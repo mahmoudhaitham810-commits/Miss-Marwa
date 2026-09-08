@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prep 1 | Summaries & Notes</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --primary-blue: #2563eb;
+            --glowing-cyan: #00E5FF;
+            --bg-deep: #020617;
+            --card-glass: rgba(15, 23, 42, 0.65);
+            --border-glass: rgba(0, 229, 255, 0.2);
+            --text-light: #f8fafc;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-light);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .bg-orbs {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            overflow: hidden;
+            background: radial-gradient(circle at 50% 50%, #0a0f24 0%, #020617 100%);
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            animation: floatOrbs 20s infinite alternate ease-in-out;
+        }
+
+        .orb-1 {
+            width: 400px;
+            height: 400px;
+            background: #00E5FF;
+            top: -10%;
+            left: -10%;
+        }
+
+        .orb-2 {
+            width: 500px;
+            height: 500px;
+            background: #2563eb;
+            bottom: -20%;
+            right: -10%;
+            animation-delay: -5s;
+        }
+
+        @keyframes floatOrbs {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(100px, 50px) scale(1.2);
+            }
+
+            100% {
+                transform: translate(-50px, 100px) scale(0.9);
+            }
+        }
+
+        /* Top Navbar */
+        .top-nav {
+            padding: 20px 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(2, 6, 23, 0.65);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            z-index: 100;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #94a3b8;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.95rem;
+            padding: 7px 16px;
+            border-radius: 50px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: 0.3s ease;
+            direction: ltr;
+        }
+
+        .back-link:hover {
+            color: var(--glowing-cyan);
+            border-color: var(--glowing-cyan);
+            transform: translateX(-3px);
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.25);
+        }
+
+        .brand-title {
+            font-size: 1.3rem;
+            font-weight: 900;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        .brand-title span {
+            color: var(--glowing-cyan);
+        }
+
+        /* Main Content */
+        .main-container {
+            flex: 1;
+            max-width: 1100px;
+            width: 100%;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .page-header h1 {
+            font-size: 3.2rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: linear-gradient(to right, #ffffff, var(--glowing-cyan), #2563eb);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        .page-header p {
+            color: #94a3b8;
+            font-size: 1.1rem;
+            direction: ltr;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* Items Grid */
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 22px;
+        }
+
+        .item-card {
+            background: var(--card-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            backdrop-filter: blur(16px);
+            transition: all 0.35s ease;
+            text-align: right;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+        }
+
+        .item-card:hover {
+            transform: translateY(-6px);
+            border-color: var(--glowing-cyan);
+            box-shadow: 0 15px 35px rgba(0, 229, 255, 0.2);
+        }
+
+        .card-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .tag-badge {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .card-date {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .item-title {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .item-notes {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-bottom: 22px;
+            line-height: 1.5;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, var(--glowing-cyan), var(--primary-blue));
+            color: #020617;
+            text-decoration: none;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-weight: 800;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: 0.3s;
+        }
+
+        .download-btn:hover {
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.45);
+            filter: brightness(1.08);
+            transform: scale(1.02);
+        }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 60px 20px;
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            color: #64748b;
+        }
+
+        @media (max-width: 768px) {
+            .page-header h1 {
+                font-size: 2.4rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+    </div>
+
+    <nav class="top-nav">
+        <a href="../prep1.html" class="back-link">
+            <i class="fas fa-arrow-left"></i>
+            <span>Back to Prep 1</span>
+        </a>
+        <div class="brand-title">Science <span>Summaries</span></div>
+    </nav>
+
+    <main class="main-container">
+        <div class="page-header">
+            <h1>Summaries & Notes</h1>
+            <p>Download unit revisions, concept sheets, and study notes for Prep 1.</p>
+        </div>
+
+        <div class="items-grid" id="summariesContainer">
+            <!-- Rendered automatically from localStorage -->
+        </div>
+    </main>
+
+    <script>
+        // Authentication Guard
+        const session = localStorage.getItem('student_session');
+        if (!session) {
+            alert('يرجى تسجيل الدخول أولاً');
+            window.location.href = '../../index.html';
+        }
+
+        function loadSummaries() {
+            const allLessons = JSON.parse(localStorage.getItem('mm_lessons_db') || '[]');
+
+            // Tolerant match: matches 'summaries', 'summary', or 'pdf' for 'prep1'
+            const summaries = allLessons.filter(item => {
+                const isPrep1 = item.grade && item.grade.toLowerCase() === 'prep1';
+                const isSummary = item.category === 'summaries' ||
+                    item.category === 'summary' ||
+                    item.type === 'pdf';
+                return isPrep1 && isSummary;
+            });
+
+            const container = document.getElementById('summariesContainer');
+            container.innerHTML = '';
+
+            if (summaries.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-file-pdf" style="font-size: 3.5rem; color: #334155; margin-bottom: 15px; display: block;"></i>
+                        <h3 style="color: #cbd5e1; margin-bottom: 6px;">لا توجد مذكرات مضافة حالياً</h3>
+                        <p style="font-size: 0.9rem;">سيتم رفع المذكرات وشيتات المراجعة الخاصة بـ Prep 1 هنا قريباً.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            summaries.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'item-card';
+                card.innerHTML = `
+                    <div>
+                        <div class="card-meta">
+                            <span class="tag-badge">
+                                <i class="fas fa-file-pdf"></i>
+                                <span>PDF Summary</span>
+                            </span>
+                            <span class="card-date">${item.createdAt || ''}</span>
+                        </div>
+                        <h2 class="item-title">${item.title}</h2>
+                        <p class="item-notes">${item.notes || 'مذكرة تلخيص وشرح وافي لمنهج العلوم'}</p>
+                    </div>
+
+                    <a href="${item.url}" target="_blank" class="download-btn">
+                        <span>تحميل / عرض المذكرة</span>
+                        <i class="fas fa-arrow-up-right-from-square"></i>
+                    </a>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', loadSummaries);
+    </script>
+</body>
+
+</html>

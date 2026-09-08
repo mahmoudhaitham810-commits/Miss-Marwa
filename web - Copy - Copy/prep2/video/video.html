@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Miss Marwa - Videos | Prep 2</title>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-QSM0JZ79ZR"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-QSM0JZ79ZR');
+    </script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --primary-blue: #2563eb;
+            --glowing-cyan: #00E5FF;
+            --bg-deep: #020617;
+            --text-light: #f8fafc;
+            --card-glass: rgba(15, 23, 42, 0.5);
+            --border-glass: rgba(0, 229, 255, 0.15);
+            --facebook-blue: #1877F2;
+            --youtube-red: #ff0000;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Cairo', sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-light);
+            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- خلفية حية متحركة --- */
+        .bg-orbs {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            overflow: hidden;
+            background: radial-gradient(circle at 50% 50%, #0a0f24 0%, #020617 100%);
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            animation: floatOrbs 20s infinite alternate ease-in-out;
+        }
+
+        .orb-1 {
+            width: 400px;
+            height: 400px;
+            background: #00E5FF;
+            top: -10%;
+            left: -10%;
+        }
+
+        .orb-2 {
+            width: 500px;
+            height: 500px;
+            background: #2563eb;
+            bottom: -20%;
+            right: -10%;
+            animation-delay: -5s;
+        }
+
+        @keyframes floatOrbs {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(100px, 50px) scale(1.2);
+            }
+
+            100% {
+                transform: translate(-50px, 100px) scale(0.9);
+            }
+        }
+
+        /* --- الشريط العلوي للرجوع --- */
+        .top-nav {
+            padding: 25px 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            animation: slideDown 0.8s ease forwards;
+            opacity: 0;
+            transform: translateY(-20px);
+            z-index: 100;
+        }
+
+        .brand-name {
+            font-weight: 900;
+            font-size: 1.5rem;
+            color: #fff;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .brand-name span {
+            color: var(--glowing-cyan);
+        }
+
+        .back-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #94a3b8;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: 0.4s ease;
+            direction: ltr;
+        }
+
+        .back-link i {
+            font-size: 1.2rem;
+            transition: 0.4s ease;
+        }
+
+        .back-link:hover {
+            color: var(--glowing-cyan);
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+        }
+
+        .back-link:hover i {
+            transform: translateX(-5px);
+        }
+
+        /* --- المحتوى الرئيسي --- */
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 20px 80px;
+            width: 100%;
+        }
+
+        .header-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header-section h1 {
+            font-size: 3.5rem;
+            margin: 0 0 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: linear-gradient(to right, #ffffff, var(--glowing-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: fadeUpSoft 1s ease 0.3s forwards;
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        .header-section p {
+            color: #94a3b8;
+            font-size: 1.1rem;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            direction: ltr;
+        }
+
+        /* --- كونتينر اللينكات --- */
+        .links-container {
+            width: 100%;
+            max-width: 650px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* --- كارت اللينك (Glassmorphism Card) --- */
+        .material-card {
+            background: var(--card-glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            padding: 22px 30px;
+            border-radius: 20px;
+            text-decoration: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.5s ease;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeUpSoft 0.8s ease forwards;
+        }
+
+        /* لمعة الإزاز */
+        .material-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -150%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transform: skewX(-25deg);
+            transition: 0.6s ease;
+        }
+
+        /* محتوى الكارت */
+        .card-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            direction: ltr;
+        }
+
+        .social-icon {
+            font-size: 1.8rem;
+            color: #64748b;
+            transition: 0.4s ease;
+            flex-shrink: 0;
+        }
+
+        .title-group {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .material-title {
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: var(--text-light);
+            transition: 0.4s ease;
+            text-align: left;
+        }
+
+        .material-subtitle {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            font-weight: 400;
+            text-align: left;
+        }
+
+        .arabic-text {
+            direction: rtl;
+            text-align: right;
+        }
+
+        .play-icon {
+            font-size: 1.4rem;
+            color: #64748b;
+            transition: 0.4s ease;
+            animation: pulse-play 2s infinite;
+            flex-shrink: 0;
+        }
+
+        /* --- تأثير الماوس (Hover) --- */
+        .material-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            background: rgba(15, 23, 42, 0.8);
+            border-color: var(--glowing-cyan);
+            box-shadow: 0 15px 35px rgba(0, 229, 255, 0.2), inset 0 0 15px rgba(0, 229, 255, 0.05);
+        }
+
+        .material-card:hover::after {
+            left: 200%;
+        }
+
+        .material-card:hover .material-title {
+            color: var(--glowing-cyan);
+        }
+
+        .material-card:hover .social-icon.fb-icon {
+            color: var(--facebook-blue);
+            filter: drop-shadow(0 0 10px rgba(24, 119, 242, 0.5));
+        }
+
+        .material-card:hover .social-icon.yt-icon {
+            color: var(--youtube-red);
+            filter: drop-shadow(0 0 10px rgba(255, 0, 0, 0.5));
+        }
+
+        .material-card:hover .social-icon.default-video-icon {
+            color: var(--glowing-cyan);
+            filter: drop-shadow(0 0 10px var(--glowing-cyan));
+        }
+
+        .material-card:hover .play-icon {
+            color: var(--glowing-cyan);
+            filter: drop-shadow(0 0 10px var(--glowing-cyan));
+            transform: scale(1.2);
+        }
+
+        .empty-placeholder {
+            text-align: center;
+            padding: 50px 20px;
+            background: var(--card-glass);
+            border: 1px dashed var(--border-glass);
+            border-radius: 20px;
+            color: #64748b;
+            backdrop-filter: blur(12px);
+        }
+
+        .empty-placeholder i {
+            font-size: 3rem;
+            color: #334155;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        /* --- Keyframes --- */
+        @keyframes slideDown {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeUpSoft {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse-play {
+            0% {
+                transform: scale(1);
+                opacity: 0.7;
+            }
+
+            50% {
+                transform: scale(1.15);
+                opacity: 1;
+                color: var(--glowing-cyan);
+                filter: drop-shadow(0 0 8px var(--glowing-cyan));
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 0.7;
+            }
+        }
+
+        /* --- الموبايل --- */
+        @media (max-width: 768px) {
+            .top-nav {
+                padding: 20px;
+            }
+
+            .brand-name {
+                font-size: 1.2rem;
+            }
+
+            .header-section h1 {
+                font-size: 2.5rem;
+            }
+
+            .material-card {
+                padding: 18px 20px;
+            }
+
+            .material-title {
+                font-size: 1.1rem;
+            }
+
+            .social-icon {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+    </div>
+
+    <nav class="top-nav">
+        <div class="brand-name">Miss <span>Marwa</span></div>
+        <a href="../prep2.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Prep 2</a>
+    </nav>
+
+    <main class="main-content">
+
+        <div class="header-section">
+            <h1>Videos</h1>
+            <p>Prep 2 Science Video Lectures & Revisions</p>
+        </div>
+
+        <div class="links-container" id="videosContainer">
+            <!-- Dynamically populated from database -->
+        </div>
+
+    </main>
+
+    <script>
+        // Authentication Guard
+        const session = localStorage.getItem('student_session');
+        if (!session) {
+            alert('يرجى تسجيل الدخول أولاً للوصول إلى الفيديوهات');
+            window.location.href = '../../index.html';
+        }
+
+        function loadVideos() {
+            const allLessons = JSON.parse(localStorage.getItem('mm_lessons_db') || '[]');
+
+            // Dynamic filters for Prep 2 Videos
+            const prep2Videos = allLessons.filter(item => {
+                const isPrep2 = item.grade && item.grade.toLowerCase() === 'prep2';
+                const isVideo = item.category === 'videos' || item.category === 'video' || item.type === 'video';
+                return isPrep2 && isVideo;
+            });
+
+            const container = document.getElementById('videosContainer');
+            container.innerHTML = '';
+
+            if (prep2Videos.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-placeholder">
+                        <i class="fas fa-video"></i>
+                        <h3 style="color: #cbd5e1; margin-bottom: 6px; font-size: 1.2rem;">لا توجد فيديوهات متاحة حالياً</h3>
+                        <p style="font-size: 0.9rem; margin: 0; color: #64748b;">سيتم نشر الشروحات وفيديوهات المراجعة لـ Prep 2 هنا قريباً.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            prep2Videos.forEach((item, index) => {
+                const isArabic = /[\u0600-\u06FF]/.test(item.title);
+                const urlLower = (item.url || '').toLowerCase();
+
+                // Smart Icon detection: Facebook vs YouTube vs standard Video
+                let iconClass = 'fas fa-play-circle default-video-icon';
+                if (urlLower.includes('facebook.com') || urlLower.includes('fb.watch')) {
+                    iconClass = 'fab fa-facebook-f fb-icon';
+                } else if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) {
+                    iconClass = 'fab fa-youtube yt-icon';
+                }
+
+                const card = document.createElement('a');
+                card.href = item.url;
+                card.target = '_blank';
+                card.className = 'material-card';
+                card.style.animationDelay = `${0.1 * (index + 1)}s`;
+
+                card.innerHTML = `
+                    <div class="card-left">
+                        <i class="${iconClass} social-icon"></i>
+                        <div class="title-group">
+                            <span class="material-title ${isArabic ? 'arabic-text' : ''}">${item.title}</span>
+                            ${item.notes ? `<span class="material-subtitle ${isArabic ? 'arabic-text' : ''}">${item.notes}</span>` : ''}
+                        </div>
+                    </div>
+                    <i class="fas fa-play play-icon"></i>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', loadVideos);
+    </script>
+
+</body>
+
+</html>
