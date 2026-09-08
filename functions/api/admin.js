@@ -7,7 +7,7 @@ export async function onRequest(context) {
         if (request.method === 'GET' && action === 'list') {
             const { results } = await env.DB.prepare(
                 `SELECT student_id as studentId, first_name as firstName, last_name as lastName, 
-                phone, parent_phone as parentPhone, grade, created_at as createdAt 
+                gender, phone, parent_phone as parentPhone, grade, created_at as createdAt 
          FROM students ORDER BY id DESC`
             ).all();
 
