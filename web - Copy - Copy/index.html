@@ -553,6 +553,18 @@
             transition: all 0.3s ease;
         }
 
+        /* إصلاح مظهر السهم في القائمة المنسدلة */
+        .input-wrapper select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+        }
+
+        .input-wrapper select option {
+            background-color: var(--bg-deep);
+            color: var(--text-light);
+        }
+
         .input-wrapper input.input-error {
             border-color: var(--error-red) !important;
             box-shadow: 0 0 10px rgba(239, 68, 68, 0.3) !important;
@@ -808,6 +820,19 @@
                     </div>
                 </div>
 
+                <!-- إضافة حقل النوع (Gender) هنا قبل التليفون -->
+                <div class="form-group">
+                    <label for="signupGender">النوع (Gender)</label>
+                    <div class="input-wrapper">
+                        <select id="signupGender" required>
+                            <option value="" disabled selected>اختر النوع</option>
+                            <option value="male">ذكر</option>
+                            <option value="female">أنثى</option>
+                        </select>
+                        <i class="fas fa-venus-mars"></i>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label for="phone">رقم هاتف الطالب</label>
                     <div class="input-wrapper">
@@ -925,6 +950,7 @@
                     studentId,
                     firstName: p.firstName.trim(),
                     lastName: p.lastName.trim(),
+                    gender: p.gender, // تم إضافة النوع هنا
                     phone: p.phone.trim(),
                     parentPhone: p.parentPhone.trim(),
                     grade: p.grade,
@@ -1124,6 +1150,7 @@
             const payload = {
                 firstName: document.getElementById('firstName').value.trim(),
                 lastName: document.getElementById('lastName').value.trim(),
+                gender: document.getElementById('signupGender').value, // تم سحب بيانات النوع هنا
                 phone: phone,
                 parentPhone: parentPhone,
                 grade: document.getElementById('signupGrade').value,
