@@ -436,6 +436,24 @@
         }
 
         window.addEventListener('DOMContentLoaded', loadContent);
+        // التأكد من السيرفر في الخلفية إن الحساب لم يتم حذفه
+        if (student.id) {
+            fetch('/api/auth?action=validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ studentId: student.id })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.valid === false) {
+                    // لو السيرفر قال إن الحساب مش موجود، امسح التذكرة واطرده
+                    localStorage.removeItem('student_session');
+                    alert('تم حذف هذا الحساب من قبل الإدارة. يرجى مراجعة المعلم.');
+                    window.location.href = './index.html';
+                }
+            })
+            .catch(err => console.log('Validation error:', err));
+        }
     </script>
 </body>
 
