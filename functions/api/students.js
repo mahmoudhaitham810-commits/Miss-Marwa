@@ -1,39 +1,35 @@
-export async function onRequestGet({ env }) {
-    try {
-        const { results } = await env.DB.prepare(
-            `SELECT student_id as studentId, first_name as firstName, last_name as lastName,
-                    phone, parent_phone as parentPhone, grade, password, role,
-                    strftime('%d/%m/%Y', created_at) as createdAt
-             FROM students ORDER BY id DESC`
-        ).all();
-        return Response.json(results || []);
-    } catch (err) {
-        return Response.json({ error: err.message }, { status: 500 });
-    }
+export async function onRequestGet(context) {
+  // الكود ده بيشتغل لما صفحة الأدمن تطلب تجيب كل الطلاب
+  try {
+    const { results } = await context.env.D1_DB.prepare("SELECT * FROM students ORDER BY created_at DESC").all();
+    return Response.json(results);
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
 }
 
-export async function onRequestPost({ request, env }) {
-    try {
-        const url = new URL(request.url);
-        const action = url.searchParams.get('action');
-        const body = await request.json();
+export async function onRequestPost(context) {
+  const { request, env } = context;
+  const url = new URL(request.url);
+  const action = url.searchParams.get('action');
 
-        if (action === 'reset-password') {
-            await env.DB.prepare(
-                `UPDATE students SET password = ? WHERE student_id = ?`
-            ).bind(body.password.trim(), body.studentId).run();
-            return Response.json({ success: true });
-        }
-
-        if (action === 'delete') {
-            await env.DB.prepare(
-                `DELETE FROM students WHERE student_id = ?`
-            ).bind(body.studentId).run();
-            return Response.json({ success: true });
-        }
-
-        return Response.json({ error: 'Invalid action' }, { status: 400 });
-    } catch (err) {
-        return Response.json({ error: err.message }, { status: 500 });
+  try {
+    // 1. حالة تغيير الباسورد
+    if (action === 'reset-password') {
+      const { studentId, password } = await request.json();
+      await env.D1_DB.prepare("UPDATE students SET password = ? WHERE student_id = ?").bind(password, studentId).run();
+      return Response.json({ success: true });
     }
+
+    // 2. حالة حذف طالب
+    if (action === 'delete') {
+      const { studentId } = await request.json();
+      await env.D1_DB.prepare("DELETE FROM students WHERE student_id = ?").bind(studentId).run();
+      return Response.json({ success: true });
+    }
+
+    return Response.json({ error: 'Action not found' }, { status: 404 });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
 }
