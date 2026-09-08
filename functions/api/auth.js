@@ -37,16 +37,23 @@ export async function onRequestPost(context) {
     }
 
     // 2. حالة إنشاء حساب جديد (Signup)
+    // 2. حالة إنشاء حساب جديد (Signup)
     if (action === 'signup') {
       const data = await request.json();
+      
+      // التأكد الإجباري إن الطالب اختار النوع
+      if (!data.gender) {
+        return Response.json({ error: 'يرجى اختيار النوع (ذكر/أنثى)' }, { status: 400 });
+      }
+
       // توليد كود طالب عشوائي
       const studentId = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
 
-      // إدخال البيانات في الداتا بيز
+      // إدخال البيانات في الداتا بيز (تم ترتيب gender قبل phone)
       const stmt = env.D1_DB.prepare(
-        "INSERT INTO students (student_id, first_name, last_name, phone, parent_phone, grade, password, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO students (student_id, first_name, last_name, gender, phone, parent_phone, grade, password, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
-        studentId, data.firstName, data.lastName, data.phone, data.parentPhone, data.grade, data.password, 'student'
+        studentId, data.firstName, data.lastName, data.gender, data.phone, data.parentPhone, data.grade, data.password, 'student'
       );
 
       await stmt.run();
@@ -59,7 +66,8 @@ export async function onRequestPost(context) {
           firstName: data.firstName,
           lastName: data.lastName,
           grade: data.grade,
-          role: 'student'
+          role: 'student',
+          gender: data.gender
         }
       });
     }
