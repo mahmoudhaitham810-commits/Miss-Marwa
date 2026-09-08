@@ -485,6 +485,7 @@
                         <tr>
                             <th>كود الطالب (ID)</th>
                             <th>الاسم</th>
+                            <th>النوع</th> <!-- تم إضافة عمود النوع هنا -->
                             <th>المرحلة</th>
                             <th>هاتف الطالب</th>
                             <th>هاتف ولي الأمر</th>
@@ -672,15 +673,20 @@
             tbody.innerHTML = '';
 
             if (!students || students.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #64748b; padding: 30px;">لا يوجد طلاب مسجلين</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 30px;">لا يوجد طلاب مسجلين</td></tr>`;
                 return;
             }
 
             students.forEach(s => {
                 const tr = document.createElement('tr');
+                
+                // ترجمة النوع للعربي
+                const genderAr = s.gender === 'male' ? 'ذكر' : (s.gender === 'female' ? 'أنثى' : '—');
+                
                 tr.innerHTML = `
                     <td><span class="id-badge">${s.studentId}</span></td>
                     <td><strong>${s.firstName} ${s.lastName}</strong></td>
+                    <td>${genderAr}</td>
                     <td>${(s.grade || '').toUpperCase()}</td>
                     <td dir="ltr" style="text-align: right;">${s.phone || '—'}</td>
                     <td dir="ltr" style="text-align: right;">${s.parentPhone || '—'}</td>
@@ -864,10 +870,16 @@
 
         function exportToCSV() {
             if (allStudents.length === 0) return alert('لا توجد بيانات طلاب لتصديرها');
-            let csv = '\uFEFFكود الطالب,الاسم الأول,اسم العائلة,الصف,هاتف الطالب,هاتف ولي الأمر,تاريخ التسجيل\n';
+            
+            // تم إضافة النوع في هيدر الملف
+            let csv = '\uFEFFكود الطالب,الاسم الأول,اسم العائلة,النوع,الصف,هاتف الطالب,هاتف ولي الأمر,تاريخ التسجيل\n';
+            
             allStudents.forEach(s => {
-                csv += `"${s.studentId}","${s.firstName}","${s.lastName}","${s.grade}","${s.phone}","${s.parentPhone}","${s.createdAt || ''}"\n`;
+                // ترجمة النوع قبل تصديره للإكسيل
+                const genderAr = s.gender === 'male' ? 'ذكر' : (s.gender === 'female' ? 'أنثى' : '—');
+                csv += `"${s.studentId}","${s.firstName}","${s.lastName}","${genderAr}","${s.grade}","${s.phone}","${s.parentPhone}","${s.createdAt || ''}"\n`;
             });
+            
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
