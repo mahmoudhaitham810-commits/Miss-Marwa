@@ -1,8 +1,21 @@
 export async function onRequestGet(context) {
-  // الكود ده بيشتغل لما صفحة الأدمن تطلب تجيب كل الطلاب
   try {
     const { results } = await context.env.D1_DB.prepare("SELECT * FROM students ORDER BY created_at DESC").all();
-    return Response.json(results);
+    
+    // الجزء ده بيترجم أسماء الداتا بيز للأسماء اللي الواجهة متوقعاها
+    const formattedStudents = results.map(user => ({
+      studentId: user.student_id,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      phone: user.phone,
+      parentPhone: user.parent_phone,
+      grade: user.grade,
+      password: user.password,
+      role: user.role,
+      createdAt: user.created_at
+    }));
+
+    return Response.json(formattedStudents);
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }
