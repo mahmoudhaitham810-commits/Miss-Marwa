@@ -21,7 +21,7 @@ const DB = {
             if (cleanId === 'MM-ADMIN' && cleanPass === 'marwa2026') {
                 return {
                     success: true,
-                    student: { id: 'MM-ADMIN', firstName: 'Miss Marwa', lastName: '(Admin)', grade: 'all', role: 'admin' }
+                    student: { id: 'MM-ADMIN', firstName: 'Miss Marwa', lastName: '(Admin)', grade: 'all', role: 'admin', gender: 'female' }
                 };
             }
             
@@ -34,7 +34,8 @@ const DB = {
                         firstName: acc.firstName,
                         lastName: acc.lastName,
                         grade: acc.grade,
-                        role: acc.role || (acc.grade === 'all' ? 'admin' : 'student')
+                        role: acc.role || (acc.grade === 'all' ? 'admin' : 'student'),
+                        gender: acc.gender // تم إضافة النوع هنا
                     }
                 };
             }
@@ -70,6 +71,7 @@ const DB = {
                 studentId,
                 firstName: payload.firstName.trim(),
                 lastName: payload.lastName.trim(),
+                gender: payload.gender, // تم إضافة النوع هنا عشان يتسيف محلياً
                 phone: payload.phone.trim(),
                 parentPhone: payload.parentPhone.trim(),
                 grade: payload.grade,
@@ -88,7 +90,8 @@ const DB = {
                     firstName: newStudent.firstName,
                     lastName: newStudent.lastName,
                     grade: newStudent.grade,
-                    role: 'student'
+                    role: 'student',
+                    gender: newStudent.gender // تم إضافة النوع هنا
                 }
             };
         }
