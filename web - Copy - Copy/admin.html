@@ -421,6 +421,13 @@
                     <i class="fas fa-cloud-arrow-up"></i>
                     <span>إضافة محتوى جديد</span>
                 </button>
+                
+                <!-- زرار تنظيف الذاكرة الجديد لإصلاح البيانات -->
+                <button class="action-btn secondary" style="border-color: #ef4444; color: #fca5a5;" onclick="clearLocalCache()">
+                    <i class="fas fa-broom"></i>
+                    <span>تنظيف الذاكرة (إصلاح البيانات)</span>
+                </button>
+
                 <button class="action-btn secondary" onclick="loadData()">
                     <i class="fas fa-rotate"></i>
                     <span>تحديث البيانات</span>
@@ -485,7 +492,7 @@
                         <tr>
                             <th>كود الطالب (ID)</th>
                             <th>الاسم</th>
-                            <th>النوع</th> <!-- تم إضافة عمود النوع هنا -->
+                            <th>النوع</th>
                             <th>المرحلة</th>
                             <th>هاتف الطالب</th>
                             <th>هاتف ولي الأمر</th>
@@ -634,6 +641,14 @@
             if (e.key === 'Enter') unlockAdmin();
         });
 
+        // دالة تنظيف الذاكرة لسحب البيانات الطازجة من السيرفر
+        function clearLocalCache() {
+            localStorage.removeItem('mm_students_db');
+            localStorage.removeItem('mm_lessons_db');
+            alert('تم تنظيف الذاكرة المؤقتة، سيتم إعادة تحميل الصفحة لسحب أحدث البيانات من الخادم.');
+            location.reload();
+        }
+
         function switchSection(section) {
             if (section === 'students') {
                 document.getElementById('studentsSection').style.display = 'block';
@@ -680,20 +695,28 @@
             students.forEach(s => {
                 const tr = document.createElement('tr');
                 
+                // قراءة البيانات بطريقة "مضادة للأخطاء" لدعم الداتا بيز والكاش معاً
+                const sId = s.studentId || s.student_id || '—';
+                const fName = s.firstName || s.first_name || '';
+                const lName = s.lastName || s.last_name || '';
+                const pPhone = s.parentPhone || s.parent_phone || '—';
+                const created = s.createdAt || s.created_at || '—';
+                
                 // ترجمة النوع للعربي
-                const genderAr = s.gender === 'male' ? 'ذكر' : (s.gender === 'female' ? 'أنثى' : '—');
+                const sGender = (s.gender || '').toLowerCase();
+                const genderAr = sGender === 'male' ? 'ذكر' : (sGender === 'female' ? 'أنثى' : '—');
                 
                 tr.innerHTML = `
-                    <td><span class="id-badge">${s.studentId}</span></td>
-                    <td><strong>${s.firstName} ${s.lastName}</strong></td>
+                    <td><span class="id-badge">${sId}</span></td>
+                    <td><strong>${fName} ${lName}</strong></td>
                     <td>${genderAr}</td>
                     <td>${(s.grade || '').toUpperCase()}</td>
                     <td dir="ltr" style="text-align: right;">${s.phone || '—'}</td>
-                    <td dir="ltr" style="text-align: right;">${s.parentPhone || '—'}</td>
-                    <td>${s.createdAt || '—'}</td>
+                    <td dir="ltr" style="text-align: right;">${pPhone || '—'}</td>
+                    <td>${created}</td>
                     <td>
-                        <button class="btn-table btn-reset" onclick="resetStudentPassword('${s.studentId}')">تغيير الباسورد</button>
-                        <button class="btn-table btn-delete" onclick="deleteStudent('${s.studentId}')">حذف</button>
+                        <button class="btn-table btn-reset" onclick="resetStudentPassword('${sId}')">تغيير الباسورد</button>
+                        <button class="btn-table btn-delete" onclick="deleteStudent('${sId}')">حذف</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -737,9 +760,10 @@
             const grade = document.getElementById('studentGradeFilter').value;
 
             const filtered = allStudents.filter(s => {
-                const matchQuery = (s.studentId || '').toLowerCase().includes(q) ||
-                    `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase().includes(q) ||
-                    (s.phone || '').includes(q) || (s.parentPhone || '').includes(q);
+                const sId = (s.studentId || s.student_id || '').toLowerCase();
+                const fullName = `${s.firstName || s.first_name || ''} ${s.lastName || s.last_name || ''}`.toLowerCase();
+                const matchQuery = sId.includes(q) || fullName.includes(q) ||
+                    (s.phone || '').includes(q) || (s.parentPhone || s.parent_phone || '').includes(q);
                 const matchGrade = (grade === 'ALL' || (s.grade || '').toLowerCase() === grade.toLowerCase());
                 return matchQuery && matchGrade;
             });
@@ -829,7 +853,7 @@
                 if (typeof DB !== 'undefined' && DB.resetPassword) {
                     await DB.resetPassword(studentId, newPassword.trim());
                 } else {
-                    const idx = allStudents.findIndex(s => s.studentId === studentId);
+                    const idx = allStudents.findIndex(s => (s.studentId || s.student_id) === studentId);
                     if (idx !== -1) {
                         allStudents[idx].password = newPassword.trim();
                         localStorage.setItem('mm_students_db', JSON.stringify(allStudents));
@@ -848,7 +872,7 @@
                     if (typeof DB !== 'undefined' && DB.deleteStudent) {
                         await DB.deleteStudent(studentId);
                     } else {
-                        allStudents = allStudents.filter(s => s.studentId !== studentId);
+                        allStudents = allStudents.filter(s => (s.studentId || s.student_id) !== studentId);
                         localStorage.setItem('mm_students_db', JSON.stringify(allStudents));
                     }
                     await loadData();
@@ -871,13 +895,18 @@
         function exportToCSV() {
             if (allStudents.length === 0) return alert('لا توجد بيانات طلاب لتصديرها');
             
-            // تم إضافة النوع في هيدر الملف
             let csv = '\uFEFFكود الطالب,الاسم الأول,اسم العائلة,النوع,الصف,هاتف الطالب,هاتف ولي الأمر,تاريخ التسجيل\n';
             
             allStudents.forEach(s => {
-                // ترجمة النوع قبل تصديره للإكسيل
-                const genderAr = s.gender === 'male' ? 'ذكر' : (s.gender === 'female' ? 'أنثى' : '—');
-                csv += `"${s.studentId}","${s.firstName}","${s.lastName}","${genderAr}","${s.grade}","${s.phone}","${s.parentPhone}","${s.createdAt || ''}"\n`;
+                const sId = s.studentId || s.student_id || '';
+                const fName = s.firstName || s.first_name || '';
+                const lName = s.lastName || s.last_name || '';
+                const pPhone = s.parentPhone || s.parent_phone || '';
+                const created = s.createdAt || s.created_at || '';
+                const sGender = (s.gender || '').toLowerCase();
+                const genderAr = sGender === 'male' ? 'ذكر' : (sGender === 'female' ? 'أنثى' : '—');
+                
+                csv += `"${sId}","${fName}","${lName}","${genderAr}","${s.grade}","${s.phone}","${pPhone}","${created}"\n`;
             });
             
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
