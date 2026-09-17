@@ -3,11 +3,15 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
 
+    // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
+    // السطر ده بيتأكد إننا بنمسك الاسم الصح مهما كان
+    const db = env.DB || env.D1_DB;
+
     try {
         if (request.method === 'GET' && action === 'list') {
-            const { results } = await env.DB.prepare(
+            const { results } = await db.prepare(
                 `SELECT student_id as studentId, first_name as firstName, last_name as lastName, 
-                gender, phone, parent_phone as parentPhone, grade, created_at as createdAt 
+                gender, branch, phone, parent_phone as parentPhone, grade, created_at as createdAt 
          FROM students ORDER BY id DESC`
             ).all();
 
