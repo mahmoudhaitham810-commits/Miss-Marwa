@@ -72,6 +72,7 @@ const DB = {
                 firstName: payload.firstName.trim(),
                 lastName: payload.lastName.trim(),
                 gender: payload.gender,
+                branch: payload.branch,
                 phone: payload.phone.trim(),
                 parentPhone: payload.parentPhone.trim(),
                 grade: payload.grade,
@@ -91,7 +92,8 @@ const DB = {
                     lastName: newStudent.lastName,
                     grade: newStudent.grade,
                     role: 'student',
-                    gender: newStudent.gender
+                    gender: newStudent.gender,
+                    branch: newStudent.branch
                 }
             };
         }
@@ -102,7 +104,7 @@ const DB = {
             // كسر الكاش بإضافة وقت الطلب عشان المتصفح يسحب داتا فريش
             const timestamp = new Date().getTime();
             let res = await fetch(`/api/admin?action=list&t=${timestamp}`);
-            
+
             if (!res.ok) {
                 res = await fetch(`/api/students?t=${timestamp}`);
             }
