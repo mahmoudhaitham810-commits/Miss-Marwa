@@ -422,6 +422,11 @@
                     <span>إضافة محتوى جديد</span>
                 </button>
 
+                <button class="action-btn" onclick="openAddExamModal()">
+                    <i class="fas fa-file-circle-plus"></i>
+                    <span>إضافة امتحان</span>
+                </button>
+
                 <!-- زرار تنظيف الذاكرة الجديد لإصلاح البيانات -->
                 <button class="action-btn secondary" style="border-color: #ef4444; color: #fca5a5;"
                     onclick="clearLocalCache()">
@@ -452,6 +457,10 @@
             <button class="nav-tab" id="tabLessonsBtn" onclick="switchSection('lessons')">
                 <i class="fas fa-layer-group"></i>
                 <span>المحتوى والمكتبة التعليمية</span>
+            </button>
+            <button class="nav-tab" id="tabExamsBtn" onclick="switchSection('exams')">
+                <i class="fas fa-file-pen"></i>
+                <span>الامتحانات</span>
             </button>
         </div>
 
@@ -565,9 +574,109 @@
                 </table>
             </div>
         </div>
+
+        <!-- EXAMS SECTION -->
+        <div id="examsSection" style="display: none;">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3 id="totalExamsCreatedCount">0</h3>
+                    <p>إجمالي الامتحانات المنشورة</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="activeExamsCount">0</h3>
+                    <p>امتحانات شغالة حالياً</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="expiredExamsCount">0</h3>
+                    <p>امتحانات منتهية</p>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>عنوان الامتحان</th>
+                            <th>المرحلة</th>
+                            <th>عدد الأسئلة</th>
+                            <th>ينتهي في</th>
+                            <th>الحالة</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="examsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
-    <!-- Modal for Adding Content -->
+    <!-- Modal for Adding an Exam -->
+    <div class="modal-overlay" id="addExamModal">
+        <div class="modal-box" style="max-width: 700px;">
+            <button class="close-btn" onclick="closeAddExamModal()">&times;</button>
+            <h2 style="margin-bottom: 20px; font-size: 1.5rem; color: #fff;">
+                <i class="fas fa-file-pen" style="color: var(--glowing-cyan); margin-left: 8px;"></i>
+                إضافة امتحان جديد
+            </h2>
+
+            <form id="addExamForm">
+                <div class="form-group">
+                    <label>عنوان الامتحان</label>
+                    <input type="text" id="examTitle" class="form-input" placeholder="مثال: امتحان الوحدة الأولى"
+                        required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label>المرحلة الدراسية</label>
+                        <select id="examGrade" class="form-input" required>
+                            <option value="prep1">Prep 1</option>
+                            <option value="prep2">Prep 2</option>
+                            <option value="prep3">Prep 3</option>
+                            <option value="sec1">Secondary 1</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="flex: 1;">
+                        <label>مدة بقاء الامتحان مفتوح (بالأيام)</label>
+                        <input type="number" id="examDuration" class="form-input" value="3" min="1" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>الصق الأسئلة هنا (كل الأسئلة اختيار من متعدد)</label>
+                    <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 8px; line-height: 1.6;">
+                        اكتب كل سؤال بالشكل ده بالظبط، وحط علامة <strong style="color:#4ade80;">*</strong> بعد
+                        الإجابة الصح مباشرة من غير مسافة:
+                    </p>
+                    <pre style="background: rgba(2,6,23,0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 14px; color: #94a3b8; font-size: 0.82rem; margin-bottom: 10px; white-space: pre-wrap; direction: ltr; text-align: left;">1) What is the powerhouse of the cell?
+A) Nucleus
+B) Mitochondria*
+C) Ribosome
+D) Golgi apparatus
+
+2) Water boils at what temperature at sea level?
+A) 90
+B) 100*
+C) 110
+D) 120</pre>
+                    <textarea id="examQuestionsInput" class="form-input" rows="8"
+                        placeholder="الصق كل الأسئلة هنا دفعة واحدة..." oninput="renderExamPreview()"
+                        style="font-family: monospace; direction: ltr; text-align: left;"></textarea>
+                </div>
+
+                <div id="examPreviewBox" style="margin-bottom: 15px;">
+                    <p style="color: #64748b;">اكتب أو الصق الأسئلة فوق عشان تظهر هنا المعاينة</p>
+                </div>
+
+                <button type="submit" id="examSubmitBtn" class="action-btn" disabled
+                    style="width: 100%; justify-content: center; margin-top: 10px;">
+                    <i class="fas fa-check"></i>
+                    <span>نشر الامتحان</span>
+                </button>
+            </form>
+        </div>
+    </div>
     <div class="modal-overlay" id="addLessonModal">
         <div class="modal-box">
             <button class="close-btn" onclick="closeAddLessonModal()">&times;</button>
@@ -631,6 +740,7 @@
         const ADMIN_PIN = 'marwa2026';
         let allStudents = [];
         let allLessons = [];
+        let allExams = [];
 
         function unlockAdmin() {
             const input = document.getElementById('adminPinInput').value;
@@ -656,17 +766,13 @@
         }
 
         function switchSection(section) {
-            if (section === 'students') {
-                document.getElementById('studentsSection').style.display = 'block';
-                document.getElementById('lessonsSection').style.display = 'none';
-                document.getElementById('tabStudentsBtn').classList.add('active');
-                document.getElementById('tabLessonsBtn').classList.remove('active');
-            } else {
-                document.getElementById('studentsSection').style.display = 'none';
-                document.getElementById('lessonsSection').style.display = 'block';
-                document.getElementById('tabLessonsBtn').classList.add('active');
-                document.getElementById('tabStudentsBtn').classList.remove('active');
-            }
+            document.getElementById('studentsSection').style.display = (section === 'students') ? 'block' : 'none';
+            document.getElementById('lessonsSection').style.display = (section === 'lessons') ? 'block' : 'none';
+            document.getElementById('examsSection').style.display = (section === 'exams') ? 'block' : 'none';
+
+            document.getElementById('tabStudentsBtn').classList.toggle('active', section === 'students');
+            document.getElementById('tabLessonsBtn').classList.toggle('active', section === 'lessons');
+            document.getElementById('tabExamsBtn').classList.toggle('active', section === 'exams');
         }
 
         async function loadData() {
@@ -691,6 +797,7 @@
                 renderLessonsTable(allLessons);
                 updateStats();
                 document.getElementById('filteredCount').textContent = allStudents.length;
+                await loadExams();
             } catch (err) {
                 console.error("Fetch Data Error:", err);
                 alert("حدث خطأ أثناء مزامنة البيانات مع الخادم: " + err.message);
@@ -860,10 +967,202 @@
                 } catch (err) {
                     alert("فشل حذف المحتوى: " + err.message);
                 }
-            }
         }
 
-        async function resetStudentPassword(studentId) {
+        // ==================== نظام الامتحانات ====================
+
+        // بيحول النص اللي الأستاذة تلصقه لأسئلة منظمة
+        // الشكل المطلوب: "1) نص السؤال" ثم اختيارات "A) ... B) ... " وحط * بعد الإجابة الصح
+        function parseExamText(text) {
+            const lines = text.split(/\r?\n/);
+            const questions = [];
+            const errors = [];
+            let current = null;
+
+            const qRegex = /^\s*\d+[\)\.\-]\s*(.+)$/;
+            const optRegex = /^\s*[A-Da-d][\)\.\-]\s*(.+)$/;
+
+            lines.forEach((rawLine) => {
+                const line = rawLine.trim();
+                if (!line) return;
+
+                const qMatch = line.match(qRegex);
+                if (qMatch) {
+                    if (current) questions.push(current);
+                    current = { question: qMatch[1].trim(), options: [], correctIndex: -1 };
+                    return;
+                }
+
+                const optMatch = line.match(optRegex);
+                if (optMatch && current) {
+                    let optText = optMatch[0].replace(/^\s*[A-Da-d][\)\.\-]\s*/, '').trim();
+                    let isCorrect = false;
+                    if (optText.endsWith('*')) {
+                        isCorrect = true;
+                        optText = optText.slice(0, -1).trim();
+                    }
+                    current.options.push(optText);
+                    if (isCorrect) {
+                        if (current.correctIndex !== -1) {
+                            errors.push(`السؤال "${current.question}" فيه أكتر من إجابة واحدة متعلّمة بعلامة *`);
+                        }
+                        current.correctIndex = current.options.length - 1;
+                    }
+                }
+            });
+            if (current) questions.push(current);
+
+            questions.forEach((q, i) => {
+                if (q.options.length < 2) errors.push(`السؤال ${i + 1} ("${q.question}") لازم يكون له اختيارين على الأقل`);
+                if (q.correctIndex === -1) errors.push(`السؤال ${i + 1} ("${q.question}") لسه محدّدش له إجابة صح (حط * بعد الإجابة الصح مباشرة)`);
+            });
+
+            return { questions, errors };
+        }
+
+        function renderExamPreview() {
+            const text = document.getElementById('examQuestionsInput').value;
+            const previewBox = document.getElementById('examPreviewBox');
+            const submitBtn = document.getElementById('examSubmitBtn');
+
+            if (!text.trim()) {
+                previewBox.innerHTML = '<p style="color: #64748b;">اكتب أو الصق الأسئلة فوق عشان تظهر هنا المعاينة</p>';
+                submitBtn.disabled = true;
+                return;
+            }
+
+            const { questions, errors } = parseExamText(text);
+            let html = '';
+
+            if (errors.length > 0) {
+                html += `<div style="background: rgba(239,68,68,0.12); border: 1px solid #ef4444; border-radius: 10px; padding: 12px; margin-bottom: 12px; color: #fca5a5;">
+                    <strong>في حاجات لازم تتصلح قبل ما تنشري الامتحان:</strong>
+                    <ul style="margin: 8px 0 0 0; padding-right: 18px;">${errors.map(e => `<li>${e}</li>`).join('')}</ul>
+                </div>`;
+            }
+
+            html += questions.map((q, i) => `
+                <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px;">
+                    <strong>${i + 1}. ${q.question}</strong>
+                    <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 3px; font-size: 0.9rem;">
+                        ${q.options.map((opt, oi) => `<span style="color: ${oi === q.correctIndex ? '#4ade80' : '#94a3b8'};">${oi === q.correctIndex ? '✓' : '—'} ${opt}</span>`).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            previewBox.innerHTML = html;
+            submitBtn.disabled = (errors.length > 0 || questions.length === 0);
+        }
+
+        function openAddExamModal() {
+            document.getElementById('addExamModal').classList.add('active');
+        }
+
+        function closeAddExamModal() {
+            document.getElementById('addExamModal').classList.remove('active');
+            document.getElementById('addExamForm').reset();
+            document.getElementById('examPreviewBox').innerHTML = '<p style="color: #64748b;">اكتب أو الصق الأسئلة فوق عشان تظهر هنا المعاينة</p>';
+            document.getElementById('examSubmitBtn').disabled = true;
+        }
+
+        document.getElementById('addExamForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = document.getElementById('examSubmitBtn');
+            const { questions, errors } = parseExamText(document.getElementById('examQuestionsInput').value);
+
+            if (errors.length > 0 || questions.length === 0) {
+                alert('لسه في أخطاء في الأسئلة، لازم تتصلح الأول قبل النشر (شوفي المعاينة تحت).');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            const payload = {
+                title: document.getElementById('examTitle').value.trim(),
+                grade: document.getElementById('examGrade').value,
+                durationDays: parseInt(document.getElementById('examDuration').value, 10) || 3,
+                questions
+            };
+
+            try {
+                const res = await fetch('/api/exams?action=create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل إنشاء الامتحان');
+
+                alert(`تم نشر الامتحان بنجاح! (${questions.length} سؤال)`);
+                closeAddExamModal();
+                await loadExams();
+                switchSection('exams');
+            } catch (err) {
+                alert('حصل خطأ: ' + err.message);
+                submitBtn.disabled = false;
+            }
+        });
+
+        async function loadExams() {
+            try {
+                const res = await fetch(`/api/exams?action=list&t=${Date.now()}`);
+                const data = await res.json();
+                allExams = Array.isArray(data) ? data : [];
+            } catch (err) {
+                console.error('Load exams error:', err);
+                allExams = [];
+            }
+            renderExamsTable(allExams);
+        }
+
+        function renderExamsTable(list) {
+            const tbody = document.getElementById('examsTableBody');
+            document.getElementById('totalExamsCreatedCount').textContent = list.length;
+
+            const now = new Date();
+            let activeCount = 0, expiredCount = 0;
+
+            if (!list.length) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">لا توجد امتحانات منشورة بعد</td></tr>`;
+                document.getElementById('activeExamsCount').textContent = 0;
+                document.getElementById('expiredExamsCount').textContent = 0;
+                return;
+            }
+
+            tbody.innerHTML = list.map(ex => {
+                let qCount = 0;
+                try { qCount = JSON.parse(ex.questions).length; } catch (e) { /* ignore */ }
+                const expires = new Date(ex.expires_at);
+                const isExpired = expires < now;
+                if (isExpired) expiredCount++; else activeCount++;
+
+                return `<tr>
+                    <td><strong>${ex.title}</strong></td>
+                    <td>${(ex.grade || '').toUpperCase()}</td>
+                    <td>${qCount}</td>
+                    <td>${expires.toLocaleDateString('ar-EG')}</td>
+                    <td>${isExpired ? '<span style="color:#ef4444;">منتهي</span>' : '<span style="color:#4ade80;">شغال</span>'}</td>
+                    <td><button class="btn-table btn-delete" onclick="deleteExam('${ex.id}')">حذف</button></td>
+                </tr>`;
+            }).join('');
+
+            document.getElementById('activeExamsCount').textContent = activeCount;
+            document.getElementById('expiredExamsCount').textContent = expiredCount;
+        }
+
+        async function deleteExam(examId) {
+            if (!confirm('متأكدة إنك عايزة تمسحي الامتحان ده؟ هيتمسح معاه كل نتايج الطلاب اللي دخلوه.')) return;
+            try {
+                const res = await fetch('/api/exams?action=delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ examId })
+                });
+                if (!res.ok) throw new Error('فشل الحذف');
+                await loadExams();
+            } catch (err) {
+                alert('حصل خطأ أثناء الحذف: ' + err.message);
+            }
+        }
             const newPassword = prompt(`أدخل كلمة المرور الجديدة للطالب (${studentId}):`);
             if (!newPassword || newPassword.trim().length < 4) {
                 alert('كلمة المرور يجب ألا تقل عن 4 خانات');
