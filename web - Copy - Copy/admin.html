@@ -305,6 +305,8 @@
             padding: 30px;
             width: 100%;
             max-width: 520px;
+            max-height: 90vh;
+            overflow-y: auto;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
             position: relative;
         }
@@ -592,6 +594,19 @@
                 </div>
             </div>
 
+            <div class="controls-bar">
+                <select class="filter-select" id="examGradeSelect" onchange="onExamGradeChange()">
+                    <option value="">-- اختاري المرحلة الدراسية --</option>
+                    <option value="prep1">Prep 1</option>
+                    <option value="prep2">Prep 2</option>
+                    <option value="prep3">Prep 3</option>
+                    <option value="sec1">Secondary 1</option>
+                </select>
+                <select class="filter-select" id="examNameSelect" onchange="renderExamsTable()" disabled>
+                    <option value="">-- اختاري الامتحان --</option>
+                </select>
+            </div>
+
             <div class="table-container">
                 <table>
                     <thead>
@@ -677,8 +692,6 @@ D) 120</pre>
             </form>
         </div>
     </div>
-    
-    <!-- Modal for Adding Content -->
     <div class="modal-overlay" id="addLessonModal">
         <div class="modal-box">
             <button class="close-btn" onclick="closeAddLessonModal()">&times;</button>
@@ -969,7 +982,6 @@ D) 120</pre>
                 } catch (err) {
                     alert("فشل حذف المحتوى: " + err.message);
                 }
-            }
         }
 
         // ==================== نظام الامتحانات ====================
@@ -1098,6 +1110,10 @@ D) 120</pre>
                 alert(`تم نشر الامتحان بنجاح! (${questions.length} سؤال)`);
                 closeAddExamModal();
                 await loadExams();
+                document.getElementById('examGradeSelect').value = payload.grade;
+                populateExamNameSelect();
+                document.getElementById('examNameSelect').value = data.examId;
+                renderExamsTable();
                 switchSection('exams');
             } catch (err) {
                 alert('حصل خطأ: ' + err.message);
@@ -1114,42 +1130,80 @@ D) 120</pre>
                 console.error('Load exams error:', err);
                 allExams = [];
             }
-            renderExamsTable(allExams);
+
+            // الكروت الثلاثة فوق بتفضل تعرض الإجمالي العام دايماً، مش مرتبطة بالاختيار تحت
+            const now = new Date();
+            const activeCount = allExams.filter(ex => new Date(ex.expires_at) >= now).length;
+            document.getElementById('totalExamsCreatedCount').textContent = allExams.length;
+            document.getElementById('activeExamsCount').textContent = activeCount;
+            document.getElementById('expiredExamsCount').textContent = allExams.length - activeCount;
+
+            populateExamNameSelect();
+            renderExamsTable();
         }
 
-        function renderExamsTable(list) {
-            const tbody = document.getElementById('examsTableBody');
-            document.getElementById('totalExamsCreatedCount').textContent = list.length;
+        // بتملأ قائمة "اختاري الامتحان" بناءً على المرحلة اللي اتختارت
+        function populateExamNameSelect() {
+            const grade = document.getElementById('examGradeSelect').value;
+            const nameSelect = document.getElementById('examNameSelect');
+            const currentValue = nameSelect.value;
 
-            const now = new Date();
-            let activeCount = 0, expiredCount = 0;
-
-            if (!list.length) {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">لا توجد امتحانات منشورة بعد</td></tr>`;
-                document.getElementById('activeExamsCount').textContent = 0;
-                document.getElementById('expiredExamsCount').textContent = 0;
+            if (!grade) {
+                nameSelect.innerHTML = '<option value="">-- اختاري الامتحان --</option>';
+                nameSelect.disabled = true;
                 return;
             }
 
-            tbody.innerHTML = list.map(ex => {
-                let qCount = 0;
-                try { qCount = JSON.parse(ex.questions).length; } catch (e) { /* ignore */ }
-                const expires = new Date(ex.expires_at);
-                const isExpired = expires < now;
-                if (isExpired) expiredCount++; else activeCount++;
+            const examsForGrade = allExams.filter(ex => (ex.grade || '').toLowerCase() === grade.toLowerCase());
+            nameSelect.disabled = false;
+            nameSelect.innerHTML = '<option value="">-- اختاري الامتحان --</option>' +
+                examsForGrade.map(ex => `<option value="${ex.id}">${ex.title}</option>`).join('');
 
-                return `<tr>
-                    <td><strong>${ex.title}</strong></td>
-                    <td>${(ex.grade || '').toUpperCase()}</td>
-                    <td>${qCount}</td>
-                    <td>${expires.toLocaleDateString('ar-EG')}</td>
-                    <td>${isExpired ? '<span style="color:#ef4444;">منتهي</span>' : '<span style="color:#4ade80;">شغال</span>'}</td>
-                    <td><button class="btn-table btn-delete" onclick="deleteExam('${ex.id}')">حذف</button></td>
-                </tr>`;
-            }).join('');
+            // لو الامتحان اللي كان متختار قبل كده لسه موجود في القائمة، سيبيه زي ما هو
+            if (examsForGrade.some(ex => ex.id === currentValue)) {
+                nameSelect.value = currentValue;
+            }
+        }
 
-            document.getElementById('activeExamsCount').textContent = activeCount;
-            document.getElementById('expiredExamsCount').textContent = expiredCount;
+        function onExamGradeChange() {
+            populateExamNameSelect();
+            renderExamsTable();
+        }
+
+        // الجدول ميعرضش أي حاجة لحد ما تتختار المرحلة والامتحان الاتنين، عشان الداشبورد تفضل نضيفة
+        function renderExamsTable() {
+            const tbody = document.getElementById('examsTableBody');
+            const grade = document.getElementById('examGradeSelect').value;
+            const examId = document.getElementById('examNameSelect').value;
+
+            if (!grade) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري المرحلة الدراسية الأول عشان تظهر الامتحانات</td></tr>`;
+                return;
+            }
+            if (!examId) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري اسم الامتحان عشان تظهر تفاصيله</td></tr>`;
+                return;
+            }
+
+            const ex = allExams.find(e => e.id === examId);
+            if (!ex) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">الامتحان ده مش موجود دلوقتي (يمكن اتمسح)</td></tr>`;
+                return;
+            }
+
+            let qCount = 0;
+            try { qCount = JSON.parse(ex.questions).length; } catch (e) { /* ignore */ }
+            const expires = new Date(ex.expires_at);
+            const isExpired = expires < new Date();
+
+            tbody.innerHTML = `<tr>
+                <td><strong>${ex.title}</strong></td>
+                <td>${(ex.grade || '').toUpperCase()}</td>
+                <td>${qCount}</td>
+                <td>${expires.toLocaleDateString('ar-EG')}</td>
+                <td>${isExpired ? '<span style="color:#ef4444;">منتهي</span>' : '<span style="color:#4ade80;">شغال</span>'}</td>
+                <td><button class="btn-table btn-delete" onclick="deleteExam('${ex.id}')">حذف</button></td>
+            </tr>`;
         }
 
         async function deleteExam(examId) {
@@ -1161,13 +1215,12 @@ D) 120</pre>
                     body: JSON.stringify({ examId })
                 });
                 if (!res.ok) throw new Error('فشل الحذف');
+                document.getElementById('examNameSelect').value = '';
                 await loadExams();
             } catch (err) {
                 alert('حصل خطأ أثناء الحذف: ' + err.message);
             }
         }
-
-        async function resetStudentPassword(studentId) {
             const newPassword = prompt(`أدخل كلمة المرور الجديدة للطالب (${studentId}):`);
             if (!newPassword || newPassword.trim().length < 4) {
                 alert('كلمة المرور يجب ألا تقل عن 4 خانات');
