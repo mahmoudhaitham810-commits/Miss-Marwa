@@ -470,6 +470,10 @@
                     <h3 id="secCount">0</h3>
                     <p>طلاب الثانوي</p>
                 </div>
+                <div class="stat-card">
+                    <h3 id="filteredCount">0</h3>
+                    <p>مطابق للفلتر الحالي</p>
+                </div>
             </div>
 
             <div class="controls-bar">
@@ -686,6 +690,7 @@
                 renderStudentsTable(allStudents);
                 renderLessonsTable(allLessons);
                 updateStats();
+                document.getElementById('filteredCount').textContent = allStudents.length;
             } catch (err) {
                 console.error("Fetch Data Error:", err);
                 alert("حدث خطأ أثناء مزامنة البيانات مع الخادم: " + err.message);
@@ -781,6 +786,7 @@
                 const matchGrade = (grade === 'ALL' || (s.grade || '').toLowerCase() === grade.toLowerCase());
                 return matchQuery && matchGrade;
             });
+            document.getElementById('filteredCount').textContent = filtered.length;
             renderStudentsTable(filtered);
         }
 
