@@ -305,8 +305,11 @@
             padding: 30px;
             width: 100%;
             max-width: 520px;
+            
+            /* التعديل الجذري لمشكلة السكرول عشان الزرار ميختفيش */
             max-height: 90vh;
             overflow-y: auto;
+            
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
             position: relative;
         }
@@ -792,9 +795,7 @@ D) 120</pre>
                 }
                 if (!Array.isArray(allStudents)) allStudents = [];
                 if (!Array.isArray(allLessons)) allLessons = [];
-                if (allStudents.length === 0) {
-                    console.warn('تنبيه: لم يتم جلب أي طلاب.');
-                }
+                
                 renderStudentsTable(allStudents);
                 renderLessonsTable(allLessons);
                 updateStats();
@@ -1166,9 +1167,12 @@ D) 120</pre>
                 alert(`تم نشر الامتحان بنجاح! (${questions.length} سؤال)`);
                 closeAddExamModal();
                 await loadExams();
-                document.getElementById('examGradeSelect').value = payload.grade;
-                populateExamNameSelect();
-                document.getElementById('examNameSelect').value = data.examId;
+                
+                // منع التحديد التلقائي اللي كان بيظهر الامتحان غصب عننا
+                document.getElementById('examGradeSelect').value = '';
+                document.getElementById('examNameSelect').value = '';
+                document.getElementById('examNameSelect').disabled = true;
+                
                 renderExamsTable();
                 switchSection('exams');
             } catch (err) {
@@ -1228,18 +1232,15 @@ D) 120</pre>
             const grade = document.getElementById('examGradeSelect').value;
             const examId = document.getElementById('examNameSelect').value;
 
-            if (!grade) {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري المرحلة الدراسية الأول عشان تظهر الامتحانات</td></tr>`;
-                return;
-            }
-            if (!examId) {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري اسم الامتحان عشان تظهر تفاصيله</td></tr>`;
+            // الجدول هيفضل فاضي خالص ومش هيظهر فيه أي سطر إلا لو اخترت المرحلة والامتحان
+            if (!grade || !examId) {
+                tbody.innerHTML = '';
                 return;
             }
 
             const ex = allExams.find(e => e.id === examId);
             if (!ex) {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">الامتحان ده مش موجود دلوقتي (يمكن اتمسح)</td></tr>`;
+                tbody.innerHTML = '';
                 return;
             }
 
