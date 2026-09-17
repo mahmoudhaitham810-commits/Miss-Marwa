@@ -421,9 +421,10 @@
                     <i class="fas fa-cloud-arrow-up"></i>
                     <span>إضافة محتوى جديد</span>
                 </button>
-                
+
                 <!-- زرار تنظيف الذاكرة الجديد لإصلاح البيانات -->
-                <button class="action-btn secondary" style="border-color: #ef4444; color: #fca5a5;" onclick="clearLocalCache()">
+                <button class="action-btn secondary" style="border-color: #ef4444; color: #fca5a5;"
+                    onclick="clearLocalCache()">
                     <i class="fas fa-broom"></i>
                     <span>تنظيف الذاكرة (إصلاح البيانات)</span>
                 </button>
@@ -493,6 +494,7 @@
                             <th>كود الطالب (ID)</th>
                             <th>الاسم</th>
                             <th>النوع</th>
+                            <th>النظام</th>
                             <th>المرحلة</th>
                             <th>هاتف الطالب</th>
                             <th>هاتف ولي الأمر</th>
@@ -666,6 +668,10 @@
         async function loadData() {
             try {
                 if (typeof DB !== 'undefined' && DB.getStudents) {
+                    // بنمسح الكاش القديم قبل السحب عشان نضمن إن الداشبورد
+                    // بيعرض دايماً آخر بيانات موجودة فعلياً في الداتا بيز
+                    // مش نسخة قديمة متخزنة في المتصفح
+                    localStorage.removeItem('mm_students_db');
                     allStudents = await DB.getStudents();
                     allLessons = await DB.getLessons('ALL', 'ALL');
                 } else {
@@ -674,6 +680,9 @@
                 }
                 if (!Array.isArray(allStudents)) allStudents = [];
                 if (!Array.isArray(allLessons)) allLessons = [];
+                if (allStudents.length === 0) {
+                    console.warn('تنبيه: لم يتم جلب أي طلاب. لو انتِ متأكدة إن فيه طلاب مسجلين، يبقى فيه مشكلة في الاتصال بالداتا بيز (شوفي الـ Console لتفاصيل الخطأ).');
+                }
                 renderStudentsTable(allStudents);
                 renderLessonsTable(allLessons);
                 updateStats();
@@ -688,28 +697,33 @@
             tbody.innerHTML = '';
 
             if (!students || students.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 30px;">لا يوجد طلاب مسجلين</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #64748b; padding: 30px;">لا يوجد طلاب مسجلين</td></tr>`;
                 return;
             }
 
             students.forEach(s => {
                 const tr = document.createElement('tr');
-                
+
                 // قراءة البيانات بطريقة "مضادة للأخطاء" لدعم الداتا بيز والكاش معاً
                 const sId = s.studentId || s.student_id || '—';
                 const fName = s.firstName || s.first_name || '';
                 const lName = s.lastName || s.last_name || '';
                 const pPhone = s.parentPhone || s.parent_phone || '—';
                 const created = s.createdAt || s.created_at || '—';
-                
+
                 // ترجمة النوع للعربي
                 const sGender = (s.gender || '').toLowerCase();
                 const genderAr = sGender === 'male' ? 'ذكر' : (sGender === 'female' ? 'أنثى' : '—');
-                
+
+                // ترجمة نظام الدراسة للعربي
+                const sBranch = (s.branch || '').toLowerCase();
+                const branchAr = sBranch === 'private' ? 'خاص' : (sBranch === 'center' ? 'سنتر' : '—');
+
                 tr.innerHTML = `
                     <td><span class="id-badge">${sId}</span></td>
                     <td><strong>${fName} ${lName}</strong></td>
                     <td>${genderAr}</td>
+                    <td>${branchAr}</td>
                     <td>${(s.grade || '').toUpperCase()}</td>
                     <td dir="ltr" style="text-align: right;">${s.phone || '—'}</td>
                     <td dir="ltr" style="text-align: right;">${pPhone || '—'}</td>
@@ -894,9 +908,9 @@
 
         function exportToCSV() {
             if (allStudents.length === 0) return alert('لا توجد بيانات طلاب لتصديرها');
-            
-            let csv = '\uFEFFكود الطالب,الاسم الأول,اسم العائلة,النوع,الصف,هاتف الطالب,هاتف ولي الأمر,تاريخ التسجيل\n';
-            
+
+            let csv = '\uFEFFكود الطالب,الاسم الأول,اسم العائلة,النوع,النظام,الصف,هاتف الطالب,هاتف ولي الأمر,تاريخ التسجيل\n';
+
             allStudents.forEach(s => {
                 const sId = s.studentId || s.student_id || '';
                 const fName = s.firstName || s.first_name || '';
@@ -905,10 +919,12 @@
                 const created = s.createdAt || s.created_at || '';
                 const sGender = (s.gender || '').toLowerCase();
                 const genderAr = sGender === 'male' ? 'ذكر' : (sGender === 'female' ? 'أنثى' : '—');
-                
-                csv += `"${sId}","${fName}","${lName}","${genderAr}","${s.grade}","${s.phone}","${pPhone}","${created}"\n`;
+                const sBranch = (s.branch || '').toLowerCase();
+                const branchAr = sBranch === 'private' ? 'خاص' : (sBranch === 'center' ? 'سنتر' : '—');
+
+                csv += `"${sId}","${fName}","${lName}","${genderAr}","${branchAr}","${s.grade}","${s.phone}","${pPhone}","${created}"\n`;
             });
-            
+
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
