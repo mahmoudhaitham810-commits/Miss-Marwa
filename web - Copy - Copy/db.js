@@ -65,37 +65,12 @@ const DB = {
 
             return data;
         } catch (err) {
-            // If offline or API unavailable, create locally
-            const studentId = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
-            const newStudent = {
-                studentId,
-                firstName: payload.firstName.trim(),
-                lastName: payload.lastName.trim(),
-                gender: payload.gender,
-                branch: payload.branch,
-                phone: payload.phone.trim(),
-                parentPhone: payload.parentPhone.trim(),
-                grade: payload.grade,
-                password: payload.password.trim(),
-                role: 'student',
-                createdAt: new Date().toLocaleDateString('ar-EG')
-            };
-            const local = JSON.parse(localStorage.getItem('mm_students_db') || '[]');
-            local.push(newStudent);
-            localStorage.setItem('mm_students_db', JSON.stringify(local));
-            return {
-                success: true,
-                studentId,
-                student: {
-                    id: studentId,
-                    firstName: newStudent.firstName,
-                    lastName: newStudent.lastName,
-                    grade: newStudent.grade,
-                    role: 'student',
-                    gender: newStudent.gender,
-                    branch: newStudent.branch
-                }
-            };
+            // مهم جداً: لو التسجيل فشل فعلاً (مثلاً مشكلة في السيرفر أو الداتا بيز)،
+            // من غير ما نعمل حساب وهمي محفوظ بس في متصفح الطالب (ده كان بيسبب
+            // اختفاء حسابات طلاب حقيقيين من لوحة الأدمن من غير ما حد يلاحظ).
+            // دلوقتي هيظهر رسالة خطأ واضحة للطالب بدل ما نتظاهر إن التسجيل نجح.
+            console.error('Signup failed:', err);
+            throw err;
         }
     },
 
