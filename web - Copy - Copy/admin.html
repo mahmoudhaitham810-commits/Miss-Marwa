@@ -677,6 +677,8 @@ D) 120</pre>
             </form>
         </div>
     </div>
+    
+    <!-- Modal for Adding Content -->
     <div class="modal-overlay" id="addLessonModal">
         <div class="modal-box">
             <button class="close-btn" onclick="closeAddLessonModal()">&times;</button>
@@ -967,6 +969,7 @@ D) 120</pre>
                 } catch (err) {
                     alert("فشل حذف المحتوى: " + err.message);
                 }
+            }
         }
 
         // ==================== نظام الامتحانات ====================
@@ -1163,6 +1166,8 @@ D) 120</pre>
                 alert('حصل خطأ أثناء الحذف: ' + err.message);
             }
         }
+
+        async function resetStudentPassword(studentId) {
             const newPassword = prompt(`أدخل كلمة المرور الجديدة للطالب (${studentId}):`);
             if (!newPassword || newPassword.trim().length < 4) {
                 alert('كلمة المرور يجب ألا تقل عن 4 خانات');
