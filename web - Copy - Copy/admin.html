@@ -305,11 +305,8 @@
             padding: 30px;
             width: 100%;
             max-width: 520px;
-            
-            /* التعديل الجذري لمشكلة السكرول عشان الزرار ميختفيش */
             max-height: 90vh;
             overflow-y: auto;
-            
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
             position: relative;
         }
@@ -407,7 +404,8 @@
             <h2 style="margin-top: 15px;">لوحة تحكم المعلم</h2>
             <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 5px;">أدخل الرمز السري للوصول</p>
             <input type="password" id="adminPinInput" placeholder="PIN Code" autofocus>
-            <button class="action-btn" style="width: 100%; justify-content: center;" onclick="unlockAdmin()">دخول</button>
+            <button class="action-btn" style="width: 100%; justify-content: center;"
+                onclick="unlockAdmin()">دخول</button>
             <div id="pinError" style="color: #ef4444; margin-top: 10px; display: none;">الرمز السري غير صحيح!</div>
         </div>
     </div>
@@ -432,7 +430,8 @@
                 </button>
 
                 <!-- زرار تنظيف الذاكرة الجديد لإصلاح البيانات -->
-                <button class="action-btn secondary" style="border-color: #ef4444; color: #fca5a5;" onclick="clearLocalCache()">
+                <button class="action-btn secondary" style="border-color: #ef4444; color: #fca5a5;"
+                    onclick="clearLocalCache()">
                     <i class="fas fa-broom"></i>
                     <span>تنظيف الذاكرة (إصلاح البيانات)</span>
                 </button>
@@ -465,6 +464,10 @@
                 <i class="fas fa-file-pen"></i>
                 <span>الامتحانات</span>
             </button>
+            <button class="nav-tab" id="tabResultsBtn" onclick="switchSection('results')">
+                <i class="fas fa-chart-simple"></i>
+                <span>نتائج الامتحانات</span>
+            </button>
         </div>
 
         <!-- STUDENTS SECTION -->
@@ -490,7 +493,8 @@
 
             <div class="controls-bar">
                 <div class="search-box">
-                    <input type="text" id="studentSearchInput" placeholder="ابحث باسم الطالب، الكود أو الهاتف..." oninput="filterStudents()">
+                    <input type="text" id="studentSearchInput" placeholder="ابحث باسم الطالب، الكود أو الهاتف..."
+                        oninput="filterStudents()">
                     <i class="fas fa-search"></i>
                 </div>
                 <select class="filter-select" id="studentGradeFilter" onchange="filterStudents()">
@@ -541,7 +545,8 @@
 
             <div class="controls-bar">
                 <div class="search-box">
-                    <input type="text" id="lessonSearchInput" placeholder="ابحث بعنوان الدرس أو الملاحظات..." oninput="filterLessons()">
+                    <input type="text" id="lessonSearchInput" placeholder="ابحث بعنوان الدرس أو الملاحظات..."
+                        oninput="filterLessons()">
                     <i class="fas fa-search"></i>
                 </div>
                 <select class="filter-select" id="lessonGradeFilter" onchange="filterLessons()">
@@ -622,6 +627,37 @@
                 </table>
             </div>
         </div>
+
+        <!-- EXAM RESULTS SECTION -->
+        <div id="resultsSection" style="display: none;">
+            <div class="controls-bar">
+                <select class="filter-select" id="resultsGradeSelect" onchange="onResultsGradeChange()">
+                    <option value="">-- اختاري المرحلة الدراسية --</option>
+                    <option value="prep1">Prep 1</option>
+                    <option value="prep2">Prep 2</option>
+                    <option value="prep3">Prep 3</option>
+                    <option value="sec1">Secondary 1</option>
+                </select>
+                <select class="filter-select" id="resultsExamSelect" onchange="loadExamResults()" disabled>
+                    <option value="">-- اختاري الامتحان --</option>
+                </select>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>كود الطالب (ID)</th>
+                            <th>اسم الطالب</th>
+                            <th>هاتف الطالب</th>
+                            <th>هاتف ولي الأمر</th>
+                            <th>الدرجة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Modal for Adding an Exam -->
@@ -633,10 +669,12 @@
                 إضافة امتحان جديد
             </h2>
 
+
             <form id="addExamForm">
                 <div class="form-group">
                     <label>عنوان الامتحان</label>
-                    <input type="text" id="examTitle" class="form-input" placeholder="مثال: امتحان الوحدة الأولى" required>
+                    <input type="text" id="examTitle" class="form-input" placeholder="مثال: امتحان الوحدة الأولى"
+                        required>
                 </div>
 
                 <div class="form-row">
@@ -673,22 +711,23 @@ A) 90
 B) 100*
 C) 110
 D) 120</pre>
-                    <textarea id="examQuestionsInput" class="form-input" rows="8" placeholder="الصق كل الأسئلة هنا دفعة واحدة..." oninput="renderExamPreview()" style="font-family: monospace; direction: ltr; text-align: left;"></textarea>
+                    <textarea id="examQuestionsInput" class="form-input" rows="8"
+                        placeholder="الصق كل الأسئلة هنا دفعة واحدة..." oninput="renderExamPreview()"
+                        style="font-family: monospace; direction: ltr; text-align: left;"></textarea>
                 </div>
 
                 <div id="examPreviewBox" style="margin-bottom: 15px;">
                     <p style="color: #64748b;">اكتب أو الصق الأسئلة فوق عشان تظهر هنا المعاينة</p>
                 </div>
 
-                <button type="submit" id="examSubmitBtn" class="action-btn" disabled style="width: 100%; justify-content: center; margin-top: 10px;">
+                <button type="submit" id="examSubmitBtn" class="action-btn" disabled
+                    style="width: 100%; justify-content: center; margin-top: 10px;">
                     <i class="fas fa-check"></i>
                     <span>نشر الامتحان</span>
                 </button>
             </form>
         </div>
     </div>
-
-    <!-- Modal for Adding Content -->
     <div class="modal-overlay" id="addLessonModal">
         <div class="modal-box">
             <button class="close-btn" onclick="closeAddLessonModal()">&times;</button>
@@ -700,7 +739,8 @@ D) 120</pre>
             <form id="addLessonForm">
                 <div class="form-group">
                     <label>عنوان المحتوى / الدرس</label>
-                    <input type="text" id="lessonTitle" class="form-input" placeholder="مثال: Unit 1 - Lesson 1: Matter" required>
+                    <input type="text" id="lessonTitle" class="form-input" placeholder="مثال: Unit 1 - Lesson 1: Matter"
+                        required>
                 </div>
 
                 <div class="form-row">
@@ -731,10 +771,12 @@ D) 120</pre>
 
                 <div class="form-group">
                     <label>الوصف أو ملاحظات إضافية</label>
-                    <input type="text" id="lessonNotes" class="form-input" placeholder="مثال: شرح مفصل + حل أسئلة كتاب الوزارة">
+                    <input type="text" id="lessonNotes" class="form-input"
+                        placeholder="مثال: شرح مفصل + حل أسئلة كتاب الوزارة">
                 </div>
 
-                <button type="submit" class="action-btn" style="width: 100%; justify-content: center; margin-top: 10px;">
+                <button type="submit" class="action-btn"
+                    style="width: 100%; justify-content: center; margin-top: 10px;">
                     <i class="fas fa-check"></i>
                     <span>نشر المحتوى في القسم المحدد</span>
                 </button>
@@ -766,6 +808,7 @@ D) 120</pre>
             if (e.key === 'Enter') unlockAdmin();
         });
 
+        // دالة تنظيف الذاكرة لسحب البيانات الطازجة من السيرفر
         function clearLocalCache() {
             localStorage.removeItem('mm_students_db');
             localStorage.removeItem('mm_lessons_db');
@@ -777,15 +820,20 @@ D) 120</pre>
             document.getElementById('studentsSection').style.display = (section === 'students') ? 'block' : 'none';
             document.getElementById('lessonsSection').style.display = (section === 'lessons') ? 'block' : 'none';
             document.getElementById('examsSection').style.display = (section === 'exams') ? 'block' : 'none';
+            document.getElementById('resultsSection').style.display = (section === 'results') ? 'block' : 'none';
 
             document.getElementById('tabStudentsBtn').classList.toggle('active', section === 'students');
             document.getElementById('tabLessonsBtn').classList.toggle('active', section === 'lessons');
             document.getElementById('tabExamsBtn').classList.toggle('active', section === 'exams');
+            document.getElementById('tabResultsBtn').classList.toggle('active', section === 'results');
         }
 
         async function loadData() {
             try {
                 if (typeof DB !== 'undefined' && DB.getStudents) {
+                    // بنمسح الكاش القديم قبل السحب عشان نضمن إن الداشبورد
+                    // بيعرض دايماً آخر بيانات موجودة فعلياً في الداتا بيز
+                    // مش نسخة قديمة متخزنة في المتصفح
                     localStorage.removeItem('mm_students_db');
                     allStudents = await DB.getStudents();
                     allLessons = await DB.getLessons('ALL', 'ALL');
@@ -795,7 +843,9 @@ D) 120</pre>
                 }
                 if (!Array.isArray(allStudents)) allStudents = [];
                 if (!Array.isArray(allLessons)) allLessons = [];
-                
+                if (allStudents.length === 0) {
+                    console.warn('تنبيه: لم يتم جلب أي طلاب. لو انتِ متأكدة إن فيه طلاب مسجلين، يبقى فيه مشكلة في الاتصال بالداتا بيز (شوفي الـ Console لتفاصيل الخطأ).');
+                }
                 renderStudentsTable(allStudents);
                 renderLessonsTable(allLessons);
                 updateStats();
@@ -818,13 +868,19 @@ D) 120</pre>
 
             students.forEach(s => {
                 const tr = document.createElement('tr');
+
+                // قراءة البيانات بطريقة "مضادة للأخطاء" لدعم الداتا بيز والكاش معاً
                 const sId = s.studentId || s.student_id || '—';
                 const fName = s.firstName || s.first_name || '';
                 const lName = s.lastName || s.last_name || '';
                 const pPhone = s.parentPhone || s.parent_phone || '—';
                 const created = s.createdAt || s.created_at || '—';
+
+                // ترجمة النوع للعربي
                 const sGender = (s.gender || '').toLowerCase();
                 const genderAr = sGender === 'male' ? 'ذكر' : (sGender === 'female' ? 'أنثى' : '—');
+
+                // ترجمة نظام الدراسة للعربي
                 const sBranch = (s.branch || '').toLowerCase();
                 const branchAr = sBranch === 'private' ? 'خاص' : (sBranch === 'center' ? 'سنتر' : '—');
 
@@ -943,7 +999,7 @@ D) 120</pre>
                 closeAddLessonModal();
                 await loadData();
                 switchSection('lessons');
-                alert(`تم نشر المحتوى بنجاح!`);
+                alert(`تم نشر المحتوى بنجاح في قسم (${newLesson.category.toUpperCase()}) لصف (${newLesson.grade.toUpperCase()})!`);
             } catch (err) {
                 alert("فشل إضافة المحتوى: " + err.message);
             } finally {
@@ -967,84 +1023,10 @@ D) 120</pre>
             }
         }
 
-        async function resetStudentPassword(studentId) {
-            const newPassword = prompt(`أدخل كلمة المرور الجديدة للطالب (${studentId}):`);
-            if (!newPassword || newPassword.trim().length < 4) {
-                alert('كلمة المرور يجب ألا تقل عن 4 خانات');
-                return;
-            }
-            try {
-                if (typeof DB !== 'undefined' && DB.resetPassword) {
-                    await DB.resetPassword(studentId, newPassword.trim());
-                } else {
-                    const idx = allStudents.findIndex(s => (s.studentId || s.student_id) === studentId);
-                    if (idx !== -1) {
-                        allStudents[idx].password = newPassword.trim();
-                        localStorage.setItem('mm_students_db', JSON.stringify(allStudents));
-                    }
-                }
-                alert(`تم تحديث كلمة المرور للطالب ${studentId} بنجاح!`);
-                await loadData();
-            } catch (err) {
-                alert("فشل تحديث كلمة المرور: " + err.message);
-            }
-        }
-
-        async function deleteStudent(studentId) {
-            if (confirm(`هل أنت متأكد من حذف حساب الطالب (${studentId}) نهائياً؟`)) {
-                try {
-                    if (typeof DB !== 'undefined' && DB.deleteStudent) {
-                        await DB.deleteStudent(studentId);
-                    } else {
-                        allStudents = allStudents.filter(s => (s.studentId || s.student_id) !== studentId);
-                        localStorage.setItem('mm_students_db', JSON.stringify(allStudents));
-                    }
-                    await loadData();
-                } catch (err) {
-                    alert("فشل حذف الطالب: " + err.message);
-                }
-            }
-        }
-
-        function updateStats() {
-            document.getElementById('totalStudentsCount').textContent = allStudents.length;
-            document.getElementById('prepCount').textContent = allStudents.filter(s => (s.grade || '').toLowerCase().startsWith('prep')).length;
-            document.getElementById('secCount').textContent = allStudents.filter(s => (s.grade || '').toLowerCase().startsWith('sec')).length;
-
-            document.getElementById('totalVideosCount').textContent = allLessons.filter(l => (l.category || '').toLowerCase() === 'videos').length;
-            document.getElementById('totalSummariesCount').textContent = allLessons.filter(l => (l.category || '').toLowerCase() === 'summaries').length;
-            document.getElementById('totalExamsCount').textContent = allLessons.filter(l => (l.category || '').toLowerCase() === 'exams').length;
-        }
-
-        function exportToCSV() {
-            if (allStudents.length === 0) return alert('لا توجد بيانات طلاب لتصديرها');
-            let csv = '\uFEFFكود الطالب,الاسم الأول,اسم العائلة,النوع,النظام,الصف,هاتف الطالب,هاتف ولي الأمر,تاريخ التسجيل\n';
-            allStudents.forEach(s => {
-                const sId = s.studentId || s.student_id || '';
-                const fName = s.firstName || s.first_name || '';
-                const lName = s.lastName || s.last_name || '';
-                const pPhone = s.parentPhone || s.parent_phone || '';
-                const created = s.createdAt || s.created_at || '';
-                const sGender = (s.gender || '').toLowerCase();
-                const genderAr = sGender === 'male' ? 'ذكر' : (sGender === 'female' ? 'أنثى' : '—');
-                const sBranch = (s.branch || '').toLowerCase();
-                const branchAr = sBranch === 'private' ? 'خاص' : (sBranch === 'center' ? 'سنتر' : '—');
-
-                csv += `"${sId}","${fName}","${lName}","${genderAr}","${branchAr}","${s.grade}","${s.phone}","${pPhone}","${created}"\n`;
-            });
-
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `Students_List_${new Date().toISOString().slice(0, 10)}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
         // ==================== نظام الامتحانات ====================
 
+        // بيحول النص اللي الأستاذة تلصقه لأسئلة منظمة
+        // الشكل المطلوب: "1) نص السؤال" ثم اختيارات "A) ... B) ... " وحط * بعد الإجابة الصح
         function parseExamText(text) {
             const lines = text.split(/\r?\n/);
             const questions = [];
@@ -1167,12 +1149,9 @@ D) 120</pre>
                 alert(`تم نشر الامتحان بنجاح! (${questions.length} سؤال)`);
                 closeAddExamModal();
                 await loadExams();
-                
-                // منع التحديد التلقائي اللي كان بيظهر الامتحان غصب عننا
-                document.getElementById('examGradeSelect').value = '';
-                document.getElementById('examNameSelect').value = '';
-                document.getElementById('examNameSelect').disabled = true;
-                
+                document.getElementById('examGradeSelect').value = payload.grade;
+                populateExamNameSelect();
+                document.getElementById('examNameSelect').value = data.examId;
                 renderExamsTable();
                 switchSection('exams');
             } catch (err) {
@@ -1191,6 +1170,7 @@ D) 120</pre>
                 allExams = [];
             }
 
+            // الكروت الثلاثة فوق بتفضل تعرض الإجمالي العام دايماً، مش مرتبطة بالاختيار تحت
             const now = new Date();
             const activeCount = allExams.filter(ex => new Date(ex.expires_at) >= now).length;
             document.getElementById('totalExamsCreatedCount').textContent = allExams.length;
@@ -1201,6 +1181,7 @@ D) 120</pre>
             renderExamsTable();
         }
 
+        // بتملأ قائمة "اختاري الامتحان" بناءً على المرحلة اللي اتختارت
         function populateExamNameSelect() {
             const grade = document.getElementById('examGradeSelect').value;
             const nameSelect = document.getElementById('examNameSelect');
@@ -1217,6 +1198,7 @@ D) 120</pre>
             nameSelect.innerHTML = '<option value="">-- اختاري الامتحان --</option>' +
                 examsForGrade.map(ex => `<option value="${ex.id}">${ex.title}</option>`).join('');
 
+            // لو الامتحان اللي كان متختار قبل كده لسه موجود في القائمة، سيبيه زي ما هو
             if (examsForGrade.some(ex => ex.id === currentValue)) {
                 nameSelect.value = currentValue;
             }
@@ -1227,20 +1209,24 @@ D) 120</pre>
             renderExamsTable();
         }
 
+        // الجدول ميعرضش أي حاجة لحد ما تتختار المرحلة والامتحان الاتنين، عشان الداشبورد تفضل نضيفة
         function renderExamsTable() {
             const tbody = document.getElementById('examsTableBody');
             const grade = document.getElementById('examGradeSelect').value;
             const examId = document.getElementById('examNameSelect').value;
 
-            // الجدول هيفضل فاضي خالص ومش هيظهر فيه أي سطر إلا لو اخترت المرحلة والامتحان
-            if (!grade || !examId) {
-                tbody.innerHTML = '';
+            if (!grade) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري المرحلة الدراسية الأول عشان تظهر الامتحانات</td></tr>`;
+                return;
+            }
+            if (!examId) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري اسم الامتحان عشان تظهر تفاصيله</td></tr>`;
                 return;
             }
 
             const ex = allExams.find(e => e.id === examId);
             if (!ex) {
-                tbody.innerHTML = '';
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">الامتحان ده مش موجود دلوقتي (يمكن اتمسح)</td></tr>`;
                 return;
             }
 
@@ -1273,6 +1259,152 @@ D) 120</pre>
             } catch (err) {
                 alert('حصل خطأ أثناء الحذف: ' + err.message);
             }
+        }
+
+        // ==================== تبويب نتائج الامتحانات ====================
+
+        // بتملأ قائمة "اختاري الامتحان" في تبويب النتائج بناءً على المرحلة اللي اتختارت
+        function populateResultsExamSelect() {
+            const grade = document.getElementById('resultsGradeSelect').value;
+            const nameSelect = document.getElementById('resultsExamSelect');
+
+            if (!grade) {
+                nameSelect.innerHTML = '<option value="">-- اختاري الامتحان --</option>';
+                nameSelect.disabled = true;
+                return;
+            }
+
+            const examsForGrade = allExams.filter(ex => (ex.grade || '').toLowerCase() === grade.toLowerCase());
+            nameSelect.disabled = false;
+            nameSelect.innerHTML = '<option value="">-- اختاري الامتحان --</option>' +
+                examsForGrade.map(ex => `<option value="${ex.id}">${ex.title}</option>`).join('');
+        }
+
+        function onResultsGradeChange() {
+            populateResultsExamSelect();
+            document.getElementById('resultsTableBody').innerHTML =
+                `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 30px;">اختاري الامتحان عشان تظهر نتايج الطلاب</td></tr>`;
+        }
+
+        async function loadExamResults() {
+            const tbody = document.getElementById('resultsTableBody');
+            const examId = document.getElementById('resultsExamSelect').value;
+
+            if (!examId) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 30px;">اختاري الامتحان عشان تظهر نتايج الطلاب</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 30px;">جاري التحميل...</td></tr>`;
+
+            try {
+                const res = await fetch(`/api/exams?action=results&examId=${encodeURIComponent(examId)}&t=${Date.now()}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل تحميل النتايج');
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 30px;">محدش دخل الامتحان ده لسه</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = data.map(r => {
+                    let scoreCell = '<span style="color:#94a3b8;">لسه ما سلمش</span>';
+                    if (r.status === 'submitted' && r.score !== null && r.score !== undefined) {
+                        const pct = r.total > 0 ? (r.score / r.total) * 100 : 0;
+                        let color = '#e2e8f0';
+                        if (pct < 50) color = '#ef4444';
+                        else if (r.score >= r.total - 1) color = '#4ade80';
+                        scoreCell = `<strong style="color:${color};">${r.score} / ${r.total}</strong>`;
+                    }
+                    return `<tr>
+                        <td><span class="id-badge">${r.studentId}</span></td>
+                        <td><strong>${r.firstName} ${r.lastName}</strong></td>
+                        <td>${r.phone || ''}</td>
+                        <td>${r.parentPhone || ''}</td>
+                        <td>${scoreCell}</td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 30px;">حصل خطأ: ${err.message}</td></tr>`;
+            }
+        }
+
+        async function resetStudentPassword(studentId) {
+            const newPassword = prompt(`أدخل كلمة المرور الجديدة للطالب (${studentId}):`);
+            if (!newPassword || newPassword.trim().length < 4) {
+                alert('كلمة المرور يجب ألا تقل عن 4 خانات');
+                return;
+            }
+            try {
+                if (typeof DB !== 'undefined' && DB.resetPassword) {
+                    await DB.resetPassword(studentId, newPassword.trim());
+                } else {
+                    const idx = allStudents.findIndex(s => (s.studentId || s.student_id) === studentId);
+                    if (idx !== -1) {
+                        allStudents[idx].password = newPassword.trim();
+                        localStorage.setItem('mm_students_db', JSON.stringify(allStudents));
+                    }
+                }
+                alert(`تم تحديث كلمة المرور للطالب ${studentId} بنجاح!`);
+                await loadData();
+            } catch (err) {
+                alert("فشل تحديث كلمة المرور: " + err.message);
+            }
+        }
+
+        async function deleteStudent(studentId) {
+            if (confirm(`هل أنت متأكد من حذف حساب الطالب (${studentId}) نهائياً؟`)) {
+                try {
+                    if (typeof DB !== 'undefined' && DB.deleteStudent) {
+                        await DB.deleteStudent(studentId);
+                    } else {
+                        allStudents = allStudents.filter(s => (s.studentId || s.student_id) !== studentId);
+                        localStorage.setItem('mm_students_db', JSON.stringify(allStudents));
+                    }
+                    await loadData();
+                } catch (err) {
+                    alert("فشل حذف الطالب: " + err.message);
+                }
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('totalStudentsCount').textContent = allStudents.length;
+            document.getElementById('prepCount').textContent = allStudents.filter(s => (s.grade || '').toLowerCase().startsWith('prep')).length;
+            document.getElementById('secCount').textContent = allStudents.filter(s => (s.grade || '').toLowerCase().startsWith('sec')).length;
+
+            document.getElementById('totalVideosCount').textContent = allLessons.filter(l => (l.category || '').toLowerCase() === 'videos').length;
+            document.getElementById('totalSummariesCount').textContent = allLessons.filter(l => (l.category || '').toLowerCase() === 'summaries').length;
+            document.getElementById('totalExamsCount').textContent = allLessons.filter(l => (l.category || '').toLowerCase() === 'exams').length;
+        }
+
+        function exportToCSV() {
+            if (allStudents.length === 0) return alert('لا توجد بيانات طلاب لتصديرها');
+
+            let csv = '\uFEFFكود الطالب,الاسم الأول,اسم العائلة,النوع,النظام,الصف,هاتف الطالب,هاتف ولي الأمر,تاريخ التسجيل\n';
+
+            allStudents.forEach(s => {
+                const sId = s.studentId || s.student_id || '';
+                const fName = s.firstName || s.first_name || '';
+                const lName = s.lastName || s.last_name || '';
+                const pPhone = s.parentPhone || s.parent_phone || '';
+                const created = s.createdAt || s.created_at || '';
+                const sGender = (s.gender || '').toLowerCase();
+                const genderAr = sGender === 'male' ? 'ذكر' : (sGender === 'female' ? 'أنثى' : '—');
+                const sBranch = (s.branch || '').toLowerCase();
+                const branchAr = sBranch === 'private' ? 'خاص' : (sBranch === 'center' ? 'سنتر' : '—');
+
+                csv += `"${sId}","${fName}","${lName}","${genderAr}","${branchAr}","${s.grade}","${s.phone}","${pPhone}","${created}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Students_List_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
     </script>
 </body>
