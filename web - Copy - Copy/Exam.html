@@ -214,6 +214,7 @@
             text-align: center;
             width: 100%;
             max-width: 500px;
+            margin: 0 auto;
         }
 
         .status-card i {
@@ -290,21 +291,9 @@
     </main>
 
     <script>
-        const params = new URLSearchParams(window.location.search);
-        const examId = params.get('id');
-
-        // نفس حارس تسجيل الدخول المستخدم في باقي الموقع
-        const sessionData = localStorage.getItem('student_session');
-        if (!sessionData) {
-            alert('يرجى تسجيل الدخول أولاً');
-            window.location.href = './index.html';
-        }
-        const student = JSON.parse(sessionData || '{}');
-
-        if (!examId) {
-            window.location.href = './index.html';
-        }
-
+        // تعريف المتغيرات في النطاق العام لتكون متاحة لكل الدوال
+        let student = null;
+        let examId = null;
         let examQuestions = [];
         let leaveWarningEnabled = false;
 
@@ -319,7 +308,7 @@
         function renderMessage(title, text, icon) {
             document.getElementById('pageHeading').textContent = 'الامتحان';
             document.getElementById('pageSubheading').textContent = '';
-            const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
+            const backUrl = student ? `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams` : './index.html';
             document.getElementById('examContainer').innerHTML = `
                 <div class="status-card">
                     <i class="fas ${icon}"></i>
@@ -431,7 +420,32 @@
             }
         }
 
-        window.addEventListener('DOMContentLoaded', startExam);
+        // حارس الحماية وضبط التهيئة (يعمل بمجرد تحميل الصفحة)
+        window.addEventListener('DOMContentLoaded', () => {
+            const sessionData = localStorage.getItem('student_session');
+            
+            // 1. التحقق من وجود جلسة الطالب
+            if (!sessionData) {
+                alert('عفواً، يبدو أنك غير مسجل الدخول أو انتهت الجلسة. سيتم تحويلك للصفحة الرئيسية.');
+                window.location.replace('./index.html');
+                return; // إيقاف تنفيذ باقي الكود تماماً
+            }
+
+            student = JSON.parse(sessionData);
+            
+            // 2. التحقق من وجود رابط الامتحان (examId)
+            const params = new URLSearchParams(window.location.search);
+            examId = params.get('id');
+
+            if (!examId) {
+                alert('عفواً، رابط الامتحان غير صحيح أو مفقود. سيتم إعادتك لقائمة الامتحانات.');
+                window.location.replace('./materials.html?grade=' + encodeURIComponent(student.grade || '') + '&cat=exams');
+                return; // إيقاف التنفيذ
+            }
+
+            // إذا كان كل شيء سليماً، نبدأ الامتحان
+            startExam();
+        });
     </script>
 
 </body>
