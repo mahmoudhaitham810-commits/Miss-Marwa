@@ -68,6 +68,76 @@ export async function onRequestGet(context) {
             return Response.json(list);
         }
 
+        // === تستخدمها لوحة الأدمن عشان تجيب نتايج كل الطلاب في امتحان معين ===
+        if (action === 'results') {
+            const examId = url.searchParams.get('examId');
+            if (!examId) {
+                return Response.json({ error: 'كود الامتحان مطلوب' }, { status: 400 });
+            }
+
+            const exam = await db.prepare("SELECT questions FROM exams WHERE id = ?").bind(examId).first();
+            if (!exam) {
+                return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
+            }
+
+            let total = 0;
+            try { total = JSON.parse(exam.questions).length; } catch (e) { /* ignore */ }
+
+            const { results } = await db.prepare(
+                `SELECT s.student_id as studentId, s.first_name as firstName, s.last_name as lastName,
+                        s.phone, s.parent_phone as parentPhone, sub.status, sub.score
+                 FROM exam_submissions sub
+                 JOIN students s ON s.student_id = sub.student_id
+                 WHERE sub.exam_id = ?
+                 ORDER BY s.first_name ASC`
+            ).bind(examId).all();
+
+            const list = results.map(r => ({
+                studentId: r.studentId,
+                firstName: r.firstName,
+                lastName: r.lastName,
+                phone: r.phone,
+                parentPhone: r.parentPhone,
+                status: r.status,
+                score: r.score,
+                total
+            }));
+
+            return Response.json(list);
+        }
+
+        // === تستخدمها صفحة "نتائج الامتحانات" الخاصة بالطالب عشان تعرض كل درجاته ===
+        if (action === 'my-results') {
+            const studentId = url.searchParams.get('studentId');
+            if (!studentId) {
+                return Response.json({ error: 'كود الطالب مطلوب' }, { status: 400 });
+            }
+
+            const { results } = await db.prepare(
+                `SELECT sub.exam_id as examId, sub.score, sub.submitted_at as submittedAt,
+                        e.title, e.grade, e.questions
+                 FROM exam_submissions sub
+                 JOIN exams e ON e.id = sub.exam_id
+                 WHERE sub.student_id = ? AND sub.status = 'submitted'
+                 ORDER BY sub.submitted_at DESC`
+            ).bind(studentId).all();
+
+            const list = results.map(r => {
+                let total = 0;
+                try { total = JSON.parse(r.questions).length; } catch (e) { /* ignore */ }
+                return {
+                    examId: r.examId,
+                    title: r.title,
+                    grade: r.grade,
+                    score: r.score,
+                    total,
+                    submittedAt: r.submittedAt
+                };
+            });
+
+            return Response.json(list);
+        }
+
         return Response.json({ error: 'إجراء غير معروف' }, { status: 400 });
     } catch (err) {
         return Response.json({ error: err.message }, { status: 500 });
