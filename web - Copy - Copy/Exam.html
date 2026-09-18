@@ -319,12 +319,13 @@
         function renderMessage(title, text, icon) {
             document.getElementById('pageHeading').textContent = 'الامتحان';
             document.getElementById('pageSubheading').textContent = '';
+            const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
             document.getElementById('examContainer').innerHTML = `
                 <div class="status-card">
                     <i class="fas ${icon}"></i>
                     <h2>${title}</h2>
                     <p>${text}</p>
-                    <a href="javascript:history.back()" class="back-btn-inline">رجوع</a>
+                    <a href="${backUrl}" class="back-btn-inline">رجوع لقائمة الامتحانات</a>
                 </div>
             `;
         }
@@ -332,12 +333,13 @@
         function renderResultScreen(score, total) {
             document.getElementById('pageHeading').textContent = 'نتيجتك';
             document.getElementById('pageSubheading').textContent = '';
+            const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
             document.getElementById('examContainer').innerHTML = `
                 <div class="status-card">
                     <i class="fas fa-circle-check" style="color:#4ade80;"></i>
                     <h2>تم تسليم هذا الامتحان</h2>
                     <p>درجتك: <strong style="color:#fff; font-size:1.2rem;">${score} / ${total}</strong></p>
-                    <a href="javascript:history.back()" class="back-btn-inline">رجوع</a>
+                    <a href="${backUrl}" class="back-btn-inline">رجوع لقائمة الامتحانات</a>
                 </div>
             `;
         }
