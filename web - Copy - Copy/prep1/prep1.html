@@ -516,7 +516,20 @@
 
             document.getElementById('videoCount').textContent = videos.length;
             document.getElementById('summaryCount').textContent = summaries.length;
-            document.getElementById('examCount').textContent = exams.length;
+
+            // نجيب كمان عدد الامتحانات الحقيقية من نظام الامتحانات الجديد ونضيفه على العدد القديم
+            let liveExamsCount = 0;
+            try {
+                const res = await fetch(`/api/exams?action=list-for-student&grade=prep1&studentId=${encodeURIComponent(student.id || '')}`);
+                if (res.ok) {
+                    const liveExams = await res.json();
+                    if (Array.isArray(liveExams)) liveExamsCount = liveExams.length;
+                }
+            } catch (e) {
+                console.error('Error loading live exam count:', e);
+            }
+
+            document.getElementById('examCount').textContent = exams.length + liveExamsCount;
         }
 
         updateCategoryCounts();
