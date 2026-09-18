@@ -358,6 +358,63 @@
         document.getElementById('backLink').href = `./${gradeFileNames[grade] || 'index.html'}`;
         document.getElementById('backLink').innerHTML = `<i class="fas fa-arrow-left"></i> Back to ${gradeNames[grade] || 'Grade'}`;
 
+        // بتبني كارت HTML لعنصر من النظام القديم (فيديو / ملخص / رابط امتحان قديم)
+        function buildOldMaterialCardHtml(item) {
+            const urlLower = (item.url || '').toLowerCase();
+            let iconClass = 'fas fa-file-pdf item-icon pdf';
+            let actionIcon = 'fa-cloud-download-alt';
+
+            if (cat === 'videos') {
+                actionIcon = 'fa-play';
+                if (urlLower.includes('youtube') || urlLower.includes('youtu.be')) iconClass = 'fab fa-youtube item-icon yt';
+                else if (urlLower.includes('facebook') || urlLower.includes('fb.watch')) iconClass = 'fab fa-facebook-f item-icon fb';
+                else iconClass = 'fas fa-play-circle item-icon';
+            } else if (cat === 'exams') {
+                iconClass = 'fas fa-file-signature item-icon exam';
+                actionIcon = 'fa-arrow-left';
+            }
+
+            const isArabic = /[\u0600-\u06FF]/.test(item.title);
+            return `<a href="${item.url}" target="_blank" class="material-card">
+                <div class="card-left">
+                    <i class="${iconClass}"></i>
+                    <div class="title-group">
+                        <span class="material-title" style="${isArabic ? 'direction: rtl; text-align: right;' : ''}">${item.title}</span>
+                        ${item.notes ? `<span class="material-subtitle">${item.notes}</span>` : ''}
+                    </div>
+                </div>
+                <i class="fas ${actionIcon} action-icon"></i>
+            </a>`;
+        }
+
+        // بتبني كارت HTML لامتحان حقيقي من النظام الجديد، وبتفتح exam.html جوه نفس الموقع
+        function buildLiveExamCardHtml(exam) {
+            let subtitle = `عدد الأسئلة: ${exam.total}`;
+            let actionIcon = 'fa-arrow-left';
+
+            if (exam.status === 'submitted') {
+                subtitle = `تم التسليم بالفعل — الدرجة: ${exam.score} / ${exam.total}`;
+                actionIcon = 'fa-circle-check';
+            } else if (exam.status === 'locked') {
+                subtitle = 'بدأتِ هذا الامتحان قبل كده ولا يمكن الدخول مرة أخرى';
+                actionIcon = 'fa-lock';
+            } else if (exam.status === 'expired') {
+                subtitle = 'انتهى وقت هذا الامتحان';
+                actionIcon = 'fa-clock';
+            }
+
+            return `<a href="./exam.html?id=${encodeURIComponent(exam.id)}" class="material-card">
+                <div class="card-left">
+                    <i class="fas fa-file-signature item-icon exam"></i>
+                    <div class="title-group">
+                        <span class="material-title">${exam.title}</span>
+                        <span class="material-subtitle">${subtitle}</span>
+                    </div>
+                </div>
+                <i class="fas ${actionIcon} action-icon"></i>
+            </a>`;
+        }
+
         async function loadContent() {
             const container = document.getElementById('itemsContainer');
             container.innerHTML = `
@@ -367,6 +424,24 @@
                 </div>
             `;
 
+            let cardsHtml = '';
+
+            // لو القسم امتحانات، هات الامتحانات الحقيقية من النظام الجديد الأول
+            if (cat === 'exams') {
+                try {
+                    const res = await fetch(`/api/exams?action=list-for-student&grade=${encodeURIComponent(grade)}&studentId=${encodeURIComponent(student.id || '')}&t=${Date.now()}`);
+                    if (res.ok) {
+                        const liveExams = await res.json();
+                        if (Array.isArray(liveExams)) {
+                            cardsHtml += liveExams.map(buildLiveExamCardHtml).join('');
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error loading live exams:', err);
+                }
+            }
+
+            // بعد كده هات المحتوى القديم (فيديوهات / ملخصات / أي روابط امتحانات قديمة)
             let filtered = [];
             try {
                 if (typeof DB !== 'undefined' && DB.getLessons) {
@@ -388,9 +463,9 @@
                 console.error("Error loading lessons:", err);
             }
 
-            container.innerHTML = '';
+            cardsHtml += filtered.map(buildOldMaterialCardHtml).join('');
 
-            if (!filtered || filtered.length === 0) {
+            if (!cardsHtml) {
                 container.innerHTML = `
                     <div class="empty-placeholder">
                         <i class="fas fa-folder-open"></i>
@@ -401,38 +476,7 @@
                 return;
             }
 
-            filtered.forEach(item => {
-                const urlLower = (item.url || '').toLowerCase();
-                let iconClass = 'fas fa-file-pdf item-icon pdf';
-                let actionIcon = 'fa-cloud-download-alt';
-
-                if (cat === 'videos') {
-                    actionIcon = 'fa-play';
-                    if (urlLower.includes('youtube') || urlLower.includes('youtu.be')) iconClass = 'fab fa-youtube item-icon yt';
-                    else if (urlLower.includes('facebook') || urlLower.includes('fb.watch')) iconClass = 'fab fa-facebook-f item-icon fb';
-                    else iconClass = 'fas fa-play-circle item-icon';
-                } else if (cat === 'exams') {
-                    iconClass = 'fas fa-file-signature item-icon exam';
-                    actionIcon = 'fa-arrow-left';
-                }
-
-                const isArabic = /[\u0600-\u06FF]/.test(item.title);
-                const card = document.createElement('a');
-                card.href = item.url;
-                card.target = '_blank';
-                card.className = 'material-card';
-                card.innerHTML = `
-                    <div class="card-left">
-                        <i class="${iconClass}"></i>
-                        <div class="title-group">
-                            <span class="material-title" style="${isArabic ? 'direction: rtl; text-align: right;' : ''}">${item.title}</span>
-                            ${item.notes ? `<span class="material-subtitle">${item.notes}</span>` : ''}
-                        </div>
-                    </div>
-                    <i class="fas ${actionIcon} action-icon"></i>
-                `;
-                container.appendChild(card);
-            });
+            container.innerHTML = cardsHtml;
         }
 
         window.addEventListener('DOMContentLoaded', loadContent);
@@ -443,18 +487,19 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ studentId: student.id })
             })
-            .then(res => res.json())
-            .then(data => {
-                if (data.valid === false) {
-                    // لو السيرفر قال إن الحساب مش موجود، امسح التذكرة واطرده
-                    localStorage.removeItem('student_session');
-                    alert('تم حذف هذا الحساب من قبل الإدارة. يرجى مراجعة المعلم.');
-                    window.location.href = './index.html';
-                }
-            })
-            .catch(err => console.log('Validation error:', err));
+                .then(res => res.json())
+                .then(data => {
+                    if (data.valid === false) {
+                        // لو السيرفر قال إن الحساب مش موجود، امسح التذكرة واطرده
+                        localStorage.removeItem('student_session');
+                        alert('تم حذف هذا الحساب من قبل الإدارة. يرجى مراجعة المعلم.');
+                        window.location.href = './index.html';
+                    }
+                })
+                .catch(err => console.log('Validation error:', err));
         }
     </script>
+
 </body>
 
 </html>
