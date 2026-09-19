@@ -68,7 +68,7 @@ export async function onRequestGet(context) {
             return Response.json(list);
         }
 
-        // === تستخدمها لوحة الأدمن عشان تجيب نتايج كل الطلاب في امتحان معين ===
+        // === تستخدمها لوحة الأدمن عشان تجيب نتايج كل الطلاب في امتحان معين، مع إحصائية سريعة ===
         if (action === 'results') {
             const examId = url.searchParams.get('examId');
             if (!examId) {
@@ -103,7 +103,14 @@ export async function onRequestGet(context) {
                 total
             }));
 
-            return Response.json(list);
+            // إحصائية سريعة: كام طالب فتح الامتحان، كام سلم، كام لسه بيحل
+            const stats = {
+                totalAccessed: list.length,
+                completed: list.filter(r => r.status === 'submitted').length,
+                inProgress: list.filter(r => r.status === 'started').length
+            };
+
+            return Response.json({ stats, results: list });
         }
 
         // === تستخدمها صفحة "نتائج الامتحانات" الخاصة بالطالب عشان تعرض كل درجاته ===
@@ -172,14 +179,16 @@ export async function onRequestPost(context) {
             }
 
             const durationDays = parseInt(data.durationDays, 10) > 0 ? parseInt(data.durationDays, 10) : 3;
+            // تايمر الامتحان اختياري: لو مبعتوش رقم صحيح موجب، يبقى مفيش وقت محدد (NULL)
+            const timeLimitMinutes = parseInt(data.timeLimitMinutes, 10) > 0 ? parseInt(data.timeLimitMinutes, 10) : null;
             const examId = `EX-${Math.floor(100000 + Math.random() * 900000)}`;
             const now = new Date();
             const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
             await db.prepare(
-                "INSERT INTO exams (id, title, grade, questions, duration_days, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
+                "INSERT INTO exams (id, title, grade, questions, duration_days, time_limit_minutes, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
             ).bind(
-                examId, data.title, data.grade, JSON.stringify(data.questions), durationDays, expiresAt.toISOString()
+                examId, data.title, data.grade, JSON.stringify(data.questions), durationDays, timeLimitMinutes, expiresAt.toISOString()
             ).run();
 
             return Response.json({ success: true, examId });
@@ -196,6 +205,18 @@ export async function onRequestPost(context) {
             return Response.json({ success: true });
         }
 
+        // === الأدمن بتفتح المحاولة تاني لطالب معين (لو اتقفل عليه بالغلط أو النت قطع معاه) ===
+        if (action === 'reset-attempt') {
+            const { examId, studentId } = data;
+            if (!examId || !studentId) {
+                return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
+            }
+            await db.prepare(
+                "DELETE FROM exam_submissions WHERE exam_id = ? AND student_id = ?"
+            ).bind(examId, studentId).run();
+            return Response.json({ success: true });
+        }
+
         // === الطالب بيفتح الامتحان لأول مرة (وده اللي بيقفل الدخول تاني) ===
         if (action === 'start') {
             const { examId, studentId } = data;
@@ -204,7 +225,7 @@ export async function onRequestPost(context) {
             }
 
             const exam = await db.prepare(
-                "SELECT id, title, grade, questions, expires_at FROM exams WHERE id = ?"
+                "SELECT id, title, grade, questions, expires_at, time_limit_minutes as timeLimitMinutes FROM exams WHERE id = ?"
             ).bind(examId).first();
 
             if (!exam) {
@@ -255,6 +276,7 @@ export async function onRequestPost(context) {
                 status: 'started',
                 examId: exam.id,
                 title: exam.title,
+                timeLimitMinutes: exam.timeLimitMinutes || null,
                 questions: questionsForStudent
             });
         }
