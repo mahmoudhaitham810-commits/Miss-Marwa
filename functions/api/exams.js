@@ -4,6 +4,47 @@ function getDb(env) {
     return env.DB || env.D1_DB;
 }
 
+// بتبعت إشعار Push للطلاب المشتركين. لو معانا "grade"، بتستهدف بس الطلاب
+// المتعلّمين بتاج المرحلة دي (مش كل الطلاب)؛ لو مفيش، بتبعت للكل كحل احتياطي.
+// لو الإرسال فشل لأي سبب، بترجع بس من غير ما توقف نشر الامتحان نفسه.
+async function sendPushNotification(env, { title, message, grade }) {
+    const appId = env.ONESIGNAL_APP_ID;
+    const apiKey = env.ONESIGNAL_REST_API_KEY;
+
+    if (!appId || !apiKey) {
+        console.log('OneSignal غير مفعّل: ONESIGNAL_APP_ID أو ONESIGNAL_REST_API_KEY مش متسجلين كـ Environment Variables');
+        return;
+    }
+
+    const body = {
+        app_id: appId,
+        target_channel: 'push',
+        headings: { en: title, ar: title },
+        contents: { en: message, ar: message }
+    };
+
+    if (grade) {
+        body.filters = [
+            { field: 'tag', key: 'grade', relation: '=', value: grade.toUpperCase() }
+        ];
+    } else {
+        body.included_segments = ['Subscribed Users'];
+    }
+
+    try {
+        await fetch('https://api.onesignal.com/notifications', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Authorization': `Key ${apiKey}`
+            },
+            body: JSON.stringify(body)
+        });
+    } catch (err) {
+        console.log('فشل إرسال إشعار Push:', err.message);
+    }
+}
+
 export async function onRequestGet(context) {
     const { request, env } = context;
     const url = new URL(request.url);
@@ -190,6 +231,13 @@ export async function onRequestPost(context) {
             ).bind(
                 examId, data.title, data.grade, JSON.stringify(data.questions), durationDays, timeLimitMinutes, expiresAt.toISOString()
             ).run();
+
+            // بمجرد ما الامتحان يتحفظ بنجاح، ابعتي إشعار لطلاب نفس المرحلة بس
+            await sendPushNotification(env, {
+                title: '📝 امتحان جديد',
+                message: `${data.title} — متاح الآن لطلاب ${(data.grade || '').toUpperCase()}`,
+                grade: data.grade
+            });
 
             return Response.json({ success: true, examId });
         }
