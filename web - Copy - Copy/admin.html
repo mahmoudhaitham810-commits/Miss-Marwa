@@ -643,6 +643,21 @@
                 </select>
             </div>
 
+            <div class="stats-grid" id="resultsStatsGrid" style="display: none;">
+                <div class="stat-card">
+                    <h3 id="statTotalAccessed">0</h3>
+                    <p>فتحوا الامتحان</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="statCompleted">0</h3>
+                    <p>سلّموا وأخدوا درجة</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="statInProgress">0</h3>
+                    <p>لسه بيحلوا دلوقتي</p>
+                </div>
+            </div>
+
             <div class="table-container">
                 <table>
                     <thead>
@@ -652,6 +667,7 @@
                             <th>هاتف الطالب</th>
                             <th>هاتف ولي الأمر</th>
                             <th>الدرجة</th>
+                            <th>إجراءات</th>
                         </tr>
                     </thead>
                     <tbody id="resultsTableBody"></tbody>
@@ -692,6 +708,14 @@
                         <label>مدة بقاء الامتحان مفتوح (بالأيام)</label>
                         <input type="number" id="examDuration" class="form-input" value="3" min="1" required>
                     </div>
+                </div>
+
+                <div class="form-group">
+                    <label>مدة حل الامتحان نفسه (بالدقايق) — اختياري</label>
+                    <p style="color: #64748b; font-size: 0.82rem; margin-bottom: 6px;">
+                        ده وقت العداد التنازلي اللي الطالب هيشوفه وهو بيحل. سيبيه فاضي لو مش عايزة وقت محدد.
+                    </p>
+                    <input type="number" id="examTimeLimit" class="form-input" placeholder="مثال: 30" min="1">
                 </div>
 
                 <div class="form-group">
@@ -1134,6 +1158,7 @@ D) 120</pre>
                 title: document.getElementById('examTitle').value.trim(),
                 grade: document.getElementById('examGrade').value,
                 durationDays: parseInt(document.getElementById('examDuration').value, 10) || 3,
+                timeLimitMinutes: parseInt(document.getElementById('examTimeLimit').value, 10) || null,
                 questions
             };
 
@@ -1282,32 +1307,48 @@ D) 120</pre>
 
         function onResultsGradeChange() {
             populateResultsExamSelect();
+            document.getElementById('resultsStatsGrid').style.display = 'none';
             document.getElementById('resultsTableBody').innerHTML =
-                `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 30px;">اختاري الامتحان عشان تظهر نتايج الطلاب</td></tr>`;
+                `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري الامتحان عشان تظهر نتايج الطلاب</td></tr>`;
         }
+
+        // بنسيب كود الامتحان الحالي متاح عشان زرار "إعادة فتح المحاولة" يقدر يستخدمه
+        let currentResultsExamId = '';
 
         async function loadExamResults() {
             const tbody = document.getElementById('resultsTableBody');
+            const statsGrid = document.getElementById('resultsStatsGrid');
             const examId = document.getElementById('resultsExamSelect').value;
+            currentResultsExamId = examId;
 
             if (!examId) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 30px;">اختاري الامتحان عشان تظهر نتايج الطلاب</td></tr>`;
+                statsGrid.style.display = 'none';
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري الامتحان عشان تظهر نتايج الطلاب</td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 30px;">جاري التحميل...</td></tr>`;
+            statsGrid.style.display = 'none';
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">جاري التحميل...</td></tr>`;
 
             try {
                 const res = await fetch(`/api/exams?action=results&examId=${encodeURIComponent(examId)}&t=${Date.now()}`);
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'فشل تحميل النتايج');
 
-                if (!Array.isArray(data) || data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 30px;">محدش دخل الامتحان ده لسه</td></tr>`;
+                const stats = data.stats || { totalAccessed: 0, completed: 0, inProgress: 0 };
+                const rows = Array.isArray(data.results) ? data.results : [];
+
+                document.getElementById('statTotalAccessed').textContent = stats.totalAccessed;
+                document.getElementById('statCompleted').textContent = stats.completed;
+                document.getElementById('statInProgress').textContent = stats.inProgress;
+                statsGrid.style.display = 'grid';
+
+                if (rows.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">محدش دخل الامتحان ده لسه</td></tr>`;
                     return;
                 }
 
-                tbody.innerHTML = data.map(r => {
+                tbody.innerHTML = rows.map(r => {
                     let scoreCell = '<span style="color:#94a3b8;">لسه ما سلمش</span>';
                     if (r.status === 'submitted' && r.score !== null && r.score !== undefined) {
                         const pct = r.total > 0 ? (r.score / r.total) * 100 : 0;
@@ -1322,10 +1363,29 @@ D) 120</pre>
                         <td>${r.phone || ''}</td>
                         <td>${r.parentPhone || ''}</td>
                         <td>${scoreCell}</td>
+                        <td><button class="btn-table btn-reset" onclick="resetExamAttempt('${r.studentId}')">إعادة فتح المحاولة</button></td>
                     </tr>`;
                 }).join('');
             } catch (err) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 30px;">حصل خطأ: ${err.message}</td></tr>`;
+                statsGrid.style.display = 'none';
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #ef4444; padding: 30px;">حصل خطأ: ${err.message}</td></tr>`;
+            }
+        }
+
+        async function resetExamAttempt(studentId) {
+            if (!currentResultsExamId) return;
+            if (!confirm(`متأكدة إنك عايزة تفتحي المحاولة تاني للطالب (${studentId})؟ لو كان سلّم قبل كده، درجته هتتمسح وهيقدر يدخل الامتحان من الأول.`)) return;
+
+            try {
+                const res = await fetch('/api/exams?action=reset-attempt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ examId: currentResultsExamId, studentId })
+                });
+                if (!res.ok) throw new Error('فشلت إعادة الفتح');
+                await loadExamResults();
+            } catch (err) {
+                alert('حصل خطأ: ' + err.message);
             }
         }
 
