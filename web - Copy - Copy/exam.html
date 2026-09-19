@@ -22,6 +22,10 @@
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+            /* منع تحديد النص في كل الصفحة عشان يصعب نسخ أسئلة الامتحان */
+            user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
         }
 
         body {
@@ -90,6 +94,25 @@
 
         .brand-name span {
             color: var(--glowing-cyan);
+        }
+
+        .timer-badge {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 229, 255, 0.08);
+            border: 1px solid var(--border-glass);
+            padding: 8px 18px;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 1.05rem;
+            color: var(--glowing-cyan);
+        }
+
+        .timer-badge.warning {
+            color: #f87171;
+            border-color: #f87171;
+            background: rgba(239, 68, 68, 0.1);
         }
 
         .main-content {
@@ -259,6 +282,11 @@
             .question-card {
                 padding: 18px;
             }
+
+            .timer-badge {
+                font-size: 0.9rem;
+                padding: 6px 12px;
+            }
         }
     </style>
 </head>
@@ -272,6 +300,10 @@
 
     <nav class="top-nav">
         <div class="brand-name">Miss <span>Marwa</span></div>
+        <div class="timer-badge" id="timerBadge">
+            <i class="fas fa-stopwatch"></i>
+            <span id="timerText">00:00</span>
+        </div>
     </nav>
 
     <main class="main-content">
@@ -307,6 +339,35 @@
 
         let examQuestions = [];
         let leaveWarningEnabled = false;
+        let timerInterval = null;
+        let tabSwitchCount = 0;
+
+        // ==================== منع النسخ والغش ====================
+
+        // منع الزرار اليمين (القائمة اللي فيها "نسخ" و"فحص العنصر")
+        document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // منع نسخ أي نص من الصفحة
+        document.addEventListener('copy', (e) => e.preventDefault());
+        document.addEventListener('cut', (e) => e.preventDefault());
+
+        // منع أشهر اختصارات لوحة المفاتيح للنسخ/الطباعة/أدوات المطور
+        document.addEventListener('keydown', (e) => {
+            const key = (e.key || '').toLowerCase();
+            const ctrlOrCmd = e.ctrlKey || e.metaKey;
+
+            // F12 وأدوات المطور
+            if (key === 'f12') { e.preventDefault(); return; }
+            if (ctrlOrCmd && e.shiftKey && ['i', 'j', 'c'].includes(key)) { e.preventDefault(); return; }
+
+            // نسخ / قص / لصق / طباعة / حفظ / عرض المصدر
+            if (ctrlOrCmd && ['c', 'x', 'v', 'p', 's', 'u'].includes(key)) { e.preventDefault(); return; }
+
+            // زرار PrintScreen (المتصفح ملوش سيطرة كاملة عليه، لكن بنحاول نحذف اللي انسخ فوراً)
+            if (key === 'printscreen') {
+                navigator.clipboard?.writeText('').catch(() => { });
+            }
+        });
 
         // تحذير لو الطالب حاول يقفل الصفحة أو يرجع للخلف أثناء الامتحان
         window.addEventListener('beforeunload', function (e) {
@@ -316,7 +377,60 @@
             }
         });
 
+        // اكتشاف تبديل التابات أثناء الامتحان: تحذير أول مرة، وتسليم تلقائي لو اتكررت
+        document.addEventListener('visibilitychange', () => {
+            if (!leaveWarningEnabled || !document.hidden) return;
+
+            tabSwitchCount++;
+            if (tabSwitchCount === 1) {
+                alert('تنبيه: الخروج من صفحة الامتحان غير مسموح به. لو تكرر الأمر، هيتم تسليم الامتحان تلقائياً بإجاباتك الحالية.');
+            } else if (tabSwitchCount >= 2) {
+                submitAnswers(true, 'تم رصد خروجك من صفحة الامتحان أكتر من مرة، فتم تسليمه تلقائياً بإجاباتك الحالية.');
+            }
+        });
+
+        // ==================== العداد التنازلي ====================
+
+        function formatTime(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+            const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function startTimer(minutes) {
+            let remainingSeconds = minutes * 60;
+            const badge = document.getElementById('timerBadge');
+            const text = document.getElementById('timerText');
+            badge.style.display = 'flex';
+            text.textContent = formatTime(remainingSeconds);
+
+            timerInterval = setInterval(() => {
+                remainingSeconds--;
+                text.textContent = formatTime(remainingSeconds);
+
+                if (remainingSeconds <= 60) {
+                    badge.classList.add('warning');
+                }
+
+                if (remainingSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    submitAnswers(true, 'خلص وقت الامتحان، فتم تسليمه تلقائياً بإجاباتك الحالية.');
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            document.getElementById('timerBadge').style.display = 'none';
+        }
+
+        // ==================== عرض الحالات المختلفة ====================
+
         function renderMessage(title, text, icon) {
+            stopTimer();
             document.getElementById('pageHeading').textContent = 'الامتحان';
             document.getElementById('pageSubheading').textContent = '';
             const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
@@ -330,7 +444,8 @@
             `;
         }
 
-        function renderResultScreen(score, total) {
+        function renderResultScreen(score, total, note) {
+            stopTimer();
             document.getElementById('pageHeading').textContent = 'نتيجتك';
             document.getElementById('pageSubheading').textContent = '';
             const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
@@ -339,6 +454,7 @@
                     <i class="fas fa-circle-check" style="color:#4ade80;"></i>
                     <h2>تم تسليم هذا الامتحان</h2>
                     <p>درجتك: <strong style="color:#fff; font-size:1.2rem;">${score} / ${total}</strong></p>
+                    ${note ? `<p style="margin-top:10px; color:#f87171;">${note}</p>` : ''}
                     <a href="${backUrl}" class="back-btn-inline">رجوع لقائمة الامتحانات</a>
                 </div>
             `;
@@ -366,25 +482,38 @@
             </button></form>`;
 
             document.getElementById('examContainer').innerHTML = html;
-            document.getElementById('examForm').addEventListener('submit', handleSubmit);
+            document.getElementById('examForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+
+                const answers = examQuestions.map((q, qi) => {
+                    const selected = document.querySelector(`input[name="q${qi}"]:checked`);
+                    return selected ? parseInt(selected.value, 10) : -1;
+                });
+
+                if (answers.includes(-1)) {
+                    alert('لازم تجاوبي على كل الأسئلة قبل التسليم');
+                    return;
+                }
+
+                submitAnswers(false);
+            });
         }
 
-        async function handleSubmit(e) {
-            e.preventDefault();
+        // ==================== التسليم (يدوي أو تلقائي) ====================
+
+        // isAutoSubmit=true بتتسلم أي إجابات موجودة من غير ما تشترط إن كل الأسئلة اتجاوبت
+        // (بتستخدم لما الوقت يخلص أو لما نظام منع الغش يقفل الامتحان تلقائياً)
+        async function submitAnswers(isAutoSubmit, autoNote) {
+            const submitBtn = document.getElementById('submitExamBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري التسليم...';
+            }
 
             const answers = examQuestions.map((q, qi) => {
                 const selected = document.querySelector(`input[name="q${qi}"]:checked`);
                 return selected ? parseInt(selected.value, 10) : -1;
             });
-
-            if (answers.includes(-1)) {
-                alert('لازم تجاوبي على كل الأسئلة قبل التسليم');
-                return;
-            }
-
-            const submitBtn = document.getElementById('submitExamBtn');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري التسليم...';
 
             try {
                 const res = await fetch('/api/exams?action=submit', {
@@ -396,13 +525,23 @@
                 if (!res.ok) throw new Error(data.error || 'فشل تسليم الامتحان');
 
                 leaveWarningEnabled = false;
-                renderResultScreen(data.score, data.total);
+                renderResultScreen(data.score, data.total, isAutoSubmit ? autoNote : null);
             } catch (err) {
+                if (isAutoSubmit) {
+                    // لو التسليم التلقائي فشل (مثلاً مشكلة نت)، نوقف كل حاجة ونوضح المشكلة
+                    leaveWarningEnabled = false;
+                    renderMessage('حصل خطأ أثناء التسليم التلقائي', 'حاولي تفتحي الامتحان تاني أو كلمي المدرّسة.', 'fa-triangle-exclamation');
+                    return;
+                }
                 alert('حصل خطأ أثناء التسليم: ' + err.message);
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> تسليم الامتحان';
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> تسليم الامتحان';
+                }
             }
         }
+
+        // ==================== بدء الامتحان ====================
 
         async function startExam() {
             try {
@@ -417,6 +556,9 @@
                     examQuestions = data.questions;
                     renderExamForm(data.title, data.questions);
                     leaveWarningEnabled = true;
+                    if (data.timeLimitMinutes) {
+                        startTimer(data.timeLimitMinutes);
+                    }
                 } else if (data.status === 'submitted') {
                     renderResultScreen(data.score, data.total);
                 } else if (data.status === 'locked') {
