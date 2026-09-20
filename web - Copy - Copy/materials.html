@@ -6,18 +6,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Materials | Science Academy</title>
     
-    <!-- OneSignal SDK & Init -->
+    <!-- OneSignal Integration -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.init({
-          appId: "a5d058a6-b45e-46a5-aa86-014309b7c7d2",
-          notifyButton: {
-            enable: true,
-          },
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        OneSignalDeferred.push(async function(OneSignal) {
+            await OneSignal.init({
+                appId: "a5d058a6-b45e-46a5-aa86-014309b7c7d2",
+                notifyButton: {
+                    enable: false,
+                },
+            });
         });
-      });
     </script>
 
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -71,13 +71,35 @@
             animation: floatOrbs 20s infinite alternate ease-in-out;
         }
 
-        .orb-1 { width: 400px; height: 400px; background: #00E5FF; top: -10%; left: -10%; }
-        .orb-2 { width: 500px; height: 500px; background: #2563eb; bottom: -20%; right: -10%; animation-delay: -5s; }
+        .orb-1 {
+            width: 400px;
+            height: 400px;
+            background: #00E5FF;
+            top: -10%;
+            left: -10%;
+        }
+
+        .orb-2 {
+            width: 500px;
+            height: 500px;
+            background: #2563eb;
+            bottom: -20%;
+            right: -10%;
+            animation-delay: -5s;
+        }
 
         @keyframes floatOrbs {
-            0% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(100px, 50px) scale(1.2); }
-            100% { transform: translate(-50px, 100px) scale(0.9); }
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(100px, 50px) scale(1.2);
+            }
+
+            100% {
+                transform: translate(-50px, 100px) scale(0.9);
+            }
         }
 
         .top-nav {
@@ -92,43 +114,204 @@
             z-index: 100;
         }
 
-        .nav-left { display: flex; align-items: center; gap: 15px; direction: ltr; }
-        .brand-name { font-weight: 900; font-size: 1.4rem; color: #fff; letter-spacing: 1px; text-transform: uppercase; }
-        .brand-name span { color: var(--glowing-cyan); }
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            direction: ltr;
+        }
 
-        .back-link { display: inline-flex; align-items: center; gap: 8px; color: #94a3b8; text-decoration: none; font-weight: 700; font-size: 0.95rem; text-transform: uppercase; padding: 6px 14px; border-radius: 50px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); transition: 0.3s ease; direction: ltr; }
-        .back-link:hover { color: var(--glowing-cyan); border-color: var(--glowing-cyan); transform: translateX(-3px); }
+        .brand-name {
+            font-weight: 900;
+            font-size: 1.4rem;
+            color: #fff;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
 
-        .main-content { flex-grow: 1; display: flex; flex-direction: column; align-items: center; padding: 30px 20px 80px; width: 100%; }
-        .header-section { text-align: center; margin-bottom: 35px; }
-        .header-section h1 { font-size: 3.5rem; margin: 0 0 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; background: linear-gradient(to right, #ffffff, var(--glowing-cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .header-section p { color: #94a3b8; font-size: 1.1rem; direction: ltr; }
-        
-        .links-container { width: 100%; max-width: 680px; display: flex; flex-direction: column; gap: 18px; }
+        .brand-name span {
+            color: var(--glowing-cyan);
+        }
 
-        .material-card { background: var(--card-glass); backdrop-filter: blur(14px); border: 1px solid var(--border-glass); padding: 20px 26px; border-radius: 18px; text-decoration: none; display: flex; justify-content: space-between; align-items: center; transition: all 0.3s ease; position: relative; overflow: hidden; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2); }
-        .material-card:hover { transform: translateY(-5px) scale(1.01); background: rgba(15, 23, 42, 0.9); border-color: var(--glowing-cyan); box-shadow: 0 12px 30px rgba(0, 229, 255, 0.25); }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #94a3b8;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            padding: 6px 14px;
+            border-radius: 50px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: 0.3s ease;
+            direction: ltr;
+        }
 
-        .card-left { display: flex; align-items: center; gap: 16px; direction: ltr; }
-        .item-icon { font-size: 1.8rem; color: #64748b; transition: 0.3s; flex-shrink: 0; }
-        .title-group { display: flex; flex-direction: column; gap: 4px; text-align: left; }
-        .material-title { font-weight: 700; font-size: 1.2rem; color: var(--text-light); transition: 0.3s; }
-        .material-subtitle { font-size: 0.85rem; color: #94a3b8; }
-        .action-icon { font-size: 1.3rem; color: #64748b; transition: 0.3s; flex-shrink: 0; }
+        .back-link:hover {
+            color: var(--glowing-cyan);
+            border-color: var(--glowing-cyan);
+            transform: translateX(-3px);
+        }
 
-        .material-card:hover .material-title, .material-card:hover .action-icon { color: var(--glowing-cyan); }
-        .material-card:hover .item-icon.yt { color: var(--youtube-red); filter: drop-shadow(0 0 10px rgba(255, 0, 0, 0.5)); }
-        .material-card:hover .item-icon.fb { color: var(--facebook-blue); filter: drop-shadow(0 0 10px rgba(24, 119, 242, 0.5)); }
-        .material-card:hover .item-icon.pdf { color: #f87171; filter: drop-shadow(0 0 10px rgba(248, 113, 113, 0.5)); }
-        .material-card:hover .item-icon.exam { color: #4ade80; filter: drop-shadow(0 0 10px rgba(74, 222, 128, 0.5)); }
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 20px 80px;
+            width: 100%;
+        }
 
-        .empty-placeholder { text-align: center; padding: 50px 20px; background: var(--card-glass); border: 1px dashed var(--border-glass); border-radius: 20px; color: #64748b; width: 100%; }
-        .empty-placeholder i { font-size: 3rem; color: #334155; margin-bottom: 12px; display: block; }
+        .header-section {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .header-section h1 {
+            font-size: 3.5rem;
+            margin: 0 0 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: linear-gradient(to right, #ffffff, var(--glowing-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-section p {
+            color: #94a3b8;
+            font-size: 1.1rem;
+            direction: ltr;
+        }
+
+        .links-container {
+            width: 100%;
+            max-width: 680px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .material-card {
+            background: var(--card-glass);
+            backdrop-filter: blur(14px);
+            border: 1px solid var(--border-glass);
+            padding: 20px 26px;
+            border-radius: 18px;
+            text-decoration: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .material-card:hover {
+            transform: translateY(-5px) scale(1.01);
+            background: rgba(15, 23, 42, 0.9);
+            border-color: var(--glowing-cyan);
+            box-shadow: 0 12px 30px rgba(0, 229, 255, 0.25);
+        }
+
+        .card-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            direction: ltr;
+        }
+
+        .item-icon {
+            font-size: 1.8rem;
+            color: #64748b;
+            transition: 0.3s;
+            flex-shrink: 0;
+        }
+
+        .title-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            text-align: left;
+        }
+
+        .material-title {
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: var(--text-light);
+            transition: 0.3s;
+        }
+
+        .material-subtitle {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        .action-icon {
+            font-size: 1.3rem;
+            color: #64748b;
+            transition: 0.3s;
+            flex-shrink: 0;
+        }
+
+        .material-card:hover .material-title,
+        .material-card:hover .action-icon {
+            color: var(--glowing-cyan);
+        }
+
+        .material-card:hover .item-icon.yt {
+            color: var(--youtube-red);
+            filter: drop-shadow(0 0 10px rgba(255, 0, 0, 0.5));
+        }
+
+        .material-card:hover .item-icon.fb {
+            color: var(--facebook-blue);
+            filter: drop-shadow(0 0 10px rgba(24, 119, 242, 0.5));
+        }
+
+        .material-card:hover .item-icon.pdf {
+            color: #f87171;
+            filter: drop-shadow(0 0 10px rgba(248, 113, 113, 0.5));
+        }
+
+        .material-card:hover .item-icon.exam {
+            color: #4ade80;
+            filter: drop-shadow(0 0 10px rgba(74, 222, 128, 0.5));
+        }
+
+        .empty-placeholder {
+            text-align: center;
+            padding: 50px 20px;
+            background: var(--card-glass);
+            border: 1px dashed var(--border-glass);
+            border-radius: 20px;
+            color: #64748b;
+            width: 100%;
+        }
+
+        .empty-placeholder i {
+            font-size: 3rem;
+            color: #334155;
+            margin-bottom: 12px;
+            display: block;
+        }
 
         @media (max-width: 768px) {
-            .header-section h1 { font-size: 2.5rem; }
-            .material-card { padding: 16px 18px; }
-            .material-title { font-size: 1.05rem; }
+            .header-section h1 {
+                font-size: 2.5rem;
+            }
+
+            .material-card {
+                padding: 16px 18px;
+            }
+
+            .material-title {
+                font-size: 1.05rem;
+            }
         }
     </style>
 </head>
@@ -144,6 +327,9 @@
         <div class="nav-left">
             <a id="backLink" href="./index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back</a>
             <div class="brand-name">Miss <span>Marwa</span></div>
+            
+            <!-- Custom Notification Bell properly linked to OneSignal prompt -->
+            <a href="javascript:void(0)" onclick="window.OneSignalDeferred.push(function(OneSignal) { OneSignal.Slidedown.promptPush(); });" title="تفعيل الإشعارات" style="color: var(--glowing-cyan); margin-left: 10px; font-size: 1.3rem;"><i class="fas fa-bell"></i></a>
         </div>
     </nav>
 
@@ -190,6 +376,7 @@
         document.getElementById('backLink').href = `./${gradeFileNames[grade] || 'index.html'}`;
         document.getElementById('backLink').innerHTML = `<i class="fas fa-arrow-left"></i> Back to ${gradeNames[grade] || 'Grade'}`;
 
+        // بتبني كارت HTML لعنصر من النظام القديم (فيديو / ملخص / رابط امتحان قديم)
         function buildOldMaterialCardHtml(item) {
             const urlLower = (item.url || '').toLowerCase();
             let iconClass = 'fas fa-file-pdf item-icon pdf';
@@ -218,6 +405,7 @@
             </a>`;
         }
 
+        // بتبني كارت HTML لامتحان حقيقي من النظام الجديد، وبتفتح exam.html جوه نفس الموقع
         function buildLiveExamCardHtml(exam) {
             let subtitle = `عدد الأسئلة: ${exam.total}`;
             let actionIcon = 'fa-arrow-left';
@@ -256,6 +444,7 @@
 
             let cardsHtml = '';
 
+            // لو القسم امتحانات، هات الامتحانات الحقيقية من النظام الجديد الأول
             if (cat === 'exams') {
                 try {
                     const res = await fetch(`/api/exams?action=list-for-student&grade=${encodeURIComponent(grade)}&studentId=${encodeURIComponent(student.id || '')}&t=${Date.now()}`);
@@ -270,6 +459,7 @@
                 }
             }
 
+            // بعد كده هات المحتوى القديم (فيديوهات / ملخصات / أي روابط امتحانات قديمة)
             let filtered = [];
             try {
                 if (typeof DB !== 'undefined' && DB.getLessons) {
@@ -308,7 +498,7 @@
         }
 
         window.addEventListener('DOMContentLoaded', loadContent);
-        
+        // التأكد من السيرفر في الخلفية إن الحساب لم يتم حذفه
         if (student.id) {
             fetch('/api/auth?action=validate', {
                 method: 'POST',
@@ -318,6 +508,7 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data.valid === false) {
+                        // لو السيرفر قال إن الحساب مش موجود، امسح التذكرة واطرده
                         localStorage.removeItem('student_session');
                         alert('تم حذف هذا الحساب من قبل الإدارة. يرجى مراجعة المعلم.');
                         window.location.href = './index.html';
