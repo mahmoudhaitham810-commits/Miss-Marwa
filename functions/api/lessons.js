@@ -87,8 +87,25 @@ export async function onRequestGet(context) {
 
 export async function onRequestPost(context) {
     const { request, env } = context;
+    const url = new URL(request.url);
+    const action = url.searchParams.get('action');
     const db = getDb(env);
+
     try {
+        // === تسجيل مشاهدة محتوى (فيديو/ملخص/امتحان قديم) من طالب ===
+        // بتُستخدم من صفحة materials.html كل ما طالب يفتح حاجة
+        if (action === 'view') {
+            const { studentId, contentId, contentType } = await request.json();
+            if (!studentId || !contentId) {
+                return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
+            }
+            await db.prepare(
+                "INSERT INTO content_views (student_id, content_id, content_type) VALUES (?, ?, ?)"
+            ).bind(studentId, contentId, contentType || 'unknown').run();
+            return Response.json({ success: true });
+        }
+
+        // === إضافة محتوى جديد (السلوك الأصلي، من غير أي action محدد) ===
         const lesson = await request.json();
 
         // إدخال الدرس الجديد في الداتا بيز
