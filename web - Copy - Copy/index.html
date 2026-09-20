@@ -1398,6 +1398,15 @@
                     });
                 }
 
+                // "تسجيل حضور" خفيف عشان الـ streak يفضل محدّث
+                if (session.id && session.role !== 'admin') {
+                    fetch('/api/auth?action=checkin', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ studentId: session.id })
+                    }).catch(() => { /* مش مشكلة لو فشلت */ });
+                }
+
 
                 if (session.role === 'admin' || session.grade === 'all') {
                     headerAvatarLetter.textContent = '★'; headerAvatarLetter.classList.add('admin-avatar');
