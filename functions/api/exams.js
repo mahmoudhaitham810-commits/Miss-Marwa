@@ -109,14 +109,14 @@ export async function onRequestGet(context) {
             return Response.json(list);
         }
 
-        // === تستخدمها لوحة الأدمن عشان تجيب نتايج كل الطلاب في امتحان معين، مع إحصائية سريعة ===
+        // === تستخدمها لوحة الأدمن عشان تجيب نتايج كل الطلاب في امتحان معين، مع إحصائية سريعة وقائمة الغياب ===
         if (action === 'results') {
             const examId = url.searchParams.get('examId');
             if (!examId) {
                 return Response.json({ error: 'كود الامتحان مطلوب' }, { status: 400 });
             }
 
-            const exam = await db.prepare("SELECT questions FROM exams WHERE id = ?").bind(examId).first();
+            const exam = await db.prepare("SELECT questions, grade FROM exams WHERE id = ?").bind(examId).first();
             if (!exam) {
                 return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
             }
@@ -151,7 +151,17 @@ export async function onRequestGet(context) {
                 inProgress: list.filter(r => r.status === 'started').length
             };
 
-            return Response.json({ stats, results: list });
+            // === الطلاب المسجّلين في نفس المرحلة واللي محضروش الامتحان ده خالص ===
+            const { results: missedRows } = await db.prepare(
+                `SELECT student_id as studentId, first_name as firstName, last_name as lastName,
+                        phone, parent_phone as parentPhone
+                 FROM students
+                 WHERE grade = ?
+                 AND student_id NOT IN (SELECT student_id FROM exam_submissions WHERE exam_id = ?)
+                 ORDER BY first_name ASC`
+            ).bind(exam.grade, examId).all();
+
+            return Response.json({ stats, results: list, missed: missedRows });
         }
 
         // === تستخدمها صفحة "نتائج الامتحانات" الخاصة بالطالب عشان تعرض كل درجاته ===
