@@ -486,6 +486,83 @@
             font-weight: 700;
             cursor: pointer;
         }
+
+        /* زرار المتابعة اليومية (Streak) */
+        .streak-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            height: 42px;
+            padding: 0 14px;
+            border-radius: 50px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #94a3b8;
+            font-weight: 800;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .streak-btn:hover {
+            border-color: #f97316;
+            color: #f97316;
+        }
+
+        .streak-btn.has-streak {
+            color: #f97316;
+            border-color: #f97316;
+            background: rgba(249, 115, 22, 0.08);
+        }
+
+        .streak-btn i {
+            font-size: 1.05rem;
+        }
+
+        /* مودال الأوسمة */
+        .badges-modal-box {
+            background: var(--card-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .badges-modal-box h3 {
+            color: #fff;
+            margin-bottom: 6px;
+            font-size: 1.3rem;
+        }
+
+        .badges-modal-box p {
+            color: #94a3b8;
+            margin-bottom: 18px;
+        }
+
+        .badges-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            text-align: right;
+            margin-bottom: 20px;
+        }
+
+        .badge-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 0.95rem;
+        }
+
+        .badge-item.locked {
+            opacity: 0.4;
+        }
     </style>
 </head>
 
@@ -503,6 +580,11 @@
         </div>
 
         <div class="account-wrapper">
+            <button class="streak-btn" id="streakBtn" onclick="handleStreakClick()" title="المتابعة اليومية">
+                <i class="fas fa-fire"></i>
+                <span id="streakCount">0</span>
+            </button>
+
             <button class="bell-btn" id="notifBellBtn" onclick="handleBellClick()" title="الإشعارات">
                 <i class="fas fa-bell"></i>
                 <span class="bell-dot"></span>
@@ -541,6 +623,15 @@
             <i class="fas fa-bell-slash"></i>
             <p>أنت قمت بإيقاف الإشعارات. لتشغيلها، اضغط على علامة القفل (🔒) أعلى المتصفح واختر السماح</p>
             <button onclick="document.getElementById('notifBlockedModal').classList.remove('active')">تمام</button>
+        </div>
+    </div>
+
+    <div class="notif-modal-overlay" id="badgesModal">
+        <div class="badges-modal-box">
+            <h3 id="badgesStreakText">🔥 0 يوم متتالي</h3>
+            <p>استمري كل يوم عشان تفكي أوسمة جديدة</p>
+            <div class="badges-list" id="badgesList"></div>
+            <button onclick="document.getElementById('badgesModal').classList.remove('active')">تمام</button>
         </div>
     </div>
 
@@ -605,6 +696,52 @@
                 await OneSignal.User.addTag('grade', student.grade.toUpperCase());
             });
         }
+
+        // ==================== المتابعة اليومية (Streak) والأوسمة ====================
+
+        const BADGE_INFO = {
+            streak_3: { icon: '🔥', label: '3 أيام متتالية' },
+            streak_7: { icon: '🔥🔥', label: 'أسبوع كامل متواصل' },
+            streak_30: { icon: '🔥🔥🔥', label: 'شهر كامل! إنجاز رهيب' },
+            active_learner: { icon: '📚', label: 'متعلم نشيط (10 مشاهدات فأكتر)' }
+        };
+
+        let earnedBadges = [];
+
+        async function checkinAndUpdateStreak() {
+            if (!student || !student.id || student.role === 'admin') return;
+            try {
+                const res = await fetch('/api/auth?action=checkin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId: student.id })
+                });
+                const data = await res.json();
+                if (data.skipped) return;
+
+                document.getElementById('streakCount').textContent = data.currentStreak || 0;
+                document.getElementById('streakBtn').classList.toggle('active', (data.currentStreak || 0) > 0);
+                document.getElementById('streakBtn').classList.toggle('has-streak', (data.currentStreak || 0) > 0);
+                earnedBadges = data.badges || [];
+                document.getElementById('badgesStreakText').textContent = `🔥 ${data.currentStreak || 0} يوم متتالي`;
+            } catch (err) {
+                console.error('Checkin failed:', err);
+            }
+        }
+
+        function handleStreakClick() {
+            const list = document.getElementById('badgesList');
+            list.innerHTML = Object.entries(BADGE_INFO).map(([key, info]) => {
+                const earned = earnedBadges.includes(key);
+                return `<div class="badge-item ${earned ? '' : 'locked'}">
+                    <span style="font-size:1.3rem;">${info.icon}</span>
+                    <span>${info.label}</span>
+                </div>`;
+            }).join('');
+            document.getElementById('badgesModal').classList.add('active');
+        }
+
+        checkinAndUpdateStreak();
 
         // ==================== جرس الإشعارات ====================
 
