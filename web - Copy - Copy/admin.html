@@ -673,6 +673,33 @@
                     <tbody id="resultsTableBody"></tbody>
                 </table>
             </div>
+
+            <div id="missedSection" style="display: none; margin-top: 30px;">
+                <div class="controls-bar" style="justify-content: space-between;">
+                    <h3 style="color: #fff; font-size: 1.2rem;">
+                        <i class="fas fa-user-clock" style="color: #ef4444; margin-left: 8px;"></i>
+                        الطلاب اللي لم يحضروا الامتحان (<span id="missedCount">0</span>)
+                    </h3>
+                    <button class="action-btn secondary" onclick="exportMissedToCSV()">
+                        <i class="fas fa-file-export"></i>
+                        <span>تصدير Excel</span>
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>كود الطالب (ID)</th>
+                                <th>اسم الطالب</th>
+                                <th>هاتف الطالب</th>
+                                <th>هاتف ولي الأمر</th>
+                            </tr>
+                        </thead>
+                        <tbody id="missedTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1308,26 +1335,31 @@ D) 120</pre>
         function onResultsGradeChange() {
             populateResultsExamSelect();
             document.getElementById('resultsStatsGrid').style.display = 'none';
+            document.getElementById('missedSection').style.display = 'none';
             document.getElementById('resultsTableBody').innerHTML =
                 `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري الامتحان عشان تظهر نتايج الطلاب</td></tr>`;
         }
 
         // بنسيب كود الامتحان الحالي متاح عشان زرار "إعادة فتح المحاولة" يقدر يستخدمه
         let currentResultsExamId = '';
+        let currentMissedList = [];
 
         async function loadExamResults() {
             const tbody = document.getElementById('resultsTableBody');
             const statsGrid = document.getElementById('resultsStatsGrid');
+            const missedSection = document.getElementById('missedSection');
             const examId = document.getElementById('resultsExamSelect').value;
             currentResultsExamId = examId;
 
             if (!examId) {
                 statsGrid.style.display = 'none';
+                missedSection.style.display = 'none';
                 tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري الامتحان عشان تظهر نتايج الطلاب</td></tr>`;
                 return;
             }
 
             statsGrid.style.display = 'none';
+            missedSection.style.display = 'none';
             tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">جاري التحميل...</td></tr>`;
 
             try {
@@ -1337,11 +1369,27 @@ D) 120</pre>
 
                 const stats = data.stats || { totalAccessed: 0, completed: 0, inProgress: 0 };
                 const rows = Array.isArray(data.results) ? data.results : [];
+                currentMissedList = Array.isArray(data.missed) ? data.missed : [];
 
                 document.getElementById('statTotalAccessed').textContent = stats.totalAccessed;
                 document.getElementById('statCompleted').textContent = stats.completed;
                 document.getElementById('statInProgress').textContent = stats.inProgress;
                 statsGrid.style.display = 'grid';
+
+                // قائمة "الطلاب اللي لم يحضروا" بتظهر دايماً بمجرد ما امتحان يتختار
+                document.getElementById('missedCount').textContent = currentMissedList.length;
+                const missedBody = document.getElementById('missedTableBody');
+                if (currentMissedList.length === 0) {
+                    missedBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #64748b; padding: 20px;">كل الطلاب المسجلين في المرحلة دي دخلوا الامتحان 🎉</td></tr>`;
+                } else {
+                    missedBody.innerHTML = currentMissedList.map(m => `<tr>
+                        <td><span class="id-badge">${m.studentId}</span></td>
+                        <td><strong>${m.firstName} ${m.lastName}</strong></td>
+                        <td>${m.phone || ''}</td>
+                        <td>${m.parentPhone || ''}</td>
+                    </tr>`).join('');
+                }
+                missedSection.style.display = 'block';
 
                 if (rows.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">محدش دخل الامتحان ده لسه</td></tr>`;
@@ -1368,8 +1416,28 @@ D) 120</pre>
                 }).join('');
             } catch (err) {
                 statsGrid.style.display = 'none';
+                missedSection.style.display = 'none';
                 tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #ef4444; padding: 30px;">حصل خطأ: ${err.message}</td></tr>`;
             }
+        }
+
+        function exportMissedToCSV() {
+            if (currentMissedList.length === 0) return alert('لا يوجد طلاب غائبين لتصديرهم');
+
+            let csv = '\uFEFFكود الطالب,الاسم الأول,اسم العائلة,هاتف الطالب,هاتف ولي الأمر\n';
+            currentMissedList.forEach(m => {
+                csv += `"${m.studentId}","${m.firstName}","${m.lastName}","${m.phone || ''}","${m.parentPhone || ''}"\n`;
+            });
+
+            const examTitle = document.getElementById('resultsExamSelect').selectedOptions[0]?.textContent || 'Exam';
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Missed_${examTitle}_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         async function resetExamAttempt(studentId) {
