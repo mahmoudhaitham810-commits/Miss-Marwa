@@ -379,6 +379,25 @@
         document.getElementById('backLink').href = `./${gradeFileNames[grade] || 'index.html'}`;
         document.getElementById('backLink').innerHTML = `<i class="fas fa-arrow-left"></i> Back to ${gradeNames[grade] || 'Grade'}`;
 
+        // "تسجيل حضور" خفيف عشان الـ streak يفضل محدّث حتى لو الطالب فاتح الصفحة دي بس من غير ما يعمل login
+        if (student.id) {
+            fetch('/api/auth?action=checkin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ studentId: student.id })
+            }).catch(() => { /* مش مشكلة لو فشلت، مش حاجة حرجة */ });
+        }
+
+        // بتسجل إن الطالب فتح محتوى معين (فيديو/ملخص/رابط امتحان قديم)
+        function trackContentView(contentId, contentType) {
+            if (!student.id) return;
+            fetch('/api/lessons?action=view', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ studentId: student.id, contentId, contentType })
+            }).catch(() => { /* مش مشكلة لو فشلت */ });
+        }
+
         // بتبني كارت HTML لعنصر من النظام القديم (فيديو / ملخص / رابط امتحان قديم)
         function buildOldMaterialCardHtml(item) {
             const urlLower = (item.url || '').toLowerCase();
@@ -396,7 +415,7 @@
             }
 
             const isArabic = /[\u0600-\u06FF]/.test(item.title);
-            return `<a href="${item.url}" target="_blank" class="material-card">
+            return `<a href="${item.url}" target="_blank" class="material-card" onclick="trackContentView('${item.id}', '${cat}')">
                 <div class="card-left">
                     <i class="${iconClass}"></i>
                     <div class="title-group">
