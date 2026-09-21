@@ -1598,10 +1598,14 @@ D) 120</pre>
                 const avg = Math.round(totalPct / results.length);
                 message += `\nالمعدل العام: ${avg}%`;
 
-                // api.whatsapp.com بيشتغل بشكل أوثق مع واتساب ويب على الكمبيوتر
-                // من wa.me، اللي أحياناً بيحاول يفتح تطبيق مش متثبت بدل الويب
+                // على الموبايل: wa.me بيفتح تطبيق واتساب مباشرة
+                // على الكمبيوتر: web.whatsapp.com بيفتح واتساب ويب طول، من غير ما يحاول
+                // يفرض فتح تطبيق الديسكتوب المثبت
                 const waNumber = toWhatsAppNumber(student.parentPhone);
-                const waUrl = `https://api.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
+                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                const waUrl = isMobile
+                    ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
+                    : `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
                 window.open(waUrl, '_blank');
 
                 // مؤشر بصري بس (مش محفوظ في الداتا بيز) عشان تتجنبي إرسال التقرير مرتين بالغلط
