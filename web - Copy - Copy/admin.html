@@ -468,6 +468,10 @@
                 <i class="fas fa-chart-simple"></i>
                 <span>نتائج الامتحانات</span>
             </button>
+            <button class="nav-tab" id="tabReportsBtn" onclick="switchSection('reports')">
+                <i class="fab fa-whatsapp"></i>
+                <span>تقارير أولياء الأمور</span>
+            </button>
         </div>
 
         <!-- STUDENTS SECTION -->
@@ -701,6 +705,37 @@
                 </div>
             </div>
         </div>
+
+        <!-- ONLINE PARENT REPORTS SECTION -->
+        <div id="reportsSection" style="display: none;">
+            <div class="controls-bar">
+                <select class="filter-select" id="reportsGradeSelect" onchange="onReportsGradeChange()">
+                    <option value="">-- اختاري المرحلة الدراسية --</option>
+                    <option value="prep1">Prep 1</option>
+                    <option value="prep2">Prep 2</option>
+                    <option value="prep3">Prep 3</option>
+                    <option value="sec1">Secondary 1</option>
+                </select>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>كود الطالب (ID)</th>
+                            <th>اسم الطالب</th>
+                            <th>هاتف ولي الأمر</th>
+                            <th>عدد الامتحانات</th>
+                            <th>المعدل العام</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportsTableBody">
+                        <tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري المرحلة الدراسية عشان تظهر قائمة الطلاب</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Modal for Adding an Exam -->
@@ -872,11 +907,13 @@ D) 120</pre>
             document.getElementById('lessonsSection').style.display = (section === 'lessons') ? 'block' : 'none';
             document.getElementById('examsSection').style.display = (section === 'exams') ? 'block' : 'none';
             document.getElementById('resultsSection').style.display = (section === 'results') ? 'block' : 'none';
+            document.getElementById('reportsSection').style.display = (section === 'reports') ? 'block' : 'none';
 
             document.getElementById('tabStudentsBtn').classList.toggle('active', section === 'students');
             document.getElementById('tabLessonsBtn').classList.toggle('active', section === 'lessons');
             document.getElementById('tabExamsBtn').classList.toggle('active', section === 'exams');
             document.getElementById('tabResultsBtn').classList.toggle('active', section === 'results');
+            document.getElementById('tabReportsBtn').classList.toggle('active', section === 'reports');
         }
 
         async function loadData() {
@@ -1454,6 +1491,111 @@ D) 120</pre>
                 await loadExamResults();
             } catch (err) {
                 alert('حصل خطأ: ' + err.message);
+            }
+        }
+
+        // ==================== تقارير أولياء الأمور (أونلاين) ====================
+
+        const GRADE_LABELS = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Secondary 1' };
+        let currentReportsList = [];
+
+        async function onReportsGradeChange() {
+            const grade = document.getElementById('reportsGradeSelect').value;
+            const tbody = document.getElementById('reportsTableBody');
+
+            if (!grade) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري المرحلة الدراسية عشان تظهر قائمة الطلاب</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">جاري التحميل...</td></tr>`;
+
+            try {
+                const res = await fetch(`/api/exams?action=grade-overview&grade=${encodeURIComponent(grade)}&t=${Date.now()}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل تحميل البيانات');
+
+                currentReportsList = Array.isArray(data) ? data : [];
+
+                if (currentReportsList.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">لا يوجد طلاب مسجلين في المرحلة دي</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = currentReportsList.map(s => {
+                    const avgCell = s.avgPercent === null
+                        ? '<span style="color:#64748b;">-</span>'
+                        : `<strong style="color:${s.avgPercent < 50 ? '#ef4444' : '#4ade80'};">${s.avgPercent}%</strong>`;
+
+                    const actionCell = s.examsCount === 0
+                        ? '<span style="color:#64748b; font-size:0.85rem;">لا توجد نتائج بعد</span>'
+                        : `<button class="btn-table" style="background:#25D366; color:#fff;" onclick="generateReport('${s.studentId}')">
+                               <i class="fab fa-whatsapp"></i> إنشاء تقرير
+                           </button>`;
+
+                    return `<tr>
+                        <td><span class="id-badge">${s.studentId}</span></td>
+                        <td><strong>${s.firstName} ${s.lastName}</strong></td>
+                        <td>${s.parentPhone || ''}</td>
+                        <td>${s.examsCount}</td>
+                        <td>${avgCell}</td>
+                        <td>${actionCell}</td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #ef4444; padding: 30px;">حصل خطأ: ${err.message}</td></tr>`;
+            }
+        }
+
+        // بتحول رقم موبايل مصري عادي (01xxxxxxxxx) لصيغة وياتساب الدولية (20xxxxxxxxxx)
+        function toWhatsAppNumber(phone) {
+            let clean = (phone || '').replace(/\D/g, '');
+            if (clean.startsWith('0')) clean = clean.substring(1);
+            if (!clean.startsWith('20')) clean = '20' + clean;
+            return clean;
+        }
+
+        async function generateReport(studentId) {
+            const student = currentReportsList.find(s => s.studentId === studentId);
+            if (!student) return;
+
+            if (!student.parentPhone) {
+                alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/exams?action=my-results&studentId=${encodeURIComponent(studentId)}&t=${Date.now()}`);
+                const results = await res.json();
+                if (!res.ok) throw new Error(results.error || 'فشل تحميل نتائج الطالب');
+
+                if (!Array.isArray(results) || results.length === 0) {
+                    alert('لا توجد نتائج امتحانات لهذا الطالب بعد');
+                    return;
+                }
+
+                const gradeLabel = GRADE_LABELS[(results[0].grade || '').toLowerCase()] || results[0].grade;
+                let message = `مرحباً 👋، تقرير أداء الطالب/ة: ${student.firstName} ${student.lastName}\n`;
+                message += `المرحلة: ${gradeLabel}\n\n`;
+                message += `📊 نتائج الامتحانات:\n`;
+
+                let totalPct = 0;
+                results.forEach(r => {
+                    const pct = r.total > 0 ? (r.score / r.total) * 100 : 0;
+                    const icon = pct < 50 ? '⚠️' : '✅';
+                    message += `${icon} ${r.title}: ${r.score}/${r.total}\n`;
+                    totalPct += pct;
+                });
+
+                const avg = Math.round(totalPct / results.length);
+                message += `\nالمعدل العام: ${avg}%\n\n`;
+                message += `مع تحياتي، مس مروة`;
+
+                const waNumber = toWhatsAppNumber(student.parentPhone);
+                const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
+                window.open(waUrl, '_blank');
+            } catch (err) {
+                alert('حصل خطأ أثناء تجهيز التقرير: ' + err.message);
             }
         }
 
