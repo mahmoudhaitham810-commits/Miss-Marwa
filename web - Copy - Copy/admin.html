@@ -1529,7 +1529,7 @@ D) 120</pre>
 
                     const actionCell = s.examsCount === 0
                         ? '<span style="color:#64748b; font-size:0.85rem;">لا توجد نتائج بعد</span>'
-                        : `<button class="btn-table" style="background:#25D366; color:#fff;" onclick="generateReport('${s.studentId}')">
+                        : `<button class="btn-table" style="background:#25D366; color:#fff;" onclick="generateReport('${s.studentId}', this)">
                                <i class="fab fa-whatsapp"></i> إنشاء تقرير
                            </button>`;
 
@@ -1555,13 +1555,19 @@ D) 120</pre>
             return clean;
         }
 
-        async function generateReport(studentId) {
+        async function generateReport(studentId, btnEl) {
             const student = currentReportsList.find(s => s.studentId === studentId);
             if (!student) return;
 
             if (!student.parentPhone) {
                 alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب');
                 return;
+            }
+
+            const originalBtnHtml = btnEl ? btnEl.innerHTML : '';
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري التجهيز...';
             }
 
             try {
@@ -1571,11 +1577,13 @@ D) 120</pre>
 
                 if (!Array.isArray(results) || results.length === 0) {
                     alert('لا توجد نتائج امتحانات لهذا الطالب بعد');
+                    if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = originalBtnHtml; }
                     return;
                 }
 
                 const gradeLabel = GRADE_LABELS[(results[0].grade || '').toLowerCase()] || results[0].grade;
-                let message = `مرحباً 👋، تقرير أداء الطالب/ة: ${student.firstName} ${student.lastName}\n`;
+                let message = `مرحبا 👋 تيم مس مروة\n`;
+                message += `تقرير أداء الطالب/ة: ${student.firstName} ${student.lastName}\n`;
                 message += `المرحلة: ${gradeLabel}\n\n`;
                 message += `📊 نتائج الامتحانات:\n`;
 
@@ -1588,14 +1596,23 @@ D) 120</pre>
                 });
 
                 const avg = Math.round(totalPct / results.length);
-                message += `\nالمعدل العام: ${avg}%\n\n`;
-                message += `مع تحياتي، مس مروة`;
+                message += `\nالمعدل العام: ${avg}%`;
 
+                // api.whatsapp.com بيشتغل بشكل أوثق مع واتساب ويب على الكمبيوتر
+                // من wa.me، اللي أحياناً بيحاول يفتح تطبيق مش متثبت بدل الويب
                 const waNumber = toWhatsAppNumber(student.parentPhone);
-                const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
+                const waUrl = `https://api.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
                 window.open(waUrl, '_blank');
+
+                // مؤشر بصري بس (مش محفوظ في الداتا بيز) عشان تتجنبي إرسال التقرير مرتين بالغلط
+                if (btnEl) {
+                    btnEl.innerHTML = 'تم الإنشاء ✅';
+                    btnEl.style.background = '#64748b';
+                    btnEl.style.cursor = 'default';
+                }
             } catch (err) {
                 alert('حصل خطأ أثناء تجهيز التقرير: ' + err.message);
+                if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = originalBtnHtml; }
             }
         }
 
