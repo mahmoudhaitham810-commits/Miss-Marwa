@@ -698,6 +698,7 @@
                                 <th>اسم الطالب</th>
                                 <th>هاتف الطالب</th>
                                 <th>هاتف ولي الأمر</th>
+                                <th>إجراءات</th>
                             </tr>
                         </thead>
                         <tbody id="missedTableBody"></tbody>
@@ -1417,13 +1418,16 @@ D) 120</pre>
                 document.getElementById('missedCount').textContent = currentMissedList.length;
                 const missedBody = document.getElementById('missedTableBody');
                 if (currentMissedList.length === 0) {
-                    missedBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #64748b; padding: 20px;">كل الطلاب المسجلين في المرحلة دي دخلوا الامتحان 🎉</td></tr>`;
+                    missedBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 20px;">كل الطلاب المسجلين في المرحلة دي دخلوا الامتحان 🎉</td></tr>`;
                 } else {
                     missedBody.innerHTML = currentMissedList.map(m => `<tr>
                         <td><span class="id-badge">${m.studentId}</span></td>
                         <td><strong>${m.firstName} ${m.lastName}</strong></td>
                         <td>${m.phone || ''}</td>
                         <td>${m.parentPhone || ''}</td>
+                        <td><button class="btn-table" style="background:#ef4444; color:#fff;" onclick="sendAbsenceWarning('${m.studentId}', this)">
+                                <i class="fab fa-whatsapp"></i> إرسال تنبيه
+                            </button></td>
                     </tr>`).join('');
                 }
                 missedSection.style.display = 'block';
@@ -1585,7 +1589,7 @@ D) 120</pre>
                 let message = `مرحبا 👋 تيم مس مروة\n`;
                 message += `تقرير أداء الطالب/ة: ${student.firstName} ${student.lastName}\n`;
                 message += `المرحلة: ${gradeLabel}\n\n`;
-                message += `📊 نتائج الامتحانات:\n`;
+                message += `📊 نتائج الامتحانات (الأونلاين):\n`;
 
                 let totalPct = 0;
                 results.forEach(r => {
@@ -1606,7 +1610,7 @@ D) 120</pre>
                 const waUrl = isMobile
                     ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
                     : `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
-                window.open(waUrl, '_blank');
+                window.open(waUrl, 'whatsapp_report_tab');
 
                 // مؤشر بصري بس (مش محفوظ في الداتا بيز) عشان تتجنبي إرسال التقرير مرتين بالغلط
                 if (btnEl) {
@@ -1617,6 +1621,42 @@ D) 120</pre>
             } catch (err) {
                 alert('حصل خطأ أثناء تجهيز التقرير: ' + err.message);
                 if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = originalBtnHtml; }
+            }
+        }
+
+        // بترسل تنبيه واتساب لولي أمر طالب غايب عن امتحان معين
+        function sendAbsenceWarning(studentId, btnEl) {
+            const student = currentMissedList.find(m => m.studentId === studentId);
+            if (!student) return;
+
+            if (!student.parentPhone) {
+                alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب');
+                return;
+            }
+
+            const examTitle = document.getElementById('resultsExamSelect').selectedOptions[0]?.textContent || 'الامتحان';
+            const studentName = `${student.firstName} ${student.lastName}`;
+
+            const message = `⚠️ تنبيه من منصة Science Academy ⚠️\n`
+                + `ولي الأمر المحترم،\n`
+                + `نحيط سيادتكم علماً بأن الطالب: ${studentName}\n`
+                + `لم يقم بأداء الامتحان الأونلاين: ${examTitle}\n`
+                + `برجاء متابعة الطالب والتأكد من إتمام المهام المطلوبة.`;
+
+            // نفس منطق توجيه واتساب اللي اتأكدنا منه في المرحلة اللي فاتت بالظبط
+            const waNumber = toWhatsAppNumber(student.parentPhone);
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const waUrl = isMobile
+                ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
+                : `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
+            window.open(waUrl, 'whatsapp_warning_tab');
+
+            // مؤشر بصري بس عشان تتجنبي إرسال نفس التنبيه مرتين بالغلط
+            if (btnEl) {
+                btnEl.innerHTML = 'تم الإرسال ✅';
+                btnEl.style.background = '#64748b';
+                btnEl.style.cursor = 'default';
+                btnEl.disabled = true;
             }
         }
 
