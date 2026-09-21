@@ -196,6 +196,48 @@ export async function onRequestGet(context) {
             return Response.json(list);
         }
 
+        // === تستخدمها صفحة "تقارير أولياء الأمور": لكل طالب في المرحلة، كام امتحان
+        // سلّمه والمعدل العام بتاعه، عشان الأدمن تشوف الصورة كاملة قبل ما تولّد تقرير ===
+        if (action === 'grade-overview') {
+            const grade = (url.searchParams.get('grade') || '').toLowerCase();
+            if (!grade) {
+                return Response.json({ error: 'المرحلة الدراسية مطلوبة' }, { status: 400 });
+            }
+
+            const { results: students } = await db.prepare(
+                "SELECT student_id as studentId, first_name as firstName, last_name as lastName, parent_phone as parentPhone FROM students WHERE grade = ? ORDER BY first_name ASC"
+            ).bind(grade).all();
+
+            const { results: subRows } = await db.prepare(
+                `SELECT sub.student_id as studentId, sub.score, e.questions
+                 FROM exam_submissions sub
+                 JOIN exams e ON e.id = sub.exam_id
+                 WHERE sub.status = 'submitted' AND e.grade = ?`
+            ).bind(grade).all();
+
+            const list = students.map(s => {
+                const subs = subRows.filter(r => r.studentId === s.studentId);
+                let totalPct = 0;
+                subs.forEach(r => {
+                    let total = 0;
+                    try { total = JSON.parse(r.questions).length; } catch (e) { /* ignore */ }
+                    if (total > 0) totalPct += (r.score / total) * 100;
+                });
+                const avgPercent = subs.length > 0 ? Math.round(totalPct / subs.length) : null;
+
+                return {
+                    studentId: s.studentId,
+                    firstName: s.firstName,
+                    lastName: s.lastName,
+                    parentPhone: s.parentPhone,
+                    examsCount: subs.length,
+                    avgPercent
+                };
+            });
+
+            return Response.json(list);
+        }
+
         return Response.json({ error: 'إجراء غير معروف' }, { status: 400 });
     } catch (err) {
         return Response.json({ error: err.message }, { status: 500 });
