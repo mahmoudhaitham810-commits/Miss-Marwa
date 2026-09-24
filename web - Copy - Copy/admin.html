@@ -1937,8 +1937,13 @@ D) 120</pre>
                 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                 const waUrl = isMobile
                     ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
-                    : `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
-                window.open(waUrl, 'whatsapp_report_tab');
+                    : `whatsapp://send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
+                
+                if (isMobile) {
+                    window.open(waUrl, 'whatsapp_report_tab');
+                } else {
+                    window.location.href = waUrl;
+                }
 
                 // مؤشر بصري بس (مش محفوظ في الداتا بيز) عشان تتجنبي إرسال التقرير مرتين بالغلط
                 if (btnEl) {
@@ -1976,8 +1981,13 @@ D) 120</pre>
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
             const waUrl = isMobile
                 ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
-                : `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
-            window.open(waUrl, 'whatsapp_report_tab');
+                : `whatsapp://send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
+            
+            if (isMobile) {
+                window.open(waUrl, 'whatsapp_report_tab');
+            } else {
+                window.location.href = waUrl;
+            }
 
             // مؤشر بصري بس عشان تتجنبي إرسال نفس التنبيه مرتين بالغلط
             if (btnEl) {
@@ -2221,8 +2231,13 @@ D) 120</pre>
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
             const waUrl = isMobile
                 ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
-                : `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
-            window.open(waUrl, 'whatsapp_report_tab');
+                : `whatsapp://send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
+            
+            if (isMobile) {
+                window.open(waUrl, 'whatsapp_report_tab');
+            } else {
+                window.location.href = waUrl;
+            }
         }
 
         async function resetStudentPassword(studentId) {
