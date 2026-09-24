@@ -2086,10 +2086,10 @@ D) 120</pre>
                 const hasAnyGrade = currentOfflineExams.some(ex => currentOfflineGradesMap[ex.id] && currentOfflineGradesMap[ex.id][s.studentId] !== undefined && currentOfflineGradesMap[ex.id][s.studentId] !== null);
 
                 cells += `<td style="white-space:nowrap;">
-                    <button class="btn-table" style="background:#25D366; color:#fff; margin-left:4px;" ${currentOfflineExams.length === 0 ? 'disabled' : ''} onclick="sendLatestGrade('${s.studentId}')">
+                    <button class="btn-table" style="background:#25D366; color:#fff; margin-left:4px;" ${currentOfflineExams.length === 0 ? 'disabled' : ''} onclick="sendLatestGrade('${s.studentId}', this)">
                         <i class="fab fa-whatsapp"></i> آخر درجة
                     </button>
-                    <button class="btn-table" style="background:#128C7E; color:#fff;" ${!hasAnyGrade ? 'disabled' : ''} onclick="sendFullOfflineReport('${s.studentId}')">
+                    <button class="btn-table" style="background:#128C7E; color:#fff;" ${!hasAnyGrade ? 'disabled' : ''} onclick="sendFullOfflineReport('${s.studentId}', this)">
                         <i class="fab fa-whatsapp"></i> تقرير كامل
                     </button>
                 </td>`;
@@ -2158,7 +2158,7 @@ D) 120</pre>
             }
         }
 
-        function sendLatestGrade(studentId) {
+        function sendLatestGrade(studentId, btn) {
             const student = currentOfflineStudents.find(s => s.studentId === studentId);
             if (!student || currentOfflineExams.length === 0) return;
             if (!student.parentPhone) { alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب'); return; }
@@ -2172,9 +2172,15 @@ D) 120</pre>
                 + `${score} / ${latestExam.totalMarks}`;
 
             openWhatsApp(student.parentPhone, message);
+
+            if (btn) {
+                btn.disabled = true;
+                btn.style.background = '#64748b'; // Gray color
+                btn.innerHTML = '<i class="fas fa-check-double"></i> تم الإرسال';
+            }
         }
 
-        function sendFullOfflineReport(studentId) {
+        function sendFullOfflineReport(studentId, btn) {
             const student = currentOfflineStudents.find(s => s.studentId === studentId);
             if (!student) return;
             if (!student.parentPhone) { alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب'); return; }
@@ -2201,6 +2207,12 @@ D) 120</pre>
             message += `\nالمعدل العام: ${avg}%`;
 
             openWhatsApp(student.parentPhone, message);
+
+            if (btn) {
+                btn.disabled = true;
+                btn.style.background = '#64748b'; // Gray color
+                btn.innerHTML = '<i class="fas fa-check-double"></i> تم الإنشاء';
+            }
         }
 
         // بتفتح واتساب برسالة جاهزة، بنفس منطق توجيه الموبايل/الديسكتوب اللي اتأكدنا منه قبل كده
