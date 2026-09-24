@@ -472,6 +472,10 @@
                 <i class="fab fa-whatsapp"></i>
                 <span>تقارير أولياء الأمور</span>
             </button>
+            <button class="nav-tab" id="tabOfflineBtn" onclick="switchSection('offline')">
+                <i class="fas fa-pen-to-square"></i>
+                <span>الامتحانات الأوفلاين</span>
+            </button>
         </div>
 
         <!-- STUDENTS SECTION -->
@@ -739,6 +743,57 @@
         </div>
     </div>
 
+    <!-- OFFLINE EXAMS SECTION -->
+    <div id="offlineSection" style="display: none; padding: 0 5%;">
+        <div class="controls-bar">
+            <select class="filter-select" id="offlineGradeSelect" onchange="onOfflineGradeChange()">
+                <option value="">-- اختاري المرحلة الدراسية --</option>
+                <option value="prep1">Prep 1</option>
+                <option value="prep2">Prep 2</option>
+                <option value="prep3">Prep 3</option>
+                <option value="sec1">Secondary 1</option>
+            </select>
+            <button class="action-btn" id="addOfflineExamBtn" onclick="openAddOfflineExamModal()" disabled>
+                <i class="fas fa-plus"></i>
+                <span>إضافة امتحان جديد</span>
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table id="offlineTable">
+                <thead id="offlineTableHead"></thead>
+                <tbody id="offlineTableBody">
+                    <tr><td style="text-align: center; color: #64748b; padding: 30px;">اختاري المرحلة الدراسية عشان تظهر قائمة الطلاب</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal for Adding an Offline Exam -->
+    <div class="modal-overlay" id="addOfflineExamModal">
+        <div class="modal-box">
+            <button class="close-btn" onclick="closeAddOfflineExamModal()">&times;</button>
+            <h2 style="margin-bottom: 20px; font-size: 1.5rem; color: #fff;">
+                <i class="fas fa-pen-to-square" style="color: var(--glowing-cyan); margin-left: 8px;"></i>
+                إضافة امتحان أوفلاين جديد
+            </h2>
+            <form id="addOfflineExamForm">
+                <div class="form-group">
+                    <label>اسم الامتحان</label>
+                    <input type="text" id="offlineExamName" class="form-input" placeholder="مثال: امتحان الأسبوع 3" required>
+                </div>
+                <div class="form-group">
+                    <label>الدرجة الكلية</label>
+                    <input type="number" id="offlineExamTotal" class="form-input" value="100" min="1" required>
+                </div>
+                <button type="submit" class="action-btn" style="width: 100%; justify-content: center; margin-top: 10px;">
+                    <i class="fas fa-check"></i>
+                    <span>إضافة العمود</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal for Adding an Exam -->
     <div class="modal-overlay" id="addExamModal">
         <div class="modal-box" style="max-width: 700px;">
@@ -909,12 +964,14 @@ D) 120</pre>
             document.getElementById('examsSection').style.display = (section === 'exams') ? 'block' : 'none';
             document.getElementById('resultsSection').style.display = (section === 'results') ? 'block' : 'none';
             document.getElementById('reportsSection').style.display = (section === 'reports') ? 'block' : 'none';
+            document.getElementById('offlineSection').style.display = (section === 'offline') ? 'block' : 'none';
 
             document.getElementById('tabStudentsBtn').classList.toggle('active', section === 'students');
             document.getElementById('tabLessonsBtn').classList.toggle('active', section === 'lessons');
             document.getElementById('tabExamsBtn').classList.toggle('active', section === 'exams');
             document.getElementById('tabResultsBtn').classList.toggle('active', section === 'results');
             document.getElementById('tabReportsBtn').classList.toggle('active', section === 'reports');
+            document.getElementById('tabOfflineBtn').classList.toggle('active', section === 'offline');
         }
 
         async function loadData() {
@@ -1638,10 +1695,10 @@ D) 120</pre>
             const studentName = `${student.firstName} ${student.lastName}`;
 
             const message = `⚠️ تنبيه من منصة Science Academy ⚠️\n`
-              + `تيم مس مروة\n`
-              + `نحيط سيادتكم علماً بأن الطالب: ${studentName}\n`
-              + `لم يقم بأداء الامتحان الأونلاين: ${examTitle}\n`
-              + `برجاء متابعة الطالب والتأكد من إتمام المهام المطلوبة.`;
+                + `ولي الأمر المحترم،\n`
+                + `نحيط سيادتكم علماً بأن الطالب: ${studentName}\n`
+                + `لم يقم بأداء الامتحان الأونلاين: ${examTitle}\n`
+                + `برجاء متابعة الطالب والتأكد من إتمام المهام المطلوبة.`;
 
             // نفس منطق توجيه واتساب اللي اتأكدنا منه في المرحلة اللي فاتت بالظبط
             const waNumber = toWhatsAppNumber(student.parentPhone);
@@ -1658,6 +1715,211 @@ D) 120</pre>
                 btnEl.style.cursor = 'default';
                 btnEl.disabled = true;
             }
+        }
+
+        // ==================== الامتحانات الأوفلاين ====================
+
+        let currentOfflineGrade = '';
+        let currentOfflineStudents = [];
+        let currentOfflineExams = [];
+        let currentOfflineGradesMap = {}; // currentOfflineGradesMap[examId][studentId] = score
+
+        async function onOfflineGradeChange() {
+            const grade = document.getElementById('offlineGradeSelect').value;
+            currentOfflineGrade = grade;
+            document.getElementById('addOfflineExamBtn').disabled = !grade;
+
+            if (!grade) {
+                document.getElementById('offlineTableHead').innerHTML = '';
+                document.getElementById('offlineTableBody').innerHTML =
+                    `<tr><td style="text-align: center; color: #64748b; padding: 30px;">اختاري المرحلة الدراسية عشان تظهر قائمة الطلاب</td></tr>`;
+                return;
+            }
+
+            document.getElementById('offlineTableBody').innerHTML =
+                `<tr><td style="text-align: center; color: #64748b; padding: 30px;">جاري التحميل...</td></tr>`;
+
+            try {
+                const res = await fetch(`/api/offline-exams?action=grade-data&grade=${encodeURIComponent(grade)}&t=${Date.now()}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل تحميل البيانات');
+
+                currentOfflineStudents = data.students || [];
+                currentOfflineExams = data.exams || [];
+
+                currentOfflineGradesMap = {};
+                (data.grades || []).forEach(g => {
+                    if (!currentOfflineGradesMap[g.examId]) currentOfflineGradesMap[g.examId] = {};
+                    currentOfflineGradesMap[g.examId][g.studentId] = g.score;
+                });
+
+                renderOfflineTable();
+            } catch (err) {
+                document.getElementById('offlineTableBody').innerHTML =
+                    `<tr><td style="text-align: center; color: #ef4444; padding: 30px;">حصل خطأ: ${err.message}</td></tr>`;
+            }
+        }
+
+        function renderOfflineTable() {
+            const thead = document.getElementById('offlineTableHead');
+            const tbody = document.getElementById('offlineTableBody');
+
+            let headHtml = '<tr><th>كود الطالب (ID)</th><th>اسم الطالب</th><th>هاتف ولي الأمر</th>';
+            currentOfflineExams.forEach(ex => {
+                headHtml += `<th>${ex.examName} (${ex.totalMarks})
+                    <button class="btn-table btn-reset" style="margin-right:6px; padding:2px 10px; font-size:0.75rem;" onclick="saveExamColumn(${ex.id})">
+                        <i class="fas fa-save"></i> حفظ
+                    </button>
+                </th>`;
+            });
+            headHtml += '<th>إجراءات</th></tr>';
+            thead.innerHTML = headHtml;
+
+            if (currentOfflineStudents.length === 0) {
+                const colspan = 4 + currentOfflineExams.length;
+                tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 30px;">لا يوجد طلاب مسجلين في المرحلة دي</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = currentOfflineStudents.map(s => {
+                let cells = `<td><span class="id-badge">${s.studentId}</span></td>
+                    <td><strong>${s.firstName} ${s.lastName}</strong></td>
+                    <td>${s.parentPhone || ''}</td>`;
+
+                currentOfflineExams.forEach(ex => {
+                    const existingScore = (currentOfflineGradesMap[ex.id] && currentOfflineGradesMap[ex.id][s.studentId] !== undefined)
+                        ? currentOfflineGradesMap[ex.id][s.studentId]
+                        : '';
+                    cells += `<td><input type="number" class="form-input offline-score-input" style="width:80px; padding:6px 8px;"
+                        data-exam="${ex.id}" data-student="${s.studentId}" value="${existingScore === null ? '' : existingScore}"></td>`;
+                });
+
+                const hasAnyGrade = currentOfflineExams.some(ex => currentOfflineGradesMap[ex.id] && currentOfflineGradesMap[ex.id][s.studentId] !== undefined && currentOfflineGradesMap[ex.id][s.studentId] !== null);
+
+                cells += `<td style="white-space:nowrap;">
+                    <button class="btn-table" style="background:#25D366; color:#fff; margin-left:4px;" ${currentOfflineExams.length === 0 ? 'disabled' : ''} onclick="sendLatestGrade('${s.studentId}')">
+                        <i class="fab fa-whatsapp"></i> آخر درجة
+                    </button>
+                    <button class="btn-table" style="background:#128C7E; color:#fff;" ${!hasAnyGrade ? 'disabled' : ''} onclick="sendFullOfflineReport('${s.studentId}')">
+                        <i class="fab fa-whatsapp"></i> تقرير كامل
+                    </button>
+                </td>`;
+
+                return `<tr>${cells}</tr>`;
+            }).join('');
+        }
+
+        function openAddOfflineExamModal() {
+            if (!currentOfflineGrade) return;
+            document.getElementById('addOfflineExamModal').classList.add('active');
+        }
+
+        function closeAddOfflineExamModal() {
+            document.getElementById('addOfflineExamModal').classList.remove('active');
+            document.getElementById('addOfflineExamForm').reset();
+        }
+
+        document.getElementById('addOfflineExamForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const examName = document.getElementById('offlineExamName').value.trim();
+            const totalMarks = parseFloat(document.getElementById('offlineExamTotal').value) || 100;
+
+            try {
+                const res = await fetch('/api/offline-exams?action=create-exam', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ examName, grade: currentOfflineGrade, totalMarks })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'فشل إنشاء الامتحان');
+
+                currentOfflineExams.push({ id: data.examId, examName, totalMarks, createdAt: new Date().toISOString() });
+                closeAddOfflineExamModal();
+                renderOfflineTable();
+            } catch (err) {
+                alert('حصل خطأ: ' + err.message);
+            }
+        });
+
+        async function saveExamColumn(examId) {
+            const inputs = document.querySelectorAll(`.offline-score-input[data-exam="${examId}"]`);
+            const grades = Array.from(inputs).map(inp => ({
+                studentId: inp.getAttribute('data-student'),
+                score: inp.value
+            }));
+
+            try {
+                const res = await fetch('/api/offline-exams?action=save-grades', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ examId, grades })
+                });
+                if (!res.ok) throw new Error('فشل حفظ الدرجات');
+
+                if (!currentOfflineGradesMap[examId]) currentOfflineGradesMap[examId] = {};
+                grades.forEach(g => {
+                    currentOfflineGradesMap[examId][g.studentId] = g.score === '' ? null : parseFloat(g.score);
+                });
+                renderOfflineTable();
+                alert('تم حفظ الدرجات بنجاح ✅');
+            } catch (err) {
+                alert('حصل خطأ أثناء الحفظ: ' + err.message);
+            }
+        }
+
+        function sendLatestGrade(studentId) {
+            const student = currentOfflineStudents.find(s => s.studentId === studentId);
+            if (!student || currentOfflineExams.length === 0) return;
+            if (!student.parentPhone) { alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب'); return; }
+
+            const latestExam = currentOfflineExams[currentOfflineExams.length - 1];
+            const score = currentOfflineGradesMap[latestExam.id] ? currentOfflineGradesMap[latestExam.id][studentId] : undefined;
+            if (score === undefined || score === null) { alert('لسه مفيش درجة مسجّلة للطالب ده في آخر امتحان'); return; }
+
+            const message = `مرحبا 👋 تيم مس مروة\n`
+                + `درجة الطالب/ة ${student.firstName} ${student.lastName} في امتحان ${latestExam.examName}:\n`
+                + `${score} / ${latestExam.totalMarks}`;
+
+            openWhatsApp(student.parentPhone, message);
+        }
+
+        function sendFullOfflineReport(studentId) {
+            const student = currentOfflineStudents.find(s => s.studentId === studentId);
+            if (!student) return;
+            if (!student.parentPhone) { alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب'); return; }
+
+            const examsWithScores = currentOfflineExams.filter(ex =>
+                currentOfflineGradesMap[ex.id] && currentOfflineGradesMap[ex.id][studentId] !== undefined && currentOfflineGradesMap[ex.id][studentId] !== null
+            );
+            if (examsWithScores.length === 0) { alert('لا توجد درجات مسجّلة لهذا الطالب بعد'); return; }
+
+            let message = `مرحبا 👋 تيم مس مروة\n`;
+            message += `تقرير أداء الطالب/ة: ${student.firstName} ${student.lastName}\n\n`;
+            message += `📊 نتائج الامتحانات (الحضورية):\n`;
+
+            let totalPct = 0;
+            examsWithScores.forEach(ex => {
+                const score = currentOfflineGradesMap[ex.id][studentId];
+                const pct = ex.totalMarks > 0 ? (score / ex.totalMarks) * 100 : 0;
+                const icon = pct < 50 ? '⚠️' : '✅';
+                message += `${icon} ${ex.examName}: ${score}/${ex.totalMarks}\n`;
+                totalPct += pct;
+            });
+
+            const avg = Math.round(totalPct / examsWithScores.length);
+            message += `\nالمعدل العام: ${avg}%`;
+
+            openWhatsApp(student.parentPhone, message);
+        }
+
+        // بتفتح واتساب برسالة جاهزة، بنفس منطق توجيه الموبايل/الديسكتوب اللي اتأكدنا منه قبل كده
+        function openWhatsApp(parentPhone, message) {
+            const waNumber = toWhatsAppNumber(parentPhone);
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const waUrl = isMobile
+                ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
+                : `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
+            window.open(waUrl, 'whatsapp_offline_tab');
         }
 
         async function resetStudentPassword(studentId) {
