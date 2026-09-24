@@ -1977,7 +1977,7 @@ D) 120</pre>
             const waUrl = isMobile
                 ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
                 : `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
-            window.open(waUrl, 'whatsapp_warning_tab');
+            window.open(waUrl, 'whatsapp_report_tab');
 
             // مؤشر بصري بس عشان تتجنبي إرسال نفس التنبيه مرتين بالغلط
             if (btnEl) {
@@ -2222,7 +2222,7 @@ D) 120</pre>
             const waUrl = isMobile
                 ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
                 : `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
-            window.open(waUrl, 'whatsapp_offline_tab');
+            window.open(waUrl, 'whatsapp_report_tab');
         }
 
         async function resetStudentPassword(studentId) {
