@@ -2341,82 +2341,222 @@ D) 120</pre>
             document.getElementById('offlineUngradedCount').textContent = ungradedCount;
         }
 
-        // === 3. نظام الصوت الذكي (Voice-to-Score AI) ===
+        // === 3. نظام الصوت الذكي V2 (Voice-to-Score AI — Rewritten) ===
 
-        // دالة تنظيف النص العربي — بتوحّد الحروف اللي ليها أكتر من شكل
+        // ──────────────────────────────────────────────
+        // تنظيف عميق للنص العربي — بيشيل كل الفروقات اللي بتسبب مشاكل المقارنة
+        // ──────────────────────────────────────────────
         function normalizeArabic(text) {
             return (text || '')
-                .replace(/[أإآٱ]/g, 'ا')
+                // شيل التشكيل بالكامل (فتحة ضمة كسرة شدة سكون تنوين)
+                .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '')
+                // توحيد الألف بكل أشكاله
+                .replace(/[أإآٱءٲٳ]/g, 'ا')
+                // التاء المربوطة = هاء
                 .replace(/ة/g, 'ه')
+                // الألف المقصورة = ياء
                 .replace(/ى/g, 'ي')
+                // الهمزة على واو = واو
                 .replace(/ؤ/g, 'و')
+                // الهمزة على ياء = ياء
                 .replace(/ئ/g, 'ي')
+                // شيل أي حروف مش عربية ومش أرقام ومش مسافات (علامات ترقيم زيادة)
+                .replace(/[^\u0621-\u064A\u0660-\u06690-9a-zA-Z\s]/g, '')
+                // مسافات متعددة → مسافة واحدة
                 .replace(/\s+/g, ' ')
                 .trim();
         }
 
-        // بتحول الأرقام المكتوبة بالعربي (كلام) لأرقام حقيقية
+        // نسخة أعمق للمقارنة — بتشيل حتى "ال" التعريف
+        function deepNormalize(text) {
+            let n = normalizeArabic(text).toLowerCase();
+            // شيل "ال" التعريف من أول كل كلمة
+            n = n.replace(/\bال/g, '');
+            // شيل المسافات الزيادة اللي ممكن تكون ظهرت
+            n = n.replace(/\s+/g, ' ').trim();
+            return n;
+        }
+
+        // ──────────────────────────────────────────────
+        // قاموس شامل: كل الأرقام العربية بالكلام (فصحى + عامية مصرية)
+        // ──────────────────────────────────────────────
         const arabicNumberWords = {
-            'صفر': 0, 'واحد': 1, 'واحده': 1, 'اتنين': 2, 'اثنين': 2, 'تلاته': 3, 'ثلاثه': 3, 'ثلاثة': 3, 'تلاتة': 3,
-            'اربعه': 4, 'أربعه': 4, 'اربعة': 4, 'أربعة': 4, 'خمسه': 5, 'خمسة': 5,
-            'سته': 6, 'ستة': 6, 'ست': 6, 'سبعه': 7, 'سبعة': 7, 'تمنيه': 8, 'ثمانيه': 8, 'تمانية': 8, 'ثمانية': 8,
-            'تسعه': 9, 'تسعة': 9, 'عشره': 10, 'عشرة': 10, 'عشر': 10,
-            'حداشر': 11, 'احداشر': 11, 'اطناشر': 12, 'اتناشر': 12, 'تلاتاشر': 13, 'ثلاثتاشر': 13,
-            'اربعتاشر': 14, 'أربعتاشر': 14, 'خمستاشر': 15, 'ستاشر': 16, 'سبعتاشر': 17, 'تمنتاشر': 18, 'تسعتاشر': 19,
-            'عشرين': 20, 'تلاتين': 30, 'ثلاثين': 30, 'اربعين': 40, 'أربعين': 40,
-            'خمسين': 50, 'ستين': 60, 'سبعين': 70, 'تمانين': 80, 'ثمانين': 80, 'تسعين': 90, 'ميه': 100, 'مية': 100, 'مئة': 100
+            // 0-10 (كل الأشكال الممكنة)
+            'صفر': 0, 'سيرو': 0, 'زيرو': 0,
+            'واحد': 1, 'واحده': 1, 'واحدة': 1,
+            'اتنين': 2, 'اثنين': 2, 'اثنان': 2, 'اتنان': 2,
+            'تلاته': 3, 'تلاتة': 3, 'ثلاثه': 3, 'ثلاثة': 3, 'ثلاث': 3, 'تلات': 3,
+            'اربعه': 4, 'اربعة': 4, 'أربعه': 4, 'أربعة': 4, 'اربع': 4, 'أربع': 4,
+            'خمسه': 5, 'خمسة': 5, 'خمس': 5,
+            'سته': 6, 'ستة': 6, 'ست': 6,
+            'سبعه': 7, 'سبعة': 7, 'سبع': 7,
+            'تمنيه': 8, 'تمانيه': 8, 'تمانية': 8, 'ثمانيه': 8, 'ثمانية': 8, 'ثماني': 8, 'تماني': 8, 'ثمانى': 8,
+            'تسعه': 9, 'تسعة': 9, 'تسع': 9,
+            'عشره': 10, 'عشرة': 10, 'عشر': 10,
+
+            // 11-19 (عامية + فصحى)
+            'حداشر': 11, 'احداشر': 11, 'حدعشر': 11, 'احد عشر': 11, 'احدى عشر': 11, 'احدى عشره': 11, 'حداعشر': 11,
+            'اطناشر': 12, 'اتناشر': 12, 'اثنى عشر': 12, 'اثني عشر': 12, 'اتناعشر': 12, 'اطناعشر': 12, 'اثنا عشر': 12,
+            'تلاتاشر': 13, 'ثلاثتاشر': 13, 'تلتاشر': 13, 'ثلاثه عشر': 13, 'ثلاثة عشر': 13, 'تلاتاعشر': 13,
+            'اربعتاشر': 14, 'أربعتاشر': 14, 'اربعه عشر': 14, 'أربعة عشر': 14, 'اربعة عشر': 14, 'اربعطاشر': 14, 'اربعتاعشر': 14,
+            'خمستاشر': 15, 'خمسطاشر': 15, 'خمسه عشر': 15, 'خمسة عشر': 15, 'خمستاعشر': 15,
+            'ستاشر': 16, 'سطاشر': 16, 'سته عشر': 16, 'ستة عشر': 16, 'ستاعشر': 16,
+            'سبعتاشر': 17, 'سبعطاشر': 17, 'سبعه عشر': 17, 'سبعة عشر': 17, 'سبعتاعشر': 17,
+            'تمنتاشر': 18, 'تمنطاشر': 18, 'ثمانيه عشر': 18, 'ثمانية عشر': 18, 'ثمانتاشر': 18, 'تمنتاعشر': 18,
+            'تسعتاشر': 19, 'تسعطاشر': 19, 'تسعه عشر': 19, 'تسعة عشر': 19, 'تسعتاعشر': 19,
+
+            // العشرات (20-90)
+            'عشرين': 20, 'تلاتين': 30, 'ثلاثين': 30,
+            'اربعين': 40, 'أربعين': 40,
+            'خمسين': 50, 'ستين': 60, 'سبعين': 70,
+            'تمانين': 80, 'ثمانين': 80, 'تمنين': 80,
+            'تسعين': 90,
+
+            // 100 وما فوق
+            'ميه': 100, 'مية': 100, 'مئة': 100, 'مئه': 100, 'ميت': 100
         };
 
+        // ──────────────────────────────────────────────
+        // تحويل نص عربي (كلام أو رقم) لعدد
+        // بيفهم: "50" / "خمسين" / "خمسه وعشرين" / "٥٠"
+        // ──────────────────────────────────────────────
         function parseArabicNumber(text) {
-            const cleaned = normalizeArabic(text).trim();
+            let cleaned = normalizeArabic(text).trim();
 
-            // لو رقم عادي (1, 2, 50, 100 etc.)
+            // حوّل الأرقام العربية/الهندية (٠١٢٣) لأرقام لاتينية
+            cleaned = cleaned.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+
+            // لو رقم عادي (1, 50, 100, 7.5 etc.)
             if (/^\d+(\.\d+)?$/.test(cleaned)) {
                 return parseFloat(cleaned);
             }
 
-            // لو كلمة عربية واحدة (خمسين، عشرين...)
+            // لو كلمة عربية واحدة مطابقة بالظبط
             if (arabicNumberWords[cleaned] !== undefined) {
                 return arabicNumberWords[cleaned];
             }
 
-            // لو عدد مركب زي "خمسه وعشرين" أو "تلاته و تلاتين"
-            const parts = cleaned.split(/\s*و\s*/);
-            if (parts.length === 2) {
-                const a = arabicNumberWords[parts[0].trim()];
-                const b = arabicNumberWords[parts[1].trim()];
+            // لو عدد مركب فيه "و" — مثلاً "خمسه وعشرين" → 5 + 20 = 25
+            // أو "ثلاثة و ستين" → 3 + 60 = 63
+            const wawParts = cleaned.split(/\s*و\s*/);
+            if (wawParts.length === 2) {
+                const a = arabicNumberWords[wawParts[0].trim()];
+                const b = arabicNumberWords[wawParts[1].trim()];
                 if (a !== undefined && b !== undefined) {
                     return a + b;
+                }
+            }
+            // جرب 3 أجزاء — "ميه و خمسه و عشرين"
+            if (wawParts.length === 3) {
+                const a = arabicNumberWords[wawParts[0].trim()];
+                const b = arabicNumberWords[wawParts[1].trim()];
+                const c = arabicNumberWords[wawParts[2].trim()];
+                if (a !== undefined && b !== undefined && c !== undefined) {
+                    return a + b + c;
                 }
             }
 
             return null;
         }
 
-        // بتقارن اسمين عربيين وترجع نسبة التشابه (0-1)
-        function arabicNameSimilarity(spoken, stored) {
-            const a = normalizeArabic(spoken).toLowerCase();
-            const b = normalizeArabic(stored).toLowerCase();
+        // ──────────────────────────────────────────────
+        // Levenshtein Distance — المسافة بين نصّين (عدد التعديلات المطلوبة)
+        // ──────────────────────────────────────────────
+        function levenshtein(a, b) {
+            const m = a.length, n = b.length;
+            if (m === 0) return n;
+            if (n === 0) return m;
 
-            if (a === b) return 1;
-            if (b.includes(a) || a.includes(b)) return 0.85;
+            // بنستخدم صف واحد بس عشان الذاكرة
+            let prev = Array.from({ length: n + 1 }, (_, i) => i);
+            let curr = new Array(n + 1);
 
-            // مقارنة كل كلمة في الاسم المنطوق مع الاسم المخزّن
-            const spokenWords = a.split(' ').filter(w => w.length > 1);
-            const storedWords = b.split(' ').filter(w => w.length > 1);
-
-            let matchedWords = 0;
-            spokenWords.forEach(sw => {
-                if (storedWords.some(stw => stw.includes(sw) || sw.includes(stw))) {
-                    matchedWords++;
+            for (let i = 1; i <= m; i++) {
+                curr[0] = i;
+                for (let j = 1; j <= n; j++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    curr[j] = Math.min(
+                        prev[j] + 1,       // حذف
+                        curr[j - 1] + 1,   // إضافة
+                        prev[j - 1] + cost  // استبدال
+                    );
                 }
-            });
-
-            if (spokenWords.length === 0) return 0;
-            return matchedWords / Math.max(spokenWords.length, 1);
+                [prev, curr] = [curr, prev];
+            }
+            return prev[n];
         }
 
-        // متغير لحفظ كائن الـ SpeechRecognition النشط
+        // ──────────────────────────────────────────────
+        // مقارنة أسماء ذكية — بتاخد في الاعتبار:
+        // 1. التشابه الحرفي (Levenshtein) على الاسم كامل
+        // 2. تطابق الكلمات منفصلة (اسم أول + اسم عائلة)
+        // 3. تطابق جزئي (substring)
+        // بترجع نسبة 0 إلى 1
+        // ──────────────────────────────────────────────
+        function arabicNameSimilarity(spoken, stored) {
+            const a = deepNormalize(spoken);
+            const b = deepNormalize(stored);
+
+            if (!a || !b) return 0;
+
+            // تطابق كامل بعد التنظيف
+            if (a === b) return 1.0;
+
+            // ── الطريقة 1: Levenshtein على الاسم الكامل ──
+            const maxLen = Math.max(a.length, b.length);
+            const dist = levenshtein(a, b);
+            const charSimilarity = maxLen > 0 ? 1 - (dist / maxLen) : 0;
+
+            // ── الطريقة 2: مقارنة كلمة كلمة ──
+            const spokenWords = a.split(' ').filter(w => w.length > 0);
+            const storedWords = b.split(' ').filter(w => w.length > 0);
+
+            let wordMatchScore = 0;
+            if (spokenWords.length > 0 && storedWords.length > 0) {
+                let matchedWeight = 0;
+
+                spokenWords.forEach(sw => {
+                    let bestWordSim = 0;
+                    storedWords.forEach(stw => {
+                        // تطابق كامل
+                        if (sw === stw) {
+                            bestWordSim = Math.max(bestWordSim, 1.0);
+                        }
+                        // تطابق جزئي (كلمة داخل كلمة)
+                        else if (stw.includes(sw) || sw.includes(stw)) {
+                            const overlap = Math.min(sw.length, stw.length) / Math.max(sw.length, stw.length);
+                            bestWordSim = Math.max(bestWordSim, 0.7 + (overlap * 0.2));
+                        }
+                        // Levenshtein على مستوى الكلمة
+                        else {
+                            const wLen = Math.max(sw.length, stw.length);
+                            const wDist = levenshtein(sw, stw);
+                            const wSim = 1 - (wDist / wLen);
+                            // نقبل لو حرف أو اتنين غلط بس
+                            if (wDist <= 2 && wSim > 0.5) {
+                                bestWordSim = Math.max(bestWordSim, wSim * 0.85);
+                            }
+                        }
+                    });
+                    matchedWeight += bestWordSim;
+                });
+
+                wordMatchScore = matchedWeight / spokenWords.length;
+            }
+
+            // ── الطريقة 3: واحد يحتوي التاني (substring) ──
+            let substringBonus = 0;
+            if (b.includes(a) || a.includes(b)) {
+                substringBonus = 0.85;
+            }
+
+            // الدرجة النهائية = أعلى واحدة من التلاتة
+            return Math.max(charSimilarity, wordMatchScore, substringBonus);
+        }
+
+        // ──────────────────────────────────────────────
+        // SpeechRecognition — الاستماع
+        // ──────────────────────────────────────────────
         let voiceRecognition = null;
 
         function startVoiceGrading() {
@@ -2440,11 +2580,11 @@ D) 120</pre>
             voiceRecognition.lang = 'ar-EG';
             voiceRecognition.continuous = false;
             voiceRecognition.interimResults = true;
-            voiceRecognition.maxAlternatives = 3;
+            voiceRecognition.maxAlternatives = 5;
 
             document.getElementById('voiceOverlay').classList.add('active');
             document.getElementById('voiceStatus').textContent = 'جاري الاستماع...';
-            document.getElementById('voiceTranscript').textContent = 'قول اسم الطالب والدرجة';
+            document.getElementById('voiceTranscript').textContent = 'قول اسم الطالب والدرجة — مثال: "أحمد محمد خمسين"';
 
             voiceRecognition.onresult = (event) => {
                 let finalTranscript = '';
@@ -2459,16 +2599,16 @@ D) 120</pre>
                     }
                 }
 
-                // عرض النص المؤقت وهو بيتكلم
                 if (interimTranscript) {
                     document.getElementById('voiceTranscript').textContent = interimTranscript;
                 }
 
-                // لما يخلّص كلام، نحلل النتيجة
                 if (finalTranscript) {
                     document.getElementById('voiceStatus').textContent = 'جاري التحليل...';
                     document.getElementById('voiceTranscript').textContent = `"${finalTranscript}"`;
-                    processVoiceInput(finalTranscript);
+
+                    // نستني لحظة عشان اليوزر يشوف النص قبل ما الأوفرلاي يتقفل
+                    setTimeout(() => processVoiceInput(finalTranscript), 400);
                 }
             };
 
@@ -2479,18 +2619,13 @@ D) 120</pre>
                 } else if (event.error === 'not-allowed') {
                     showSmartToast('الميكروفون محتاج إذن. فعّليه من إعدادات المتصفح.', 'error');
                 } else {
-                    showSmartToast('حصل خطأ في التعرّف على الصوت', 'error');
+                    showSmartToast('حصل خطأ في التعرّف على الصوت: ' + event.error, 'error');
                 }
                 stopVoiceGrading();
             };
 
             voiceRecognition.onend = () => {
-                // لو الأوفرلاي لسه مفتوح يبقى خلص من غير نتيجة
-                const overlay = document.getElementById('voiceOverlay');
-                if (overlay.classList.contains('active')) {
-                    // ممكن يكون خلّص بنجاح (processVoiceInput هيقفله)
-                    // أو خلّص من غير ما يلاقي كلام
-                }
+                // مش بنعمل حاجة هنا — processVoiceInput هيقفل الأوفرلاي لما يخلص
             };
 
             voiceRecognition.start();
@@ -2504,74 +2639,105 @@ D) 120</pre>
             document.getElementById('voiceOverlay').classList.remove('active');
         }
 
+        // ──────────────────────────────────────────────
+        // تحليل الكلام وتعبئة الدرجة
+        // ──────────────────────────────────────────────
         function processVoiceInput(transcript) {
-            const cleaned = transcript.trim();
+            const rawTranscript = transcript.trim();
+            const cleaned = rawTranscript;
 
-            // نحاول نستخرج الرقم من آخر الجملة
-            // الطريقة: بنشيل الرقم (عربي مكتوب أو أرقام) من الآخر، والباقي هو الاسم
+            // ────── مرحلة 1: استخراج الرقم ──────
             let score = null;
             let namepart = '';
 
-            // أولاً: لو في رقم في الآخر (50, 30, etc.)
-            const numAtEnd = cleaned.match(/(\d+(\.\d+)?)\s*$/);
-            if (numAtEnd) {
-                score = parseFloat(numAtEnd[1]);
-                namepart = cleaned.replace(/\d+(\.\d+)?\s*$/, '').trim();
-            } else {
-                // ثانياً: بنحاول نلاقي كلمة رقمية عربية في الآخر
+            // أولاً: لو في رقم (digits) في أي مكان في الجملة — بناخد آخر واحد
+            const allDigits = [...cleaned.matchAll(/(\d+(\.\d+)?)/g)];
+            if (allDigits.length > 0) {
+                const lastDigitMatch = allDigits[allDigits.length - 1];
+                score = parseFloat(lastDigitMatch[1]);
+                // الاسم = كل حاجة قبل الرقم
+                const idx = cleaned.lastIndexOf(lastDigitMatch[0]);
+                namepart = cleaned.substring(0, idx).trim();
+                // لو مفيش اسم قبل الرقم، جرب بعده
+                if (!namepart) {
+                    namepart = cleaned.substring(idx + lastDigitMatch[0].length).trim();
+                }
+            }
+
+            // ثانياً: لو مفيش أرقام digits — نبحث عن كلمات رقمية عربية
+            if (score === null) {
                 const words = cleaned.split(/\s+/);
 
-                // بنجرب من آخر كلمة، كلمتين، أو تلاتة (عشان "خمسه و عشرين")
-                for (let tryLen = 3; tryLen >= 1; tryLen--) {
-                    if (words.length >= tryLen + 1) {
-                        const candidateWords = words.slice(-tryLen).join(' ');
+                // بنجرب من الأطول للأقصر: 5 كلمات, 4, 3, 2, 1
+                // (عشان نمسك "خمسه و عشرين" أو "ثلاثة و ستين" أو "ميه و خمسه و عشرين")
+                for (let tryLen = 5; tryLen >= 1; tryLen--) {
+                    if (words.length < tryLen + 1) continue; // لازم يفضل على الأقل كلمة واحدة للاسم
+
+                    const candidateWords = words.slice(-tryLen).join(' ');
+                    const parsed = parseArabicNumber(candidateWords);
+                    if (parsed !== null) {
+                        score = parsed;
+                        namepart = words.slice(0, -tryLen).join(' ').trim();
+                        break;
+                    }
+                }
+
+                // لو لسه ملقيناش — ممكن الرقم في الأول مش الآخر
+                // مثال: "خمسين أحمد" (بعض الناس بتقول الرقم الأول)
+                if (score === null) {
+                    for (let tryLen = 5; tryLen >= 1; tryLen--) {
+                        if (words.length < tryLen + 1) continue;
+
+                        const candidateWords = words.slice(0, tryLen).join(' ');
                         const parsed = parseArabicNumber(candidateWords);
                         if (parsed !== null) {
                             score = parsed;
-                            namepart = words.slice(0, -tryLen).join(' ').trim();
+                            namepart = words.slice(tryLen).join(' ').trim();
                             break;
                         }
                     }
                 }
-
-                // لو لسه ملقيناش، نجرب آخر كلمة لوحدها
-                if (score === null && words.length >= 2) {
-                    const lastWord = words[words.length - 1];
-                    const parsed = parseArabicNumber(lastWord);
-                    if (parsed !== null) {
-                        score = parsed;
-                        namepart = words.slice(0, -1).join(' ').trim();
-                    }
-                }
             }
 
-            if (score === null || namepart === '') {
-                showSmartToast('مقدرتش أفهم الدرجة أو الاسم. حاولي تاني بوضوح.', 'error');
+            // ────── فحص: لقينا رقم واسم؟ ──────
+            if (score === null) {
+                showSmartToast(`سمعت: "${rawTranscript}" — مقدرتش أستخرج الدرجة. قولي الاسم والرقم بوضوح.`, 'error');
                 stopVoiceGrading();
                 return;
             }
 
-            // دلوقتي بنبحث عن أقرب طالب
+            if (!namepart) {
+                showSmartToast(`سمعت: "${rawTranscript}" — لقيت الدرجة (${score}) بس مش شايف اسم. حاولي تاني.`, 'error');
+                stopVoiceGrading();
+                return;
+            }
+
+            // ────── مرحلة 2: البحث عن الطالب بالاسم ──────
             let bestMatch = null;
-            let bestScore = 0;
+            let bestSim = 0;
 
             currentOfflineStudents.forEach(s => {
                 const fullName = `${s.firstName} ${s.lastName}`;
-                const sim = arabicNameSimilarity(namepart, fullName);
-                if (sim > bestScore) {
-                    bestScore = sim;
+                // نقارن بالاسم الكامل
+                const sim1 = arabicNameSimilarity(namepart, fullName);
+                // نقارن بالاسم الأول بس (ناس كتير بتقول الاسم الأول وبس)
+                const sim2 = arabicNameSimilarity(namepart, s.firstName);
+
+                const sim = Math.max(sim1, sim2 * 0.95); // الاسم الكامل أولى بنسبة بسيطة
+                if (sim > bestSim) {
+                    bestSim = sim;
                     bestMatch = s;
                 }
             });
 
-            // الحد الأدنى للقبول 0.5 (50% تشابه)
-            if (!bestMatch || bestScore < 0.5) {
-                showSmartToast(`مفيش طالب اسمه مشابه لـ "${namepart}"`, 'error');
+            // الحد الأدنى للقبول — 0.4 (متسامح جداً)
+            if (!bestMatch || bestSim < 0.4) {
+                showSmartToast(`سمعت: "${rawTranscript}" — مفيش طالب اسمه قريب من "${namepart}".`, 'error');
                 stopVoiceGrading();
                 return;
             }
 
-            // بندخّل الدرجة في آخر امتحان (أحدث عمود)
+            // ────── مرحلة 3: تعبئة الدرجة ──────
             const targetExam = currentOfflineExams[currentOfflineExams.length - 1];
             const inputEl = document.querySelector(
                 `.offline-score-input[data-exam="${targetExam.id}"][data-student="${bestMatch.studentId}"]`
@@ -2579,19 +2745,18 @@ D) 120</pre>
 
             if (inputEl) {
                 inputEl.value = score;
-                // نحدّث الخريطة المحلية كمان
                 if (!currentOfflineGradesMap[targetExam.id]) currentOfflineGradesMap[targetExam.id] = {};
                 currentOfflineGradesMap[targetExam.id][bestMatch.studentId] = score;
 
-                // نتأكد الـ input ظاهر (scroll to it)
                 inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 inputEl.style.boxShadow = '0 0 15px rgba(0, 229, 255, 0.6)';
-                setTimeout(() => { inputEl.style.boxShadow = ''; }, 2000);
+                inputEl.style.transition = 'box-shadow 0.3s ease';
+                setTimeout(() => { inputEl.style.boxShadow = ''; }, 2500);
 
                 updateOfflineInsights();
                 showSmartToast(`✅ تم تسجيل ${score} لـ ${bestMatch.firstName} ${bestMatch.lastName}`, 'success');
             } else {
-                showSmartToast('مقدرتش ألاقي خانة الدرجة — الطالب ممكن يكون مش ظاهر في الجدول', 'error');
+                showSmartToast(`سمعت: "${rawTranscript}" — لقيت ${bestMatch.firstName} بس مش ظاهر في الجدول (جرّبي شيلي فلتر البحث).`, 'error');
             }
 
             stopVoiceGrading();
@@ -2604,18 +2769,17 @@ D) 120</pre>
             toast.textContent = message;
             toast.className = 'smart-toast ' + type;
 
-            // بنشيل أي تايمر قديم
             if (toastTimeout) clearTimeout(toastTimeout);
 
-            // بنطلّع التوست
             requestAnimationFrame(() => {
                 toast.classList.add('show');
             });
 
-            // بنخبّيه بعد 3.5 ثانية
+            // الأخطاء بتفضل أطول عشان اليوزر يقرأ النص
+            const duration = type === 'error' ? 5000 : 3500;
             toastTimeout = setTimeout(() => {
                 toast.classList.remove('show');
-            }, 3500);
+            }, duration);
         }
     </script>
 </body>
