@@ -2368,8 +2368,39 @@ D) 120</pre>
         }
 
         // نسخة أعمق للمقارنة — بتشيل حتى "ال" التعريف
+        // تحويل الحروف الإنجليزية إلى ما يقابلها بالعربية (عشان لو اسم متسجل بالانجليزي والمايك جابه عربي)
+        function englishToArabicPhonetic(text) {
+            if (!/[a-zA-Z]/.test(text || '')) return text;
+            
+            let t = text.toLowerCase();
+            
+            // الحروف المركبة أولاً
+            const digraphs = {
+                'sh': 'ش', 'ch': 'تش', 'th': 'ث', 
+                'kh': 'خ', 'gh': 'غ', 'ph': 'ف',
+                'ou': 'و', 'oo': 'و', 'ee': 'ي'
+            };
+            for (let [eng, ar] of Object.entries(digraphs)) {
+                t = t.split(eng).join(ar);
+            }
+            
+            // الحروف الفردية
+            const letters = {
+                'a': 'ا', 'b': 'ب', 'c': 'ك', 'd': 'د', 'e': 'ي', 
+                'f': 'ف', 'g': 'ج', 'h': 'ه', 'i': 'ي', 'j': 'ج', 
+                'k': 'ك', 'l': 'ل', 'm': 'م', 'n': 'ن', 'o': 'و', 
+                'p': 'ب', 'q': 'ق', 'r': 'ر', 's': 'س', 't': 'ت', 
+                'u': 'و', 'v': 'ف', 'w': 'و', 'x': 'كس', 'y': 'ي', 'z': 'ز'
+            };
+            
+            return t.split('').map(char => letters[char] || char).join('');
+        }
+
+        // نسخة أعمق للمقارنة — بتشيل حتى "ال" التعريف
         function deepNormalize(text) {
-            let n = normalizeArabic(text).toLowerCase();
+            // تحويل أي انجليزي لعربي الأول
+            let n = englishToArabicPhonetic(text);
+            n = normalizeArabic(n).toLowerCase();
             // شيل "ال" التعريف من أول كل كلمة
             n = n.replace(/\bال/g, '');
             // شيل المسافات الزيادة اللي ممكن تكون ظهرت
@@ -2514,6 +2545,7 @@ D) 120</pre>
             let wordMatchScore = 0;
             if (spokenWords.length > 0 && storedWords.length > 0) {
                 let matchedWeight = 0;
+                let completelyUnmatched = 0;
 
                 spokenWords.forEach(sw => {
                     let bestWordSim = 0;
@@ -2538,15 +2570,28 @@ D) 120</pre>
                             }
                         }
                     });
+                    
                     matchedWeight += bestWordSim;
+                    
+                    // لو الكلمة المنطوقة دي ملهاش أي تقارب مع أي جزء من الاسم المخزن
+                    if (bestWordSim < 0.3) {
+                        completelyUnmatched++;
+                    }
                 });
 
                 wordMatchScore = matchedWeight / spokenWords.length;
+                
+                // عقاب صارم لو في كلمات اتقالت ملهاش أي علاقة بالاسم
+                // ده عشان نمنع "فريده السكري" تتطابق مع "فريده وائل"
+                if (completelyUnmatched > 0) {
+                    wordMatchScore = wordMatchScore * Math.pow(0.6, completelyUnmatched);
+                }
             }
 
             // ── الطريقة 3: واحد يحتوي التاني (substring) ──
             let substringBonus = 0;
-            if (b.includes(a) || a.includes(b)) {
+            // بنعطي بونص بس لو مفيش كلمات مختلفة تماماً (عشان نتجنب نفس المشكلة)
+            if ((b.includes(a) || a.includes(b)) && wordMatchScore >= 0.5) {
                 substringBonus = 0.85;
             }
 
