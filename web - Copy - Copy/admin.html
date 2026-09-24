@@ -392,6 +392,234 @@
             font-size: 1.2rem;
             outline: none;
         }
+        /* ===== Offline Smart Grading: Voice, Search, Stats ===== */
+        .offline-insights-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .offline-insight-card {
+            background: var(--card-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 18px;
+            text-align: center;
+            backdrop-filter: blur(12px);
+        }
+
+        .offline-insight-card h3 {
+            font-size: 2rem;
+            color: var(--glowing-cyan);
+        }
+
+        .offline-insight-card p {
+            color: #94a3b8;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+
+        .voice-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(2, 6, 23, 0.92);
+            backdrop-filter: blur(20px);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .voice-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .voice-ring {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-blue), var(--glowing-cyan));
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            animation: voicePulse 1.5s ease-in-out infinite;
+            box-shadow: 0 0 60px rgba(0, 229, 255, 0.4);
+        }
+
+        .voice-ring i {
+            font-size: 3.5rem;
+            color: #fff;
+        }
+
+        .voice-ring::before,
+        .voice-ring::after {
+            content: '';
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid rgba(0, 229, 255, 0.3);
+            animation: voiceRipple 2s ease-out infinite;
+        }
+
+        .voice-ring::before {
+            width: 180px;
+            height: 180px;
+        }
+
+        .voice-ring::after {
+            width: 220px;
+            height: 220px;
+            animation-delay: 0.5s;
+        }
+
+        @keyframes voicePulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
+        @keyframes voiceRipple {
+            0% { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(1.3); opacity: 0; }
+        }
+
+        .voice-status {
+            margin-top: 30px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--glowing-cyan);
+        }
+
+        .voice-transcript {
+            margin-top: 12px;
+            font-size: 1rem;
+            color: #94a3b8;
+            max-width: 400px;
+            text-align: center;
+            min-height: 24px;
+        }
+
+        .voice-cancel-btn {
+            margin-top: 30px;
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+            padding: 10px 30px;
+            border-radius: 12px;
+            font-family: 'Cairo', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .voice-cancel-btn:hover {
+            background: rgba(239, 68, 68, 0.35);
+        }
+
+        .smart-toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            padding: 14px 28px;
+            border-radius: 14px;
+            font-family: 'Cairo', sans-serif;
+            font-weight: 700;
+            font-size: 0.95rem;
+            z-index: 10001;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+            pointer-events: none;
+            backdrop-filter: blur(16px);
+            max-width: 90%;
+            text-align: center;
+        }
+
+        .smart-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .smart-toast.success {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            color: #4ade80;
+            box-shadow: 0 8px 30px rgba(34, 197, 94, 0.2);
+        }
+
+        .smart-toast.error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+            box-shadow: 0 8px 30px rgba(239, 68, 68, 0.2);
+        }
+
+        .voice-grade-btn {
+            background: linear-gradient(135deg, #7c3aed, var(--glowing-cyan));
+            border: none;
+            border-radius: 12px;
+            color: #fff;
+            padding: 10px 20px;
+            font-weight: 800;
+            font-family: 'Cairo', sans-serif;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
+        }
+
+        .voice-grade-btn:hover {
+            box-shadow: 0 0 25px rgba(124, 58, 237, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .voice-grade-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .offline-search-box {
+            flex: 2;
+            min-width: 200px;
+            position: relative;
+        }
+
+        .offline-search-box input {
+            width: 100%;
+            padding: 11px 40px 11px 16px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            color: #fff;
+            font-family: 'Cairo', sans-serif;
+            outline: none;
+        }
+
+        .offline-search-box input:focus {
+            border-color: var(--glowing-cyan);
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
+        }
+
+        .offline-search-box i {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+        }
     </style>
 </head>
 
@@ -757,6 +985,34 @@
                 <i class="fas fa-plus"></i>
                 <span>إضافة امتحان جديد</span>
             </button>
+            <button class="voice-grade-btn" id="voiceGradeBtn" onclick="startVoiceGrading()" disabled>
+                <i class="fas fa-microphone"></i>
+                <span>🎤 Voice Grade</span>
+            </button>
+        </div>
+
+        <!-- Live Exam Insights -->
+        <div class="offline-insights-grid" id="offlineInsightsGrid" style="display: none;">
+            <div class="offline-insight-card">
+                <h3 id="offlineTotalStudents">0</h3>
+                <p>إجمالي الطلاب</p>
+            </div>
+            <div class="offline-insight-card">
+                <h3 id="offlineGradedCount">0</h3>
+                <p>تم تقييمهم</p>
+            </div>
+            <div class="offline-insight-card">
+                <h3 id="offlineUngradedCount">0</h3>
+                <p>لم يتم تقييمهم</p>
+            </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="controls-bar" id="offlineSearchBar" style="display: none;">
+            <div class="offline-search-box">
+                <input type="text" id="offlineSearchInput" placeholder="ابحث باسم الطالب..." oninput="filterOfflineStudents()">
+                <i class="fas fa-search"></i>
+            </div>
         </div>
 
         <div class="table-container">
@@ -768,6 +1024,21 @@
             </table>
         </div>
     </div>
+
+    <!-- Voice Grading Overlay -->
+    <div class="voice-overlay" id="voiceOverlay">
+        <div class="voice-ring">
+            <i class="fas fa-microphone"></i>
+        </div>
+        <div class="voice-status" id="voiceStatus">جاري الاستماع...</div>
+        <div class="voice-transcript" id="voiceTranscript"></div>
+        <button class="voice-cancel-btn" onclick="stopVoiceGrading()">
+            <i class="fas fa-times"></i> إلغاء
+        </button>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="smart-toast" id="smartToast"></div>
 
     <!-- Modal for Adding an Offline Exam -->
     <div class="modal-overlay" id="addOfflineExamModal">
@@ -1728,11 +1999,15 @@ D) 120</pre>
             const grade = document.getElementById('offlineGradeSelect').value;
             currentOfflineGrade = grade;
             document.getElementById('addOfflineExamBtn').disabled = !grade;
+            document.getElementById('voiceGradeBtn').disabled = !grade;
 
             if (!grade) {
                 document.getElementById('offlineTableHead').innerHTML = '';
                 document.getElementById('offlineTableBody').innerHTML =
                     `<tr><td style="text-align: center; color: #64748b; padding: 30px;">اختاري المرحلة الدراسية عشان تظهر قائمة الطلاب</td></tr>`;
+                document.getElementById('offlineInsightsGrid').style.display = 'none';
+                document.getElementById('offlineSearchBar').style.display = 'none';
+                document.getElementById('offlineSearchInput').value = '';
                 return;
             }
 
@@ -1754,6 +2029,9 @@ D) 120</pre>
                 });
 
                 renderOfflineTable();
+                document.getElementById('offlineInsightsGrid').style.display = 'grid';
+                document.getElementById('offlineSearchBar').style.display = 'flex';
+                document.getElementById('offlineSearchInput').value = '';
             } catch (err) {
                 document.getElementById('offlineTableBody').innerHTML =
                     `<tr><td style="text-align: center; color: #ef4444; padding: 30px;">حصل خطأ: ${err.message}</td></tr>`;
@@ -1763,6 +2041,7 @@ D) 120</pre>
         function renderOfflineTable() {
             const thead = document.getElementById('offlineTableHead');
             const tbody = document.getElementById('offlineTableBody');
+            const searchQuery = (document.getElementById('offlineSearchInput')?.value || '').trim().toLowerCase();
 
             let headHtml = '<tr><th>كود الطالب (ID)</th><th>اسم الطالب</th><th>هاتف ولي الأمر</th>';
             currentOfflineExams.forEach(ex => {
@@ -1775,13 +2054,23 @@ D) 120</pre>
             headHtml += '<th>إجراءات</th></tr>';
             thead.innerHTML = headHtml;
 
-            if (currentOfflineStudents.length === 0) {
+            // تطبيق فلتر البحث بالاسم
+            const filteredStudents = searchQuery
+                ? currentOfflineStudents.filter(s => {
+                    const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
+                    return fullName.includes(searchQuery);
+                })
+                : currentOfflineStudents;
+
+            if (filteredStudents.length === 0) {
                 const colspan = 4 + currentOfflineExams.length;
-                tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 30px;">لا يوجد طلاب مسجلين في المرحلة دي</td></tr>`;
+                const msg = searchQuery ? 'لا يوجد طلاب مطابقين للبحث' : 'لا يوجد طلاب مسجلين في المرحلة دي';
+                tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 30px;">${msg}</td></tr>`;
+                updateOfflineInsights();
                 return;
             }
 
-            tbody.innerHTML = currentOfflineStudents.map(s => {
+            tbody.innerHTML = filteredStudents.map(s => {
                 let cells = `<td><span class="id-badge">${s.studentId}</span></td>
                     <td><strong>${s.firstName} ${s.lastName}</strong></td>
                     <td>${s.parentPhone || ''}</td>`;
@@ -1791,7 +2080,7 @@ D) 120</pre>
                         ? currentOfflineGradesMap[ex.id][s.studentId]
                         : '';
                     cells += `<td><input type="number" class="form-input offline-score-input" style="width:80px; padding:6px 8px;"
-                        data-exam="${ex.id}" data-student="${s.studentId}" value="${existingScore === null ? '' : existingScore}"></td>`;
+                        data-exam="${ex.id}" data-student="${s.studentId}" value="${existingScore === null ? '' : existingScore}" oninput="updateOfflineInsights()"></td>`;
                 });
 
                 const hasAnyGrade = currentOfflineExams.some(ex => currentOfflineGradesMap[ex.id] && currentOfflineGradesMap[ex.id][s.studentId] !== undefined && currentOfflineGradesMap[ex.id][s.studentId] !== null);
@@ -1807,6 +2096,8 @@ D) 120</pre>
 
                 return `<tr>${cells}</tr>`;
             }).join('');
+
+            updateOfflineInsights();
         }
 
         function openAddOfflineExamModal() {
@@ -1998,6 +2289,333 @@ D) 120</pre>
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        }
+
+        // ==================== نظام التقييم الذكي (Smart Grading & Insights) ====================
+
+        // === 1. بحث في جدول الأوفلاين بالاسم ===
+        function filterOfflineStudents() {
+            renderOfflineTable();
+        }
+
+        // === 2. إحصائيات لايف (بتتحدث مع كل تغيير) ===
+        function updateOfflineInsights() {
+            const allInputs = document.querySelectorAll('.offline-score-input');
+            const visibleRows = document.querySelectorAll('#offlineTableBody tr');
+
+            // عدد الطلاب الظاهرين في الجدول (بعد الفلتر)
+            let totalVisible = 0;
+            let gradedCount = 0;
+            let ungradedCount = 0;
+
+            // بنلف على كل الـ inputs الموجودة حالياً في الجدول المعروض
+            // بنحسب "الطالب اتقيّم" لو عنده حتى درجة واحدة في أي امتحان
+            const studentScores = {};
+            allInputs.forEach(inp => {
+                const studentId = inp.getAttribute('data-student');
+                if (!studentScores[studentId]) studentScores[studentId] = { hasGrade: false };
+                if (inp.value.trim() !== '') {
+                    studentScores[studentId].hasGrade = true;
+                }
+            });
+
+            totalVisible = Object.keys(studentScores).length;
+            Object.values(studentScores).forEach(s => {
+                if (s.hasGrade) gradedCount++;
+                else ungradedCount++;
+            });
+
+            // لو مفيش امتحانات أصلاً، كل الطلاب ungraded
+            if (currentOfflineExams.length === 0) {
+                const searchQuery = (document.getElementById('offlineSearchInput')?.value || '').trim().toLowerCase();
+                const filtered = searchQuery
+                    ? currentOfflineStudents.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(searchQuery))
+                    : currentOfflineStudents;
+                totalVisible = filtered.length;
+                gradedCount = 0;
+                ungradedCount = totalVisible;
+            }
+
+            document.getElementById('offlineTotalStudents').textContent = totalVisible;
+            document.getElementById('offlineGradedCount').textContent = gradedCount;
+            document.getElementById('offlineUngradedCount').textContent = ungradedCount;
+        }
+
+        // === 3. نظام الصوت الذكي (Voice-to-Score AI) ===
+
+        // دالة تنظيف النص العربي — بتوحّد الحروف اللي ليها أكتر من شكل
+        function normalizeArabic(text) {
+            return (text || '')
+                .replace(/[أإآٱ]/g, 'ا')
+                .replace(/ة/g, 'ه')
+                .replace(/ى/g, 'ي')
+                .replace(/ؤ/g, 'و')
+                .replace(/ئ/g, 'ي')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        // بتحول الأرقام المكتوبة بالعربي (كلام) لأرقام حقيقية
+        const arabicNumberWords = {
+            'صفر': 0, 'واحد': 1, 'واحده': 1, 'اتنين': 2, 'اثنين': 2, 'تلاته': 3, 'ثلاثه': 3, 'ثلاثة': 3, 'تلاتة': 3,
+            'اربعه': 4, 'أربعه': 4, 'اربعة': 4, 'أربعة': 4, 'خمسه': 5, 'خمسة': 5,
+            'سته': 6, 'ستة': 6, 'ست': 6, 'سبعه': 7, 'سبعة': 7, 'تمنيه': 8, 'ثمانيه': 8, 'تمانية': 8, 'ثمانية': 8,
+            'تسعه': 9, 'تسعة': 9, 'عشره': 10, 'عشرة': 10, 'عشر': 10,
+            'حداشر': 11, 'احداشر': 11, 'اطناشر': 12, 'اتناشر': 12, 'تلاتاشر': 13, 'ثلاثتاشر': 13,
+            'اربعتاشر': 14, 'أربعتاشر': 14, 'خمستاشر': 15, 'ستاشر': 16, 'سبعتاشر': 17, 'تمنتاشر': 18, 'تسعتاشر': 19,
+            'عشرين': 20, 'تلاتين': 30, 'ثلاثين': 30, 'اربعين': 40, 'أربعين': 40,
+            'خمسين': 50, 'ستين': 60, 'سبعين': 70, 'تمانين': 80, 'ثمانين': 80, 'تسعين': 90, 'ميه': 100, 'مية': 100, 'مئة': 100
+        };
+
+        function parseArabicNumber(text) {
+            const cleaned = normalizeArabic(text).trim();
+
+            // لو رقم عادي (1, 2, 50, 100 etc.)
+            if (/^\d+(\.\d+)?$/.test(cleaned)) {
+                return parseFloat(cleaned);
+            }
+
+            // لو كلمة عربية واحدة (خمسين، عشرين...)
+            if (arabicNumberWords[cleaned] !== undefined) {
+                return arabicNumberWords[cleaned];
+            }
+
+            // لو عدد مركب زي "خمسه وعشرين" أو "تلاته و تلاتين"
+            const parts = cleaned.split(/\s*و\s*/);
+            if (parts.length === 2) {
+                const a = arabicNumberWords[parts[0].trim()];
+                const b = arabicNumberWords[parts[1].trim()];
+                if (a !== undefined && b !== undefined) {
+                    return a + b;
+                }
+            }
+
+            return null;
+        }
+
+        // بتقارن اسمين عربيين وترجع نسبة التشابه (0-1)
+        function arabicNameSimilarity(spoken, stored) {
+            const a = normalizeArabic(spoken).toLowerCase();
+            const b = normalizeArabic(stored).toLowerCase();
+
+            if (a === b) return 1;
+            if (b.includes(a) || a.includes(b)) return 0.85;
+
+            // مقارنة كل كلمة في الاسم المنطوق مع الاسم المخزّن
+            const spokenWords = a.split(' ').filter(w => w.length > 1);
+            const storedWords = b.split(' ').filter(w => w.length > 1);
+
+            let matchedWords = 0;
+            spokenWords.forEach(sw => {
+                if (storedWords.some(stw => stw.includes(sw) || sw.includes(stw))) {
+                    matchedWords++;
+                }
+            });
+
+            if (spokenWords.length === 0) return 0;
+            return matchedWords / Math.max(spokenWords.length, 1);
+        }
+
+        // متغير لحفظ كائن الـ SpeechRecognition النشط
+        let voiceRecognition = null;
+
+        function startVoiceGrading() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                showSmartToast('المتصفح ده مش بيدعم التعرّف على الصوت. استخدم Chrome.', 'error');
+                return;
+            }
+
+            if (currentOfflineStudents.length === 0) {
+                showSmartToast('لازم تختاري مرحلة فيها طلاب الأول', 'error');
+                return;
+            }
+
+            if (currentOfflineExams.length === 0) {
+                showSmartToast('لازم يكون فيه امتحان واحد على الأقل عشان تدخلي درجات', 'error');
+                return;
+            }
+
+            voiceRecognition = new SpeechRecognition();
+            voiceRecognition.lang = 'ar-EG';
+            voiceRecognition.continuous = false;
+            voiceRecognition.interimResults = true;
+            voiceRecognition.maxAlternatives = 3;
+
+            document.getElementById('voiceOverlay').classList.add('active');
+            document.getElementById('voiceStatus').textContent = 'جاري الاستماع...';
+            document.getElementById('voiceTranscript').textContent = 'قول اسم الطالب والدرجة';
+
+            voiceRecognition.onresult = (event) => {
+                let finalTranscript = '';
+                let interimTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                // عرض النص المؤقت وهو بيتكلم
+                if (interimTranscript) {
+                    document.getElementById('voiceTranscript').textContent = interimTranscript;
+                }
+
+                // لما يخلّص كلام، نحلل النتيجة
+                if (finalTranscript) {
+                    document.getElementById('voiceStatus').textContent = 'جاري التحليل...';
+                    document.getElementById('voiceTranscript').textContent = `"${finalTranscript}"`;
+                    processVoiceInput(finalTranscript);
+                }
+            };
+
+            voiceRecognition.onerror = (event) => {
+                console.error('Voice error:', event.error);
+                if (event.error === 'no-speech') {
+                    showSmartToast('مسمعتش حاجة، حاولي تاني', 'error');
+                } else if (event.error === 'not-allowed') {
+                    showSmartToast('الميكروفون محتاج إذن. فعّليه من إعدادات المتصفح.', 'error');
+                } else {
+                    showSmartToast('حصل خطأ في التعرّف على الصوت', 'error');
+                }
+                stopVoiceGrading();
+            };
+
+            voiceRecognition.onend = () => {
+                // لو الأوفرلاي لسه مفتوح يبقى خلص من غير نتيجة
+                const overlay = document.getElementById('voiceOverlay');
+                if (overlay.classList.contains('active')) {
+                    // ممكن يكون خلّص بنجاح (processVoiceInput هيقفله)
+                    // أو خلّص من غير ما يلاقي كلام
+                }
+            };
+
+            voiceRecognition.start();
+        }
+
+        function stopVoiceGrading() {
+            if (voiceRecognition) {
+                try { voiceRecognition.stop(); } catch (e) {}
+                voiceRecognition = null;
+            }
+            document.getElementById('voiceOverlay').classList.remove('active');
+        }
+
+        function processVoiceInput(transcript) {
+            const cleaned = transcript.trim();
+
+            // نحاول نستخرج الرقم من آخر الجملة
+            // الطريقة: بنشيل الرقم (عربي مكتوب أو أرقام) من الآخر، والباقي هو الاسم
+            let score = null;
+            let namepart = '';
+
+            // أولاً: لو في رقم في الآخر (50, 30, etc.)
+            const numAtEnd = cleaned.match(/(\d+(\.\d+)?)\s*$/);
+            if (numAtEnd) {
+                score = parseFloat(numAtEnd[1]);
+                namepart = cleaned.replace(/\d+(\.\d+)?\s*$/, '').trim();
+            } else {
+                // ثانياً: بنحاول نلاقي كلمة رقمية عربية في الآخر
+                const words = cleaned.split(/\s+/);
+
+                // بنجرب من آخر كلمة، كلمتين، أو تلاتة (عشان "خمسه و عشرين")
+                for (let tryLen = 3; tryLen >= 1; tryLen--) {
+                    if (words.length >= tryLen + 1) {
+                        const candidateWords = words.slice(-tryLen).join(' ');
+                        const parsed = parseArabicNumber(candidateWords);
+                        if (parsed !== null) {
+                            score = parsed;
+                            namepart = words.slice(0, -tryLen).join(' ').trim();
+                            break;
+                        }
+                    }
+                }
+
+                // لو لسه ملقيناش، نجرب آخر كلمة لوحدها
+                if (score === null && words.length >= 2) {
+                    const lastWord = words[words.length - 1];
+                    const parsed = parseArabicNumber(lastWord);
+                    if (parsed !== null) {
+                        score = parsed;
+                        namepart = words.slice(0, -1).join(' ').trim();
+                    }
+                }
+            }
+
+            if (score === null || namepart === '') {
+                showSmartToast('مقدرتش أفهم الدرجة أو الاسم. حاولي تاني بوضوح.', 'error');
+                stopVoiceGrading();
+                return;
+            }
+
+            // دلوقتي بنبحث عن أقرب طالب
+            let bestMatch = null;
+            let bestScore = 0;
+
+            currentOfflineStudents.forEach(s => {
+                const fullName = `${s.firstName} ${s.lastName}`;
+                const sim = arabicNameSimilarity(namepart, fullName);
+                if (sim > bestScore) {
+                    bestScore = sim;
+                    bestMatch = s;
+                }
+            });
+
+            // الحد الأدنى للقبول 0.5 (50% تشابه)
+            if (!bestMatch || bestScore < 0.5) {
+                showSmartToast(`مفيش طالب اسمه مشابه لـ "${namepart}"`, 'error');
+                stopVoiceGrading();
+                return;
+            }
+
+            // بندخّل الدرجة في آخر امتحان (أحدث عمود)
+            const targetExam = currentOfflineExams[currentOfflineExams.length - 1];
+            const inputEl = document.querySelector(
+                `.offline-score-input[data-exam="${targetExam.id}"][data-student="${bestMatch.studentId}"]`
+            );
+
+            if (inputEl) {
+                inputEl.value = score;
+                // نحدّث الخريطة المحلية كمان
+                if (!currentOfflineGradesMap[targetExam.id]) currentOfflineGradesMap[targetExam.id] = {};
+                currentOfflineGradesMap[targetExam.id][bestMatch.studentId] = score;
+
+                // نتأكد الـ input ظاهر (scroll to it)
+                inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                inputEl.style.boxShadow = '0 0 15px rgba(0, 229, 255, 0.6)';
+                setTimeout(() => { inputEl.style.boxShadow = ''; }, 2000);
+
+                updateOfflineInsights();
+                showSmartToast(`✅ تم تسجيل ${score} لـ ${bestMatch.firstName} ${bestMatch.lastName}`, 'success');
+            } else {
+                showSmartToast('مقدرتش ألاقي خانة الدرجة — الطالب ممكن يكون مش ظاهر في الجدول', 'error');
+            }
+
+            stopVoiceGrading();
+        }
+
+        // === Toast (إشعار صغير أنيق) ===
+        let toastTimeout = null;
+        function showSmartToast(message, type) {
+            const toast = document.getElementById('smartToast');
+            toast.textContent = message;
+            toast.className = 'smart-toast ' + type;
+
+            // بنشيل أي تايمر قديم
+            if (toastTimeout) clearTimeout(toastTimeout);
+
+            // بنطلّع التوست
+            requestAnimationFrame(() => {
+                toast.classList.add('show');
+            });
+
+            // بنخبّيه بعد 3.5 ثانية
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3500);
         }
     </script>
 </body>
