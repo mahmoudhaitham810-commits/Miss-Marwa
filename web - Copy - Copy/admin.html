@@ -620,6 +620,154 @@
             transform: translateY(-50%);
             color: #64748b;
         }
+
+        /* ===== Mobile Responsive (portrait) — desktop stays untouched ===== */
+        @media (max-width: 768px) {
+
+            /* ── Admin Header & Action Buttons ── */
+            .admin-header {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+
+            .header-actions {
+                justify-content: center;
+            }
+
+            .action-btn {
+                padding: 9px 14px;
+                font-size: 0.85rem;
+            }
+
+            /* ── Navigation Tabs ── */
+            .nav-tabs {
+                flex-wrap: wrap;
+                gap: 6px;
+                justify-content: center;
+            }
+
+            .nav-tab {
+                padding: 8px 14px;
+                font-size: 0.82rem;
+                flex: 1 1 auto;
+                text-align: center;
+                min-width: 0;
+            }
+
+            /* ── Controls Bar (search + filters) ── */
+            .controls-bar {
+                flex-direction: column;
+            }
+
+            .search-box,
+            .filter-select,
+            .offline-search-box {
+                flex: unset;
+                width: 100%;
+                min-width: unset;
+            }
+
+            /* ── Stats Grids ── */
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .offline-insights-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .offline-insight-card h3 {
+                font-size: 1.6rem;
+            }
+
+            /* ── Data Tables ── */
+            .table-container {
+                border-radius: 12px;
+            }
+
+            table {
+                min-width: 600px;
+            }
+
+            th, td {
+                padding: 10px 12px;
+                font-size: 0.82rem;
+            }
+
+            .btn-table {
+                padding: 5px 8px;
+                font-size: 0.75rem;
+                margin-left: 3px;
+            }
+
+            /* ── Modals & Forms ── */
+            .modal-box {
+                padding: 20px 16px;
+                border-radius: 18px;
+                max-width: 95vw;
+            }
+
+            .form-row {
+                flex-direction: column;
+                gap: 0;
+            }
+
+            .form-input {
+                font-size: 0.9rem;
+            }
+
+            .close-btn {
+                top: 14px;
+                left: 14px;
+            }
+
+            /* ── Lock Screen ── */
+            .lock-box {
+                padding: 28px 20px;
+            }
+
+            /* ── Voice Overlay ── */
+            .voice-ring {
+                width: 110px;
+                height: 110px;
+            }
+
+            .voice-ring i {
+                font-size: 2.8rem;
+            }
+
+            .voice-ring::before {
+                width: 150px;
+                height: 150px;
+            }
+
+            .voice-ring::after {
+                width: 185px;
+                height: 185px;
+            }
+
+            .voice-status {
+                font-size: 1.1rem;
+            }
+
+            .voice-transcript {
+                font-size: 0.9rem;
+                max-width: 90%;
+            }
+
+            .voice-grade-btn {
+                padding: 9px 14px;
+                font-size: 0.85rem;
+            }
+
+            /* ── Smart Toast ── */
+            .smart-toast {
+                max-width: 92%;
+                font-size: 0.85rem;
+                padding: 12px 18px;
+            }
+        }
     </style>
 </head>
 
