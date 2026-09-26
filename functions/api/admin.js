@@ -1,7 +1,17 @@
+import { verifyAdminRequest } from './admin-auth.js';
+
 export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
+
+    // ── حماية: لازم يكون أدمن ──
+    const isAdmin = await verifyAdminRequest(request, env);
+    if (!isAdmin) {
+        return new Response(JSON.stringify({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }), {
+            status: 401, headers: { 'Content-Type': 'application/json' }
+        });
+    }
 
     // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
     // السطر ده بيتأكد إننا بنمسك الاسم الصح مهما كان

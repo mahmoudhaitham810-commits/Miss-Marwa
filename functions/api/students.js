@@ -1,4 +1,12 @@
+import { verifyAdminRequest } from './admin-auth.js';
+
 export async function onRequestGet(context) {
+    // ── حماية: لازم يكون أدمن عشان يجيب قائمة الطلاب ──
+    const isAdmin = await verifyAdminRequest(context.request, context.env);
+    if (!isAdmin) {
+        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
+    }
+
     // الكود ده بيشتغل لما صفحة الأدمن تطلب تجيب كل الطلاب
     // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
     const db = context.env.DB || context.env.D1_DB;
@@ -15,6 +23,12 @@ export async function onRequestPost(context) {
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
     const db = env.DB || env.D1_DB;
+
+    // ── حماية: كل العمليات هنا أدمن بس ──
+    const isAdmin = await verifyAdminRequest(request, env);
+    if (!isAdmin) {
+        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
+    }
 
     try {
         // 1. حالة تغيير الباسورد

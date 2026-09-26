@@ -1,3 +1,5 @@
+import { verifyAdminRequest } from './admin-auth.js';
+
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
 // الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
 function getDb(env) {
@@ -54,6 +56,10 @@ export async function onRequestGet(context) {
     try {
         // === تستخدمها لوحة الأدمن عشان تجيب كل الامتحانات ===
         if (action === 'list') {
+            // ── حماية: أدمن بس ──
+            const isAdmin = await verifyAdminRequest(request, env);
+            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+
             const { results } = await db.prepare(
                 "SELECT id, title, grade, questions, duration_days as durationDays, expires_at, created_at FROM exams ORDER BY created_at DESC"
             ).all();
@@ -111,6 +117,10 @@ export async function onRequestGet(context) {
 
         // === تستخدمها لوحة الأدمن عشان تجيب نتايج كل الطلاب في امتحان معين، مع إحصائية سريعة وقائمة الغياب ===
         if (action === 'results') {
+            // ── حماية: أدمن بس ──
+            const isAdmin = await verifyAdminRequest(request, env);
+            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+
             const examId = url.searchParams.get('examId');
             if (!examId) {
                 return Response.json({ error: 'كود الامتحان مطلوب' }, { status: 400 });
@@ -199,6 +209,10 @@ export async function onRequestGet(context) {
         // === تستخدمها صفحة "تقارير أولياء الأمور": لكل طالب في المرحلة، كام امتحان
         // سلّمه والمعدل العام بتاعه، عشان الأدمن تشوف الصورة كاملة قبل ما تولّد تقرير ===
         if (action === 'grade-overview') {
+            // ── حماية: أدمن بس ──
+            const isAdmin = await verifyAdminRequest(request, env);
+            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+
             const grade = (url.searchParams.get('grade') || '').toLowerCase();
             if (!grade) {
                 return Response.json({ error: 'المرحلة الدراسية مطلوبة' }, { status: 400 });
@@ -255,6 +269,10 @@ export async function onRequestPost(context) {
 
         // === الأدمن بتنشئ امتحان جديد ===
         if (action === 'create') {
+            // ── حماية: أدمن بس ──
+            const isAdmin = await verifyAdminRequest(request, env);
+            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+
             if (!data.title || !data.grade) {
                 return Response.json({ error: 'عنوان الامتحان والمرحلة الدراسية مطلوبين' }, { status: 400 });
             }
@@ -296,6 +314,10 @@ export async function onRequestPost(context) {
 
         // === الأدمن بتمسح امتحان ===
         if (action === 'delete') {
+            // ── حماية: أدمن بس ──
+            const isAdmin = await verifyAdminRequest(request, env);
+            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+
             const { examId } = data;
             if (!examId) {
                 return Response.json({ error: 'كود الامتحان مطلوب' }, { status: 400 });
@@ -307,6 +329,10 @@ export async function onRequestPost(context) {
 
         // === الأدمن بتفتح المحاولة تاني لطالب معين (لو اتقفل عليه بالغلط أو النت قطع معاه) ===
         if (action === 'reset-attempt') {
+            // ── حماية: أدمن بس ──
+            const isAdmin = await verifyAdminRequest(request, env);
+            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+
             const { examId, studentId } = data;
             if (!examId || !studentId) {
                 return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });

@@ -1,3 +1,5 @@
+import { verifyAdminRequest } from './admin-auth.js';
+
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
 // الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
 function getDb(env) {
@@ -106,6 +108,11 @@ export async function onRequestPost(context) {
         }
 
         // === إضافة محتوى جديد (السلوك الأصلي، من غير أي action محدد) ===
+        // ── حماية: لازم يكون أدمن عشان يضيف محتوى ──
+        const isAdmin = await verifyAdminRequest(request, env);
+        if (!isAdmin) {
+            return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
+        }
         const lesson = await request.json();
 
         // إدخال الدرس الجديد في الداتا بيز
@@ -134,6 +141,12 @@ export async function onRequestDelete(context) {
     const db = getDb(env);
     const url = new URL(request.url);
     const id = url.searchParams.get('id');
+
+    // ── حماية: لازم يكون أدمن عشان يمسح محتوى ──
+    const isAdmin = await verifyAdminRequest(request, env);
+    if (!isAdmin) {
+        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
+    }
 
     try {
         // حذف الدرس بناءً على الـ ID

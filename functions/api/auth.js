@@ -76,7 +76,8 @@ export async function onRequestPost(context) {
             const { studentId, password } = await request.json();
 
             // التحقق من حساب الأدمن الخاص بالمس مروة
-            if (studentId.trim().toUpperCase() === 'MM-ADMIN' && password === 'marwa2026') {
+            const adminPassword = env.ADMIN_PASSWORD || 'marwa2026';
+            if (studentId.trim().toUpperCase() === 'MM-ADMIN' && password === adminPassword) {
                 return Response.json({
                     success: true,
                     student: { id: 'MM-ADMIN', firstName: 'Miss Marwa', lastName: '(Admin)', grade: 'all', role: 'admin' }

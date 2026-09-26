@@ -1351,19 +1351,50 @@ D) 120</pre>
     <script src="./db.js"></script>
 
     <script>
-        const ADMIN_PIN = 'marwa2026';
         let allStudents = [];
         let allLessons = [];
         let allExams = [];
 
-        function unlockAdmin() {
+        // ── التحقق من الجلسة عند فتح الصفحة ──
+        (async function checkExistingSession() {
+            try {
+                const res = await fetch('/api/admin-auth?action=check', { credentials: 'same-origin' });
+                const data = await res.json();
+                if (data.authenticated) {
+                    document.getElementById('adminLockScreen').style.display = 'none';
+                    document.getElementById('adminPanel').style.display = 'block';
+                    loadData();
+                }
+            } catch (e) {
+                // لو فشل — خلي شاشة القفل ظاهرة عادي
+            }
+        })();
+
+        async function unlockAdmin() {
             const input = document.getElementById('adminPinInput').value;
-            if (input === ADMIN_PIN) {
-                document.getElementById('adminLockScreen').style.display = 'none';
-                document.getElementById('adminPanel').style.display = 'block';
-                loadData();
-            } else {
-                document.getElementById('pinError').style.display = 'block';
+            const pinError = document.getElementById('pinError');
+            pinError.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/admin-auth?action=login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ password: input })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    document.getElementById('adminLockScreen').style.display = 'none';
+                    document.getElementById('adminPanel').style.display = 'block';
+                    loadData();
+                } else {
+                    pinError.textContent = data.error || 'الرمز السري غير صحيح!';
+                    pinError.style.display = 'block';
+                }
+            } catch (err) {
+                pinError.textContent = 'خطأ في الاتصال بالسيرفر';
+                pinError.style.display = 'block';
             }
         }
 

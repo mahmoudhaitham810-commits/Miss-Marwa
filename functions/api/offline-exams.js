@@ -1,3 +1,5 @@
+import { verifyAdminRequest } from './admin-auth.js';
+
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
 // الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
 function getDb(env) {
@@ -6,6 +8,12 @@ function getDb(env) {
 
 export async function onRequestGet(context) {
     const { request, env } = context;
+
+    // ── حماية: أدمن بس ──
+    const isAdmin = await verifyAdminRequest(request, env);
+    if (!isAdmin) {
+        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
+    }
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
     const db = getDb(env);
@@ -48,6 +56,13 @@ export async function onRequestGet(context) {
 
 export async function onRequestPost(context) {
     const { request, env } = context;
+
+    // ── حماية: أدمن بس ──
+    const isAdmin = await verifyAdminRequest(request, env);
+    if (!isAdmin) {
+        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
+    }
+
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
     const db = getDb(env);
