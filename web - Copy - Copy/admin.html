@@ -1970,7 +1970,7 @@ D) 120</pre>
                         actionsHTML = `
                             <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
                                 <button class="btn-table btn-reset" style="padding: 6px 12px; font-size: 0.85rem;" onclick="resetExamAttempt('${r.studentId}')">إعادة فتح</button>
-                                <button class="btn-table" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 6px 12px; font-weight: bold; cursor: pointer; font-size: 0.85rem; transition: 0.3s;" onclick="sendCheatingWarning('${safeName}', '${r.parentPhone || ''}')">
+                                <button class="btn-table" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 6px 12px; font-weight: bold; cursor: pointer; font-size: 0.85rem; transition: 0.3s;" onclick="sendCheatingWarning('${safeName}', '${r.parentPhone || ''}', this)">
                                     <i class="fab fa-whatsapp"></i> إنذار
                                 </button>
                             </div>
@@ -2012,13 +2012,22 @@ D) 120</pre>
             document.body.removeChild(link);
         }
 
-        function sendCheatingWarning(studentName, parentPhone) {
+        async function sendCheatingWarning(studentName, parentPhone, btnElement) {
             if (!parentPhone) {
                 alert('لا يوجد رقم لولي الأمر لهذا الطالب.');
                 return;
             }
             const message = `🚨 إشعار هام من منصة Science Academy - تيم مس مروة 🚨\n\nولي الأمر الكريم،\nنحيطكم علماً بأن الطالب/ة: *${studentName}* قد دخل إلى الامتحان الإلكتروني ولكنه لم يقم بتسليم الإجابات، مما أدى إلى إغلاق الامتحان تلقائياً. 🔒\n\n⚠️ *تحذير هام:* هذا الإجراء يحدث عندما يخرج الطالب من شاشة الامتحان (في محاولة للبحث عن إجابة أو فتح تطبيقات أخرى).\n\n🔄 سيتم إعادة فتح الامتحان للطالب مرة أخرى كفرصة أخيرة.\nيرجى التنبيه عليه بأنه بمجرد فتح الامتحان، *يُمنع منعاً باتاً الخروج من الصفحة أو عمل تحديث (Refresh)* حتى يتم تسليم الإجابات نهائياً، وإلا سيتم إغلاق الامتحان ولن يُعاد فتحه مرة أخرى.\n\nمع تحياتنا وتمنياتنا بالتوفيق.. 💐`;
             openWhatsApp(parentPhone, message);
+
+            if (btnElement) {
+                btnElement.innerHTML = '<i class="fas fa-check-circle"></i> تم الإرسال';
+                btnElement.style.background = 'rgba(74, 222, 128, 0.2)';
+                btnElement.style.borderColor = 'rgba(74, 222, 128, 0.5)';
+                btnElement.style.color = '#4ade80';
+                btnElement.style.cursor = 'not-allowed';
+                btnElement.disabled = true;
+            }
         }
 
         async function resetExamAttempt(studentId) {
