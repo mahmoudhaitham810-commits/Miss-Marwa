@@ -1320,11 +1320,35 @@
     <div class="modal-overlay" id="ios-install-popup">
         <div class="auth-box" style="text-align: center; max-width: 400px; padding: 40px 30px;">
             <button class="close-btn" onclick="document.getElementById('ios-install-popup').classList.remove('active')">&times;</button>
-            <i class="fas fa-arrow-up-from-bracket" style="font-size: 3rem; color: var(--glowing-cyan); margin-bottom: 20px;"></i>
-            <h2 style="font-size: 1.5rem; margin-bottom: 15px;">إضافة التطبيق</h2>
-            <p style="color: #cbd5e1; font-size: 1rem; line-height: 1.6;">
-                لتحميل التطبيق، اضغط على أيقونة المشاركة (Share) بالأسفل ⍐ <br><br> ثم اختر <br><strong>'إضافة للشاشة الرئيسية' (Add to Home Screen)</strong> ➕.
-            </p>
+            <h2 style="font-size: 1.5rem; margin-bottom: 5px;">إضافة التطبيق</h2>
+            
+            <div style="text-align: center; direction: rtl; line-height: 1.8; margin-top: 15px;">
+                <p style="margin-bottom: 5px; font-size: 16px; color: #cbd5e1;">
+                    لتحميل التطبيق، اضغط على زر المشاركة الخاص بالآيفون في <strong>أسفل الشاشة</strong>
+                </p>
+                
+                <!-- Apple Share Icon SVG -->
+                <div style="margin: 10px 0; color: #00d2ff;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                        <polyline points="16 6 12 2 8 6"></polyline>
+                        <line x1="12" y1="2" x2="12" y2="15"></line>
+                    </svg>
+                </div>
+
+                <p style="margin-bottom: 5px; color: #cbd5e1;">
+                    ثم اسحب القائمة لأعلى واختر <br><strong>"إضافة للشاشة الرئيسية"</strong>
+                </p>
+                
+                <p style="color: #bbb; font-size: 14px; margin-bottom: 15px;">
+                    <span dir="ltr">(Add to Home Screen)</span> ➕
+                </p>
+
+                <!-- Pointing Down Emoji -->
+                <div style="font-size: 35px;">
+                    👇
+                </div>
+            </div>
         </div>
     </div>
 
