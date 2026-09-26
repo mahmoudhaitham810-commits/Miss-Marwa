@@ -7,6 +7,7 @@
     <title>لوحة تحكم المعلم | Science Academy</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 
     <style>
         :root {
@@ -768,6 +769,129 @@
                 padding: 12px 18px;
             }
         }
+
+        /* ═══ Analytics Dashboard CSS ═══ */
+        .analytics-chart-card {
+            background: var(--card-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+        .analytics-chart-card.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .analytics-chart-card h3 {
+            color: #fff;
+            font-size: 1.15rem;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .chart-wrapper {
+            position: relative;
+            width: 100%;
+            min-height: 280px;
+        }
+        .analytics-student-header {
+            background: var(--card-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 25px 30px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .analytics-student-header .student-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #2563eb, #06b6d4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            color: #fff;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+        .analytics-student-header .student-info h2 {
+            color: #fff;
+            font-size: 1.4rem;
+            margin-bottom: 4px;
+        }
+        .analytics-student-header .student-info p {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        .analytics-cheat-box {
+            border-radius: 16px;
+            padding: 25px 30px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .analytics-cheat-box.safe {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .analytics-cheat-box.warning {
+            background: rgba(245, 158, 11, 0.15);
+            border: 2px solid rgba(245, 158, 11, 0.5);
+            animation: cheatPulse 2s ease-in-out infinite;
+        }
+        @keyframes cheatPulse {
+            0%, 100% { box-shadow: 0 0 0px rgba(245, 158, 11, 0); }
+            50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+        }
+        .cheat-icon {
+            font-size: 2.5rem;
+            flex-shrink: 0;
+        }
+        .cheat-details { flex: 1; }
+        .cheat-details h3 { color: #fff; font-size: 1.15rem; margin-bottom: 8px; }
+        .cheat-details p { color: #cbd5e1; font-size: 0.95rem; line-height: 1.6; }
+        .cheat-scores {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        .cheat-scores .score-pill {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+        #analyticsSearchResults {
+            background: var(--card-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 8px;
+        }
+        #analyticsSearchResults .search-result-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: #e2e8f0;
+        }
+        #analyticsSearchResults .search-result-item:hover {
+            background: rgba(0, 229, 255, 0.1);
+        }
+        #analyticsSearchResults .search-result-item:last-child { border-bottom: none; }
     </style>
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -853,6 +977,10 @@
             <button class="nav-tab" id="tabOfflineBtn" onclick="switchSection('offline')">
                 <i class="fas fa-pen-to-square"></i>
                 <span>الامتحانات الأوفلاين</span>
+            </button>
+            <button class="nav-tab" id="tabAnalyticsBtn" onclick="switchSection('analytics')">
+                <i class="fas fa-chart-line"></i>
+                <span>تحليلات الأداء</span>
             </button>
         </div>
 
@@ -1175,6 +1303,107 @@
         </div>
     </div>
 
+    <!-- ═══════════════ ANALYTICS SECTION (Phase 5) ═══════════════ -->
+    <div id="analyticsSection" style="display: none; padding: 0 5%;">
+
+        <!-- ── View 1: Grade Overview ── -->
+        <div id="analyticsGradeView">
+            <div class="controls-bar">
+                <select class="filter-select" id="analyticsGradeSelect" onchange="loadAnalyticsGradeOverview()">
+                    <option value="">-- اختاري المرحلة الدراسية --</option>
+                    <option value="prep1">Prep 1</option>
+                    <option value="prep2">Prep 2</option>
+                    <option value="prep3">Prep 3</option>
+                    <option value="sec1">Secondary 1</option>
+                </select>
+            </div>
+
+            <div id="analyticsGradeContent" style="display: none;">
+                <!-- Grade summary stats -->
+                <div class="stats-grid" id="analyticsStatsGrid" style="margin-bottom: 30px;">
+                    <div class="stat-card"><h3 id="anTotalStudents">0</h3><p>إجمالي الطلاب</p></div>
+                    <div class="stat-card"><h3 id="anGradedCount">0</h3><p>لديهم درجات أوفلاين</p></div>
+                    <div class="stat-card"><h3 id="anOnlineCount">0</h3><p>لديهم نتائج أونلاين</p></div>
+                    <div class="stat-card"><h3 id="anGradeAvg">0%</h3><p>متوسط المرحلة (أوفلاين)</p></div>
+                </div>
+
+                <!-- Top 10 students chart -->
+                <div class="analytics-chart-card">
+                    <h3><i class="fas fa-trophy" style="color: #fbbf24;"></i> أعلى 10 طلاب أداءً (أوفلاين)</h3>
+                    <div class="chart-wrapper"><canvas id="chartTop10"></canvas></div>
+                </div>
+
+                <!-- Worst 15 students chart -->
+                <div class="analytics-chart-card">
+                    <h3><i class="fas fa-arrow-trend-down" style="color: #ef4444;"></i> أضعف 15 طالب أداءً (أوفلاين)</h3>
+                    <div class="chart-wrapper"><canvas id="chartWorst15"></canvas></div>
+                </div>
+
+                <!-- Combined grouped bar chart: Top 10 online vs offline -->
+                <div class="analytics-chart-card">
+                    <h3><i class="fas fa-scale-balanced" style="color: #a78bfa;"></i> مقارنة أعلى 10 طلاب: أونلاين vs أوفلاين</h3>
+                    <div class="chart-wrapper"><canvas id="chartCombinedTop10"></canvas></div>
+                </div>
+
+                <!-- Grade distribution donut -->
+                <div class="analytics-chart-card" style="max-width: 500px; margin: 0 auto 30px auto;">
+                    <h3><i class="fas fa-chart-pie" style="color: #06b6d4;"></i> توزيع المستويات (أوفلاين)</h3>
+                    <div class="chart-wrapper" style="max-height: 350px;"><canvas id="chartGradeDistribution"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── View 2: Student Deep-Dive ── -->
+        <div id="analyticsStudentView" style="display: none;">
+            <button class="action-btn" style="margin-bottom: 20px;" onclick="showAnalyticsGradeView()">
+                <i class="fas fa-arrow-right"></i> رجوع لنظرة المرحلة
+            </button>
+
+            <!-- Student info header -->
+            <div class="analytics-student-header" id="anStudentHeader"></div>
+
+            <!-- Cheating Detection Indicator -->
+            <div id="anCheatIndicator" class="analytics-cheat-box"></div>
+
+            <!-- Trend Line Charts -->
+            <div class="analytics-chart-card">
+                <h3><i class="fas fa-arrow-trend-up" style="color: #22d3ee;"></i> مسار الأداء في الامتحانات الأوفلاين</h3>
+                <div class="chart-wrapper"><canvas id="chartOfflineTrend"></canvas></div>
+            </div>
+
+            <div class="analytics-chart-card">
+                <h3><i class="fas fa-arrow-trend-up" style="color: #818cf8;"></i> مسار الأداء في الامتحانات الأونلاين</h3>
+                <div class="chart-wrapper"><canvas id="chartOnlineTrend"></canvas></div>
+            </div>
+
+            <!-- Improvement Donut -->
+            <div class="analytics-chart-card" style="max-width: 450px; margin: 0 auto 30px auto;">
+                <h3><i class="fas fa-rocket" style="color: #f472b6;"></i> مؤشر التطور</h3>
+                <div class="chart-wrapper" style="max-height: 320px;"><canvas id="chartImprovement"></canvas></div>
+                <p id="anImprovementCaption" style="text-align: center; color: #94a3b8; margin-top: 10px; font-size: 0.95rem;"></p>
+            </div>
+
+            <!-- Exam count summary -->
+            <div class="analytics-chart-card" style="max-width: 450px; margin: 0 auto 30px auto;">
+                <h3><i class="fas fa-clipboard-list" style="color: #34d399;"></i> ملخص المشاركة</h3>
+                <div class="chart-wrapper" style="max-height: 320px;"><canvas id="chartParticipation"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Student search bar (always visible) -->
+        <div class="controls-bar" style="margin-top: 25px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 25px;">
+            <div class="search-box" style="flex: 1;">
+                <input type="text" id="analyticsStudentSearch" placeholder="🔍 ابحث عن طالب بالاسم للتحليل التفصيلي..." oninput="onAnalyticsSearchInput(this.value)">
+                <i class="fas fa-search"></i>
+            </div>
+            <button class="action-btn" onclick="startAnalyticsVoiceSearch()" title="بحث صوتي">
+                <i class="fas fa-microphone"></i>
+                <span>بحث صوتي</span>
+            </button>
+        </div>
+        <div id="analyticsSearchResults" style="display: none;"></div>
+
+    </div>
     <!-- Voice Grading Overlay -->
     <div class="voice-overlay" id="voiceOverlay">
         <div class="voice-ring">
@@ -1417,6 +1646,7 @@ D) 120</pre>
             document.getElementById('resultsSection').style.display = (section === 'results') ? 'block' : 'none';
             document.getElementById('reportsSection').style.display = (section === 'reports') ? 'block' : 'none';
             document.getElementById('offlineSection').style.display = (section === 'offline') ? 'block' : 'none';
+            document.getElementById('analyticsSection').style.display = (section === 'analytics') ? 'block' : 'none';
 
             document.getElementById('tabStudentsBtn').classList.toggle('active', section === 'students');
             document.getElementById('tabLessonsBtn').classList.toggle('active', section === 'lessons');
@@ -1424,6 +1654,7 @@ D) 120</pre>
             document.getElementById('tabResultsBtn').classList.toggle('active', section === 'results');
             document.getElementById('tabReportsBtn').classList.toggle('active', section === 'reports');
             document.getElementById('tabOfflineBtn').classList.toggle('active', section === 'offline');
+            document.getElementById('tabAnalyticsBtn').classList.toggle('active', section === 'analytics');
         }
 
         async function loadData() {
@@ -3053,6 +3284,493 @@ D) 120</pre>
             }
 
             stopVoiceGrading();
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // ═══  Phase 5: Analytics Dashboard — JavaScript  ═══
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // ── Cheating-detection threshold (percentage points).
+        //    A named constant so the teacher can tune it easily after seeing real data.
+        //    Only flags when: online% - offline% > CHEAT_DETECTION_THRESHOLD_PCT
+        const CHEAT_DETECTION_THRESHOLD_PCT = 30;
+
+        // ── Vivid chart color palette (consistent across all analytics charts)
+        const AN_COLORS = [
+            '#06b6d4', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444',
+            '#ec4899', '#3b82f6', '#14b8a6', '#f97316', '#6366f1',
+            '#84cc16', '#e879f9', '#22d3ee', '#a3e635', '#fb923c'
+        ];
+
+        // ── Chart instances (so we can destroy before re-rendering)
+        let anCharts = {};
+        let analyticsGradeData = null; // cached grade-overview response
+
+        // ── Helper: destroy a chart by key
+        function anDestroy(key) {
+            if (anCharts[key]) { anCharts[key].destroy(); delete anCharts[key]; }
+        }
+
+        // ── IntersectionObserver: animate chart cards on scroll
+        const anObserver = new IntersectionObserver((entries) => {
+            entries.forEach(e => {
+                if (e.isIntersecting) {
+                    e.target.classList.add('visible');
+                    anObserver.unobserve(e.target);
+                }
+            });
+        }, { threshold: 0.15 });
+
+        function anObserveCards() {
+            document.querySelectorAll('#analyticsSection .analytics-chart-card').forEach(card => {
+                card.classList.remove('visible');
+                anObserver.observe(card);
+            });
+        }
+
+        // ── Default Chart.js styling for dark theme
+        function anChartDefaults() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 900, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1', font: { family: 'Cairo', size: 13 } } },
+                    tooltip: { titleFont: { family: 'Cairo' }, bodyFont: { family: 'Cairo' } }
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { family: 'Cairo', size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#94a3b8', font: { family: 'Cairo' } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true, max: 100 }
+                }
+            };
+        }
+
+        // ═══════════════════════════════════════════════════
+        // VIEW 1: Grade Overview
+        // ═══════════════════════════════════════════════════
+        async function loadAnalyticsGradeOverview() {
+            const grade = document.getElementById('analyticsGradeSelect').value;
+            const content = document.getElementById('analyticsGradeContent');
+            if (!grade) { content.style.display = 'none'; return; }
+
+            content.style.display = 'block';
+            try {
+                const res = await fetch(`/api/analytics?action=grade-overview&grade=${grade}&t=${Date.now()}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+
+                analyticsGradeData = data;
+                const students = data.students || [];
+
+                // Stats
+                const withOffline = students.filter(s => s.offlineAvgPercent !== null);
+                const withOnline = students.filter(s => s.onlineAvgPercent !== null);
+                const gradeAvg = withOffline.length > 0
+                    ? Math.round(withOffline.reduce((s, x) => s + x.offlineAvgPercent, 0) / withOffline.length)
+                    : 0;
+
+                document.getElementById('anTotalStudents').textContent = students.length;
+                document.getElementById('anGradedCount').textContent = withOffline.length;
+                document.getElementById('anOnlineCount').textContent = withOnline.length;
+                document.getElementById('anGradeAvg').textContent = gradeAvg + '%';
+
+                // ── Chart 1: Top 10 (offline)
+                const sortedTop = [...withOffline].sort((a, b) => b.offlineAvgPercent - a.offlineAvgPercent).slice(0, 10);
+                anDestroy('top10');
+                anCharts.top10 = new Chart(document.getElementById('chartTop10'), {
+                    type: 'bar',
+                    data: {
+                        labels: sortedTop.map(s => `${s.firstName} ${s.lastName}`),
+                        datasets: [{
+                            label: 'متوسط الأوفلاين %',
+                            data: sortedTop.map(s => s.offlineAvgPercent),
+                            backgroundColor: sortedTop.map((_, i) => AN_COLORS[i % AN_COLORS.length]),
+                            borderRadius: 8, borderSkipped: false, barPercentage: 0.7
+                        }]
+                    },
+                    options: { ...anChartDefaults(), indexAxis: 'y', plugins: { ...anChartDefaults().plugins, legend: { display: false } }, scales: { ...anChartDefaults().scales, x: { ...anChartDefaults().scales.x, max: 100 }, y: { ...anChartDefaults().scales.y, max: undefined } } }
+                });
+
+                // ── Chart 2: Worst 15 (offline)
+                const sortedWorst = [...withOffline].sort((a, b) => a.offlineAvgPercent - b.offlineAvgPercent).slice(0, 15);
+                anDestroy('worst15');
+                anCharts.worst15 = new Chart(document.getElementById('chartWorst15'), {
+                    type: 'bar',
+                    data: {
+                        labels: sortedWorst.map(s => `${s.firstName} ${s.lastName}`),
+                        datasets: [{
+                            label: 'متوسط الأوفلاين %',
+                            data: sortedWorst.map(s => s.offlineAvgPercent),
+                            backgroundColor: sortedWorst.map(s => s.offlineAvgPercent < 50 ? '#ef4444' : '#f59e0b'),
+                            borderRadius: 8, borderSkipped: false, barPercentage: 0.7
+                        }]
+                    },
+                    options: { ...anChartDefaults(), indexAxis: 'y', plugins: { ...anChartDefaults().plugins, legend: { display: false } }, scales: { ...anChartDefaults().scales, x: { ...anChartDefaults().scales.x, max: 100 }, y: { ...anChartDefaults().scales.y, max: undefined } } }
+                });
+
+                // ── Chart 3: Combined Top 10 (grouped bars: online vs offline)
+                // Sort by average of both scores to get the "best overall"
+                const withBoth = students.filter(s => s.offlineAvgPercent !== null && s.onlineAvgPercent !== null);
+                const combinedTop = [...withBoth].sort((a, b) => {
+                    const avgA = (a.onlineAvgPercent + a.offlineAvgPercent) / 2;
+                    const avgB = (b.onlineAvgPercent + b.offlineAvgPercent) / 2;
+                    return avgB - avgA;
+                }).slice(0, 10);
+
+                anDestroy('combined');
+                anCharts.combined = new Chart(document.getElementById('chartCombinedTop10'), {
+                    type: 'bar',
+                    data: {
+                        labels: combinedTop.map(s => `${s.firstName} ${s.lastName}`),
+                        datasets: [
+                            { label: 'أونلاين %', data: combinedTop.map(s => s.onlineAvgPercent), backgroundColor: '#818cf8', borderRadius: 6, barPercentage: 0.6 },
+                            { label: 'أوفلاين %', data: combinedTop.map(s => s.offlineAvgPercent), backgroundColor: '#22d3ee', borderRadius: 6, barPercentage: 0.6 }
+                        ]
+                    },
+                    options: anChartDefaults()
+                });
+
+                // ── Chart 4: Grade Distribution Donut (offline)
+                // Excellent >=85, Good 70-84, Average 50-69, Weak <50
+                let excellent = 0, good = 0, average = 0, weak = 0;
+                withOffline.forEach(s => {
+                    if (s.offlineAvgPercent >= 85) excellent++;
+                    else if (s.offlineAvgPercent >= 70) good++;
+                    else if (s.offlineAvgPercent >= 50) average++;
+                    else weak++;
+                });
+                anDestroy('distribution');
+                anCharts.distribution = new Chart(document.getElementById('chartGradeDistribution'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['ممتاز (≥85%)', 'جيد (70–84%)', 'متوسط (50–69%)', 'ضعيف (<50%)'],
+                        datasets: [{
+                            data: [excellent, good, average, weak],
+                            backgroundColor: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444'],
+                            borderWidth: 0, hoverOffset: 12
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, animation: { duration: 900 }, plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { family: 'Cairo', size: 13 }, padding: 15 } } } }
+                });
+
+                anObserveCards();
+
+            } catch (err) {
+                showSmartToast('خطأ في تحميل بيانات التحليلات: ' + err.message, 'error');
+            }
+        }
+
+        // ═══════════════════════════════════════════════════
+        // VIEW 2: Student Deep-Dive
+        // ═══════════════════════════════════════════════════
+        function showAnalyticsGradeView() {
+            document.getElementById('analyticsGradeView').style.display = 'block';
+            document.getElementById('analyticsStudentView').style.display = 'none';
+        }
+
+        async function loadStudentDeepDive(studentId) {
+            document.getElementById('analyticsGradeView').style.display = 'none';
+            document.getElementById('analyticsStudentView').style.display = 'block';
+            document.getElementById('analyticsSearchResults').style.display = 'none';
+            document.getElementById('analyticsStudentSearch').value = '';
+
+            try {
+                const res = await fetch(`/api/analytics?action=student-detail&studentId=${encodeURIComponent(studentId)}&t=${Date.now()}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+
+                const { student, offlineHistory, onlineHistory } = data;
+                const fullName = `${student.firstName} ${student.lastName}`;
+
+                // ── Student Header
+                document.getElementById('anStudentHeader').innerHTML = `
+                    <div class="student-avatar">${student.firstName.charAt(0)}</div>
+                    <div class="student-info">
+                        <h2>${fullName}</h2>
+                        <p><strong>الكود:</strong> ${student.studentId} &nbsp; | &nbsp; <strong>المرحلة:</strong> ${student.grade.toUpperCase()} &nbsp; | &nbsp; <strong>هاتف ولي الأمر:</strong> ${student.parentPhone || 'غير متوفر'}</p>
+                    </div>
+                `;
+
+                // ── Cheating Detection
+                // avgOnlinePercent = average of per-exam percentages (online)
+                // avgOfflinePercent = average of per-exam percentages (offline)
+                // gap = avgOnlinePercent - avgOfflinePercent
+                // Flag ONLY if gap > CHEAT_DETECTION_THRESHOLD_PCT (online significantly higher than offline)
+                const avgOnline = onlineHistory.length > 0
+                    ? Math.round(onlineHistory.reduce((s, e) => s + e.percent, 0) / onlineHistory.length)
+                    : null;
+                const avgOffline = offlineHistory.length > 0
+                    ? Math.round(offlineHistory.reduce((s, e) => s + e.percent, 0) / offlineHistory.length)
+                    : null;
+
+                const cheatBox = document.getElementById('anCheatIndicator');
+                const hasEnoughData = avgOnline !== null && avgOffline !== null;
+                const gap = hasEnoughData ? avgOnline - avgOffline : 0;
+                const isSuspicious = hasEnoughData && gap > CHEAT_DETECTION_THRESHOLD_PCT;
+
+                if (!hasEnoughData) {
+                    cheatBox.className = 'analytics-cheat-box safe';
+                    cheatBox.innerHTML = `
+                        <div class="cheat-icon">📊</div>
+                        <div class="cheat-details">
+                            <h3>لا تتوفر بيانات كافية للمقارنة</h3>
+                            <p>يحتاج النظام إلى نتيجة واحدة على الأقل في كلا النوعين (أونلاين + أوفلاين) لتشغيل التحليل.</p>
+                        </div>`;
+                } else if (isSuspicious) {
+                    cheatBox.className = 'analytics-cheat-box warning';
+                    cheatBox.innerHTML = `
+                        <div class="cheat-icon">⚠️</div>
+                        <div class="cheat-details">
+                            <h3>نمط غير طبيعي — يُستحسن المتابعة</h3>
+                            <p>فارق كبير (${gap} نقطة) بين أداء الطالب الأونلاين والحضوري. ده ممكن يشير إلى استعانة بمصادر خارجية أثناء الامتحان الإلكتروني.</p>
+                            <div class="cheat-scores">
+                                <span class="score-pill" style="background: rgba(129,140,248,0.2); color: #818cf8;">أونلاين: ${avgOnline}%</span>
+                                <span class="score-pill" style="background: rgba(34,211,238,0.2); color: #22d3ee;">أوفلاين: ${avgOffline}%</span>
+                            </div>
+                        </div>
+                        <button class="action-btn" style="flex-shrink: 0;" onclick="sendCheatParentMsg('${fullName.replace(/'/g, "\\'")}', '${student.parentPhone || ''}', ${avgOnline}, ${avgOffline})">
+                            <i class="fab fa-whatsapp"></i> مراسلة ولي الأمر
+                        </button>`;
+                } else {
+                    cheatBox.className = 'analytics-cheat-box safe';
+                    cheatBox.innerHTML = `
+                        <div class="cheat-icon">✅</div>
+                        <div class="cheat-details">
+                            <h3>لا يوجد ما يثير القلق</h3>
+                            <p>أداء الطالب متسق بين الامتحانات الأونلاين والحضورية.</p>
+                            <div class="cheat-scores">
+                                <span class="score-pill" style="background: rgba(129,140,248,0.2); color: #818cf8;">أونلاين: ${avgOnline}%</span>
+                                <span class="score-pill" style="background: rgba(34,211,238,0.2); color: #22d3ee;">أوفلاين: ${avgOffline}%</span>
+                            </div>
+                        </div>`;
+                }
+
+                // ── Offline Trend Line Chart
+                anDestroy('offlineTrend');
+                if (offlineHistory.length > 0) {
+                    anCharts.offlineTrend = new Chart(document.getElementById('chartOfflineTrend'), {
+                        type: 'line',
+                        data: {
+                            labels: offlineHistory.map(e => e.examName),
+                            datasets: [{
+                                label: 'النسبة %',
+                                data: offlineHistory.map(e => e.percent),
+                                borderColor: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.1)',
+                                tension: 0.35, fill: true, pointRadius: 6, pointHoverRadius: 9,
+                                pointBackgroundColor: '#22d3ee', borderWidth: 3
+                            }]
+                        },
+                        options: anChartDefaults()
+                    });
+                }
+
+                // ── Online Trend Line Chart
+                anDestroy('onlineTrend');
+                if (onlineHistory.length > 0) {
+                    anCharts.onlineTrend = new Chart(document.getElementById('chartOnlineTrend'), {
+                        type: 'line',
+                        data: {
+                            labels: onlineHistory.map(e => e.examName),
+                            datasets: [{
+                                label: 'النسبة %',
+                                data: onlineHistory.map(e => e.percent),
+                                borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.1)',
+                                tension: 0.35, fill: true, pointRadius: 6, pointHoverRadius: 9,
+                                pointBackgroundColor: '#818cf8', borderWidth: 3
+                            }]
+                        },
+                        options: anChartDefaults()
+                    });
+                }
+
+                // ── Improvement Donut
+                // Compare average of last 3 exams vs first 3 exams (combining online + offline)
+                anDestroy('improvement');
+                const allExams = [
+                    ...offlineHistory.map(e => ({ ...e, type: 'offline' })),
+                    ...onlineHistory.map(e => ({ ...e, type: 'online' }))
+                ].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+                const captionEl = document.getElementById('anImprovementCaption');
+                if (allExams.length >= 2) {
+                    const firstN = allExams.slice(0, Math.min(3, Math.floor(allExams.length / 2)));
+                    const lastN = allExams.slice(-Math.min(3, Math.floor(allExams.length / 2)));
+                    const earlyAvg = Math.round(firstN.reduce((s, e) => s + e.percent, 0) / firstN.length);
+                    const recentAvg = Math.round(lastN.reduce((s, e) => s + e.percent, 0) / lastN.length);
+                    const change = recentAvg - earlyAvg;
+                    const absChange = Math.abs(change);
+
+                    anCharts.improvement = new Chart(document.getElementById('chartImprovement'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: change >= 0 ? ['تحسّن', 'متبقي'] : ['تراجع', 'متبقي'],
+                            datasets: [{
+                                data: [Math.min(absChange, 100), Math.max(100 - absChange, 0)],
+                                backgroundColor: change >= 0 ? ['#22c55e', 'rgba(255,255,255,0.05)'] : ['#ef4444', 'rgba(255,255,255,0.05)'],
+                                borderWidth: 0, circumference: 360, rotation: -90
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            cutout: '75%',
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: { enabled: false }
+                            }
+                        },
+                        plugins: [{
+                            id: 'centerText',
+                            beforeDraw(chart) {
+                                const { ctx, width, height } = chart;
+                                ctx.save();
+                                ctx.font = `bold 28px Cairo`;
+                                ctx.fillStyle = change >= 0 ? '#22c55e' : '#ef4444';
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'middle';
+                                ctx.fillText(`${change >= 0 ? '+' : ''}${change}%`, width / 2, height / 2);
+                                ctx.restore();
+                            }
+                        }]
+                    });
+                    captionEl.textContent = change >= 0
+                        ? `📈 تحسّن بمقدار ${absChange} نقطة مقارنة بأول ${firstN.length} امتحانات (${earlyAvg}% ← ${recentAvg}%)`
+                        : `📉 تراجع بمقدار ${absChange} نقطة مقارنة بأول ${firstN.length} امتحانات (${earlyAvg}% ← ${recentAvg}%)`;
+                } else {
+                    captionEl.textContent = 'لا تتوفر امتحانات كافية لحساب مؤشر التطور (يحتاج 2 على الأقل).';
+                }
+
+                // ── Participation donut
+                anDestroy('participation');
+                anCharts.participation = new Chart(document.getElementById('chartParticipation'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['امتحانات أوفلاين', 'امتحانات أونلاين'],
+                        datasets: [{
+                            data: [offlineHistory.length, onlineHistory.length],
+                            backgroundColor: ['#22d3ee', '#818cf8'],
+                            borderWidth: 0, hoverOffset: 10
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { family: 'Cairo', size: 13 } } } } }
+                });
+
+                anObserveCards();
+                // Scroll to student header
+                document.getElementById('anStudentHeader').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            } catch (err) {
+                showSmartToast('خطأ في تحميل بيانات الطالب: ' + err.message, 'error');
+            }
+        }
+
+        // ── WhatsApp message for suspicious cheating pattern (polite, professional tone)
+        function sendCheatParentMsg(studentName, parentPhone, onlinePct, offlinePct) {
+            if (!parentPhone) { alert('لا يوجد رقم لولي الأمر لهذا الطالب.'); return; }
+            const message = `مرحبا 👋 تيم مس مروة — Science Academy\n\nولي الأمر الكريم،\nنودّ إبلاغكم بأننا لاحظنا وجود فارق ملحوظ في أداء الطالب/ة *${studentName}* بين الامتحانات الإلكترونية (أونلاين: ${onlinePct}%) والامتحانات الحضورية (أوفلاين: ${offlinePct}%).\n\nهذا الأمر لا يعني بالضرورة وجود مشكلة، ولكنه يستدعي متابعة بسيطة للتأكد من أن الطالب يستفيد بشكل حقيقي من المنهج.\n\nنتمنى التعاون في المتابعة ونحن على استعداد لأي استفسار.\n\nمع خالص تحياتنا 💐`;
+            openWhatsApp(parentPhone, message);
+        }
+
+        // ═══════════════════════════════════════════════════
+        // Student Search (text + voice) — reusing the existing voice pipeline
+        // ═══════════════════════════════════════════════════
+        function onAnalyticsSearchInput(query) {
+            const resultsDiv = document.getElementById('analyticsSearchResults');
+            if (!query || query.trim().length < 2) { resultsDiv.style.display = 'none'; return; }
+
+            const q = query.trim().toLowerCase();
+            // Search across allStudents (already loaded by loadData)
+            const matches = allStudents.filter(s => {
+                const name = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+                return name.includes(q) || (s.studentId || '').toLowerCase().includes(q);
+            }).slice(0, 15);
+
+            if (matches.length === 0) {
+                resultsDiv.style.display = 'none'; return;
+            }
+
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = matches.map(s => `
+                <div class="search-result-item" onclick="loadStudentDeepDive('${s.studentId}')">
+                    <strong>${s.firstName} ${s.lastName}</strong>
+                    <span style="color: #64748b; margin-right: 10px;">${s.studentId} — ${(s.grade || '').toUpperCase()}</span>
+                </div>
+            `).join('');
+        }
+
+        // ── Voice search: reuses the exact same normalizeArabic / deepNormalize /
+        //    levenshtein / arabicNameSimilarity pipeline from the offline grading
+        function startAnalyticsVoiceSearch() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                showSmartToast('المتصفح ده مش بيدعم التعرّف على الصوت. استخدم Chrome.', 'error');
+                return;
+            }
+            if (allStudents.length === 0) {
+                showSmartToast('لسه مفيش طلاب محمّلين. حمّلي البيانات الأول.', 'error');
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'ar-EG';
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 5;
+
+            document.getElementById('voiceOverlay').classList.add('active');
+            document.getElementById('voiceStatus').textContent = 'جاري الاستماع...';
+            document.getElementById('voiceTranscript').textContent = 'قول اسم الطالب — مثال: "أحمد محمد"';
+
+            recognition.onresult = (event) => {
+                let finalTranscript = '';
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const t = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) finalTranscript += t;
+                    else interimTranscript += t;
+                }
+                if (interimTranscript) {
+                    document.getElementById('voiceTranscript').textContent = interimTranscript;
+                }
+                if (finalTranscript) {
+                    document.getElementById('voiceStatus').textContent = 'جاري البحث...';
+                    document.getElementById('voiceTranscript').textContent = `"${finalTranscript}"`;
+                    setTimeout(() => {
+                        processAnalyticsVoice(finalTranscript);
+                        try { recognition.stop(); } catch(e) {}
+                        document.getElementById('voiceOverlay').classList.remove('active');
+                    }, 400);
+                }
+            };
+            recognition.onerror = (event) => {
+                showSmartToast('خطأ في الصوت: ' + event.error, 'error');
+                document.getElementById('voiceOverlay').classList.remove('active');
+            };
+            recognition.onend = () => {};
+            recognition.start();
+        }
+
+        function processAnalyticsVoice(transcript) {
+            const namepart = transcript.trim();
+            if (!namepart) { showSmartToast('مسمعتش حاجة', 'error'); return; }
+
+            // Reuse the existing arabicNameSimilarity function
+            let bestMatch = null;
+            let bestSim = 0;
+            allStudents.forEach(s => {
+                const fullName = `${s.firstName} ${s.lastName}`;
+                const sim1 = arabicNameSimilarity(namepart, fullName);
+                const sim2 = arabicNameSimilarity(namepart, s.firstName);
+                const sim = Math.max(sim1, sim2 * 0.95);
+                if (sim > bestSim) { bestSim = sim; bestMatch = s; }
+            });
+
+            if (!bestMatch || bestSim < 0.4) {
+                showSmartToast(`سمعت: "${namepart}" — مفيش طالب اسمه قريب.`, 'error');
+                return;
+            }
+
+            showSmartToast(`✅ تم العثور على: ${bestMatch.firstName} ${bestMatch.lastName}`, 'success');
+            loadStudentDeepDive(bestMatch.studentId);
         }
 
         // === Toast (إشعار صغير أنيق) ===
