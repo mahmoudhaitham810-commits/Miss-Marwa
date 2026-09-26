@@ -1651,10 +1651,16 @@
                     // We've used the prompt, and can't use it again, throw it away
                     deferredPrompt = null;
                 } else {
-                    // Fallback for iOS / Unsupported Browsers
-                    const iosModal = document.getElementById('ios-install-popup');
-                    if (iosModal) {
-                        iosModal.classList.add('active');
+                    // Securely detect if the device is iOS
+                    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                    
+                    if (isIOS) {
+                        const iosModal = document.getElementById('ios-install-popup');
+                        if (iosModal) {
+                            iosModal.classList.add('active'); // This manipulates CSS visibility properly as per the modal's stylesheet
+                        }
+                    } else {
+                        alert('التطبيق مثبت بالفعل على جهازك.');
                     }
                 }
             });
