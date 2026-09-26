@@ -88,19 +88,29 @@ export async function onRequestGet(context) {
                 // Offline average: average of (score / totalMarks * 100) per exam
                 const sOffline = offlineGrades.filter(g => g.studentId === s.studentId && g.score !== null);
                 let offlineTotalPct = 0;
+                let offlineRawScore = 0;
+                let offlineRawTotal = 0;
                 sOffline.forEach(g => {
                     const total = offlineExamMap[g.examId] || 100;
                     offlineTotalPct += (g.score / total) * 100;
+                    offlineRawScore += g.score;
+                    offlineRawTotal += total;
                 });
                 const offlineAvg = sOffline.length > 0 ? Math.round(offlineTotalPct / sOffline.length) : null;
 
                 // Online average: average of (score / questionCount * 100) per exam
                 const sOnline = onlineSubs.filter(r => r.studentId === s.studentId);
                 let onlineTotalPct = 0;
+                let onlineRawScore = 0;
+                let onlineRawTotal = 0;
                 sOnline.forEach(r => {
                     let total = 0;
                     try { total = JSON.parse(r.questions).length; } catch (e) { /* ignore */ }
-                    if (total > 0) onlineTotalPct += (r.score / total) * 100;
+                    if (total > 0) {
+                        onlineTotalPct += (r.score / total) * 100;
+                        onlineRawScore += r.score;
+                        onlineRawTotal += total;
+                    }
                 });
                 const onlineAvg = sOnline.length > 0 ? Math.round(onlineTotalPct / sOnline.length) : null;
 
@@ -111,6 +121,10 @@ export async function onRequestGet(context) {
                     parentPhone: s.parentPhone,
                     offlineAvgPercent: offlineAvg,
                     onlineAvgPercent: onlineAvg,
+                    offlineRawScore,
+                    offlineRawTotal,
+                    onlineRawScore,
+                    onlineRawTotal,
                     offlineExamCount: sOffline.length,
                     onlineExamCount: sOnline.length
                 };
