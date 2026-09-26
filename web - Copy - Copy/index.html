@@ -989,6 +989,30 @@
                 padding: 20px;
             }
         }
+
+        /* --- PWA Install Button --- */
+        .install-app-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-family: 'Cairo', sans-serif;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            direction: rtl; /* Because it's inside an LTR social-icons div */
+            margin-left: 10px;
+        }
+
+        .install-app-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
     </style>
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -1008,12 +1032,15 @@
         <div class="half bottom-half"></div>
     </div>
 
-    <!-- Header Navigation -->
     <header class="dashboard">
-        <div class="social-icons">
+        <div class="social-icons" style="align-items: center;">
             <a href="https://www.facebook.com/profile.php?id=61588022231167" target="_blank" title="Facebook"><i
                     class="fab fa-facebook-f"></i></a>
             <a href="https://wa.me/201144488717" target="_blank" title="WhatsApp"><i class="fab fa-whatsapp"></i></a>
+            
+            <button id="pwa-install-btn" class="install-app-btn" style="display: none;">
+                <i class="fas fa-download"></i> حمل التطبيق
+            </button>
         </div>
 
         <div class="auth-actions" id="guestAuthActions">
@@ -1559,6 +1586,45 @@
                     });
             });
         }
+
+        // --- Custom PWA Install Prompt Logic ---
+        let deferredPrompt;
+        const pwaInstallBtn = document.getElementById('pwa-install-btn');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent Chrome 67 and earlier from automatically showing the prompt
+            e.preventDefault();
+            // Stash the event so it can be triggered later
+            deferredPrompt = e;
+            // Show the custom install button
+            if (pwaInstallBtn) {
+                pwaInstallBtn.style.display = 'inline-flex';
+            }
+        });
+
+        if (pwaInstallBtn) {
+            pwaInstallBtn.addEventListener('click', async () => {
+                // Hide the button since they clicked it
+                pwaInstallBtn.style.display = 'none';
+                if (deferredPrompt) {
+                    // Show the native install prompt
+                    deferredPrompt.prompt();
+                    // Wait for the user to respond to the prompt
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`User response to the install prompt: ${outcome}`);
+                    // We've used the prompt, and can't use it again, throw it away
+                    deferredPrompt = null;
+                }
+            });
+        }
+
+        window.addEventListener('appinstalled', (e) => {
+            // Hide the button once successfully installed
+            if (pwaInstallBtn) {
+                pwaInstallBtn.style.display = 'none';
+            }
+            console.log('PWA was installed successfully');
+        });
     </script>
 </body>
 </html>
