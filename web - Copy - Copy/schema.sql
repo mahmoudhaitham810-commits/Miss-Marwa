@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS exam_submissions (
     student_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'started',
     score REAL,
+    answers TEXT,
     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     submitted_at DATETIME,
     UNIQUE(exam_id, student_id)
