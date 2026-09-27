@@ -444,20 +444,69 @@
             `;
         }
 
-        function renderResultScreen(score, total, note) {
+        function renderResultScreen(score, total, note, allowReview = false, reviewData = null) {
             stopTimer();
             document.getElementById('pageHeading').textContent = 'نتيجتك';
             document.getElementById('pageSubheading').textContent = '';
             const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
+
+            let reviewBtnHtml = '';
+            if (allowReview && reviewData) {
+                window.currentReviewData = reviewData;
+                reviewBtnHtml = `<button onclick="renderReviewScreen()" class="submit-exam-btn" style="margin-top:20px; background:#10b981; max-width:250px; display:flex; justify-content:center; align-items:center; margin-left:auto; margin-right:auto;"><i class="fas fa-eye"></i> راجع إجاباتك</button>`;
+            }
+
             document.getElementById('examContainer').innerHTML = `
                 <div class="status-card">
                     <i class="fas fa-circle-check" style="color:#4ade80;"></i>
                     <h2>تم تسليم هذا الامتحان</h2>
                     <p>درجتك: <strong style="color:#fff; font-size:1.2rem;">${score} / ${total}</strong></p>
                     ${note ? `<p style="margin-top:10px; color:#f87171;">${note}</p>` : ''}
-                    <a href="${backUrl}" class="back-btn-inline">رجوع لقائمة الامتحانات</a>
+                    <div style="display:flex; flex-direction:column; align-items:center; gap:15px; margin-top:20px;">
+                        ${reviewBtnHtml}
+                        <a href="${backUrl}" class="back-btn-inline">رجوع لقائمة الامتحانات</a>
+                    </div>
                 </div>
             `;
+        }
+
+        function renderReviewScreen() {
+            const data = window.currentReviewData;
+            if (!data) return;
+            
+            document.getElementById('pageHeading').textContent = data.title || 'مراجعة الإجابات';
+            document.getElementById('pageSubheading').textContent = 'الإجابات الصحيحة مظللة باللون الأخضر، وإجاباتك الخاطئة باللون الأحمر.';
+            
+            let html = '<div id="examForm" style="pointer-events: none; opacity: 0.95;">'; // read-only
+            
+            data.questions.forEach((q, qi) => {
+                const studentAnswerIndex = (data.answers && data.answers.length > qi) ? data.answers[qi] : -1;
+                html += `<div class="question-card">
+                    <p class="question-text">${qi + 1}. ${q.question}</p>
+                    <div class="options-group">`;
+                
+                q.options.forEach((opt, oi) => {
+                    let styleStr = "";
+                    let isChecked = (studentAnswerIndex === oi) ? "checked" : "";
+                    
+                    if (oi === q.correctIndex) {
+                        styleStr = "background: rgba(34, 197, 94, 0.2); border-color: #22c55e; color: #fff;";
+                    } else if (studentAnswerIndex === oi && studentAnswerIndex !== q.correctIndex) {
+                        styleStr = "background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fff;";
+                    }
+                    
+                    html += `<label class="option-label" style="${styleStr}">
+                        <input type="radio" disabled ${isChecked}>
+                        <span>${opt}</span>
+                    </label>`;
+                });
+                html += `</div></div>`;
+            });
+            
+            const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
+            html += `<a href="${backUrl}" class="submit-exam-btn" style="text-align:center; display:flex; justify-content:center; align-items:center; text-decoration:none;"><i class="fas fa-arrow-right"></i> رجوع لقائمة الامتحانات</a></div>`;
+            
+            document.getElementById('examContainer').innerHTML = html;
         }
 
         function renderExamForm(title, questions) {
@@ -560,11 +609,17 @@
                         startTimer(data.timeLimitMinutes);
                     }
                 } else if (data.status === 'submitted') {
-                    renderResultScreen(data.score, data.total);
-                } else if (data.status === 'locked') {
-                    renderMessage('لا يمكنك الدخول', data.error || 'أنتِ دخلتِ هذا الامتحان قبل كده.', 'fa-lock');
+                    renderResultScreen(data.score, data.total, null, false);
+                } else if (data.status === 'expired_taken') {
+                    renderResultScreen(data.score, data.total, 'انتهى وقت هذا الامتحان (متاح لك المراجعة الآن).', true, data);
+                } else if (data.status === 'active_taken') {
+                    renderMessage('تم أداء الامتحان', data.error || 'لقد قمت بأداء هذا الامتحان بالفعل. ستتمكن من مراجعة إجاباتك بعد انتهاء مدة الامتحان.', 'fa-circle-check');
+                } else if (data.status === 'expired_nottaken') {
+                    renderMessage('انتهى الوقت', data.error || 'انتهى وقت الامتحان ولم تقم بأدائه.', 'fa-clock');
                 } else if (data.status === 'expired') {
                     renderMessage('انتهى الوقت', data.error || 'انتهى وقت هذا الامتحان.', 'fa-clock');
+                } else if (data.status === 'locked') {
+                    renderMessage('لا يمكنك الدخول', data.error || 'أنتِ دخلتِ هذا الامتحان قبل كده، ومينفعش تدخلي مرة تانية', 'fa-lock');
                 } else {
                     renderMessage('حصل خطأ', data.error || 'حصل خطأ غير متوقع، حاولي تاني.', 'fa-triangle-exclamation');
                 }

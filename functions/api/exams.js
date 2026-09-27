@@ -182,8 +182,8 @@ export async function onRequestGet(context) {
             }
 
             const { results } = await db.prepare(
-                `SELECT sub.exam_id as examId, sub.score, sub.submitted_at as submittedAt,
-                        e.title, e.grade, e.questions
+                `SELECT sub.exam_id as examId, sub.score, sub.answers, sub.submitted_at as submittedAt,
+                        e.title, e.grade, e.questions, e.expires_at as expiresAt
                  FROM exam_submissions sub
                  JOIN exams e ON e.id = sub.exam_id
                  WHERE sub.student_id = ? AND sub.status = 'submitted'
@@ -192,14 +192,20 @@ export async function onRequestGet(context) {
 
             const list = results.map(r => {
                 let total = 0;
-                try { total = JSON.parse(r.questions).length; } catch (e) { /* ignore */ }
+                let questionsArr = [];
+                let studentAnswers = [];
+                try { questionsArr = JSON.parse(r.questions); total = questionsArr.length; } catch (e) { /* ignore */ }
+                try { studentAnswers = r.answers ? JSON.parse(r.answers) : []; } catch (e) { /* ignore */ }
                 return {
                     examId: r.examId,
                     title: r.title,
                     grade: r.grade,
                     score: r.score,
-                    total,
-                    submittedAt: r.submittedAt
+                    total: total,
+                    submittedAt: r.submittedAt,
+                    expiresAt: r.expiresAt,
+                    questions: questionsArr,
+                    answers: studentAnswers
                 };
             });
 
@@ -358,45 +364,61 @@ export async function onRequestPost(context) {
                 return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
             }
 
-            if (new Date(exam.expires_at) < new Date()) {
-                return Response.json({ status: 'expired', error: 'للأسف انتهى وقت هذا الامتحان' }, { status: 403 });
+            const isExpired = new Date(exam.expires_at) < new Date();
+
+            const existing = await db.prepare(
+                "SELECT status, score, answers FROM exam_submissions WHERE exam_id = ? AND student_id = ?"
+            ).bind(examId, studentId).first();
+
+            let questionsObj = [];
+            try { questionsObj = JSON.parse(exam.questions); } catch (e) { /* ignore */ }
+            const total = questionsObj.length;
+
+            if (existing && existing.status === 'submitted') {
+                if (isExpired) {
+                    // State D (Expired + Already Taken)
+                    let parsedAnswers = [];
+                    try { parsedAnswers = existing.answers ? JSON.parse(existing.answers) : []; } catch (e) { }
+                    return Response.json({ 
+                        status: 'expired_taken', 
+                        score: existing.score, 
+                        total, 
+                        answers: parsedAnswers, 
+                        questions: questionsObj, 
+                        title: exam.title 
+                    });
+                } else {
+                    // State B (Active + Already Taken)
+                    return Response.json({ 
+                        status: 'active_taken', 
+                        error: 'لقد قمت بأداء هذا الامتحان بالفعل. ستتمكن من مراجعة إجاباتك بعد انتهاء مدة الامتحان.' 
+                    }, { status: 403 });
+                }
+            } else if (existing && existing.status === 'started') {
+                return Response.json({
+                    status: 'locked',
+                    error: 'أنتِ دخلتِ هذا الامتحان قبل كده ولم تقم بتسليمه، ومينفعش تدخلي مرة تانية'
+                }, { status: 403 });
             }
 
-            // بنحاول نسجل "بدأ الامتحان" كصف جديد. لو فيه صف موجود بالفعل لنفس
-            // الطالب ونفس الامتحان، الـ UNIQUE في الداتا بيز هيرفض الإدراج،
-            // وده بالظبط اللي بيمنع الطالب من الدخول مرتين.
+            if (isExpired) {
+                // State C (Expired + Not Taken)
+                return Response.json({ status: 'expired_nottaken', error: 'انتهى وقت الامتحان ولم تقم بأدائه.' }, { status: 403 });
+            }
+
+            // State A (Active + Not Taken)
             try {
                 await db.prepare(
                     "INSERT INTO exam_submissions (exam_id, student_id, status) VALUES (?, ?, 'started')"
                 ).bind(examId, studentId).run();
             } catch (insertErr) {
-                const existing = await db.prepare(
-                    "SELECT status, score FROM exam_submissions WHERE exam_id = ? AND student_id = ?"
-                ).bind(examId, studentId).first();
-
-                if (existing && existing.status === 'submitted') {
-                    let total = 0;
-                    try { total = JSON.parse(exam.questions).length; } catch (e) { /* ignore */ }
-                    return Response.json({ status: 'submitted', score: existing.score, total });
-                }
-
-                return Response.json({
-                    status: 'locked',
-                    error: 'أنتِ دخلتِ هذا الامتحان قبل كده، ومينفعش تدخلي مرة تانية'
-                }, { status: 403 });
+                return Response.json({ status: 'locked', error: 'لا يمكن بدء الامتحان الآن' }, { status: 403 });
             }
 
-            // أول دخول ناجح: نبعت الأسئلة والاختيارات بس، من غير الإجابة الصح
-            // (عشان محدش يقدر يشوفها من كود الصفحة)
-            let questionsForStudent = [];
-            try {
-                questionsForStudent = JSON.parse(exam.questions).map(q => ({
-                    question: q.question,
-                    options: q.options
-                }));
-            } catch (e) {
-                return Response.json({ error: 'حصل خطأ في قراءة أسئلة الامتحان' }, { status: 500 });
-            }
+            let questionsForStudent = questionsObj.map(q => ({
+                question: q.question,
+                options: q.options
+            }));
 
             return Response.json({
                 status: 'started',
@@ -443,8 +465,8 @@ export async function onRequestPost(context) {
             });
 
             await db.prepare(
-                "UPDATE exam_submissions SET status = 'submitted', score = ?, submitted_at = CURRENT_TIMESTAMP WHERE exam_id = ? AND student_id = ?"
-            ).bind(correctCount, examId, studentId).run();
+                "UPDATE exam_submissions SET status = 'submitted', score = ?, answers = ?, submitted_at = CURRENT_TIMESTAMP WHERE exam_id = ? AND student_id = ?"
+            ).bind(correctCount, JSON.stringify(answers), examId, studentId).run();
 
             return Response.json({ success: true, score: correctCount, total: questions.length });
         }

@@ -296,13 +296,18 @@
                 }
 
                 container.innerHTML = data.map(r => `
-                    <div class="result-card">
-                        <div class="result-info">
-                            <span class="result-title">${r.title}</span>
-                            <span class="result-meta">${(r.grade || '').toUpperCase()}</span>
+                    <a href="./exam.html?id=${encodeURIComponent(r.examId)}" style="text-decoration: none; color: inherit; display: block;">
+                        <div class="result-card" style="cursor: pointer; transition: transform 0.2s; border: 1px solid var(--border-glass);">
+                            <div class="result-info">
+                                <span class="result-title">${r.title}</span>
+                                <span class="result-meta">${(r.grade || '').toUpperCase()}</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap: 15px;">
+                                <div class="result-score ${scoreClass(r.score, r.total)}">${r.score} / ${r.total}</div>
+                                <i class="fas fa-chevron-left" style="color: #64748b;"></i>
+                            </div>
                         </div>
-                        <div class="result-score ${scoreClass(r.score, r.total)}">${r.score} / ${r.total}</div>
-                    </div>
+                    </a>
                 `).join('');
             } catch (err) {
                 container.innerHTML = `
