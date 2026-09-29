@@ -2681,7 +2681,7 @@ D) 120</pre>
             const exam = currentOfflineExams.find(e => e.id == examId);
             const gradesMap = currentOfflineGradesMap[examId] || {};
             
-            const scores = Object.values(gradesMap).filter(s => s !== null && s !== undefined);
+            const scores = Object.values(gradesMap).filter(s => s !== null && s !== undefined).map(s => parseFloat(s));
             if (scores.length === 0) {
                 showSmartToast('لا توجد درجات مسجلة في هذا الامتحان.', 'error');
                 return;
@@ -2691,8 +2691,9 @@ D) 120</pre>
             const topStudents = [];
             
             currentOfflineStudents.forEach(s => {
-                const score = gradesMap[s.studentId];
-                if (score !== undefined && score !== null && (score === maxScore || score === maxScore - 1)) {
+                let score = gradesMap[s.studentId];
+                if (score !== undefined && score !== null && Math.abs(parseFloat(score) - maxScore) <= 1) {
+                    score = parseFloat(score);
                     topStudents.push({
                         name: s.firstName + " " + (s.lastName || ""),
                         score: score,
