@@ -1510,25 +1510,6 @@
         </div>
     </div>
 
-    <!-- Modal for Honor Board -->
-    <div class="modal-overlay" id="honorBoardModal">
-        <div class="modal-box">
-            <button class="close-btn" onclick="closeHonorBoardModal()">&times;</button>
-            <h2 style="margin-bottom: 20px; font-size: 1.5rem; color: #fff;">
-                <i class="fas fa-award" style="color: #f0d58a; margin-left: 8px;"></i>
-                إنشاء لوحة الشرف
-            </h2>
-            <div class="form-group">
-                <label>اختر الامتحان:</label>
-                <div class="input-wrapper">
-                    <select id="honorBoardExamSelect" required></select>
-                    <i class="fas fa-list"></i>
-                </div>
-            </div>
-            <button class="submit-btn" onclick="generateHonorBoard()"><span>إنشاء</span></button>
-        </div>
-    </div>
-
     <!-- Modal for Adding an Offline Exam -->
     <div class="modal-overlay" id="addOfflineExamModal">
         <div class="modal-box">
@@ -2574,8 +2555,6 @@ D) 120</pre>
             document.getElementById('voiceGradeBtn').disabled = !grade;
             const hbBtn = document.getElementById('honorBoardBtn');
             if (hbBtn) hbBtn.disabled = !grade;
-            const hbBtn = document.getElementById('honorBoardBtn');
-            if (hbBtn) hbBtn.disabled = !grade;
 
             if (!grade) {
                 document.getElementById('offlineTableHead').innerHTML = '';
@@ -2679,68 +2658,6 @@ D) 120</pre>
         function openAddOfflineExamModal() {
             if (!currentOfflineGrade) return;
             document.getElementById('addOfflineExamModal').classList.add('active');
-        }
-
-        function openHonorBoardModal() {
-            if (!currentOfflineGrade || currentOfflineExams.length === 0) {
-                showSmartToast('لا توجد امتحانات مسجلة لهذه المرحلة.', 'error');
-                return;
-            }
-            const select = document.getElementById('honorBoardExamSelect');
-            select.innerHTML = currentOfflineExams.map(e => `<option value="${e.id}">${e.examName}</option>`).join('');
-            document.getElementById('honorBoardModal').classList.add('active');
-        }
-
-        function closeHonorBoardModal() {
-            document.getElementById('honorBoardModal').classList.remove('active');
-        }
-
-        function generateHonorBoard() {
-            const examId = document.getElementById('honorBoardExamSelect').value;
-            if (!examId) return;
-
-            const exam = currentOfflineExams.find(e => e.id == examId);
-            const gradesMap = currentOfflineGradesMap[examId] || {};
-            
-            const scores = Object.values(gradesMap).filter(s => s !== null && s !== undefined);
-            if (scores.length === 0) {
-                showSmartToast('لا توجد درجات مسجلة في هذا الامتحان.', 'error');
-                return;
-            }
-            
-            const maxScore = Math.max(...scores);
-            const topStudents = [];
-            
-            currentOfflineStudents.forEach(s => {
-                const score = gradesMap[s.studentId];
-                if (score !== undefined && score !== null && (score === maxScore || score === maxScore - 1)) {
-                    topStudents.push({
-                        name: s.firstName + " " + (s.lastName || ""),
-                        score: score,
-                        total: exam.totalMarks || 100
-                    });
-                }
-            });
-            
-            if (topStudents.length === 0) {
-                showSmartToast('لا يوجد طلاب حصلوا على الدرجات النهائية.', 'error');
-                return;
-            }
-
-            const gradeLabels = { 'prep1': 'الصف الأول الإعدادي', 'prep2': 'الصف الثاني الإعدادي', 'prep3': 'الصف الثالث الإعدادي', 'sec1': 'الصف الأول الثانوي' };
-
-            const boardData = {
-                brand: "Science Academy",
-                teacher: "Miss Marwa",
-                label: (gradeLabels[currentOfflineGrade] || currentOfflineGrade) + " - " + exam.examName,
-                subtitle: "أوائل الطلاب في امتحان الأسبوع",
-                footer: "مبروك لأبطالنا، وعقبال الدرجة النهائية الأسبوع الجاي",
-                students: topStudents
-            };
-
-            localStorage.setItem('honorBoardData', JSON.stringify(boardData));
-            window.open('./honor-board.html', '_blank');
-            closeHonorBoardModal();
         }
 
         function openHonorBoardModal() {
