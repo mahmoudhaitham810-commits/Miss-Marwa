@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>لوحة الشرف - Science Academy</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Reem+Kufi:wght@600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+:root{
+  --page:#e9eef0; --ink:#0d2b33; --ink2:#14404b; --gold:#d4a94f; --gold2:#f0d58a;
+  --ivory:#fbf7ec; --silver:#c5d0d4;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--page:#0a1418}}
+:root[data-theme="dark"]{--page:#0a1418}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);font-family:"Cairo",Tahoma,sans-serif;display:flex;flex-direction:column;align-items:center;padding:20px 12px; min-height: 100vh;}
+.card{
+  width:100%;max-width:560px;aspect-ratio:4/5;min-height:640px;position:relative;
+  background:radial-gradient(120% 70% at 50% 0%,var(--ink2),var(--ink) 70%);
+  color:var(--ivory);padding:26px 28px;display:flex;flex-direction:column;align-items:center;
+  box-shadow:0 12px 40px rgba(0,0,0,.28);
+}
+.card::before{content:"";position:absolute;inset:10px;border:2px solid var(--gold);pointer-events:none}
+.card::after{content:"";position:absolute;inset:17px;border:1px solid rgba(212,169,79,.55);pointer-events:none}
+.brand{direction:ltr;font-family:"Reem Kufi",sans-serif;font-weight:700;font-size:clamp(28px,7vw,38px);color:var(--gold2);letter-spacing:.04em;margin-top:8px;line-height:1.1}
+.teacher{direction:ltr;font-size:15px;opacity:.85;margin-top:4px}
+.tag{direction:ltr;margin-top:12px;border:1.5px solid var(--gold);color:var(--gold2);padding:3px 18px;border-radius:99px;font-weight:600;font-size:15px}
+.title{font-family:"Reem Kufi",sans-serif;font-size:clamp(34px,9vw,48px);font-weight:700;margin:16px 0 0;line-height:1.2}
+.sub{font-size:14px;opacity:.8;margin:2px 0 14px}
+.list{width:100%;display:flex;flex-direction:column;gap:9px;flex:1;justify-content:center}
+.row{display:flex;align-items:center;gap:12px;background:rgba(251,247,236,.07);border-right:4px solid var(--gold);padding:8px 12px;border-radius:4px}
+.row.silver{border-right-color:var(--silver)}
+.medal{flex:none;width:38px;height:38px}
+.name{flex:1;font-size:19px;font-weight:700}
+.score{direction:ltr;font-weight:700;font-size:19px;color:var(--gold2);background:rgba(0,0,0,.25);padding:2px 12px;border-radius:99px}
+.silver .score{color:var(--silver)}
+.foot{font-size:14px;opacity:.85;margin-top:14px;text-align:center}
+.download-btn {
+  margin-top: 25px;
+  padding: 12px 28px;
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  color: var(--ink);
+  font-family: "Cairo", sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 0 8px 25px rgba(212, 169, 79, 0.4);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.download-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(212, 169, 79, 0.6);
+}
+</style>
+</head>
+<body>
+<main class="card" id="board"></main>
+
+<button class="download-btn" onclick="downloadImage()">تحميل كصورة 📸</button>
+
+<script>
+let boardData = {};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const rawData = localStorage.getItem('honorBoardData');
+    if (!rawData) {
+        document.getElementById('board').innerHTML = '<h2 style="margin-top: 50px; color: var(--ivory);">لا توجد بيانات لوحة شرف لعرضها</h2>';
+        return;
+    }
+    boardData = JSON.parse(rawData);
+    renderHonorBoard(boardData);
+});
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function medal(gold){
+  const fill = gold ? "#d4a94f" : "#c5d0d4";
+  const mark = gold ? "#fbf7ec" : "#0d2b33";
+  return `<svg class="medal" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="${fill}"/><circle cx="20" cy="20" r="14" fill="none" stroke="${mark}" stroke-width="1.5"/><path d="M20 9l3.2 6.6 7.2 1-5.2 5.1 1.2 7.2L20 25.4l-6.4 3.5 1.2-7.2-5.2-5.1 7.2-1z" fill="${mark}"/></svg>`;
+}
+function renderHonorBoard(data, target = document.getElementById("board")){
+  const students = [...data.students].sort((a, b) => b.score - a.score);
+  const rows = students.map(s => {
+    const gold = s.score === s.total; 
+    return `<div class="row ${gold ? "" : "silver"}">${medal(gold)}<span class="name">${esc(s.name)}</span><span class="score">${s.score} / ${s.total}</span></div>`;
+  }).join("");
+  target.innerHTML = `
+    <div class="brand">${esc(data.brand)}</div>
+    <div class="teacher">${esc(data.teacher)}</div>
+    <div class="tag">${esc(data.label)}</div>
+    <h1 class="title">لوحة الشرف</h1>
+    <div class="sub">${esc(data.subtitle)}</div>
+    <div class="list">${rows}</div>
+    <div class="foot">${esc(data.footer)}</div>`;
+}
+
+function downloadImage() {
+    if (!boardData.label) return;
+    const board = document.getElementById('board');
+    html2canvas(board, { scale: 2, useCORS: true, backgroundColor: '#0a1418' }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `Honor-Board-${boardData.label}.png`.replace(/\s+/g, '-');
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+}
+</script>
+</body>
+</html>
