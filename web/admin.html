@@ -1510,6 +1510,32 @@
         </div>
     </div>
 
+    <!-- Modal for Editing an Offline Exam -->
+    <div class="modal-overlay" id="editOfflineExamModal">
+        <div class="modal-box">
+            <button class="close-btn" onclick="closeEditOfflineExamModal()">&times;</button>
+            <h2 style="margin-bottom: 20px; font-size: 1.5rem; color: #fff;">
+                <i class="fas fa-pen-to-square" style="color: #f59e0b; margin-left: 8px;"></i>
+                تعديل بيانات الامتحان
+            </h2>
+            <form id="editOfflineExamForm">
+                <input type="hidden" id="editOfflineExamId">
+                <div class="form-group">
+                    <label>اسم الامتحان</label>
+                    <input type="text" id="editOfflineExamName" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label>الدرجة النهائية</label>
+                    <input type="number" id="editOfflineExamTotal" class="form-input" min="1" step="0.5" required>
+                </div>
+                <button type="submit" class="action-btn" style="width: 100%; justify-content: center; margin-top: 10px;">
+                    <i class="fas fa-check"></i>
+                    <span>تعديل</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal for Adding an Offline Exam -->
     <div class="modal-overlay" id="addOfflineExamModal">
         <div class="modal-box">
@@ -2547,6 +2573,42 @@ D) 120</pre>
         let currentOfflineStudents = [];
         let currentOfflineExams = [];
         let currentOfflineGradesMap = {}; // currentOfflineGradesMap[examId][studentId] = score
+        let offlinePendingScores = {}; // draft state
+
+        function handleOfflineScoreInput(input, examId, studentId) {
+            if (!offlinePendingScores[examId]) offlinePendingScores[examId] = {};
+            offlinePendingScores[examId][studentId] = input.value;
+        }
+
+        function openEditOfflineExamModal(id, currentName, currentTotal) {
+            document.getElementById('editOfflineExamId').value = id;
+            document.getElementById('editOfflineExamName').value = currentName;
+            document.getElementById('editOfflineExamTotal').value = currentTotal;
+            document.getElementById('editOfflineExamModal').classList.add('active');
+        }
+
+        function closeEditOfflineExamModal() {
+            document.getElementById('editOfflineExamModal').classList.remove('active');
+        }
+
+        async function deleteOfflineExam(examId) {
+            if (!confirm('هل أنت متأكد؟ سيتم حذف هذا الامتحان وجميع الدرجات المرتبطة به نهائياً. ولا يمكن التراجع عن هذا الإجراء.')) return;
+            try {
+                const res = await fetch('/api/offline-exams?action=delete-exam', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ examId })
+                });
+                if (!res.ok) throw new Error('فشل الحذف');
+                currentOfflineExams = currentOfflineExams.filter(e => e.id !== examId);
+                delete currentOfflineGradesMap[examId];
+                delete offlinePendingScores[examId];
+                renderOfflineTable();
+                showSmartToast('تم حذف الامتحان بنجاح', 'success');
+            } catch (err) {
+                alert('حدث خطأ: ' + err.message);
+            }
+        }
 
         async function onOfflineGradeChange() {
             const grade = document.getElementById('offlineGradeSelect').value;
@@ -2600,10 +2662,19 @@ D) 120</pre>
 
             let headHtml = '<tr><th>كود الطالب (ID)</th><th>اسم الطالب</th><th>هاتف ولي الأمر</th>';
             currentOfflineExams.forEach(ex => {
+                const escapedName = ex.examName.replace(/'/g, "\\'");
                 headHtml += `<th>${ex.examName} (${ex.totalMarks})
-                    <button class="btn-table btn-reset" style="margin-right:6px; padding:2px 10px; font-size:0.75rem;" onclick="saveExamColumn(${ex.id})">
-                        <i class="fas fa-save"></i> حفظ
-                    </button>
+                    <div style="margin-top:4px; display:flex; gap:2px; justify-content:center;">
+                        <button class="btn-table btn-reset" style="padding:2px 8px; font-size:0.75rem;" onclick="saveExamColumn(${ex.id})" title="حفظ الدرجات">
+                            <i class="fas fa-save"></i>
+                        </button>
+                        <button class="btn-table btn-reset" style="padding:2px 8px; font-size:0.75rem; color:#f59e0b;" onclick="openEditOfflineExamModal(${ex.id}, '${escapedName}', ${ex.totalMarks})" title="تعديل الامتحان">
+                            <i class="fas fa-pencil-alt"></i>
+                        </button>
+                        <button class="btn-table btn-reset" style="padding:2px 8px; font-size:0.75rem; color:#ef4444;" onclick="deleteOfflineExam(${ex.id})" title="حذف الامتحان">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </th>`;
             });
             headHtml += '<th>إجراءات</th></tr>';
@@ -2631,11 +2702,15 @@ D) 120</pre>
                     <td>${s.parentPhone || ''}</td>`;
 
                 currentOfflineExams.forEach(ex => {
-                    const existingScore = (currentOfflineGradesMap[ex.id] && currentOfflineGradesMap[ex.id][s.studentId] !== undefined)
-                        ? currentOfflineGradesMap[ex.id][s.studentId]
-                        : '';
+                    let existingScore = '';
+                    if (offlinePendingScores[ex.id] && offlinePendingScores[ex.id][s.studentId] !== undefined) {
+                        existingScore = offlinePendingScores[ex.id][s.studentId];
+                    } else if (currentOfflineGradesMap[ex.id] && currentOfflineGradesMap[ex.id][s.studentId] !== undefined) {
+                        existingScore = currentOfflineGradesMap[ex.id][s.studentId];
+                    }
+                    
                     cells += `<td><input type="number" class="form-input offline-score-input" style="width:80px; padding:6px 8px;"
-                        data-exam="${ex.id}" data-student="${s.studentId}" value="${existingScore === null ? '' : existingScore}" oninput="updateOfflineInsights()"></td>`;
+                        data-exam="${ex.id}" data-student="${s.studentId}" value="${existingScore === null ? '' : existingScore}" oninput="handleOfflineScoreInput(this, ${ex.id}, '${s.studentId}'); updateOfflineInsights()"></td>`;
                 });
 
                 const hasAnyGrade = currentOfflineExams.some(ex => currentOfflineGradesMap[ex.id] && currentOfflineGradesMap[ex.id][s.studentId] !== undefined && currentOfflineGradesMap[ex.id][s.studentId] !== null);
@@ -2727,6 +2802,32 @@ D) 120</pre>
             document.getElementById('addOfflineExamModal').classList.remove('active');
             document.getElementById('addOfflineExamForm').reset();
         }
+
+        document.getElementById('editOfflineExamForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const examId = document.getElementById('editOfflineExamId').value;
+            const examName = document.getElementById('editOfflineExamName').value.trim();
+            const totalMarks = parseFloat(document.getElementById('editOfflineExamTotal').value) || 100;
+            try {
+                const res = await fetch('/api/offline-exams?action=update-exam', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ examId, examName, totalMarks })
+                });
+                if (!res.ok) throw new Error('فشل التعديل');
+                
+                const exam = currentOfflineExams.find(e => e.id == examId);
+                if (exam) {
+                    exam.examName = examName;
+                    exam.totalMarks = totalMarks;
+                }
+                closeEditOfflineExamModal();
+                renderOfflineTable();
+                showSmartToast('تم تعديل الامتحان بنجاح', 'success');
+            } catch (err) {
+                alert('حدث خطأ: ' + err.message);
+            }
+        });
 
         document.getElementById('addOfflineExamForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -3423,21 +3524,19 @@ D) 120</pre>
                 `.offline-score-input[data-exam="${targetExam.id}"][data-student="${bestMatch.studentId}"]`
             );
 
+            if (!offlinePendingScores[targetExam.id]) offlinePendingScores[targetExam.id] = {};
+            offlinePendingScores[targetExam.id][bestMatch.studentId] = score;
+
             if (inputEl) {
                 inputEl.value = score;
-                if (!currentOfflineGradesMap[targetExam.id]) currentOfflineGradesMap[targetExam.id] = {};
-                currentOfflineGradesMap[targetExam.id][bestMatch.studentId] = score;
-
                 inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 inputEl.style.boxShadow = '0 0 15px rgba(0, 229, 255, 0.6)';
                 inputEl.style.transition = 'box-shadow 0.3s ease';
                 setTimeout(() => { inputEl.style.boxShadow = ''; }, 2500);
-
-                updateOfflineInsights();
-                showSmartToast(`✅ تم تسجيل ${score} لـ ${bestMatch.firstName} ${bestMatch.lastName}`, 'success');
-            } else {
-                showSmartToast(`سمعت: "${rawTranscript}" — لقيت ${bestMatch.firstName} بس مش ظاهر في الجدول (جرّبي شيلي فلتر البحث).`, 'error');
             }
+            
+            updateOfflineInsights();
+            showSmartToast(`✅ تم تسجيل ${score} لـ ${bestMatch.firstName} ${bestMatch.lastName}`, 'success');
 
             stopVoiceGrading();
         }

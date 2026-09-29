@@ -85,6 +85,26 @@ export async function onRequestPost(context) {
         }
 
         // === حفظ (أو تحديث) درجات مجموعة طلاب لامتحان معين دفعة واحدة ===
+        if (action === 'update-exam') {
+            const { examId, examName, totalMarks } = data;
+            if (!examId || !examName || parseFloat(totalMarks) <= 0) {
+                return Response.json({ error: 'بيانات غير صالحة' }, { status: 400 });
+            }
+            await db.prepare(
+                "UPDATE offline_exams SET exam_name = ?, total_marks = ? WHERE id = ?"
+            ).bind(examName, parseFloat(totalMarks), examId).run();
+            return Response.json({ success: true });
+        }
+
+        if (action === 'delete-exam') {
+            const { examId } = data;
+            if (!examId) return Response.json({ error: 'معرف الامتحان مفقود' }, { status: 400 });
+            
+            await db.prepare("DELETE FROM offline_exams WHERE id = ?").bind(examId).run();
+            await db.prepare("DELETE FROM offline_grades WHERE exam_id = ?").bind(examId).run();
+            return Response.json({ success: true });
+        }
+
         if (action === 'save-grades') {
             const { examId, grades } = data;
             if (!examId || !Array.isArray(grades)) {
