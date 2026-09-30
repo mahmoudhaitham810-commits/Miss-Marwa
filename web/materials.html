@@ -399,6 +399,16 @@
         }
 
         // بتبني كارت HTML لعنصر من النظام القديم (فيديو / ملخص / رابط امتحان قديم)
+        function markViewed(el, id) {
+            const viewed = JSON.parse(localStorage.getItem('viewedMaterials') || '[]');
+            if (!viewed.includes(id)) {
+                viewed.push(id);
+                localStorage.setItem('viewedMaterials', JSON.stringify(viewed));
+            }
+            const badge = el.querySelector('.new-badge');
+            if (badge) badge.style.display = 'none';
+        }
+
         function buildOldMaterialCardHtml(item) {
             const urlLower = (item.url || '').toLowerCase();
             let iconClass = 'fas fa-file-pdf item-icon pdf';
@@ -415,11 +425,16 @@
             }
 
             const isArabic = /[\u0600-\u06FF]/.test(item.title);
-            return `<a href="${item.url}" target="_blank" class="material-card" onclick="trackContentView('${item.id}', '${cat}')">
+            const viewed = JSON.parse(localStorage.getItem('viewedMaterials') || '[]');
+            const uniqueId = item.id || item.url;
+            const isViewed = viewed.includes(uniqueId);
+            const badgeHtml = isViewed ? '' : `<span class="new-badge" style="background-color: var(--glowing-cyan, #06b6d4); color: #020617; font-size: 0.65rem; font-weight: bold; padding: 2px 6px; border-radius: 99px; vertical-align: middle; text-transform: uppercase; margin-left: 8px; box-shadow: 0 0 5px rgba(6, 182, 212, 0.5); display: inline-block;">New</span>`;
+
+            return `<a href="${item.url}" target="_blank" class="material-card" onclick="markViewed(this, '${uniqueId}'); trackContentView('${item.id}', '${cat}')">
                 <div class="card-left">
                     <i class="${iconClass}"></i>
                     <div class="title-group">
-                        <span class="material-title" style="${isArabic ? 'direction: rtl; text-align: right;' : ''}">${item.title}</span>
+                        <span class="material-title" style="${isArabic ? 'direction: rtl; text-align: right;' : ''}">${item.title} ${badgeHtml}</span>
                         ${item.notes ? `<span class="material-subtitle">${item.notes}</span>` : ''}
                     </div>
                 </div>
@@ -503,6 +518,7 @@
                 console.error("Error loading lessons:", err);
             }
 
+            filtered.sort((a, b) => (parseFloat(b.id) || 0) - (parseFloat(a.id) || 0));
             cardsHtml += filtered.map(buildOldMaterialCardHtml).join('');
 
             if (!cardsHtml) {
