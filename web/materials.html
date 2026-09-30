@@ -519,9 +519,35 @@
             }
 
             filtered.sort((a, b) => {
-                const dateA = new Date(a.createdAt || a.created_at || a.timestamp || a.date || a.id || 0).getTime();
-                const dateB = new Date(b.createdAt || b.created_at || b.timestamp || b.date || b.id || 0).getTime();
-                return dateB - dateA; 
+                const parseHierarchical = (str) => {
+                    const s = (str || '').toLowerCase();
+                    
+                    // 1. Extract Unit (Default to 1 if not found, e.g., for standalone "Lesson3")
+                    const unitMatch = s.match(/unit\s*(\d+)/);
+                    const unit = unitMatch ? parseInt(unitMatch[1], 10) : 1;
+                    
+                    // 2. Extract Lesson
+                    const lessonMatch = s.match(/lesson\s*(\d+)/);
+                    let lesson = 0;
+                    if (lessonMatch) {
+                        lesson = parseInt(lessonMatch[1], 10);
+                    } else {
+                        // Fallback: extract the last number if the word "lesson" is missing
+                        const nums = s.match(/\d+/g);
+                        lesson = nums ? parseInt(nums[nums.length - 1], 10) : 0;
+                    }
+                    return { unit, lesson };
+                };
+                
+                const valA = parseHierarchical(a.title || a.name || a.id || '');
+                const valB = parseHierarchical(b.title || b.name || b.id || '');
+                
+                // Sort by Unit first (Descending)
+                if (valB.unit !== valA.unit) {
+                    return valB.unit - valA.unit;
+                }
+                // If Units match, sort by Lesson (Descending)
+                return valB.lesson - valA.lesson;
             });
             cardsHtml += filtered.map(buildOldMaterialCardHtml).join('');
 
