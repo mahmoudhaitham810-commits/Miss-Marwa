@@ -518,7 +518,11 @@
                 console.error("Error loading lessons:", err);
             }
 
-            filtered.reverse();
+            filtered.sort((a, b) => {
+                const dateA = new Date(a.createdAt || a.created_at || a.timestamp || a.date || a.id || 0).getTime();
+                const dateB = new Date(b.createdAt || b.created_at || b.timestamp || b.date || b.id || 0).getTime();
+                return dateB - dateA; 
+            });
             cardsHtml += filtered.map(buildOldMaterialCardHtml).join('');
 
             if (!cardsHtml) {
