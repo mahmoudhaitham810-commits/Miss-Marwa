@@ -518,7 +518,7 @@
                 console.error("Error loading lessons:", err);
             }
 
-            filtered.sort((a, b) => (parseFloat(b.id) || 0) - (parseFloat(a.id) || 0));
+            filtered.reverse();
             cardsHtml += filtered.map(buildOldMaterialCardHtml).join('');
 
             if (!cardsHtml) {
