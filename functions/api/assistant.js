@@ -118,7 +118,7 @@ async function executeTool(call, studentCheck, db) {
         const exams = await db.prepare("SELECT id, title, expires_at FROM exams WHERE grade = ? AND expires_at > datetime('now') ORDER BY expires_at ASC").bind(grade).all();
         const submissions = await db.prepare("SELECT exam_id FROM exam_submissions WHERE student_id = ?").bind(studentId).all();
         const subMap = new Set(submissions.results.map(s => s.exam_id));
-        
+
         const openExams = exams.results.filter(e => !subMap.has(e.id));
         return { openExams };
       }
@@ -129,7 +129,7 @@ async function executeTool(call, studentCheck, db) {
       case "get_my_grades_and_rank": {
         const online = await db.prepare("SELECT sub.score, e.title, e.questions FROM exam_submissions sub JOIN exams e ON e.id = sub.exam_id WHERE sub.student_id = ? AND sub.status = 'submitted'").bind(studentId).all();
         const offline = await db.prepare("SELECT og.score, oe.exam_name, oe.total_marks FROM offline_grades og JOIN offline_exams oe ON oe.id = og.exam_id WHERE og.student_id = ?").bind(studentId).all();
-        
+
         // Rank calculation
         const allOnlineScores = await db.prepare(`SELECT sub.student_id, AVG(CAST(sub.score AS REAL) / json_array_length(e.questions)) as avg_score 
                                                   FROM exam_submissions sub 
@@ -137,7 +137,7 @@ async function executeTool(call, studentCheck, db) {
                                                   JOIN students s ON s.student_id = sub.student_id 
                                                   WHERE s.grade = ? AND sub.status = 'submitted' 
                                                   GROUP BY sub.student_id`).bind(grade).all();
-        
+
         let rank = "N/A";
         if (allOnlineScores.results.length > 0) {
           const myAvg = allOnlineScores.results.find(s => s.student_id === studentId)?.avg_score;
@@ -152,14 +152,14 @@ async function executeTool(call, studentCheck, db) {
       case "get_wrong_answers": {
         const exam = await db.prepare("SELECT id, questions FROM exams WHERE grade = ? AND title LIKE ?").bind(grade, `%${args.exam_title}%`).first();
         if (!exam) return { error: "Exam not found" };
-        
+
         const sub = await db.prepare("SELECT answers FROM exam_submissions WHERE student_id = ? AND exam_id = ? AND status = 'submitted'").bind(studentId, exam.id).first();
         if (!sub) return { error: "No submission found for this exam" };
-        
+
         const questions = JSON.parse(exam.questions || "[]");
         const answers = JSON.parse(sub.answers || "[]");
         const wrongAnswers = [];
-        
+
         questions.forEach((q, index) => {
           const studentAns = Array.isArray(answers) ? answers[index] : undefined;
           if (studentAns === undefined || studentAns === null || studentAns !== q.correctIndex) {
@@ -189,7 +189,7 @@ async function executeTool(call, studentCheck, db) {
         const online = await db.prepare("SELECT sub.score, e.title FROM exam_submissions sub JOIN exams e ON e.id = sub.exam_id WHERE sub.student_id = ?").bind(studentId).all();
         const offline = await db.prepare("SELECT og.score, oe.exam_name, oe.total_marks FROM offline_grades og JOIN offline_exams oe ON oe.id = og.exam_id WHERE og.student_id = ?").bind(studentId).all();
         const recentActivity = await db.prepare("SELECT content_type, created_at FROM content_views WHERE student_id = ? ORDER BY created_at DESC LIMIT 5").bind(studentId).all();
-        
+
         return { profile, onlineGrades: online.results, offlineGrades: offline.results, recentActivity: recentActivity.results };
       }
       default:
@@ -250,11 +250,11 @@ async function handleChat(studentId, message, studentCheck, db, env) {
   while (geminiResponse.candidates && geminiResponse.candidates[0]?.content?.parts) {
     const parts = geminiResponse.candidates[0].content.parts;
     const functionCalls = parts.filter(p => p.functionCall);
-    
+
     if (functionCalls.length > 0) {
       // Append model's tool calls to contents
       contents.push(geminiResponse.candidates[0].content);
-      
+
       const functionResponses = [];
       for (const fCall of functionCalls) {
         const result = await executeTool(fCall.functionCall, studentCheck, db);
@@ -266,7 +266,7 @@ async function handleChat(studentId, message, studentCheck, db, env) {
           }
         });
       }
-      
+
       contents.push({ role: "user", parts: functionResponses });
       payload.contents = contents;
       geminiResponse = await callGemini(env, payload);
@@ -298,22 +298,22 @@ export async function onRequestPost({ request, env }) {
   try {
     const db = env.DB || env.D1_DB;
     await ensureTables(db);
-    
+
     const url = new URL(request.url);
     const action = url.searchParams.get("action");
     const body = await request.json();
     const { studentId, message } = body;
-    
+
     if (!studentId) {
       return Response.json({ error: "studentId is required" }, { status: 400 });
     }
-    
+
     // Validate student
-    const studentCheck = await db.prepare("SELECT * FROM students WHERE student_id = ?").bind(studentId).first();
+    const studentCheck = await db.prepare("SELECT * FROM students WHERE id = ?").bind(studentId).first();
     if (!studentCheck) {
       return Response.json({ error: "Invalid studentId" }, { status: 400 });
     }
-    
+
     if (action === "chat") {
       if (!message) return Response.json({ error: "message is required for chat" }, { status: 400 });
       return await handleChat(studentId, message, studentCheck, db, env);
