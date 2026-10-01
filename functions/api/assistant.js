@@ -219,76 +219,39 @@ async function callGemini(env, payload) {
   }
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${env.GEMINI_API_KEY}`;
-  let lastError = null;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
 
-  for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
 
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
+    clearTimeout(timeoutId);
 
-      clearTimeout(timeoutId);
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      throw new Error(`Gemini API failed - Status: ${res.status} | Details: ${errBody}`);
+    }
 
-      // Retryable status codes (503 Service Unavailable, 429 Rate Limit)
-      if (res.status === 503 || res.status === 429) {
-        const errBody = await res.text().catch(() => '');
-        lastError = new Error(`Gemini API failed - Status: ${res.status} | Details: ${errBody}`);
-        if (attempt < GEMINI_MAX_RETRIES) {
-          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-          continue;
-        }
-        break;
-      }
+    return await res.json();
 
-      // Non-retryable errors (400, 401, 403, 404, etc.)
-      if (!res.ok) {
-        const errBody = await res.text().catch(() => '');
-        throw new Error(`Gemini API failed - Status: ${res.status} | Details: ${errBody}`);
-      }
+  } catch (err) {
+    clearTimeout(timeoutId);
 
-      // Success — parse and return
-      const json = await res.json();
-      return json;
+    if (err.name === 'AbortError') {
+      throw new Error(`Gemini API failed - Status: Timeout | Details: Request timed out after ${GEMINI_TIMEOUT_MS}ms`);
+    }
 
-    } catch (err) {
-      clearTimeout(timeoutId);
-
-      // Timeout error
-      if (err.name === 'AbortError') {
-        lastError = new Error(`Gemini API failed - Status: Timeout | Details: Request timed out after ${GEMINI_TIMEOUT_MS}ms`);
-        if (attempt < GEMINI_MAX_RETRIES) {
-          continue;
-        }
-        break;
-      }
-
-      // If it's already our formatted Gemini error, rethrow immediately
-      if (err.message && err.message.startsWith("Gemini API failed")) {
-        throw err;
-      }
-
-      // Network-level errors (DNS, connect failure)
-      if (err.message && (err.message.includes('fetch') || err.message.includes('network'))) {
-        lastError = new Error(`Gemini API failed - Status: NetworkError | Details: ${err.message}`);
-        if (attempt < GEMINI_MAX_RETRIES) {
-          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-          continue;
-        }
-        break;
-      }
-
+    if (err.message && err.message.startsWith("Gemini API failed")) {
       throw err;
     }
-  }
 
-  // All retries exhausted — throw with full details
-  throw lastError || new Error("Gemini API failed after all retries");
+    throw new Error(`Gemini API failed - Status: NetworkError | Details: ${err.message}`);
+  }
 }
 
 // ─── Chat Handler ───
