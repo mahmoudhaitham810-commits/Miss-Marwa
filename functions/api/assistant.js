@@ -218,7 +218,7 @@ async function callGemini(env, payload) {
     throw new Error("Gemini API failed - Status: ConfigError | Details: GEMINI_API_KEY is not defined in environment variables.");
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${env.GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
   let lastError = null;
 
   for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
