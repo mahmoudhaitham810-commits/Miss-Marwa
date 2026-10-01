@@ -214,6 +214,10 @@ const GEMINI_MAX_RETRIES = 2;
 const GEMINI_FALLBACK_MSG = "المساعد الذكي يواجه ضغطاً كبيراً حالياً، يرجى المحاولة بعد قليل. 🙏";
 
 async function callGemini(env, payload) {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error("Gemini API failed - Status: ConfigError | Details: GEMINI_API_KEY is not defined in environment variables.");
+  }
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
   let lastError = null;
 
@@ -231,10 +235,10 @@ async function callGemini(env, payload) {
 
       clearTimeout(timeoutId);
 
-      // Retryable status codes
+      // Retryable status codes (503 Service Unavailable, 429 Rate Limit)
       if (res.status === 503 || res.status === 429) {
-        lastError = new Error(`Gemini returned ${res.status}`);
-        // Brief backoff before retry (500ms, then 1000ms)
+        const errBody = await res.text().catch(() => '');
+        lastError = new Error(`Gemini API failed - Status: ${res.status} | Details: ${errBody}`);
         if (attempt < GEMINI_MAX_RETRIES) {
           await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
           continue;
@@ -242,10 +246,10 @@ async function callGemini(env, payload) {
         break;
       }
 
-      // Non-retryable errors (400, 401, 403, etc.)
+      // Non-retryable errors (400, 401, 403, 404, etc.)
       if (!res.ok) {
         const errBody = await res.text().catch(() => '');
-        throw new Error(`Gemini API error ${res.status}: ${errBody.slice(0, 200)}`);
+        throw new Error(`Gemini API failed - Status: ${res.status} | Details: ${errBody}`);
       }
 
       // Success — parse and return
@@ -255,18 +259,23 @@ async function callGemini(env, payload) {
     } catch (err) {
       clearTimeout(timeoutId);
 
-      // AbortError = our timeout fired
+      // Timeout error
       if (err.name === 'AbortError') {
-        lastError = new Error('Gemini API timeout after 7s');
+        lastError = new Error(`Gemini API failed - Status: Timeout | Details: Request timed out after ${GEMINI_TIMEOUT_MS}ms`);
         if (attempt < GEMINI_MAX_RETRIES) {
-          continue; // retry
+          continue;
         }
         break;
       }
 
-      // Network-level errors (DNS failure, connection refused)
+      // If it's already our formatted Gemini error, rethrow immediately
+      if (err.message && err.message.startsWith("Gemini API failed")) {
+        throw err;
+      }
+
+      // Network-level errors (DNS, connect failure)
       if (err.message && (err.message.includes('fetch') || err.message.includes('network'))) {
-        lastError = err;
+        lastError = new Error(`Gemini API failed - Status: NetworkError | Details: ${err.message}`);
         if (attempt < GEMINI_MAX_RETRIES) {
           await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
           continue;
@@ -274,13 +283,12 @@ async function callGemini(env, payload) {
         break;
       }
 
-      // Non-retryable error (JSON parse, logic, etc.)
       throw err;
     }
   }
 
-  // All retries exhausted — throw with context
-  throw lastError || new Error('Gemini API failed after all retries');
+  // All retries exhausted — throw with full details
+  throw lastError || new Error("Gemini API failed after all retries");
 }
 
 // ─── Chat Handler ───
@@ -331,7 +339,7 @@ async function handleChat(studentId, message, studentCheck, db, env) {
       if (!geminiResponse || !geminiResponse.candidates || !geminiResponse.candidates[0]) {
         // Check for blocked content
         if (geminiResponse && geminiResponse.promptFeedback && geminiResponse.promptFeedback.blockReason) {
-          replyText = "عذراً، لا أقدر أجاوب على السؤال ده. ممكن تسأل سؤال تاني؟ 😊";
+          replyText = "عذراً، لا أقدر أجاوب على السؤال ده بسبب سياسات المحتوى. ممكن تسأل سؤال تاني؟ 😊";
         }
         break;
       }
@@ -379,9 +387,9 @@ async function handleChat(studentId, message, studentCheck, db, env) {
     }
 
   } catch (geminiErr) {
-    // Gemini is down or all retries failed — graceful degradation
+    // Return the raw diagnostic error directly
     console.error("Gemini error:", geminiErr.message);
-    replyText = GEMINI_FALLBACK_MSG;
+    return Response.json({ error: geminiErr.message || String(geminiErr) }, { status: 500 });
   }
 
   // Save conversation to D1 (non-blocking — don't let DB save failure crash the response)
@@ -390,7 +398,6 @@ async function handleChat(studentId, message, studentCheck, db, env) {
     await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'model', ?)").bind(studentId, replyText).run();
   } catch (saveErr) {
     console.error("Failed to save conversation:", saveErr.message);
-    // Still return the reply — saving failure is non-critical
   }
 
   return Response.json({ reply: replyText, toolsUsed });

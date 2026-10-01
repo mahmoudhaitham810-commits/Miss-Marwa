@@ -663,18 +663,22 @@
                     body: JSON.stringify({ studentId, message: text, firstName: session.firstName, grade: session.grade })
                 });
 
-                if (!res.ok) throw new Error('Network response was not ok');
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
                 
                 hideTyping();
+                if (!res.ok || data.error) {
+                    appendMessage('error', data.error || `خطأ في الخادم (Status: ${res.status})`);
+                    return;
+                }
+                
                 if (data.reply) {
                     appendMessage('assistant', data.reply);
                 } else {
-                    throw new Error('No reply from server');
+                    appendMessage('error', 'لم يتم استلام رد من المساعد.');
                 }
             } catch (error) {
                 hideTyping();
-                appendMessage('error', 'عذراً، حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.');
+                appendMessage('error', 'خطأ في الاتصال: ' + error.message);
                 console.error(error);
             } finally {
                 isWaiting = false;
