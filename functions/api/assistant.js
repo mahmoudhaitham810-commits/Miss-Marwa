@@ -96,6 +96,7 @@ const functionDeclarations = [
   }
 ];
 
+// ─── Tool Execution ───
 async function executeTool(call, studentCheck, db) {
   const name = call.name;
   const args = call.args || {};
@@ -109,52 +110,56 @@ async function executeTool(call, studentCheck, db) {
           first_name: studentCheck.first_name,
           last_name: studentCheck.last_name,
           grade: studentCheck.grade,
-          branch: studentCheck.branch,
-          current_streak: studentCheck.current_streak,
-          longest_streak: studentCheck.longest_streak
+          branch: studentCheck.branch || '',
+          current_streak: studentCheck.current_streak || 0,
+          longest_streak: studentCheck.longest_streak || 0
         };
       }
       case "get_exam_deadlines": {
         const exams = await db.prepare("SELECT id, title, expires_at FROM exams WHERE grade = ? AND expires_at > datetime('now') ORDER BY expires_at ASC").bind(grade).all();
         const submissions = await db.prepare("SELECT exam_id FROM exam_submissions WHERE student_id = ?").bind(studentId).all();
-        const subMap = new Set(submissions.results.map(s => s.exam_id));
-
-        const openExams = exams.results.filter(e => !subMap.has(e.id));
+        const subMap = new Set((submissions.results || []).map(s => s.exam_id));
+        const openExams = (exams.results || []).filter(e => !subMap.has(e.id));
         return { openExams };
       }
       case "get_new_content": {
         const lessons = await db.prepare("SELECT id, title, category, url, created_at FROM lessons WHERE grade = ? ORDER BY created_at DESC LIMIT 10").bind(grade).all();
-        return { newContent: lessons.results };
+        return { newContent: lessons.results || [] };
       }
       case "get_my_grades_and_rank": {
         const online = await db.prepare("SELECT sub.score, e.title, e.questions FROM exam_submissions sub JOIN exams e ON e.id = sub.exam_id WHERE sub.student_id = ? AND sub.status = 'submitted'").bind(studentId).all();
         const offline = await db.prepare("SELECT og.score, oe.exam_name, oe.total_marks FROM offline_grades og JOIN offline_exams oe ON oe.id = og.exam_id WHERE og.student_id = ?").bind(studentId).all();
 
         // Rank calculation
-        const allOnlineScores = await db.prepare(`SELECT sub.student_id, AVG(CAST(sub.score AS REAL) / json_array_length(e.questions)) as avg_score 
-                                                  FROM exam_submissions sub 
-                                                  JOIN exams e ON e.id = sub.exam_id 
-                                                  JOIN students s ON s.student_id = sub.student_id 
-                                                  WHERE s.grade = ? AND sub.status = 'submitted' 
-                                                  GROUP BY sub.student_id`).bind(grade).all();
-
         let rank = "N/A";
-        if (allOnlineScores.results.length > 0) {
-          const myAvg = allOnlineScores.results.find(s => s.student_id === studentId)?.avg_score;
-          if (myAvg !== undefined) {
-            let higher = allOnlineScores.results.filter(s => s.avg_score > myAvg).length;
-            rank = higher + 1;
+        try {
+          const allOnlineScores = await db.prepare(`SELECT sub.student_id, AVG(CAST(sub.score AS REAL) / json_array_length(e.questions)) as avg_score 
+                                                    FROM exam_submissions sub 
+                                                    JOIN exams e ON e.id = sub.exam_id 
+                                                    JOIN students s ON s.student_id = sub.student_id 
+                                                    WHERE s.grade = ? AND sub.status = 'submitted' 
+                                                    GROUP BY sub.student_id`).bind(grade).all();
+
+          if (allOnlineScores.results && allOnlineScores.results.length > 0) {
+            const myAvg = allOnlineScores.results.find(s => s.student_id === studentId)?.avg_score;
+            if (myAvg !== undefined && myAvg !== null) {
+              const higher = allOnlineScores.results.filter(s => s.avg_score > myAvg).length;
+              rank = `${higher + 1} من ${allOnlineScores.results.length}`;
+            }
           }
+        } catch (rankErr) {
+          // json_array_length may not exist in all D1 versions; degrade gracefully
+          rank = "غير متاح";
         }
 
-        return { onlineGrades: online.results, offlineGrades: offline.results, rank };
+        return { onlineGrades: online.results || [], offlineGrades: offline.results || [], rank };
       }
       case "get_wrong_answers": {
         const exam = await db.prepare("SELECT id, questions FROM exams WHERE grade = ? AND title LIKE ?").bind(grade, `%${args.exam_title}%`).first();
-        if (!exam) return { error: "Exam not found" };
+        if (!exam) return { error: "لم يتم العثور على الامتحان" };
 
         const sub = await db.prepare("SELECT answers FROM exam_submissions WHERE student_id = ? AND exam_id = ? AND status = 'submitted'").bind(studentId, exam.id).first();
-        if (!sub) return { error: "No submission found for this exam" };
+        if (!sub) return { error: "لم يتم العثور على إجابات لهذا الامتحان" };
 
         const questions = JSON.parse(exam.questions || "[]");
         const answers = JSON.parse(sub.answers || "[]");
@@ -167,71 +172,139 @@ async function executeTool(call, studentCheck, db) {
               questionNumber: index + 1,
               questionText: q.question || q.text || '',
               options: q.options,
-              correctAnswer: q.options[q.correctIndex],
-              studentAnswer: (studentAns !== undefined && studentAns !== null && q.options[studentAns]) ? q.options[studentAns] : 'لم يُجَب'
+              correctAnswer: q.options ? q.options[q.correctIndex] : '',
+              studentAnswer: (studentAns !== undefined && studentAns !== null && q.options && q.options[studentAns]) ? q.options[studentAns] : 'لم يُجَب'
             });
           }
         });
-        return { wrongAnswers };
+        return { wrongAnswers, totalQuestions: questions.length, totalWrong: wrongAnswers.length };
       }
       case "get_pdf_content": {
         const lesson = await db.prepare("SELECT url, notes FROM lessons WHERE grade = ? AND title LIKE ?").bind(grade, `%${args.lesson_title}%`).first();
-        if (!lesson) return { error: "Lesson not found" };
-        return { url: lesson.url, notes: lesson.notes };
+        if (!lesson) return { error: "لم يتم العثور على الملخص" };
+        return { url: lesson.url, notes: lesson.notes || '' };
       }
       case "get_parent_child_summary": {
         const profile = {
           first_name: studentCheck.first_name,
           last_name: studentCheck.last_name,
           grade: studentCheck.grade,
-          current_streak: studentCheck.current_streak
+          current_streak: studentCheck.current_streak || 0
         };
         const online = await db.prepare("SELECT sub.score, e.title FROM exam_submissions sub JOIN exams e ON e.id = sub.exam_id WHERE sub.student_id = ?").bind(studentId).all();
         const offline = await db.prepare("SELECT og.score, oe.exam_name, oe.total_marks FROM offline_grades og JOIN offline_exams oe ON oe.id = og.exam_id WHERE og.student_id = ?").bind(studentId).all();
-        const recentActivity = await db.prepare("SELECT content_type, created_at FROM content_views WHERE student_id = ? ORDER BY created_at DESC LIMIT 5").bind(studentId).all();
+        let recentActivity = { results: [] };
+        try {
+          recentActivity = await db.prepare("SELECT content_type, created_at FROM content_views WHERE student_id = ? ORDER BY created_at DESC LIMIT 5").bind(studentId).all();
+        } catch (e) { /* content_views table may not exist yet */ }
 
-        return { profile, onlineGrades: online.results, offlineGrades: offline.results, recentActivity: recentActivity.results };
+        return { profile, onlineGrades: online.results || [], offlineGrades: offline.results || [], recentActivity: recentActivity.results || [] };
       }
       default:
-        return { error: `Tool ${name} not implemented` };
+        return { error: `الأداة ${name} غير موجودة` };
     }
   } catch (err) {
-    return { error: err.message };
+    return { error: `خطأ في تنفيذ الأداة: ${err.message}` };
   }
 }
+
+// ─── Gemini API Call with Timeout, Retries, and Graceful Degradation ───
+const GEMINI_TIMEOUT_MS = 7000;
+const GEMINI_MAX_RETRIES = 2;
+const GEMINI_FALLBACK_MSG = "المساعد الذكي يواجه ضغطاً كبيراً حالياً، يرجى المحاولة بعد قليل. 🙏";
 
 async function callGemini(env, payload) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${env.GEMINI_API_KEY}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Gemini API error: ${res.status} ${txt}`);
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      // Retryable status codes
+      if (res.status === 503 || res.status === 429) {
+        lastError = new Error(`Gemini returned ${res.status}`);
+        // Brief backoff before retry (500ms, then 1000ms)
+        if (attempt < GEMINI_MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        break;
+      }
+
+      // Non-retryable errors (400, 401, 403, etc.)
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`Gemini API error ${res.status}: ${errBody.slice(0, 200)}`);
+      }
+
+      // Success — parse and return
+      const json = await res.json();
+      return json;
+
+    } catch (err) {
+      clearTimeout(timeoutId);
+
+      // AbortError = our timeout fired
+      if (err.name === 'AbortError') {
+        lastError = new Error('Gemini API timeout after 7s');
+        if (attempt < GEMINI_MAX_RETRIES) {
+          continue; // retry
+        }
+        break;
+      }
+
+      // Network-level errors (DNS failure, connection refused)
+      if (err.message && (err.message.includes('fetch') || err.message.includes('network'))) {
+        lastError = err;
+        if (attempt < GEMINI_MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        break;
+      }
+
+      // Non-retryable error (JSON parse, logic, etc.)
+      throw err;
+    }
   }
-  return res.json();
+
+  // All retries exhausted — throw with context
+  throw lastError || new Error('Gemini API failed after all retries');
 }
 
-async function handleChat(studentId, message, studentCheck, db, env) {
-  // Load conversation history
-  const historyRes = await db.prepare("SELECT role, content FROM assistant_conversations WHERE student_id = ? ORDER BY id DESC LIMIT 20").bind(studentId).all();
-  const dbHistory = historyRes.results.reverse();
+// ─── Chat Handler ───
+const MAX_TOOL_ITERATIONS = 5; // Safety cap to prevent infinite tool-calling loops
 
+async function handleChat(studentId, message, studentCheck, db, env) {
+  // Load conversation history (last 20 messages)
+  const historyRes = await db.prepare("SELECT role, content FROM assistant_conversations WHERE student_id = ? ORDER BY id DESC LIMIT 20").bind(studentId).all();
+  const dbHistory = (historyRes.results || []).reverse();
+
+  // Build Gemini contents array
   const contents = [
     { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-    { role: "model", parts: [{ text: "Understood." }] }
+    { role: "model", parts: [{ text: "تمام، أنا مساعد مس مروة الذكي. جاهز أساعدك!" }] }
   ];
 
   for (const msg of dbHistory) {
     contents.push({
-      role: msg.role, // 'user' or 'model'
+      role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }]
     });
   }
 
-  // Add new message
+  // Add the new user message
   contents.push({
     role: "user",
     parts: [{ text: message }]
@@ -243,17 +316,43 @@ async function handleChat(studentId, message, studentCheck, db, env) {
     generationConfig: { temperature: 0.8, topP: 0.95, maxOutputTokens: 2048 }
   };
 
-  let geminiResponse = await callGemini(env, payload);
+  let replyText = null;
   const toolsUsed = [];
 
-  // Multi-turn tool calling loop
-  while (geminiResponse.candidates && geminiResponse.candidates[0]?.content?.parts) {
-    const parts = geminiResponse.candidates[0].content.parts;
-    const functionCalls = parts.filter(p => p.functionCall);
+  try {
+    let geminiResponse = await callGemini(env, payload);
+    let iterations = 0;
 
-    if (functionCalls.length > 0) {
-      // Append model's tool calls to contents
-      contents.push(geminiResponse.candidates[0].content);
+    // Multi-turn tool calling loop with safety cap
+    while (iterations < MAX_TOOL_ITERATIONS) {
+      iterations++;
+
+      // Guard: ensure candidates exist
+      if (!geminiResponse || !geminiResponse.candidates || !geminiResponse.candidates[0]) {
+        // Check for blocked content
+        if (geminiResponse && geminiResponse.promptFeedback && geminiResponse.promptFeedback.blockReason) {
+          replyText = "عذراً، لا أقدر أجاوب على السؤال ده. ممكن تسأل سؤال تاني؟ 😊";
+        }
+        break;
+      }
+
+      const candidate = geminiResponse.candidates[0];
+      const parts = candidate.content && candidate.content.parts ? candidate.content.parts : [];
+
+      // Extract function calls
+      const functionCalls = parts.filter(p => p.functionCall);
+
+      if (functionCalls.length === 0) {
+        // No more tool calls — extract text reply
+        const textPart = parts.find(p => p.text);
+        if (textPart) {
+          replyText = textPart.text;
+        }
+        break;
+      }
+
+      // Execute all tool calls
+      contents.push(candidate.content);
 
       const functionResponses = [];
       for (const fCall of functionCalls) {
@@ -269,31 +368,47 @@ async function handleChat(studentId, message, studentCheck, db, env) {
 
       contents.push({ role: "user", parts: functionResponses });
       payload.contents = contents;
+
+      // Call Gemini again with tool results
       geminiResponse = await callGemini(env, payload);
-    } else {
-      break;
     }
+
+    // Fallback if no text was extracted
+    if (!replyText) {
+      replyText = "عذراً، مقدرتش أفهم الرد. ممكن تحاول تاني؟";
+    }
+
+  } catch (geminiErr) {
+    // Gemini is down or all retries failed — graceful degradation
+    console.error("Gemini error:", geminiErr.message);
+    replyText = GEMINI_FALLBACK_MSG;
   }
 
-  const replyText = geminiResponse.candidates[0]?.content?.parts?.find(p => p.text)?.text || "Sorry, I couldn't understand that.";
-
-  // Save to DB
-  await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'user', ?)").bind(studentId, message).run();
-  await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'model', ?)").bind(studentId, replyText).run();
+  // Save conversation to D1 (non-blocking — don't let DB save failure crash the response)
+  try {
+    await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'user', ?)").bind(studentId, message).run();
+    await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'model', ?)").bind(studentId, replyText).run();
+  } catch (saveErr) {
+    console.error("Failed to save conversation:", saveErr.message);
+    // Still return the reply — saving failure is non-critical
+  }
 
   return Response.json({ reply: replyText, toolsUsed });
 }
 
+// ─── History Handler ───
 async function handleHistory(studentId, db) {
   const res = await db.prepare("SELECT role, content FROM assistant_conversations WHERE student_id = ? ORDER BY id DESC LIMIT 50").bind(studentId).all();
-  return Response.json({ history: res.results.reverse() });
+  return Response.json({ history: (res.results || []).reverse() });
 }
 
+// ─── Clear Handler ───
 async function handleClear(studentId, db) {
   await db.prepare("DELETE FROM assistant_conversations WHERE student_id = ?").bind(studentId).run();
   return Response.json({ success: true });
 }
 
+// ─── Main POST Handler ───
 export async function onRequestPost({ request, env }) {
   try {
     const db = env.DB || env.D1_DB;
@@ -308,7 +423,7 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ error: "studentId is required" }, { status: 400 });
     }
 
-    // Validate student — column is "student_id", NOT "id" (id is auto-increment INTEGER)
+    // Validate student — column is "student_id", NOT "id"
     let studentCheck = null;
     try {
       studentCheck = await db.prepare("SELECT * FROM students WHERE student_id = ?").bind(studentId).first();
@@ -316,10 +431,7 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ error: "DB Error: " + dbErr.message }, { status: 500 });
     }
 
-    // Fallback: if the student authenticated via localStorage but their record
-    // hasn't propagated to D1 yet (e.g., signup API failed silently), create a
-    // minimal placeholder so the assistant doesn't break. The frontend body may
-    // include firstName / grade from the session for this purpose.
+    // Auto-registration fallback for edge cases where student is in localStorage but not D1
     if (!studentCheck) {
       const fallbackName = body.firstName || 'طالب';
       const fallbackGrade = body.grade || 'prep2';
@@ -329,7 +441,6 @@ export async function onRequestPost({ request, env }) {
         ).bind(studentId, fallbackName, fallbackGrade).run();
         studentCheck = await db.prepare("SELECT * FROM students WHERE student_id = ?").bind(studentId).first();
       } catch (insertErr) {
-        // If even the insert fails, give a clear error
         return Response.json({ error: "Student not found and auto-registration failed: " + insertErr.message }, { status: 400 });
       }
     }
@@ -349,14 +460,11 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ error: "Unknown action" }, { status: 400 });
     }
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return Response.json({ error: err.message || "Internal server error" }, { status: 500 });
   }
 }
 
+// ─── Health Check GET ───
 export async function onRequestGet({ request, env }) {
-  try {
-    return Response.json({ message: "Assistant API is running." });
-  } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
-  }
+  return Response.json({ message: "Assistant API is running.", status: "ok" });
 }
