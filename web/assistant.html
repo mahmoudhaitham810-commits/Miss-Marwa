@@ -625,7 +625,7 @@
                 const res = await fetch('/api/assistant?action=history', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ studentId })
+                    body: JSON.stringify({ studentId, firstName: session.firstName, grade: session.grade })
                 });
                 
                 if (!res.ok) throw new Error('فشل تحميل السجل');
@@ -660,7 +660,7 @@
                 const res = await fetch('/api/assistant?action=chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ studentId, message: text })
+                    body: JSON.stringify({ studentId, message: text, firstName: session.firstName, grade: session.grade })
                 });
 
                 if (!res.ok) throw new Error('Network response was not ok');
@@ -690,7 +690,7 @@
                 const res = await fetch('/api/assistant?action=clear', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ studentId })
+                    body: JSON.stringify({ studentId, firstName: session.firstName, grade: session.grade })
                 });
                 
                 if (res.ok) {

@@ -308,16 +308,34 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ error: "studentId is required" }, { status: 400 });
     }
 
-    // Validate student
+    // Validate student — column is "student_id", NOT "id" (id is auto-increment INTEGER)
     let studentCheck = null;
     try {
-      studentCheck = await db.prepare("SELECT * FROM students WHERE id = ?").bind(studentId).first();
+      studentCheck = await db.prepare("SELECT * FROM students WHERE student_id = ?").bind(studentId).first();
     } catch (dbErr) {
-      return Response.json({ error: "DB Error: " + dbErr.message }, { status: 400 });
+      return Response.json({ error: "DB Error: " + dbErr.message }, { status: 500 });
+    }
+
+    // Fallback: if the student authenticated via localStorage but their record
+    // hasn't propagated to D1 yet (e.g., signup API failed silently), create a
+    // minimal placeholder so the assistant doesn't break. The frontend body may
+    // include firstName / grade from the session for this purpose.
+    if (!studentCheck) {
+      const fallbackName = body.firstName || 'طالب';
+      const fallbackGrade = body.grade || 'prep2';
+      try {
+        await db.prepare(
+          "INSERT OR IGNORE INTO students (student_id, first_name, last_name, grade, password, role, gender, branch, phone, parent_phone) VALUES (?, ?, '', ?, '0000', 'student', '', '', '', '')"
+        ).bind(studentId, fallbackName, fallbackGrade).run();
+        studentCheck = await db.prepare("SELECT * FROM students WHERE student_id = ?").bind(studentId).first();
+      } catch (insertErr) {
+        // If even the insert fails, give a clear error
+        return Response.json({ error: "Student not found and auto-registration failed: " + insertErr.message }, { status: 400 });
+      }
     }
 
     if (!studentCheck) {
-      return Response.json({ error: "Student not found in D1 for ID: " + studentId }, { status: 400 });
+      return Response.json({ error: "Student not found for ID: " + studentId }, { status: 400 });
     }
 
     if (action === "chat") {
