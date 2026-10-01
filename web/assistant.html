@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>المساعد الذكي | مس مروة</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary-blue: #2563eb;
+            --glowing-cyan: #00E5FF;
+            --bg-deep: #020617;
+            --text-light: #f8fafc;
+            --card-glass: rgba(15, 23, 42, 0.65);
+            --border-glass: rgba(0, 229, 255, 0.2);
+            --error-red: #ef4444;
+            --accent-red: #f43f5e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Cairo', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-light);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Background Orbs */
+        .bg-orbs {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: -1;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            animation: float 10s infinite ease-in-out alternate;
+        }
+        .orb-1 {
+            width: 300px; height: 300px;
+            background: var(--glowing-cyan);
+            top: -100px; right: -50px;
+            animation-delay: 0s;
+        }
+        .orb-2 {
+            width: 400px; height: 400px;
+            background: var(--primary-blue);
+            bottom: -150px; left: -100px;
+            animation-delay: -3s;
+        }
+        .orb-3 {
+            width: 250px; height: 250px;
+            background: var(--accent-red);
+            top: 40%; left: 30%;
+            animation-delay: -6s;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(30px, 30px) scale(1.1); }
+        }
+
+        /* Top Navigation Bar */
+        .top-nav {
+            background: rgba(2, 6, 23, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-glass);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            height: 60px;
+            z-index: 10;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .back-btn {
+            color: var(--text-light);
+            text-decoration: none;
+            font-size: 1.2rem;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        .back-btn:hover {
+            background: var(--card-glass);
+            color: var(--glowing-cyan);
+        }
+
+        .brand {
+            font-size: 1.2rem;
+            font-weight: 400;
+        }
+        .brand strong {
+            font-weight: 700;
+            color: var(--glowing-cyan);
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .clear-btn {
+            background: none;
+            border: 1px solid var(--border-glass);
+            color: var(--error-red);
+            padding: 5px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: 0.3s;
+        }
+        .clear-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--error-red);
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .avatar {
+            width: 35px; height: 35px;
+            background: linear-gradient(135deg, var(--primary-blue), var(--glowing-cyan));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        .user-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        /* Chat Container */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+        }
+
+        /* Scrollbar styles */
+        .messages-area::-webkit-scrollbar {
+            width: 6px;
+        }
+        .messages-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .messages-area::-webkit-scrollbar-thumb {
+            background: var(--card-glass);
+            border-radius: 3px;
+        }
+
+        /* Welcome Screen */
+        .welcome-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 20px;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        .welcome-icon {
+            font-size: 4rem;
+            color: var(--glowing-cyan);
+            margin-bottom: 20px;
+            filter: drop-shadow(0 0 15px rgba(0, 229, 255, 0.4));
+        }
+
+        .welcome-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .welcome-subtitle {
+            font-size: 1rem;
+            color: #cbd5e1;
+            margin-bottom: 30px;
+            max-width: 400px;
+        }
+
+        .suggestion-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            max-width: 500px;
+        }
+
+        .chip {
+            background: var(--card-glass);
+            border: 1px solid var(--border-glass);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            padding: 10px 16px;
+            border-radius: 20px;
+            color: var(--text-light);
+            cursor: pointer;
+            transition: 0.3s;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chip:hover {
+            border-color: var(--glowing-cyan);
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        /* Message Bubbles */
+        .msg-wrapper {
+            display: flex;
+            flex-direction: column;
+            max-width: 85%;
+            animation: slideUp 0.3s ease-out forwards;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .msg-role {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 4px;
+            padding: 0 10px;
+        }
+
+        .msg-bubble {
+            padding: 12px 16px;
+            border-radius: 18px;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            word-break: break-word;
+        }
+
+        .msg-user {
+            align-self: flex-start; /* RTL means flex-start is right */
+        }
+        .msg-user .msg-role {
+            text-align: right;
+        }
+        .msg-user .msg-bubble {
+            background: linear-gradient(135deg, var(--primary-blue), #3b82f6);
+            border-top-right-radius: 4px;
+        }
+
+        .msg-assistant {
+            align-self: flex-end; /* RTL means flex-end is left */
+        }
+        .msg-assistant .msg-role {
+            text-align: left;
+        }
+        .msg-assistant .msg-bubble {
+            background: var(--card-glass);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border-glass);
+            border-top-left-radius: 4px;
+        }
+        
+        .msg-error {
+            align-self: center;
+            max-width: 100%;
+        }
+        .msg-error .msg-bubble {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error-red);
+            color: var(--error-red);
+            text-align: center;
+        }
+
+        /* Markdown Styles in Assistant Messages */
+        .msg-assistant .msg-bubble strong {
+            color: var(--glowing-cyan);
+        }
+        .msg-assistant .msg-bubble ul, .msg-assistant .msg-bubble ol {
+            margin-right: 20px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+        .msg-assistant .msg-bubble code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #fbbf24;
+        }
+
+        /* Typing Indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px;
+        }
+        .dot {
+            width: 8px; height: 8px;
+            background-color: #cbd5e1;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .dot:nth-child(1) { animation-delay: -0.32s; }
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        .tool-indicator {
+            font-size: 0.8rem;
+            color: var(--glowing-cyan);
+            background: rgba(0, 229, 255, 0.1);
+            padding: 4px 10px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        /* Input Area */
+        .input-area {
+            background: rgba(2, 6, 23, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border-glass);
+            padding: 15px 20px calc(15px + env(safe-area-inset-bottom, 0px));
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-glass);
+            color: var(--text-light);
+            border-radius: 24px;
+            padding: 12px 20px;
+            font-size: 1rem;
+            outline: none;
+            transition: 0.3s;
+        }
+        .chat-input:focus {
+            border-color: var(--glowing-cyan);
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.1);
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, var(--primary-blue), var(--glowing-cyan));
+            border: none;
+            width: 46px; height: 46px;
+            border-radius: 50%;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.3s;
+            flex-shrink: 0;
+            transform: rotate(180deg); /* Because RTL */
+        }
+        .send-btn:hover {
+            transform: rotate(180deg) scale(1.05);
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
+        }
+        .send-btn:disabled {
+            background: #475569;
+            cursor: not-allowed;
+            transform: rotate(180deg);
+            box-shadow: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .msg-wrapper {
+                max-width: 90%;
+            }
+            .welcome-title {
+                font-size: 1.5rem;
+            }
+            .nav-right .user-name {
+                display: none;
+            }
+            .clear-btn span {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Background Orbs -->
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <!-- Top Navigation -->
+    <div class="top-nav">
+        <div class="nav-left">
+            <a href="javascript:history.back()" class="back-btn"><i class="fas fa-arrow-right"></i></a>
+            <div class="brand">مس <strong>مروة</strong></div>
+        </div>
+        <div class="nav-right">
+            <button class="clear-btn" id="clearBtn" title="مسح المحادثة">
+                <i class="fas fa-trash-alt"></i> <span>مسح</span>
+            </button>
+            <div class="user-profile">
+                <div class="user-name" id="displayUserName">طالب</div>
+                <div class="avatar" id="displayUserAvatar">ط</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Container -->
+    <div class="chat-container">
+        <div class="messages-area" id="chatMessages">
+            <!-- Dynamic Messages Go Here -->
+            
+            <!-- Welcome Screen (shown initially) -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <i class="fas fa-robot welcome-icon"></i>
+                <h1 class="welcome-title">أهلاً بيك! 👋 أنا مساعد مس مروة الذكي</h1>
+                <p class="welcome-subtitle">اسألني عن درجاتك، مواعيد الامتحانات، أو أي سؤال علمي!</p>
+                
+                <div class="suggestion-chips">
+                    <div class="chip" onclick="sendSuggestion('عرض درجاتي')">📊 عرض درجاتي</div>
+                    <div class="chip" onclick="sendSuggestion('مواعيد الامتحانات')">📅 مواعيد الامتحانات</div>
+                    <div class="chip" onclick="sendSuggestion('المحتوى الجديد')">📚 المحتوى الجديد</div>
+                    <div class="chip" onclick="sendSuggestion('عندي سؤال علمي')">❓ عندي سؤال</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area">
+            <input type="text" class="chat-input" id="chatInput" placeholder="اكتب رسالتك هنا..." autocomplete="off">
+            <button class="send-btn" id="sendBtn"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <script>
+        // Auth Guard & Setup
+        const session = JSON.parse(localStorage.getItem('student_session') || '{}');
+        if (!session.id) {
+            window.location.href = './index.html'; // Adjust if login is elsewhere
+        }
+
+        const studentId = session.id;
+        const firstName = session.firstName || 'طالب';
+        
+        // Update Header
+        document.getElementById('displayUserName').textContent = firstName;
+        document.getElementById('displayUserAvatar').textContent = firstName.charAt(0);
+
+        // Elements
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const clearBtn = document.getElementById('clearBtn');
+
+        let isWaiting = false;
+
+        // Init
+        document.addEventListener('DOMContentLoaded', () => {
+            loadHistory();
+        });
+
+        // Basic Markdown Parser
+        function parseMarkdown(text) {
+            if (!text) return '';
+            let html = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+            
+            // Basic lists handling (simple approach)
+            html = html.replace(/^- (.*)$/gm, '<li>$1</li>');
+            if (html.includes('<li>')) {
+                html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+            }
+            
+            return html;
+        }
+
+        // Add Message to DOM
+        function appendMessage(role, content, isHtml = false) {
+            if (welcomeScreen && welcomeScreen.parentNode) {
+                welcomeScreen.remove();
+            }
+
+            const wrapper = document.createElement('div');
+            wrapper.className = `msg-wrapper msg-${role}`;
+
+            if (role !== 'error') {
+                const roleLabel = document.createElement('div');
+                roleLabel.className = 'msg-role';
+                roleLabel.textContent = role === 'user' ? 'أنت' : 'المساعد الذكي';
+                wrapper.appendChild(roleLabel);
+            }
+
+            const bubble = document.createElement('div');
+            bubble.className = 'msg-bubble';
+            
+            if (isHtml || role === 'assistant') {
+                bubble.innerHTML = role === 'assistant' ? parseMarkdown(content) : content;
+            } else {
+                bubble.textContent = content;
+            }
+
+            wrapper.appendChild(bubble);
+            chatMessages.appendChild(wrapper);
+            scrollToBottom();
+            return wrapper;
+        }
+
+        // Show/Hide Typing Indicator
+        let typingIndicatorEl = null;
+        function showTyping() {
+            if (typingIndicatorEl) return;
+            
+            typingIndicatorEl = document.createElement('div');
+            typingIndicatorEl.className = 'msg-wrapper msg-assistant';
+            
+            const roleLabel = document.createElement('div');
+            roleLabel.className = 'msg-role';
+            roleLabel.textContent = 'المساعد الذكي';
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'msg-bubble';
+            
+            // Add subtle tool hint
+            bubble.innerHTML = `
+                <div class="tool-indicator"><i class="fas fa-search"></i> جاري البحث...</div>
+                <div class="typing-indicator">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            `;
+            
+            typingIndicatorEl.appendChild(roleLabel);
+            typingIndicatorEl.appendChild(bubble);
+            chatMessages.appendChild(typingIndicatorEl);
+            scrollToBottom();
+        }
+
+        function hideTyping() {
+            if (typingIndicatorEl) {
+                typingIndicatorEl.remove();
+                typingIndicatorEl = null;
+            }
+        }
+
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // API Calls
+        async function loadHistory() {
+            try {
+                const res = await fetch('/api/assistant?action=history', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId })
+                });
+                
+                if (!res.ok) throw new Error('فشل تحميل السجل');
+                const data = await res.json();
+                
+                if (data && data.history && data.history.length > 0) {
+                    if (welcomeScreen && welcomeScreen.parentNode) welcomeScreen.remove();
+                    data.history.forEach(msg => {
+                        const displayRole = msg.role === 'model' ? 'assistant' : 'user';
+                        appendMessage(displayRole, msg.content);
+                    });
+                }
+            } catch (error) {
+                console.error(error);
+                // Non-fatal, just stay on welcome screen
+            }
+        }
+
+        async function sendMessage(text) {
+            if (!text.trim() || isWaiting) return;
+            
+            isWaiting = true;
+            chatInput.value = '';
+            chatInput.focus();
+            sendBtn.disabled = true;
+
+            // Optimistic UI
+            appendMessage('user', text);
+            showTyping();
+
+            try {
+                const res = await fetch('/api/assistant?action=chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId, message: text })
+                });
+
+                if (!res.ok) throw new Error('Network response was not ok');
+                const data = await res.json();
+                
+                hideTyping();
+                if (data.reply) {
+                    appendMessage('assistant', data.reply);
+                } else {
+                    throw new Error('No reply from server');
+                }
+            } catch (error) {
+                hideTyping();
+                appendMessage('error', 'عذراً، حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.');
+                console.error(error);
+            } finally {
+                isWaiting = false;
+                sendBtn.disabled = false;
+                chatInput.focus();
+            }
+        }
+
+        async function clearChat() {
+            if (!confirm('هل أنت متأكد من مسح المحادثة بالكامل؟')) return;
+            
+            try {
+                const res = await fetch('/api/assistant?action=clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId })
+                });
+                
+                if (res.ok) {
+                    chatMessages.innerHTML = `
+                        <div class="welcome-screen" id="welcomeScreen">
+                            <i class="fas fa-robot welcome-icon"></i>
+                            <h1 class="welcome-title">أهلاً بيك! 👋 أنا مساعد مس مروة الذكي</h1>
+                            <p class="welcome-subtitle">اسألني عن درجاتك، مواعيد الامتحانات، أو أي سؤال علمي!</p>
+                            <div class="suggestion-chips">
+                                <div class="chip" onclick="sendSuggestion('عرض درجاتي')">📊 عرض درجاتي</div>
+                                <div class="chip" onclick="sendSuggestion('مواعيد الامتحانات')">📅 مواعيد الامتحانات</div>
+                                <div class="chip" onclick="sendSuggestion('المحتوى الجديد')">📚 المحتوى الجديد</div>
+                                <div class="chip" onclick="sendSuggestion('عندي سؤال علمي')">❓ عندي سؤال</div>
+                            </div>
+                        </div>`;
+                }
+            } catch (err) {
+                alert('حدث خطأ أثناء مسح المحادثة');
+            }
+        }
+
+        // Event Listeners
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage(chatInput.value);
+            }
+        });
+
+        sendBtn.addEventListener('click', () => {
+            sendMessage(chatInput.value);
+        });
+
+        clearBtn.addEventListener('click', clearChat);
+
+        // Global function for suggestions
+        window.sendSuggestion = function(text) {
+            sendMessage(text);
+        };
+    </script>
+</body>
+</html>
