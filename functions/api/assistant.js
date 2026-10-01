@@ -309,9 +309,15 @@ export async function onRequestPost({ request, env }) {
     }
 
     // Validate student
-    const studentCheck = await db.prepare("SELECT * FROM students WHERE id = ?").bind(studentId).first();
+    let studentCheck = null;
+    try {
+      studentCheck = await db.prepare("SELECT * FROM students WHERE id = ?").bind(studentId).first();
+    } catch (dbErr) {
+      return Response.json({ error: "DB Error: " + dbErr.message }, { status: 400 });
+    }
+
     if (!studentCheck) {
-      return Response.json({ error: "Invalid studentId" }, { status: 400 });
+      return Response.json({ error: "Student not found in D1 for ID: " + studentId }, { status: 400 });
     }
 
     if (action === "chat") {
