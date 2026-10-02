@@ -148,7 +148,6 @@ async function executeTool(call, studentCheck, db) {
             }
           }
         } catch (rankErr) {
-          // json_array_length may not exist in all D1 versions; degrade gracefully
           rank = "غير متاح";
         }
 
@@ -208,17 +207,20 @@ async function executeTool(call, studentCheck, db) {
   }
 }
 
-// ─── Gemini API Call with Timeout, Retries, and Graceful Degradation ───
+// ═══════════════════════════════════════════════════════════════════════════
+// Problem 1: Configurable model + distinct error classes
+// ═══════════════════════════════════════════════════════════════════════════
 const GEMINI_TIMEOUT_MS = 7000;
-const GEMINI_MAX_RETRIES = 2;
-const GEMINI_FALLBACK_MSG = "المساعد الذكي يواجه ضغطاً كبيراً حالياً، يرجى المحاولة بعد قليل. 🙏";
 
 async function callGemini(env, payload) {
   if (!env.GEMINI_API_KEY) {
-    throw new Error("Gemini API failed - Status: ConfigError | Details: GEMINI_API_KEY is not defined in environment variables.");
+    throw new Error("[ConfigError] GEMINI_API_KEY is not set in environment variables.");
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+  // Model name from env var — change in Cloudflare dashboard, no redeploy needed
+  const model = env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
 
@@ -234,7 +236,28 @@ async function callGemini(env, payload) {
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => '');
-      throw new Error(`Gemini API failed - Status: ${res.status} | Details: ${errBody}`);
+
+      // ── 404: Model deprecated / not found — distinct from rate limits ──
+      if (res.status === 404) {
+        const lower = errBody.toLowerCase();
+        if (lower.includes('not_found') || lower.includes('no longer available') || lower.includes('is not found')) {
+          throw new Error(`[ModelNotFound] The model "${model}" is no longer available. Update the GEMINI_MODEL environment variable in Cloudflare. Raw: ${errBody.slice(0, 300)}`);
+        }
+        throw new Error(`[Gemini404] Status 404 | Details: ${errBody.slice(0, 300)}`);
+      }
+
+      // ── 429: Rate limit — inspect body to classify short vs long term ──
+      if (res.status === 429) {
+        const isDaily = classifyRateLimit(errBody);
+        if (isDaily) {
+          throw new Error(`[DailyQuotaExhausted] ${errBody.slice(0, 300)}`);
+        } else {
+          throw new Error(`[RateLimitShortTerm] ${errBody.slice(0, 300)}`);
+        }
+      }
+
+      // ── All other non-OK statuses ──
+      throw new Error(`[GeminiHTTP${res.status}] Status: ${res.status} | Details: ${errBody.slice(0, 300)}`);
     }
 
     return await res.json();
@@ -243,26 +266,340 @@ async function callGemini(env, payload) {
     clearTimeout(timeoutId);
 
     if (err.name === 'AbortError') {
-      throw new Error(`Gemini API failed - Status: Timeout | Details: Request timed out after ${GEMINI_TIMEOUT_MS}ms`);
+      throw new Error(`[GeminiTimeout] Request timed out after ${GEMINI_TIMEOUT_MS}ms`);
     }
 
-    if (err.message && err.message.startsWith("Gemini API failed")) {
+    // Re-throw our own classified errors as-is
+    if (err.message && err.message.startsWith("[")) {
       throw err;
     }
 
-    throw new Error(`Gemini API failed - Status: NetworkError | Details: ${err.message}`);
+    throw new Error(`[NetworkError] ${err.message}`);
   }
 }
 
-// ─── Chat Handler ───
-const MAX_TOOL_ITERATIONS = 5; // Safety cap to prevent infinite tool-calling loops
+// ── 429 classifier: inspects the error body to distinguish short-term from daily quota ──
+function classifyRateLimit(errBody) {
+  const lower = (errBody || '').toLowerCase();
+  // Gemini typically includes "per day" or "RATE_LIMIT_EXCEEDED" with quota metric details.
+  // "per minute" / "per_minute" / "rpm" signals short-term.
+  // "per day" / "per_day" / "rpd" / "daily" signals long-term.
+  // If the body contains "per day" or "daily" or "rpd" or "DAILY", it's the daily cap.
+  if (lower.includes('per day') || lower.includes('per_day') || lower.includes('daily') || lower.includes('rpd')) {
+    return true; // daily quota
+  }
+  // If it's clearly per-minute, it's short-term
+  if (lower.includes('per minute') || lower.includes('per_minute') || lower.includes('rpm')) {
+    return false;
+  }
+  // Ambiguous — treat as potentially daily to avoid pointless retries
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Problem 3: Scripted intent router (runs before Gemini, saves quota)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Intent patterns: each pattern list is checked against normalized message ──
+// Order matters: AI_REQUIRED_PATTERNS are checked first to exclude ambiguous cases.
+const AI_REQUIRED_PATTERNS = [
+  /حلل/,       // "حلل نتيجتي" — needs reasoning
+  /تحليل/,     // "تحليل غلطاتي"
+  /لخص/,       // "لخصلي الملخص" — PDF summarization
+  /تلخيص/,     // "تلخيص"
+  /اشرح/,      // "اشرحلي" — teaching
+  /فسر/,       // "فسرلي"
+  /ليه\s+غلط/, // "ليه غلط" — reasoning about wrong answers
+  /ايه\s+غلطي/,// "ايه غلطي" — detailed analysis
+  /غلطات/,     // "غلطاتي في" — wrong answer analysis
+  /wrong/i,    // "what did I get wrong"
+  /explain/i,  // "explain"
+  /why/i,      // "why did I..."
+  /practice/i, // "practice questions"
+  /اسئل/,      // "generate questions"
+  /اسئلة/,     // "أسئلة تدريب"
+  /تدريب/,     // "تدريب"
+  /summarize/i,// "summarize"
+  /analyze/i   // "analyze"
+];
+
+const INTENT_GRADES = {
+  keywords: [
+    /درجت/,       // درجتي، درجاتي
+    /نتيجت/,      // نتيجتي
+    /كام\s*(جبت|درجة|درجت)/,
+    /جبت\s*كام/,
+    /أداء/,       // أدائي
+    /ادائي/,
+    /my\s*(grade|score|result|mark)/i,
+    /grade/i,
+    /score/i,
+    /علامت/,      // علاماتي
+    /الدرجات/,
+    /نتائج/,
+    /عرض\s*درجات/
+  ],
+  tool: "get_my_grades_and_rank"
+};
+
+const INTENT_DEADLINES = {
+  keywords: [
+    /امتحان\s*امت/,    // امتحان امتى
+    /الامتحان.*امت/,
+    /فاضل\s*كام/,
+    /موعد/,             // مواعيد
+    /مواعيد/,
+    /deadline/i,
+    /متى.*امتحان/,
+    /امتحان.*متى/,
+    /يقفل/,             // "متى يقفل الامتحان"
+    /due\s*date/i,
+    /when.*exam/i,
+    /امتى.*الامتحان/,
+    /الامتحانات\s*القادم/,
+    /قرب\s*امتحان/,
+    /exam.*coming/i,
+    /upcoming/i,
+    /open\s*exam/i
+  ],
+  tool: "get_exam_deadlines"
+};
+
+const INTENT_NEW_CONTENT = {
+  keywords: [
+    /في\s*جديد/,        // "في جديد"
+    /فيديو.*جديد/,
+    /ملخص.*جديد/,
+    /جديد.*اتضاف/,
+    /المحتوى\s*الجديد/,
+    /new\s*(video|content|material|lesson)/i,
+    /ايه\s*الجديد/,
+    /اخر\s*(الفيديوهات|الملخصات|المحتوى|حاجة)/,
+    /آخر\s*(الفيديوهات|الملخصات|المحتوى|حاجة)/,
+    /latest/i,
+    /اتنزل.*جديد/,
+    /نزل.*جديد/,
+    /محتوى\s*جديد/
+  ],
+  tool: "get_new_content"
+};
+
+const INTENT_RANK = {
+  keywords: [
+    /ترتيب/,           // "ترتيبي ايه"
+    /رقم\s*كام/,
+    /rank/i,
+    /my\s*rank/i,
+    /standing/i,
+    /انا\s*رقم/,
+    /مركز/              // "مركزي"
+  ],
+  tool: "get_my_grades_and_rank"
+};
+
+const INTENT_PROFILE = {
+  keywords: [
+    /ستريك/,            // "الستريك"
+    /streak/i,
+    /كام\s*يوم\s*متتال/,
+    /my\s*streak/i,
+    /حضور/,
+    /المتابع/,
+    /المتابعة\s*اليومي/,
+    /الملف\s*الشخص/,
+    /بياناتي/,
+    /my\s*profile/i
+  ],
+  tool: "get_student_profile"
+};
+
+const SCRIPTED_INTENTS = [INTENT_GRADES, INTENT_DEADLINES, INTENT_NEW_CONTENT, INTENT_RANK, INTENT_PROFILE];
+
+/**
+ * Attempt to match the user's message to a scripted intent.
+ * Returns { tool, confidence } or null if no match / ambiguous.
+ * AI_REQUIRED_PATTERNS are checked first — if any match, returns null immediately.
+ */
+function detectScriptedIntent(message) {
+  const normalized = message.trim();
+
+  // 1. Exclusion pass: if message needs AI reasoning, bail out immediately
+  for (const pattern of AI_REQUIRED_PATTERNS) {
+    if (pattern.test(normalized)) {
+      return null;
+    }
+  }
+
+  // 2. Match against scripted intents — require at least one keyword hit
+  for (const intent of SCRIPTED_INTENTS) {
+    for (const kw of intent.keywords) {
+      if (kw.test(normalized)) {
+        return { tool: intent.tool };
+      }
+    }
+  }
+
+  // 3. No confident match — fall through to Gemini
+  return null;
+}
+
+// ── Scripted response templates (warm Egyptian Arabic, matching the AI persona) ──
+function formatScriptedResponse(toolName, data, studentName) {
+  const name = studentName || '';
+
+  switch (toolName) {
+    case "get_my_grades_and_rank": {
+      const onlineGrades = data.onlineGrades || [];
+      const offlineGrades = data.offlineGrades || [];
+      const rank = data.rank || 'N/A';
+
+      if (onlineGrades.length === 0 && offlineGrades.length === 0) {
+        return `لسه مفيش درجات متسجلة ليك يا ${name}. أول ما تحل امتحان هتلاقي درجاتك هنا إن شاء الله! 💪`;
+      }
+
+      let reply = `يلا نشوف درجاتك يا ${name}! 📊\n\n`;
+
+      if (onlineGrades.length > 0) {
+        reply += '**امتحانات أونلاين:**\n';
+        for (const g of onlineGrades) {
+          let total = 0;
+          try { total = JSON.parse(g.questions || '[]').length; } catch (e) { /* ignore */ }
+          reply += `• ${g.title}: ${g.score}/${total} 🎯\n`;
+        }
+        reply += '\n';
+      }
+
+      if (offlineGrades.length > 0) {
+        reply += '**امتحانات السنتر:**\n';
+        for (const g of offlineGrades) {
+          reply += `• ${g.exam_name}: ${g.score}/${g.total_marks}\n`;
+        }
+        reply += '\n';
+      }
+
+      if (rank && rank !== 'N/A' && rank !== 'غير متاح') {
+        reply += `ترتيبك بين زملائك: **${rank}** ⭐\n`;
+      }
+
+      return reply.trim();
+    }
+
+    case "get_exam_deadlines": {
+      const openExams = data.openExams || [];
+      if (openExams.length === 0) {
+        return `مفيش امتحانات مفتوحة دلوقتي يا ${name}. استريح شوية! 😎`;
+      }
+
+      let reply = `الامتحانات المفتوحة ليك يا ${name}: 📅\n\n`;
+      for (const ex of openExams) {
+        const expDate = ex.expires_at ? new Date(ex.expires_at) : null;
+        const dateStr = expDate ? expDate.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'غير محدد';
+        reply += `• **${ex.title}** — آخر موعد: ${dateStr}\n`;
+      }
+
+      reply += '\nخد بالك من المواعيد ومتسيبش حاجة للآخر! 💪';
+      return reply;
+    }
+
+    case "get_new_content": {
+      const items = data.newContent || [];
+      if (items.length === 0) {
+        return `مفيش محتوى جديد دلوقتي يا ${name}. هبقى أقولك أول ما ينزل حاجة! 📢`;
+      }
+
+      let reply = `أحدث المحتوى ليك يا ${name}: 📚\n\n`;
+      for (const item of items.slice(0, 7)) {
+        const icon = item.category === 'videos' ? '🎬' : item.category === 'summaries' ? '📝' : '📄';
+        reply += `${icon} **${item.title}** (${item.category === 'videos' ? 'فيديو' : item.category === 'summaries' ? 'ملخص' : item.category})\n`;
+      }
+      if (items.length > 7) {
+        reply += `\n... و${items.length - 7} حاجات تانية. ادخل على صفحة المحتوى عشان تشوف كل حاجة!`;
+      }
+      return reply;
+    }
+
+    case "get_student_profile": {
+      const streak = data.current_streak || 0;
+      const longest = data.longest_streak || 0;
+      const grade = data.grade || '';
+      const branch = data.branch || '';
+
+      let reply = `بياناتك يا ${name}! 🌟\n\n`;
+      reply += `🔥 الستريك الحالي: **${streak} يوم**\n`;
+      reply += `🏆 أطول ستريك: **${longest} يوم**\n`;
+      if (grade) reply += `📚 المرحلة: **${grade}**\n`;
+      if (branch) reply += `🏫 النظام: **${branch === 'private' ? 'خاص' : branch === 'center' ? 'سنتر' : branch}**\n`;
+
+      if (streak > 0) {
+        reply += '\nشغال تمام! كمّل كده ومتقطعش 💪';
+      } else {
+        reply += '\nيلا نبدأ ستريك جديد النهاردة! 🚀';
+      }
+      return reply;
+    }
+
+    default:
+      return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Chat Handler (with scripted-intent router before Gemini call)
+// ═══════════════════════════════════════════════════════════════════════════
+const MAX_TOOL_ITERATIONS = 5;
 
 async function handleChat(studentId, message, studentCheck, db, env) {
-  // Load conversation history (last 20 messages)
+  const firstName = studentCheck.first_name || '';
+  let replyText = null;
+  const toolsUsed = [];
+
+  // ── Problem 3: Scripted intent detection (runs before Gemini) ──
+  // Limitation: parent-mode detection currently lives inside the Gemini system prompt,
+  // so we have no lightweight signal to detect parents before calling the AI.
+  // For now, scripted shortcuts only apply to student-mode conversations.
+  // If a parent identifies themselves mid-conversation, subsequent messages would need
+  // the AI path anyway for tone adaptation. This is acceptable until a non-AI
+  // parent-detection signal is added (e.g., a "parent mode" toggle in the frontend).
+  const intentMatch = detectScriptedIntent(message);
+
+  if (intentMatch) {
+    try {
+      const toolResult = await executeTool(
+        { name: intentMatch.tool, args: {} },
+        studentCheck,
+        db
+      );
+
+      // If the tool itself returned an error, fall through to Gemini for a nicer explanation
+      if (!toolResult.error) {
+        replyText = formatScriptedResponse(intentMatch.tool, toolResult, firstName);
+        toolsUsed.push(intentMatch.tool + ':scripted');
+      }
+    } catch (scriptedErr) {
+      // Tool execution failed — fall through to Gemini silently
+      console.error("Scripted intent tool error:", scriptedErr.message);
+    }
+  }
+
+  // ── If scripted path produced a reply, save and return immediately (no Gemini call) ──
+  if (replyText) {
+    try {
+      await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'user', ?)").bind(studentId, message).run();
+      await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'model', ?)").bind(studentId, replyText).run();
+    } catch (saveErr) {
+      console.error("Failed to save scripted conversation:", saveErr.message);
+    }
+    return Response.json({ reply: replyText, toolsUsed });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Normal Gemini AI path (unchanged from before, except error handling)
+  // ═══════════════════════════════════════════════════════════
+
+  // Load conversation history
   const historyRes = await db.prepare("SELECT role, content FROM assistant_conversations WHERE student_id = ? ORDER BY id DESC LIMIT 20").bind(studentId).all();
   const dbHistory = (historyRes.results || []).reverse();
 
-  // Build Gemini contents array
   const contents = [
     { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
     { role: "model", parts: [{ text: "تمام، أنا مساعد مس مروة الذكي. جاهز أساعدك!" }] }
@@ -275,7 +612,6 @@ async function handleChat(studentId, message, studentCheck, db, env) {
     });
   }
 
-  // Add the new user message
   contents.push({
     role: "user",
     parts: [{ text: message }]
@@ -287,20 +623,14 @@ async function handleChat(studentId, message, studentCheck, db, env) {
     generationConfig: { temperature: 0.8, topP: 0.95, maxOutputTokens: 2048 }
   };
 
-  let replyText = null;
-  const toolsUsed = [];
-
   try {
     let geminiResponse = await callGemini(env, payload);
     let iterations = 0;
 
-    // Multi-turn tool calling loop with safety cap
     while (iterations < MAX_TOOL_ITERATIONS) {
       iterations++;
 
-      // Guard: ensure candidates exist
       if (!geminiResponse || !geminiResponse.candidates || !geminiResponse.candidates[0]) {
-        // Check for blocked content
         if (geminiResponse && geminiResponse.promptFeedback && geminiResponse.promptFeedback.blockReason) {
           replyText = "عذراً، لا أقدر أجاوب على السؤال ده بسبب سياسات المحتوى. ممكن تسأل سؤال تاني؟ 😊";
         }
@@ -309,12 +639,9 @@ async function handleChat(studentId, message, studentCheck, db, env) {
 
       const candidate = geminiResponse.candidates[0];
       const parts = candidate.content && candidate.content.parts ? candidate.content.parts : [];
-
-      // Extract function calls
       const functionCalls = parts.filter(p => p.functionCall);
 
       if (functionCalls.length === 0) {
-        // No more tool calls — extract text reply
         const textPart = parts.find(p => p.text);
         if (textPart) {
           replyText = textPart.text;
@@ -322,9 +649,7 @@ async function handleChat(studentId, message, studentCheck, db, env) {
         break;
       }
 
-      // Execute all tool calls
       contents.push(candidate.content);
-
       const functionResponses = [];
       for (const fCall of functionCalls) {
         const result = await executeTool(fCall.functionCall, studentCheck, db);
@@ -339,23 +664,35 @@ async function handleChat(studentId, message, studentCheck, db, env) {
 
       contents.push({ role: "user", parts: functionResponses });
       payload.contents = contents;
-
-      // Call Gemini again with tool results
       geminiResponse = await callGemini(env, payload);
     }
 
-    // Fallback if no text was extracted
     if (!replyText) {
       replyText = "عذراً، مقدرتش أفهم الرد. ممكن تحاول تاني؟";
     }
 
   } catch (geminiErr) {
-    // Return the raw diagnostic error directly
     console.error("Gemini error:", geminiErr.message);
-    return Response.json({ error: geminiErr.message || String(geminiErr) }, { status: 500 });
+
+    // ── Problem 2: Classify the error and return an appropriate message ──
+    const errMsg = geminiErr.message || '';
+
+    if (errMsg.startsWith('[DailyQuotaExhausted]')) {
+      // Daily quota — honest, student-friendly, and mentions scripted features still work
+      replyText = "النظام وصل لأقصى استخدام مجاني النهاردة 😔 هيرجع يشتغل تاني قريب إن شاء الله.\n\nفي الوقت ده، لسه تقدر تسألني عن درجاتك أو مواعيد الامتحانات أو المحتوى الجديد وهرد عليك فوراً! 😊";
+    } else if (errMsg.startsWith('[RateLimitShortTerm]')) {
+      replyText = "في ناس كتير بتسأل دلوقتي 😅 استنى دقيقة واحدة وابعتلي تاني.\n\nأو اسألني عن درجاتك أو مواعيد الامتحانات — دول بيشتغلوا فوراً من غير انتظار! ⚡";
+    } else if (errMsg.startsWith('[ModelNotFound]')) {
+      replyText = "عندنا مشكلة تقنية في إعدادات المساعد الذكي 🔧 بنشتغل على حلها. جرب تاني بعد شوية!";
+    } else if (errMsg.startsWith('[GeminiTimeout]')) {
+      replyText = "السيرفر بطيء شوية دلوقتي ⏳ جرب تاني كمان شوية.\n\nأو اسألني عن درجاتك أو الامتحانات — دول بيردوا فوراً! ⚡";
+    } else {
+      // Unknown / unclassified error — show raw details for debugging
+      replyText = "حصل خطأ غير متوقع 😕 التفاصيل: " + errMsg.slice(0, 200);
+    }
   }
 
-  // Save conversation to D1 (non-blocking — don't let DB save failure crash the response)
+  // Save to conversation history
   try {
     await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'user', ?)").bind(studentId, message).run();
     await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'model', ?)").bind(studentId, replyText).run();
@@ -401,7 +738,7 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ error: "DB Error: " + dbErr.message }, { status: 500 });
     }
 
-    // Auto-registration fallback for edge cases where student is in localStorage but not D1
+    // Auto-registration fallback
     if (!studentCheck) {
       const fallbackName = body.firstName || 'طالب';
       const fallbackGrade = body.grade || 'prep2';
