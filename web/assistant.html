@@ -577,6 +577,26 @@
             return wrapper;
         }
 
+        function appendFallbackChips(wrapper, chips) {
+            const chipsContainer = document.createElement('div');
+            chipsContainer.className = 'suggestion-chips';
+            chipsContainer.style.marginTop = '10px';
+            chipsContainer.style.justifyContent = 'center';
+            
+            chips.forEach(chipText => {
+                const chip = document.createElement('div');
+                chip.className = 'chip';
+                // Remove the emoji to get just the text for sending
+                const cleanText = chipText.replace(/[\u{1F300}-\u{1F9FF}]/gu, '').trim();
+                chip.textContent = chipText;
+                chip.onclick = () => sendSuggestion(cleanText);
+                chipsContainer.appendChild(chip);
+            });
+            
+            wrapper.appendChild(chipsContainer);
+            scrollToBottom();
+        }
+
         // Show/Hide Typing Indicator
         let typingIndicatorEl = null;
         function showTyping() {
@@ -667,12 +687,18 @@
                 
                 hideTyping();
                 if (!res.ok || data.error) {
-                    appendMessage('error', data.error || `خطأ في الخادم (Status: ${res.status})`);
+                    const msgWrapper = appendMessage('error', data.error || `خطأ في الخادم (Status: ${res.status})`);
+                    if (data.fallback_suggestions && data.fallback_suggestions.length > 0) {
+                        appendFallbackChips(msgWrapper, data.fallback_suggestions);
+                    }
                     return;
                 }
                 
                 if (data.reply) {
-                    appendMessage('assistant', data.reply);
+                    const msgWrapper = appendMessage('assistant', data.reply);
+                    if (data.fallback_suggestions && data.fallback_suggestions.length > 0) {
+                        appendFallbackChips(msgWrapper, data.fallback_suggestions);
+                    }
                 } else {
                     appendMessage('error', 'لم يتم استلام رد من المساعد.');
                 }

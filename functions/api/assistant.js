@@ -674,22 +674,47 @@ async function handleChat(studentId, message, studentCheck, db, env) {
   } catch (geminiErr) {
     console.error("Gemini error:", geminiErr.message);
 
-    // ── Problem 2: Classify the error and return an appropriate message ──
+    // ── Classify the error and build response with fallback suggestions ──
     const errMsg = geminiErr.message || '';
+    const FALLBACK_CHIPS = [
+      "عرض درجاتي 📊",
+      "مواعيد الامتحانات 📅",
+      "المحتوى الجديد 📚",
+      "ترتيبي كام؟ 🏆",
+      "الستريك بتاعي 🔥"
+    ];
+
+    let fallbackSuggestions = null;
 
     if (errMsg.startsWith('[DailyQuotaExhausted]')) {
-      // Daily quota — honest, student-friendly, and mentions scripted features still work
-      replyText = "النظام وصل لأقصى استخدام مجاني النهاردة 😔 هيرجع يشتغل تاني قريب إن شاء الله.\n\nفي الوقت ده، لسه تقدر تسألني عن درجاتك أو مواعيد الامتحانات أو المحتوى الجديد وهرد عليك فوراً! 😊";
+      replyText = "النظام وصل لأقصى استخدام مجاني النهاردة 😔 بس أنا لسه صاحي وممكن أساعدك في الحاجات دي فوراً:";
+      fallbackSuggestions = FALLBACK_CHIPS;
     } else if (errMsg.startsWith('[RateLimitShortTerm]')) {
-      replyText = "في ناس كتير بتسأل دلوقتي 😅 استنى دقيقة واحدة وابعتلي تاني.\n\nأو اسألني عن درجاتك أو مواعيد الامتحانات — دول بيشتغلوا فوراً من غير انتظار! ⚡";
+      replyText = "النظام عليه ضغط حالياً ⏳ بس أنا لسه صاحي وممكن أساعدك في الحاجات دي فوراً:";
+      fallbackSuggestions = FALLBACK_CHIPS;
     } else if (errMsg.startsWith('[ModelNotFound]')) {
-      replyText = "عندنا مشكلة تقنية في إعدادات المساعد الذكي 🔧 بنشتغل على حلها. جرب تاني بعد شوية!";
+      replyText = "عندنا مشكلة تقنية في إعدادات المساعد الذكي 🔧 بنشتغل على حلها.\n\nبس لسه تقدر تسألني عن الحاجات دي:";
+      fallbackSuggestions = FALLBACK_CHIPS;
     } else if (errMsg.startsWith('[GeminiTimeout]')) {
-      replyText = "السيرفر بطيء شوية دلوقتي ⏳ جرب تاني كمان شوية.\n\nأو اسألني عن درجاتك أو الامتحانات — دول بيردوا فوراً! ⚡";
+      replyText = "السيرفر بطيء شوية دلوقتي ⏳ بس أقدر أساعدك في الحاجات دي فوراً:";
+      fallbackSuggestions = FALLBACK_CHIPS;
     } else {
-      // Unknown / unclassified error — show raw details for debugging
       replyText = "حصل خطأ غير متوقع 😕 التفاصيل: " + errMsg.slice(0, 200);
     }
+
+    // Save error response to history too (so it persists)
+    try {
+      await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'user', ?)").bind(studentId, message).run();
+      await db.prepare("INSERT INTO assistant_conversations (student_id, role, content) VALUES (?, 'model', ?)").bind(studentId, replyText).run();
+    } catch (saveErr) {
+      console.error("Failed to save conversation:", saveErr.message);
+    }
+
+    const errorResponse = { error: replyText };
+    if (fallbackSuggestions) {
+      errorResponse.fallback_suggestions = fallbackSuggestions;
+    }
+    return Response.json(errorResponse);
   }
 
   // Save to conversation history
