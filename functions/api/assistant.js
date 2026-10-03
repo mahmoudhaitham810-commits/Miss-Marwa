@@ -256,6 +256,11 @@ async function callGemini(env, payload) {
         }
       }
 
+      // ── 503: Service Unavailable (High Demand) ──
+      if (res.status === 503) {
+        throw new Error(`[ServiceUnavailable] ${errBody.slice(0, 300)}`);
+      }
+
       // ── All other non-OK statuses ──
       throw new Error(`[GeminiHTTP${res.status}] Status: ${res.status} | Details: ${errBody.slice(0, 300)}`);
     }
@@ -697,6 +702,9 @@ async function handleChat(studentId, message, studentCheck, db, env) {
       fallbackSuggestions = FALLBACK_CHIPS;
     } else if (errMsg.startsWith('[GeminiTimeout]')) {
       replyText = "السيرفر بطيء شوية دلوقتي ⏳ بس أقدر أساعدك في الحاجات دي فوراً:";
+      fallbackSuggestions = FALLBACK_CHIPS;
+    } else if (errMsg.startsWith('[ServiceUnavailable]')) {
+      replyText = "النظام عليه ضغط حالياً ⏳ بس أنا لسه صاحي وممكن أساعدك في الحاجات دي فوراً:";
       fallbackSuggestions = FALLBACK_CHIPS;
     } else {
       replyText = "حصل خطأ غير متوقع 😕 التفاصيل: " + errMsg.slice(0, 200);
