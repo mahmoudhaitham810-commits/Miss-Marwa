@@ -2307,23 +2307,25 @@ D) 120</pre>
                     }
 
                     const isSuccessful = isSubmitted && r.score > 0;
-                    let actionsHTML = '';
                     const fullName = `${r.firstName} ${r.lastName}`;
                     const safeName = fullName.replace(/'/g, "\\'"); // escape single quotes
 
+                    let statusBadge = '';
                     if (isSuccessful) {
-                        actionsHTML = '<span style="color: #4ade80; font-size: 0.95rem;"><i class="fas fa-check-circle"></i> مكتمل</span>';
-                    } else {
-                        // Cheating, locked out, or haven't submitted yet
-                        actionsHTML = `
-                            <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
-                                <button class="btn-table btn-reset" style="padding: 6px 12px; font-size: 0.85rem;" onclick="resetExamAttempt('${r.studentId}')">إعادة فتح</button>
-                                <button class="btn-table" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 6px 12px; font-weight: bold; cursor: pointer; font-size: 0.85rem; transition: 0.3s;" onclick="sendCheatingWarning('${safeName}', '${r.parentPhone || ''}', this)">
-                                    <i class="fab fa-whatsapp"></i> إنذار
-                                </button>
-                            </div>
-                        `;
+                        statusBadge = '<span style="color: #4ade80; font-size: 0.95rem; margin-left: 8px;"><i class="fas fa-check-circle"></i> مكتمل</span>';
                     }
+
+                    const actionsHTML = `
+                        <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+                            ${statusBadge}
+                            <button class="btn-table btn-reset" style="padding: 6px 12px; font-size: 0.85rem;" onclick="resetExamAttempt('${r.studentId}')" title="إعادة فتح الامتحان للطالب">إعادة فتح</button>
+                            ${!isSuccessful ? `
+                            <button class="btn-table" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 6px 12px; font-weight: bold; cursor: pointer; font-size: 0.85rem; transition: 0.3s;" onclick="sendCheatingWarning('${safeName}', '${r.parentPhone || ''}', this)">
+                                <i class="fab fa-whatsapp"></i> إنذار
+                            </button>
+                            ` : ''}
+                        </div>
+                    `;
 
                     return `<tr>
                         <td><span class="id-badge">${r.studentId}</span></td>
