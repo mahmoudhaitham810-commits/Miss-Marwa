@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <title>Home · Science Academy</title>
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <style>
+        .hello { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+        .hello .greet { display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 600; font-size: 14px; }
+        .hello .greet .icon { color: var(--accent); }
+        .hello p { margin: 6px 0 0; color: var(--text-2); }
+        .dash { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+        .dash > *, .col > * { min-width: 0; }
+        .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+        @media (min-width: 1024px) {
+            .dash { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 20px; align-items: start; }
+        }
+        /* Phones: one column, most important things first */
+        @media (max-width: 1023px) {
+            .col { display: contents; }
+            #nextExam { order: 1; } #continueCard { order: 2; } #resultCard { order: 3; } #streakCard { order: 4; }
+            #newCard { order: 5; } #actions { order: 6; } #badgesCard { order: 7; }
+        }
+        .exam-hero h3 { margin: 4px 0 12px; font-size: 19px; line-height: 1.35; }
+        .exam-hero .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .continue { display: flex; gap: 14px; align-items: center; }
+        .continue .thumb { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: var(--primary-soft); color: var(--primary); flex-shrink: 0; }
+        .continue .info { min-width: 0; flex: 1; }
+        .continue .info strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .result-card { display: flex; gap: 16px; align-items: center; }
+        .result-card .info { min-width: 0; }
+        .result-card .info strong { display: block; margin: 2px 0 6px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .streak-big { display: flex; align-items: baseline; gap: 6px; }
+        .streak-big b { font-size: 34px; line-height: 1; color: var(--accent); font-weight: 800; }
+        .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 14px; }
+        .week div { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--faint); font-weight: 600; }
+        .week i { width: 30px; height: 30px; border-radius: 50%; background: var(--surface-3); display: flex; align-items: center; justify-content: center; color: #fff; }
+        .week .on i { background: var(--accent); }
+        .week .today { color: var(--text); }
+        .week .today i { box-shadow: 0 0 0 3px #FFE0C7; }
+        .new-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 14px; transition: background .15s; }
+        .new-item:hover { background: var(--surface-2); }
+        .new-item .ic { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .new-item .ic.v { background: var(--primary-soft); color: var(--primary); }
+        .new-item .ic.s { background: var(--danger-soft); color: var(--danger); }
+        .new-item .ic.e { background: var(--success-soft); color: var(--success); }
+        .new-item .t { min-width: 0; flex: 1; }
+        .new-item .t strong { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .badge { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 12px 6px; border-radius: 14px; background: var(--surface-2); font-size: 11.5px; font-weight: 600; line-height: 1.25; }
+        .badge i { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); }
+        .badge.locked { opacity: .5; }
+        .badge.locked i { background: var(--surface-3); color: var(--faint); }
+        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .action { display: flex; flex-direction: column; gap: 10px; text-align: left; height: 100%; transition: transform .15s, box-shadow .15s; }
+        .action:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+        .action .ic { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+        .action strong { font-size: 15px; }
+        .action p { margin: 0; color: var(--muted); font-size: 13px; }
+        .action .go { margin-top: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
+        .marwa { display: flex; align-items: center; gap: 12px; }
+        .marwa img { width: 52px; height: 52px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm); }
+    </style>
+</head>
+<body>
+    <main class="main" id="main">
+        <div class="container">
+            <section class="hello reveal">
+                <div>
+                    <div class="greet" id="greet"></div>
+                    <h1 class="h1" id="helloName"></h1>
+                    <p id="helloSub" class="small">&nbsp;</p>
+                </div>
+            </section>
+
+            <div class="dash">
+                <div class="col">
+                    <section class="card exam-hero reveal" id="nextExam"><div class="skel" style="height:150px"></div></section>
+                    <section class="card reveal hidden" id="continueCard"></section>
+                    <section class="card reveal" id="newCard">
+                        <div class="skel" style="height:22px;width:40%;margin-bottom:14px"></div>
+                        <div class="skel" style="height:56px;margin-bottom:8px"></div><div class="skel" style="height:56px"></div>
+                    </section>
+                    <section class="actions reveal" id="actions"></section>
+                </div>
+                <div class="col">
+                    <section class="card reveal" id="resultCard"><div class="skel" style="height:96px"></div></section>
+                    <section class="card reveal" id="streakCard"><div class="skel" style="height:110px"></div></section>
+                    <section class="card reveal" id="badgesCard"><div class="skel" style="height:90px"></div></section>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/assets/student.js"></script>
+    <script>
+    (function () {
+        if (!window.App) return;
+        const { session, grade, esc, txt, icon, api, url, timeLeft, fmtDate, ring, scoreTone } = App;
+        App.shell({ active: 'home', title: 'Home' });
+
+        // ---- Greeting ----
+        const h = new Date().getHours();
+        const part = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+        document.getElementById('greet').innerHTML = `${icon(h >= 6 && h < 18 ? 'sun' : 'moon', 'sm')}${part}`;
+        document.getElementById('helloName').innerHTML = `Hi, ${txt(session.firstName || 'there')}`;
+
+        // ---- Quick actions ----
+        document.getElementById('actions').innerHTML = `
+            <button class="card action" data-soon="Ask Miss Marwa">
+                <span class="ic" style="background:var(--primary-soft);color:var(--primary)">${icon('help')}</span>
+                <strong>Ask Miss Marwa <span class="soon-tag">Soon</span></strong>
+                <p>Send your question with a photo and get an answer from Miss Marwa.</p>
+                <span class="go" style="color:var(--primary)">Ask a question ${icon('arrowRight', 'sm')}</span>
+            </button>
+            <a class="card action" href="/assistant.html">
+                <span class="ic" style="background:var(--accent-soft);color:var(--accent)">${icon('bot')}</span>
+                <strong>AI Assistant</strong>
+                <p>Your grades, deadlines and quick help — any time.</p>
+                <span class="go" style="color:var(--accent)">Start chatting ${icon('arrowRight', 'sm')}</span>
+            </a>`;
+
+        // ---- Continue where you left off (last opened lesson on this device) ----
+        const last = App.lastOpened();
+        if (last && last.url) {
+            const card = document.getElementById('continueCard');
+            const isVideo = String(last.category || '').includes('video');
+            card.innerHTML = `
+                <div class="card-head"><h2 class="card-title">${icon('refresh')}Pick up where you left off</h2></div>
+                <a class="continue" href="${esc(App.safeUrl(last.url))}" target="_blank" rel="noopener" id="continueLink">
+                    <span class="thumb">${icon(isVideo ? 'play' : 'file', 'lg')}</span>
+                    <span class="info"><strong>${txt(last.title)}</strong><span class="xs muted">${isVideo ? 'Video' : 'Summary'} · opened ${fmtDate(new Date(last.at).toISOString())}</span></span>
+                    <span class="btn btn-soft btn-sm">${isVideo ? 'Watch' : 'Open'}</span>
+                </a>`;
+            card.classList.remove('hidden');
+            document.getElementById('continueLink').addEventListener('click', () => App.openLesson(last));
+        }
+
+        // ---- Streak + badges ----
+        const BADGES = [
+            { key: 'streak_3', label: '3-day streak', icon: 'flame' },
+            { key: 'streak_7', label: '7-day streak', icon: 'zap' },
+            { key: 'streak_30', label: '30-day streak', icon: 'trophy' },
+            { key: 'active_learner', label: 'Active learner', icon: 'book' }
+        ];
+        App.checkin().then(info => {
+            const n = info.currentStreak || 0;
+            const days = [];
+            const letters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date(); d.setDate(d.getDate() - i);
+                days.push(`<div class="${i < n ? 'on' : ''} ${i === 0 ? 'today' : ''}">${letters[d.getDay()]}<i>${i < n ? icon('check', 'sm') : ''}</i></div>`);
+            }
+            document.getElementById('streakCard').innerHTML = `
+                <div class="card-head"><h2 class="card-title">${icon('flame')}Daily streak</h2><span class="xs muted">Best: ${info.longestStreak || n} ${(info.longestStreak || n) === 1 ? 'day' : 'days'}</span></div>
+                <div class="streak-big"><b class="num">${n}</b><span class="muted">${n === 1 ? 'day' : 'days'} in a row</span></div>
+                <div class="week">${days.join('')}</div>
+                <p class="xs muted" style="margin:12px 0 0">${n === 0 ? 'Open the app every day to start a streak.' : n < 3 ? 'Keep it up — 3 days unlocks your first badge.' : 'Great consistency. Keep going!'}</p>`;
+            const earned = info.badges || [];
+            document.getElementById('badgesCard').innerHTML = `
+                <div class="card-head"><h2 class="card-title">${icon('award')}Badges</h2><span class="xs muted">${earned.length} of ${BADGES.length}</span></div>
+                <div class="badges">${BADGES.map(b => `<div class="badge ${earned.includes(b.key) ? '' : 'locked'}" title="${earned.includes(b.key) ? 'Earned' : 'Locked'}"><i>${icon(earned.includes(b.key) ? b.icon : 'lock')}</i>${b.label}</div>`).join('')}</div>`;
+            App.reveal();
+        });
+
+        // ---- Exams ----
+        const examsP = api(`/api/exams?action=list-for-student&grade=${encodeURIComponent(grade)}&studentId=${encodeURIComponent(session.id)}&t=${Date.now()}`).catch(() => null);
+        examsP.then(list => {
+            const box = document.getElementById('nextExam');
+            const sub = document.getElementById('helloSub');
+            if (!Array.isArray(list)) {
+                box.innerHTML = `<div class="empty"><div class="bubble">${icon('wifiOff')}</div><h3>Couldn't load exams</h3><p>Check your connection and refresh.</p></div>`;
+                return;
+            }
+            const open = list.filter(e => e.status === 'available').sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
+            if (!open.length) {
+                sub.textContent = "You're all caught up — no exams waiting.";
+                box.innerHTML = `
+                    <div class="row"><span class="card-title">${icon('checkCircle')}No exams waiting</span></div>
+                    <p class="muted small" style="margin:8px 0 14px">New exams will show up here as soon as Miss Marwa publishes them.</p>
+                    <a class="btn btn-ghost btn-sm" href="${url('exams.html')}">See all exams ${icon('arrowRight', 'sm')}</a>`;
+                return;
+            }
+            const e = open[0];
+            sub.innerHTML = open.length === 1 ? `You have <b>1 exam</b> waiting.` : `You have <b>${open.length} exams</b> waiting.`;
+            box.innerHTML = `
+                <div class="top"><span class="card-title">${icon('clipboard')}Next exam</span>
+                    <span class="chip accent">${icon('clock', 'sm')}${timeLeft(e.expiresAt)}</span></div>
+                <h3>${txt(e.title)}</h3>
+                <div class="meta" style="margin-bottom:14px">
+                    <span>${icon('help')}${e.total} questions</span>
+                    <span>${icon('clock')}${e.timeLimitMinutes ? e.timeLimitMinutes + ' min' : 'No timer'}</span>
+                    <span style="color:var(--danger);background:var(--danger-soft)">${icon('lock')}One attempt</span>
+                </div>
+                <div class="row wrap">
+                    <button class="btn btn-primary" id="startNext">${icon('play')}Start exam</button>
+                    ${open.length > 1 ? `<a class="btn btn-ghost" href="${url('exams.html')}">+${open.length - 1} more</a>` : ''}
+                </div>`;
+            document.getElementById('startNext').addEventListener('click', () => App.confirmStart(e));
+        });
+
+        // ---- Latest result ----
+        api(`/api/exams?action=my-results&studentId=${encodeURIComponent(session.id)}&t=${Date.now()}`).then(results => {
+            const box = document.getElementById('resultCard');
+            if (!Array.isArray(results) || !results.length) {
+                box.innerHTML = `<div class="card-head"><h2 class="card-title">${icon('chart')}Latest result</h2></div>
+                    <p class="muted small" style="margin:0">Your scores will appear here after your first exam.</p>`;
+                return;
+            }
+            const r = results.slice().sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))[0];
+            const tone = scoreTone(r.score, r.total);
+            const msg = tone === 'good' ? 'Excellent work!' : tone === 'bad' ? "Let's review this one together." : 'Good job — keep pushing.';
+            box.innerHTML = `
+                <div class="card-head"><h2 class="card-title">${icon('chart')}Latest result</h2><a class="link" href="${url('exam-results.html')}">All results</a></div>
+                <div class="result-card">${ring(r.score, r.total)}
+                    <div class="info"><span class="xs muted">${fmtDate(r.submittedAt)}</span><strong>${txt(r.title)}</strong>
+                        <span class="small" style="color:var(--text-2)">${msg}</span><br>
+                        <a class="link" style="margin-top:6px" href="${url('exam-results.html', { id: r.examId })}">Review answers ${icon('arrowRight', 'sm')}</a></div></div>`;
+            App.reveal();
+            App.animateRings(box);
+        }).catch(() => {
+            document.getElementById('resultCard').innerHTML = `<div class="card-head"><h2 class="card-title">${icon('chart')}Latest result</h2></div><p class="muted small" style="margin:0">Couldn't load results right now.</p>`;
+        });
+
+        // ---- New for you ----
+        api(`/api/lessons?grade=${encodeURIComponent(grade)}&category=ALL&t=${Date.now()}`).then(items => {
+            const box = document.getElementById('newCard');
+            const list = (Array.isArray(items) ? items : []).slice(0, 4);
+            const head = `<div class="card-head"><h2 class="card-title">${icon('sparkles')}New for you</h2><a class="link" href="${url('lessons.html')}">View all</a></div>`;
+            if (!list.length) {
+                box.innerHTML = head + `<p class="muted small" style="margin:0">New videos and summaries will show up here.</p>`;
+                return;
+            }
+            const kind = (c) => String(c || '').includes('video') ? ['v', 'play', 'Video'] : String(c || '').includes('exam') ? ['e', 'clipboard', 'Past exam'] : ['s', 'file', 'Summary'];
+            box.innerHTML = head + list.map((it, i) => {
+                const [cls, ic, label] = kind(it.category);
+                const isNew = !App.isViewed(it.id || it.url);
+                return `<a class="new-item" href="${esc(App.safeUrl(it.url))}" target="_blank" rel="noopener" data-i="${i}">
+                    <span class="ic ${cls}">${icon(ic)}</span>
+                    <span class="t"><strong>${txt(it.title)}</strong><span class="xs muted">${label}${it.notes ? ' · ' + txt(it.notes) : ''}</span></span>
+                    ${isNew ? '<span class="new-tag">NEW</span>' : `<span class="muted">${icon('check', 'sm')}</span>`}</a>`;
+            }).join('');
+            box.querySelectorAll('.new-item').forEach(a => a.addEventListener('click', () => {
+                App.openLesson(list[Number(a.dataset.i)]);
+                const tag = a.querySelector('.new-tag'); if (tag) tag.outerHTML = `<span class="muted">${icon('check', 'sm')}</span>`;
+            }));
+        }).catch(() => {
+            document.getElementById('newCard').innerHTML = `<div class="card-head"><h2 class="card-title">${icon('sparkles')}New for you</h2></div><p class="muted small" style="margin:0">Couldn't load lessons right now.</p>`;
+        });
+
+        App.reveal();
+    })();
+    </script>
+</body>
+</html>

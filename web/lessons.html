@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <title>Lessons · Science Academy</title>
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <style>
+        .lib-head { margin-bottom: 16px; }
+        .lib-head p { margin: 6px 0 0; color: var(--text-2); }
+        .tools { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+        @media (min-width: 768px) { .chips-scroll { margin: 0; padding: 2px 0; } }
+        .unit { padding: 0; overflow: hidden; }
+        .unit-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px 18px; text-align: left; }
+        .unit-head .ic { width: 42px; height: 42px; border-radius: 13px; background: var(--primary-soft); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 800; }
+        .unit-head .t { flex: 1; min-width: 0; }
+        .unit-head strong { display: block; font-size: 16px; }
+        .unit-head .chev { color: var(--faint); transition: transform .25s var(--ease); }
+        .unit.open .unit-head .chev { transform: rotate(180deg); }
+        .unit-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s var(--ease); }
+        .unit.open .unit-body { grid-template-rows: 1fr; }
+        .unit-body > div { overflow: hidden; }
+        .unit-list { padding: 0 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+        .unit .progress { margin-top: 8px; height: 6px; max-width: 220px; }
+        .item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 14px; transition: background .15s; }
+        .item:hover { background: var(--surface-2); }
+        .item .ic { width: 44px; height: 44px; border-radius: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .item .ic.v { background: var(--primary-soft); color: var(--primary); }
+        .item .ic.s { background: var(--danger-soft); color: var(--danger); }
+        .item .ic.e { background: var(--success-soft); color: var(--success); }
+        .item .t { flex: 1; min-width: 0; }
+        .item .t strong { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .item .t .sub { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+        .item .done { color: var(--success); display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
+        .item .go { flex-shrink: 0; }
+        .units { display: flex; flex-direction: column; gap: 12px; }
+        .hint { display: flex; align-items: center; gap: 12px; }
+        .hint .ic { width: 40px; height: 40px; border-radius: 12px; background: var(--success-soft); color: var(--success); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    </style>
+</head>
+<body>
+    <main class="main" id="main">
+        <div class="container">
+            <section class="lib-head reveal">
+                <h1 class="h1">Lessons</h1>
+                <p class="small" id="libSub">Videos, summaries and past exams, organised by unit.</p>
+            </section>
+            <section class="tools reveal">
+                <label class="search">
+                    <span class="sr-only">Search lessons</span>
+                    <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input id="q" type="search" placeholder="Search lessons…" autocomplete="off" dir="auto">
+                </label>
+                <div class="chips-scroll" id="filters" role="tablist" aria-label="Filter by type"></div>
+            </section>
+            <section class="units" id="units">
+                <div class="card"><div class="skel" style="height:44px;margin-bottom:12px"></div><div class="skel" style="height:44px;margin-bottom:8px"></div><div class="skel" style="height:44px"></div></div>
+                <div class="card"><div class="skel" style="height:44px"></div></div>
+            </section>
+        </div>
+    </main>
+
+    <script src="/assets/student.js"></script>
+    <script>
+    (function () {
+        if (!window.App) return;
+        const { grade, esc, txt, icon, api, url } = App;
+        App.shell({ active: 'lessons', title: 'Lessons' });
+
+        const params = new URLSearchParams(location.search);
+        const FILTERS = [
+            { key: 'all', label: 'All' },
+            { key: 'videos', label: 'Videos', icon: 'play' },
+            { key: 'summaries', label: 'Summaries', icon: 'file' },
+            { key: 'exams', label: 'Past exams', icon: 'clipboard' }
+        ];
+        let filter = FILTERS.some(f => f.key === params.get('cat')) ? params.get('cat') : 'all';
+        let query = '';
+        let items = [];
+        const openUnits = new Set();
+
+        const typeOf = (c) => { c = String(c || '').toLowerCase(); return c.includes('video') ? 'videos' : c.includes('exam') || c.includes('quiz') ? 'exams' : 'summaries'; };
+        const TYPE = { videos: ['v', 'play', 'Video', 'Watch'], summaries: ['s', 'file', 'Summary', 'Open'], exams: ['e', 'clipboard', 'Past exam', 'Open'] };
+
+        const AR_ORD = { 'الأولى': 1, 'الاولى': 1, 'الثانية': 2, 'التانية': 2, 'الثالثة': 3, 'التالتة': 3, 'الرابعة': 4, 'الخامسة': 5, 'السادسة': 6, 'السابعة': 7, 'الثامنة': 8 };
+        function unitOf(title) {
+            const s = String(title || '');
+            let m = s.match(/unit\s*(\d+)/i);
+            if (m) return parseInt(m[1], 10);
+            m = s.match(/الوحد[ةه]\s*(\d+|[؀-ۿ]+)/);
+            if (m) return /^\d+$/.test(m[1]) ? parseInt(m[1], 10) : (AR_ORD[m[1]] || 0);
+            return 0;
+        }
+        function lessonOf(title) {
+            const s = String(title || '').toLowerCase();
+            const m = s.match(/lesson\s*(\d+)/);
+            if (m) return parseInt(m[1], 10);
+            const nums = s.match(/\d+/g);
+            return nums ? parseInt(nums[nums.length - 1], 10) : 0;
+        }
+
+        function renderFilters() {
+            const counts = { all: items.length, videos: 0, summaries: 0, exams: 0 };
+            items.forEach(i => counts[typeOf(i.category)]++);
+            document.getElementById('filters').innerHTML = FILTERS.map(f =>
+                `<button class="filter-chip ${f.key === filter ? 'active' : ''}" role="tab" aria-selected="${f.key === filter}" data-f="${f.key}">
+                    ${f.icon ? icon(f.icon) : ''}${f.label}<span class="count num">${counts[f.key]}</span></button>`).join('');
+        }
+
+        function itemHtml(it) {
+            const t = typeOf(it.category);
+            const [cls, ic, label, verb] = TYPE[t];
+            const viewed = App.isViewed(it.id || it.url);
+            return `<a class="item" href="${esc(App.safeUrl(it.url))}" target="_blank" rel="noopener" data-id="${esc(it.id)}">
+                <span class="ic ${cls}">${icon(ic)}</span>
+                <span class="t"><strong>${txt(it.title)}</strong><span class="sub">${label}${it.notes ? ' · ' + txt(it.notes) : ''}</span></span>
+                ${viewed ? `<span class="done">${icon('check', 'sm')}<span class="hide-sm">Done</span></span>` : '<span class="new-tag">NEW</span>'}
+                <span class="btn btn-soft btn-sm go">${verb}</span></a>`;
+        }
+
+        function render() {
+            renderFilters();
+            const box = document.getElementById('units');
+            const q = query.trim().toLowerCase();
+            let list = items.filter(i => filter === 'all' || typeOf(i.category) === filter);
+            if (q) list = list.filter(i => `${i.title} ${i.notes || ''}`.toLowerCase().includes(q));
+
+            let html = '';
+            if (filter === 'all' || filter === 'exams') {
+                html += `<a class="card hint reveal" href="${url('exams.html')}"><span class="ic">${icon('clipboard')}</span>
+                    <span style="flex:1"><strong>Online exams live in the Exams tab</strong><br><span class="xs muted">Timed exams with instant results.</span></span>${icon('chevronRight')}</a>`;
+            }
+
+            if (!list.length) {
+                box.innerHTML = html + `<div class="card reveal"><div class="empty"><div class="bubble">${icon(q ? 'search' : 'book')}</div>
+                    <h3>${q ? 'No matches' : 'Nothing here yet'}</h3><p>${q ? 'Try a different word.' : 'Miss Marwa will add content here soon.'}</p></div></div>`;
+                App.reveal(box);
+                return;
+            }
+
+            if (q) {
+                // Searching: one flat list is easier to scan than units
+                html += `<div class="card reveal"><div class="card-head"><h2 class="card-title">${icon('search')}${list.length} result${list.length === 1 ? '' : 's'}</h2></div>
+                    <div class="unit-list" style="padding:0">${list.map(itemHtml).join('')}</div></div>`;
+                box.innerHTML = html;
+                App.reveal(box);
+                return;
+            }
+
+            const groups = new Map();
+            list.forEach(i => { const u = unitOf(i.title); if (!groups.has(u)) groups.set(u, []); groups.get(u).push(i); });
+            const keys = [...groups.keys()].sort((a, b) => (a === 0) - (b === 0) || a - b);
+            // Open the unit that holds the newest content the first time the page loads
+            if (!openUnits.size && items.length) openUnits.add(unitOf(items[0].title));
+
+            html += keys.map(u => {
+                const arr = groups.get(u).sort((a, b) => lessonOf(a.title) - lessonOf(b.title));
+                const done = arr.filter(i => App.isViewed(i.id || i.url)).length;
+                const pct = Math.round(done / arr.length * 100);
+                const title = u ? `Unit ${u}` : (keys.length === 1 ? 'All lessons' : 'More lessons');
+                const kinds = ['videos', 'summaries', 'exams'].map(k => { const n = arr.filter(i => typeOf(i.category) === k).length; const w = { videos: ['video', 'videos'], summaries: ['summary', 'summaries'], exams: ['past exam', 'past exams'] }[k]; return n ? `${n} ${w[n > 1 ? 1 : 0]}` : ''; }).filter(Boolean).join(' · ');
+                return `<div class="card unit reveal ${openUnits.has(u) ? 'open' : ''}" data-u="${u}">
+                    <button class="unit-head" aria-expanded="${openUnits.has(u)}">
+                        <span class="ic">${u || icon('book')}</span>
+                        <span class="t"><strong>${title}</strong><span class="xs muted">${kinds} · ${done}/${arr.length} done</span>
+                            <div class="progress"><i style="width:${pct}%"></i></div></span>
+                        <span class="chev">${icon('chevronDown')}</span>
+                    </button>
+                    <div class="unit-body"><div><div class="unit-list">${arr.map(itemHtml).join('')}</div></div></div>
+                </div>`;
+            }).join('');
+            box.innerHTML = html;
+            App.reveal(box);
+        }
+
+        document.getElementById('filters').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-f]'); if (!b) return;
+            filter = b.dataset.f;
+            const p = new URLSearchParams(location.search);
+            if (filter === 'all') p.delete('cat'); else p.set('cat', filter);
+            history.replaceState(null, '', `${location.pathname}${p.toString() ? '?' + p : ''}`);
+            render();
+        });
+        let t = null;
+        document.getElementById('q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { query = e.target.value; render(); }, 150); });
+        document.getElementById('units').addEventListener('click', (e) => {
+            const head = e.target.closest('.unit-head');
+            if (head) {
+                const card = head.closest('.unit'); const u = Number(card.dataset.u);
+                card.classList.toggle('open');
+                head.setAttribute('aria-expanded', card.classList.contains('open'));
+                if (card.classList.contains('open')) openUnits.add(u); else openUnits.delete(u);
+                return;
+            }
+            const a = e.target.closest('.item');
+            if (a) {
+                const it = items.find(i => String(i.id) === a.dataset.id);
+                if (it) {
+                    App.openLesson(it);
+                    const tag = a.querySelector('.new-tag');
+                    if (tag) tag.outerHTML = `<span class="done">${icon('check', 'sm')}Done</span>`;
+                }
+            }
+        });
+
+        api(`/api/lessons?grade=${encodeURIComponent(grade)}&category=ALL&t=${Date.now()}`)
+            .then(data => { items = Array.isArray(data) ? data : []; render(); })
+            .catch(() => {
+                document.getElementById('units').innerHTML = `<div class="card"><div class="empty"><div class="bubble">${icon('wifiOff')}</div>
+                    <h3>Couldn't load lessons</h3><p>Check your connection and try again.</p>
+                    <button class="btn btn-soft btn-sm" style="margin-top:12px" onclick="location.reload()">${icon('refresh', 'sm')}Retry</button></div></div>`;
+            });
+        App.reveal();
+    })();
+    </script>
+</body>
+</html>

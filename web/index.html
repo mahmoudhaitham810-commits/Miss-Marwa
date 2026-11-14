@@ -1076,10 +1076,10 @@
                         <i class="fas fa-unlock-keyhole"></i> التنقل المباشر لجميع المراحل:
                     </span>
                     <div class="admin-grades-grid">
-                        <a href="./prep1/prep1.html" class="admin-grade-btn">Prep 1</a>
-                        <a href="./prep2/prep2.html" class="admin-grade-btn">Prep 2</a>
-                        <a href="./prep3/prep3.html" class="admin-grade-btn">Prep 3</a>
-                        <a href="./sec1/Sec1.html" class="admin-grade-btn">Sec 1</a>
+                        <a href="/home.html?grade=prep1" class="admin-grade-btn">Prep 1</a>
+                        <a href="/home.html?grade=prep2" class="admin-grade-btn">Prep 2</a>
+                        <a href="/home.html?grade=prep3" class="admin-grade-btn">Prep 3</a>
+                        <a href="/home.html?grade=sec1" class="admin-grade-btn">Sec 1</a>
                     </div>
                 </div>
                 <button class="popup-action-btn logout" onclick="logoutStudent()">
@@ -1361,7 +1361,7 @@
         });
 
         const gradeLabels = { 'prep1': 'الصف الأول الإعدادي (Prep 1)', 'prep2': 'الصف الثاني الإعدادي (Prep 2)', 'prep3': 'الصف الثالث الإعدادي (Prep 3)', 'sec1': 'الصف الأول الثانوي (Secondary 1)', 'all': 'المعلم / صلاحية شاملة لجميع المراحل (Admin)' };
-        const gradeRoutes = { 'prep1': './prep1/prep1.html', 'prep2': './prep2/prep2.html', 'prep3': './prep3/prep3.html', 'sec1': './sec1/Sec1.html' };
+        const gradeRoutes = { 'prep1': '/home.html', 'prep2': '/home.html', 'prep3': '/home.html', 'sec1': '/home.html' };
 
         const modal = document.getElementById('authModal');
         const loginForm = document.getElementById('loginForm');

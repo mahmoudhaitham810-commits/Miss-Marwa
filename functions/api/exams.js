@@ -77,7 +77,7 @@ export async function onRequestGet(context) {
             }
 
             const { results: exams } = await db.prepare(
-                "SELECT id, title, grade, questions, expires_at, created_at FROM exams WHERE grade = ? ORDER BY created_at DESC"
+                "SELECT id, title, grade, questions, expires_at, created_at, time_limit_minutes FROM exams WHERE grade = ? ORDER BY created_at DESC"
             ).bind(grade).all();
 
             let submissions = [];
@@ -107,6 +107,8 @@ export async function onRequestGet(context) {
                     grade: ex.grade,
                     total,
                     expiresAt: ex.expires_at,
+                    createdAt: ex.created_at,
+                    timeLimitMinutes: ex.time_limit_minutes || null,
                     status,
                     score: sub ? sub.score : null
                 };
