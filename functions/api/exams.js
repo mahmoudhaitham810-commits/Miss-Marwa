@@ -76,7 +76,7 @@ const cleanQuestions = (qs) => qs.map(q => ({ question: String(q.question), opti
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
 // الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
 function getDb(env) {
-    return env.DB || env.D1_DB;
+    return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
 }
 
 // بتبعت إشعار Push للطلاب المشتركين. لو معانا "grade"، بتستهدف بس الطلاب

@@ -11,7 +11,7 @@ export async function onRequest(context) {
 
     // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
     // السطر ده بيتأكد إننا بنمسك الاسم الصح مهما كان
-    const db = env.DB || env.D1_DB;
+    const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
 
     try {
         if (request.method === 'GET' && action === 'list') {

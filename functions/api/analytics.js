@@ -23,7 +23,7 @@ const MIN_PARTICIPATION = 0.6;
 const GAP_THRESHOLD = 30;   // online % − center % worth a look
 const GAP_MIN_EXAMS = 3;    // …only with 3+ exams of each kind
 
-function getDb(env) { return env.DB || env.D1_DB; }
+function getDb(env) { return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function"); }
 function toMs(v) {
     if (!v) return 0;
     const str = String(v);

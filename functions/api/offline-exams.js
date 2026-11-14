@@ -10,7 +10,7 @@ import { requireStaff, audit, auditStmt, ensureAppSchema } from './admin-auth.js
 // ============================================================
 
 function getDb(env) {
-    return env.DB || env.D1_DB;
+    return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
 }
 const BRANCHES = ['center', 'private'];
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];

@@ -21,7 +21,7 @@
 // ============================================================
 
 function getDb(env) {
-    return env.DB || env.D1_DB;
+    return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
 }
 
 // ---------- Permissions (the single source of truth) ----------
@@ -107,37 +107,20 @@ function nearMissNames(env) {
 let schemaReady = false;
 export async function ensureStaffSchema(db) {
     if (schemaReady) return;
-    await db.batch([
-        db.prepare(`CREATE TABLE IF NOT EXISTS staff (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            display_name TEXT NOT NULL,
-            role TEXT NOT NULL,
-            password_hash TEXT NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1,
-            token_version INTEGER NOT NULL DEFAULT 1,
-            last_login_at TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )`),
-        db.prepare(`CREATE TABLE IF NOT EXISTS audit_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            staff_id INTEGER,
-            staff_name TEXT,
-            role TEXT,
-            action TEXT NOT NULL,
-            target TEXT,
-            details TEXT,
-            ip TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )`),
-        db.prepare(`CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`),
-        db.prepare(`CREATE TABLE IF NOT EXISTS auth_throttle (
-            key TEXT PRIMARY KEY,
-            fails INTEGER NOT NULL DEFAULT 0,
-            first_fail_at INTEGER NOT NULL DEFAULT 0,
-            locked_until INTEGER NOT NULL DEFAULT 0
-        )`)
-    ]);
+    if (!db || typeof db.prepare !== 'function') throw new Error('No D1 database binding named DB (or D1_DB) in this deployment');
+    // One statement at a time: if one step fails we still know exactly which one and why
+    const steps = [
+        `CREATE TABLE IF NOT EXISTS staff (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, role TEXT NOT NULL, password_hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, token_version INTEGER NOT NULL DEFAULT 1, last_login_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER, staff_name TEXT, role TEXT, action TEXT NOT NULL, target TEXT, details TEXT, ip TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+        `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
+        `CREATE TABLE IF NOT EXISTS auth_throttle ("key" TEXT PRIMARY KEY, fails INTEGER NOT NULL DEFAULT 0, first_fail_at INTEGER NOT NULL DEFAULT 0, locked_until INTEGER NOT NULL DEFAULT 0)`
+    ];
+    const errors = [];
+    for (const q of steps) {
+        try { await db.prepare(q).run(); }
+        catch (e) { errors.push(`${q.slice(0, 48)}… → ${e && e.message ? e.message : e}`); }
+    }
+    if (errors.length) throw new Error('Database setup failed: ' + errors.join(' | '));
     schemaReady = true;
 }
 
@@ -586,6 +569,7 @@ export async function onRequest(context) {
 
         return json({ error: 'Invalid action' }, 400);
     } catch (err) {
-        return json({ error: 'حصل خطأ في السيرفر' }, 500);
+        // The detail helps fix setup problems; it is a database/runtime message, never a secret
+        return json({ error: 'حصل خطأ في السيرفر', code: 'SERVER_ERROR', detail: String(err && err.message ? err.message : err).slice(0, 400) }, 500);
     }
 }

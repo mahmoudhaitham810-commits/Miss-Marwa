@@ -70,7 +70,7 @@ export async function onRequestPost(context) {
     const action = url.searchParams.get('action');
     // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
     // السطر ده بيتأكد إننا بنمسك الاسم الصح مهما كان
-    const db = env.DB || env.D1_DB;
+    const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
 
     try {
         // 1. حالة تسجيل الدخول (Login)

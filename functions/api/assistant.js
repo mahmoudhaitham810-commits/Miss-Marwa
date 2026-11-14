@@ -763,7 +763,7 @@ async function handleClear(studentId, db) {
 // ─── Main POST Handler ───
 export async function onRequestPost({ request, env }) {
   try {
-    const db = env.DB || env.D1_DB;
+    const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
     await ensureTables(db);
 
     const url = new URL(request.url);

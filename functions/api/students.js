@@ -61,7 +61,7 @@ export async function onRequestGet(context) {
     const auth = await requireStaff(context.request, context.env, 'students.view');
     if (auth.error) return auth.error;
 
-    const db = context.env.DB || context.env.D1_DB;
+    const db = [context.env.DB, context.env.D1_DB].find(d => d && typeof d.prepare === "function");
     try {
         const action = new URL(context.request.url).searchParams.get('action');
         if (action === 'duplicates') {
@@ -79,7 +79,7 @@ export async function onRequestPost(context) {
     const { request, env } = context;
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
-    const db = env.DB || env.D1_DB;
+    const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
 
     try {
         // 1. Reset a student's password (teacher + assistant, logged)
