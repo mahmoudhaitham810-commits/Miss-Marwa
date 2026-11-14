@@ -73,13 +73,33 @@ const IP_LOCK = { fails: 20, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 };
 // The signing secret MUST come from a Cloudflare secret. The old code fell back to a
 // string that is visible on GitHub — anyone could have forged an admin cookie with it.
 function getTokenSecret(env) {
-    const s = env.ADMIN_TOKEN_SECRET;
-    return (typeof s === 'string' && s.length >= 16) ? s : null;
+    return secretState(env) === 'ok' ? String(env.ADMIN_TOKEN_SECRET).trim() : null;
+}
+// Why the secret isn't usable (never reveals the value itself)
+function secretState(env) {
+    const s = env && env.ADMIN_TOKEN_SECRET;
+    if (s === undefined || s === null) return 'missing';
+    if (typeof s !== 'string') return 'not-text';
+    if (s.trim().length < 16) return 'too-short';
+    return 'ok';
 }
 // Only used once, to prove it's Miss Marwa during first-time setup.
+function setupState(env) {
+    const p = env && env.ADMIN_PASSWORD;
+    if (p === undefined || p === null) return 'missing';
+    if (typeof p !== 'string') return 'not-text';
+    if (p.trim() === 'marwa2026') return 'default';
+    if (p.trim().length < 6) return 'too-short';
+    return 'ok';
+}
 function getSetupPassword(env) {
-    const p = env.ADMIN_PASSWORD;
-    return (typeof p === 'string' && p.length >= 6 && p !== 'marwa2026') ? p : null;
+    return setupState(env) === 'ok' ? String(env.ADMIN_PASSWORD).trim() : null;
+}
+// Names (never values) of settings that look like a misspelt ADMIN_TOKEN_SECRET / ADMIN_PASSWORD
+function nearMissNames(env) {
+    try {
+        return Object.keys(env || {}).filter(k => /admin|token|secret/i.test(k) && k !== 'ADMIN_TOKEN_SECRET' && k !== 'ADMIN_PASSWORD').slice(0, 5);
+    } catch (e) { return []; }
 }
 
 // ---------- Schema (created automatically, never touches existing tables) ----------
@@ -358,7 +378,14 @@ export async function onRequest(context) {
         // ── STATUS: what should the login page show? ──
         if (method === 'GET' && action === 'status') {
             const teacher = await db.prepare("SELECT id FROM staff WHERE role = 'teacher' LIMIT 1").first();
-            return json({ configured: !!secret, needsSetup: !teacher, setupReady: !!getSetupPassword(env) });
+            const body = { configured: !!secret, needsSetup: !teacher, setupReady: !!getSetupPassword(env) };
+            // Diagnostics only while something is wrong (states and setting NAMES — never values)
+            if (!secret || (!teacher && !body.setupReady)) {
+                body.secretState = secretState(env);
+                body.setupState = setupState(env);
+                body.similarNames = nearMissNames(env);
+            }
+            return json(body);
         }
 
         // ── FIRST-TIME SETUP: create Miss Marwa's own account ──

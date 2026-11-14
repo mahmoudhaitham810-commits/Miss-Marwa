@@ -65,7 +65,8 @@
                 <div class="state" id="stConfig">
                     <h1>Almost ready</h1>
                     <p class="sub">The staff portal needs one setting on Cloudflare before anyone can sign in.</p>
-                    <div class="config-box" dir="auto">Add a secret named <code>ADMIN_TOKEN_SECRET</code> in Cloudflare Pages → Settings → Variables and Secrets, then redeploy.</div>
+                    <div class="config-box" id="configMsg" dir="auto">Add a secret named <code>ADMIN_TOKEN_SECRET</code> in Cloudflare Pages → Settings → Variables and Secrets, then redeploy.</div>
+                    <p class="small muted" id="configHint" style="margin-top:12px"></p>
                 </div>
 
                 <!-- First-time setup -->
@@ -140,7 +141,30 @@
                 const me = await (await fetch('/api/admin-auth?action=me', { credentials: 'same-origin' })).json();
                 if (me.authenticated) return location.replace(next);
                 const st = await (await fetch('/api/admin-auth?action=status')).json();
-                if (!st.configured) return show('stConfig');
+                const MSG = {
+                    secret: {
+                        'missing': 'The site can\'t see a setting named <code>ADMIN_TOKEN_SECRET</code> in this deployment. Check the exact name (capital letters, no spaces), that it is added for the environment you are opening (Production = main, Preview = other branches), then redeploy.',
+                        'not-text': '<code>ADMIN_TOKEN_SECRET</code> must be a plain text secret.',
+                        'too-short': '<code>ADMIN_TOKEN_SECRET</code> is set but too short. Use a random value of at least 16 characters (32+ recommended), then redeploy.'
+                    },
+                    setup: {
+                        'missing': 'First-time setup needs <code>ADMIN_PASSWORD</code> (the current admin code) as a secret. Add it, then redeploy.',
+                        'not-text': '<code>ADMIN_PASSWORD</code> must be a plain text secret.',
+                        'default': '<code>ADMIN_PASSWORD</code> is still the old public default. Change it to a new code, then redeploy.',
+                        'too-short': '<code>ADMIN_PASSWORD</code> must be at least 6 characters. Change it, then redeploy.'
+                    }
+                };
+                const hint = (st.similarNames && st.similarNames.length) ? `Settings with similar names found: ${st.similarNames.map(n => '<code>' + Site.esc(n) + '</code>').join(', ')} — is one of them misspelt?` : '';
+                if (!st.configured) {
+                    if (MSG.secret[st.secretState]) $('configMsg').innerHTML = MSG.secret[st.secretState];
+                    $('configHint').innerHTML = hint;
+                    return show('stConfig');
+                }
+                if (st.needsSetup && !st.setupReady) {
+                    $('configMsg').innerHTML = MSG.setup[st.setupState] || MSG.setup.missing;
+                    $('configHint').innerHTML = hint;
+                    return show('stConfig');
+                }
                 if (st.needsSetup) { show('stSetup'); $('sOld').focus(); return; }
                 show('stLogin');
                 try { const u = localStorage.getItem('staff_last_user'); if (u) { $('lUser').value = u; $('lPass').focus(); return; } } catch (e) { }
