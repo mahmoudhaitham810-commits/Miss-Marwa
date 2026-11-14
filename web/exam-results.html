@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#F4F7FC">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
     <title>Results · Science Academy</title>
     <link rel="icon" href="/assets/img/logo-96.png">
     <link rel="manifest" href="/manifest.json">
@@ -50,13 +51,13 @@
         .q .opt .letter { width: 28px; height: 28px; border-radius: 50%; background: var(--surface); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--text-2); flex-shrink: 0; }
         .q .opt .otext { flex: 1; }
         .q .opt .tag { font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
-        .q .opt.correct { background: var(--success-soft); border-color: #A7DDB7; }
+        .q .opt.correct { background: var(--success-soft); border-color: var(--success-line); }
         .q .opt.correct .letter { background: var(--success); color: #fff; }
         .q .opt.correct .tag { color: var(--success); }
-        .q .opt.picked-wrong { background: var(--danger-soft); border-color: #F5B5B5; }
+        .q .opt.picked-wrong { background: var(--danger-soft); border-color: var(--danger-line); }
         .q .opt.picked-wrong .letter { background: var(--danger); color: #fff; }
         .q .opt.picked-wrong .tag { color: var(--danger); }
-        .q .opt.picked { background: var(--primary-soft); border-color: #C3D0FF; }
+        .q .opt.picked { background: var(--primary-soft); border-color: var(--primary-line); }
         .q .opt.picked .letter { background: var(--primary); color: #fff; }
         .q .opt.picked .tag { color: var(--primary); }
         .qmap { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
@@ -151,7 +152,7 @@
                             <div class="card-head"><h2 class="card-title">${icon('sparkles')}Need help?</h2></div>
                             <p class="small muted" style="margin:0 0 12px">Stuck on a question? Ask Miss Marwa or the AI Assistant.</p>
                             <button class="btn btn-soft btn-block btn-sm" data-soon="Ask Miss Marwa">${icon('help', 'sm')}Ask Miss Marwa<span class="soon-tag">Soon</span></button>
-                            <a class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" href="/assistant.html">${icon('bot', 'sm')}AI Assistant</a>
+                            <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-soon="The AI Assistant">${icon('bot', 'sm')}AI Assistant<span class="soon-tag">Soon</span></button>
                         </div>
                     </aside>
                 </div>`;

@@ -145,7 +145,7 @@
         if (s >= t - 1) return 'good';
         return 'mid';
     }
-    const TONE_COLOR = { good: '#15803D', bad: '#DC2626', mid: '#2F5BEA' };
+    const TONE_COLOR = { good: 'var(--success)', bad: 'var(--danger)', mid: 'var(--primary)' };
     function ring(score, total, { size = '', label = '' } = {}) {
         const t = Number(total) || 0, s = Number(score) || 0;
         const pct = t ? Math.max(0, Math.min(1, s / t)) : 0;
@@ -153,7 +153,7 @@
         const C = 2 * Math.PI * 42;
         return `<div class="ring ${size}" data-pct="${pct}">
             <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42" fill="none" stroke-width="9"/>
-            <circle class="value" cx="50" cy="50" r="42" fill="none" stroke="${TONE_COLOR[tone]}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}"/></svg>
+            <circle class="value" cx="50" cy="50" r="42" fill="none" style="stroke:${TONE_COLOR[tone]}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}"/></svg>
             <div class="label"><strong class="num">${s}<span style="font-size:.55em;color:var(--faint);font-weight:600">/${t}</span></strong>${label ? `<span>${esc(label)}</span>` : ''}</div>
         </div>`;
     }
@@ -376,6 +376,22 @@
         });
     }
 
+    // ---------- Theme (light / dark) ----------
+    // The <head> of every page applies the saved theme before first paint (no flash);
+    // this just switches it and remembers the choice.
+    function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
+    function setTheme(t) {
+        const root = document.documentElement;
+        root.classList.add('theme-anim');
+        if (t === 'dark') root.dataset.theme = 'dark'; else delete root.dataset.theme;
+        try { localStorage.setItem('theme', t); } catch (e) { }
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t === 'dark' ? '#0B1220' : '#F4F7FC');
+        document.querySelectorAll('[data-theme-state]').forEach(el => { el.textContent = t === 'dark' ? 'Dark' : 'Light'; });
+        setTimeout(() => root.classList.remove('theme-anim'), 350);
+    }
+    function toggleTheme() { setTheme(currentTheme() === 'dark' ? 'light' : 'dark'); }
+    if (currentTheme() === 'dark') document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0B1220');
+
     // ---------- Profile ----------
     function profile() {
         const full = `${session.firstName || ''} ${session.lastName || ''}`.trim();
@@ -385,6 +401,7 @@
                 <div class="id-card"><div><span>Student code</span><strong class="num">${esc(session.id)}</strong></div>
                     <button class="btn btn-sm btn-ghost" id="copyCode">${icon('copy', 'sm')}Copy</button></div>
                 <p class="xs muted" style="margin:8px 2px 12px">You sign in with this code. Keep it safe.</p>
+                <button class="list-btn" data-theme-toggle>${icon('moon')}Dark mode<span class="end" data-theme-state>${currentTheme() === 'dark' ? 'Dark' : 'Light'}</span></button>
                 <button class="list-btn" id="pfNotif">${icon('bell')}Notifications<span class="end" id="pfNotifState"></span></button>
                 <a class="list-btn" href="${url('exam-results.html')}">${icon('chart')}My results<span class="end">${icon('chevronRight', 'sm')}</span></a>
                 <button class="list-btn danger" id="pfLogout">${icon('logout')}Sign out</button>`
@@ -415,7 +432,7 @@
     }
 
     // ---------- Shell ----------
-    function shell({ active = 'home', title = '', notifications = true } = {}) {
+    function shell({ active = 'home', title = '', notifications = true, bottomNav = true } = {}) {
         const first = session.firstName || 'Student';
         // Arabic first letters (like ا) look like a stray line in a tiny circle, so those get a person icon instead
         const ch = first.trim().charAt(0);
@@ -425,7 +442,7 @@
             { key: 'lessons', label: 'Lessons', icon: 'book', href: url('lessons.html') },
             { key: 'exams', label: 'Exams', icon: 'clipboard', href: url('exams.html') },
             { key: 'results', label: 'Results', icon: 'chart', href: url('exam-results.html') },
-            { key: 'assistant', label: 'AI Assistant', icon: 'bot', href: '/assistant.html' },
+            { key: 'assistant', label: 'AI Assistant', icon: 'bot', soon: true },
             { key: 'questions', label: 'Ask Miss Marwa', icon: 'help', soon: true }
         ];
         const gradePicker = isAdmin
@@ -438,7 +455,7 @@
                     <div class="brand-text"><strong>Science Academy</strong><span>with Miss Marwa</span></div></a>
                 <div class="side-grade">${gradePicker}</div>
                 <nav class="side-nav">${navItems.map(n => n.soon
-            ? `<button data-soon="${esc(n.label)}">${icon(n.icon)}${n.label}<span class="soon-tag">Soon</span></button>`
+            ? `<button data-soon="${esc(n.label)}" class="${n.key === active ? 'active' : ''}">${icon(n.icon)}${n.label}<span class="soon-tag">Soon</span></button>`
             : `<a href="${n.href}" class="${n.key === active ? 'active' : ''}" ${n.key === active ? 'aria-current="page"' : ''}>${icon(n.icon)}${n.label}</a>`).join('')}</nav>
             </div>
             <div class="side-user"><div class="avatar">${initial}</div>
@@ -452,6 +469,7 @@
             <div class="page-title-desktop"></div>
             <div class="topbar-actions">
                 <span class="streak-chip zero" id="streakChip" title="Daily streak">${icon('flame', 'sm')}<span class="num" id="streakNum">0</span></span>
+                <button class="icon-btn theme-btn" data-theme-toggle aria-label="Switch light / dark mode" title="Light / dark mode">${icon('moon', 'moon')}${icon('sun', 'sun')}</button>
                 ${notifications ? `<button class="icon-btn" data-bell aria-label="Notifications">${icon('bell')}<span class="dot hidden"></span></button>` : ''}
                 <button class="avatar" data-profile aria-label="My account">${initial}</button>
             </div>
@@ -464,7 +482,8 @@
         </nav>`;
 
         document.body.insertAdjacentHTML('afterbegin', sidebar + topbar);
-        document.body.insertAdjacentHTML('beforeend', bottom);
+        if (bottomNav) document.body.insertAdjacentHTML('beforeend', bottom);
+        else document.body.classList.add('no-bottomnav');
         document.title = `${title ? title + ' · ' : ''}Science Academy`;
 
         document.addEventListener('click', (e) => {
@@ -473,6 +492,7 @@
             if (e.target.closest('[data-profile]')) { profile(); return; }
             if (e.target.closest('[data-logout]')) { logout(); return; }
             if (e.target.closest('[data-bell]')) { bellClick(); return; }
+            if (e.target.closest('[data-theme-toggle]')) { toggleTheme(); return; }
         });
         document.getElementById('gradePick')?.addEventListener('change', (e) => {
             sessionStorage.setItem('preview_grade', e.target.value);
@@ -514,7 +534,7 @@
     }
 
     window.App = {
-        confirmStart,
+        confirmStart, setTheme, toggleTheme, currentTheme,
         session, grade, isAdmin, GRADES, GRADES_AR,
         esc, txt, hasArabic, icon, api, url, safeUrl,
         timeLeft, fmtDate, scoreTone, ring, animateRings,

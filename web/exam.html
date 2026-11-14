@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#F4F7FC">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
     <title>Exam · Science Academy</title>
     <link rel="icon" href="/assets/img/logo-96.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,11 +14,12 @@
     <style>
         body { user-select: none; -webkit-user-select: none; }
         .xbar {
-            position: sticky; top: 0; z-index: 40; background: rgba(244, 247, 252, .92);
+            position: sticky; top: 0; z-index: 40; background: var(--glass);
             backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--border);
         }
         .xbar-in { max-width: 1120px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
         .xbar img { width: 34px; height: 34px; flex-shrink: 0; }
+        [data-theme="dark"] .xbar img { background: #fff; border-radius: 50%; padding: 2px; }
         .xbar .ttl { flex: 1; min-width: 0; }
         .xbar .ttl strong { display: block; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .xbar .ttl span { font-size: 12px; color: var(--muted); }
@@ -33,7 +35,7 @@
         .strip { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 12px 2px 6px; }
         .strip::-webkit-scrollbar { display: none; }
         .qn { width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; font-weight: 700; font-size: 13.5px; background: var(--surface); border: 1px solid var(--border); color: var(--text-2); position: relative; transition: transform .12s, background .15s; }
-        .qn.answered { background: var(--success-soft); border-color: #BFE6CB; color: var(--success); }
+        .qn.answered { background: var(--success-soft); border-color: var(--success-line); color: var(--success); }
         .qn.flagged::after { content: ""; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
         .qn.current { background: var(--primary); border-color: var(--primary); color: #fff; transform: scale(1.06); }
         .qgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
@@ -191,7 +193,7 @@
                         <div class="card reveal">
                             <div class="card-head"><h2 class="card-title">${icon('grid')}Questions</h2><span class="xs muted">Tap to jump</span></div>
                             <div class="qgrid" id="sideGrid"></div>
-                            <div class="legend"><span><i style="background:var(--success-soft);border:1px solid #BFE6CB"></i>Answered</span><span><i style="background:var(--accent)"></i>Flagged</span><span><i style="background:var(--surface);border:1px solid var(--border)"></i>Not answered</span></div>
+                            <div class="legend"><span><i style="background:var(--success-soft);border:1px solid var(--success-line)"></i>Answered</span><span><i style="background:var(--accent)"></i>Flagged</span><span><i style="background:var(--surface);border:1px solid var(--border)"></i>Not answered</span></div>
                             <button class="btn btn-primary btn-block" id="sideSubmit">${icon('send')}Review &amp; submit</button>
                             <p class="xs muted" style="margin:12px 0 0">Stay on this page until you submit. Leaving twice submits your exam automatically.</p>
                         </div>
