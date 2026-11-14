@@ -119,6 +119,21 @@ export async function onRequestPost(context) {
         if (!lesson || !lesson.id || !lesson.title || !lesson.grade || !lesson.category || !lesson.url) {
             return Response.json({ error: 'بيانات المحتوى ناقصة' }, { status: 400 });
         }
+        // Only real web links (a "javascript:" link would run code on students' phones)
+        let parsedUrl = null;
+        try { parsedUrl = new URL(String(lesson.url).trim()); } catch (e) { }
+        if (!parsedUrl || !['http:', 'https:'].includes(parsedUrl.protocol)) {
+            return Response.json({ error: 'الرابط لازم يبدأ بـ https://' }, { status: 400 });
+        }
+        if (!['prep1', 'prep2', 'prep3', 'sec1'].includes(String(lesson.grade).toLowerCase()) || !['videos', 'summaries', 'exams'].includes(String(lesson.category).toLowerCase())) {
+            return Response.json({ error: 'المرحلة أو القسم غير صحيح' }, { status: 400 });
+        }
+        lesson.grade = String(lesson.grade).toLowerCase();
+        lesson.category = String(lesson.category).toLowerCase();
+        lesson.title = String(lesson.title).trim().slice(0, 150);
+        lesson.url = parsedUrl.toString();
+        // Always a sortable server time (older entries were saved with a local Arabic date)
+        lesson.createdAt = new Date().toISOString();
 
         // إدخال الدرس الجديد في الداتا بيز
         await db.prepare(

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Online results · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>Online results</h1><p id="headLine">Pick an exam to see who took it and who didn't.</p></div>
+            </div>
+            <div class="toolbar sticky-bar">
+                <select class="pick" id="gradePick" aria-label="Grade"></select>
+                <select class="pick" id="examPick" aria-label="Exam" style="flex:1;min-width:200px;max-width:520px"></select>
+                <div class="segmented" id="branchSeg" aria-label="Group">
+                    <button data-value="all">All</button><button data-value="center">Center</button><button data-value="private">Private</button>
+                </div>
+            </div>
+            <div id="content"></div>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/admin/assets/messages.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'results', title: 'Online results' });
+        const qs = new URLSearchParams(location.search);
+        let E = [], grade = A.store.get('results_grade', 'prep1'), examId = qs.get('exam'), branch = 'all', R = null;
+
+        try { E = await api('/api/exams?action=list'); } catch (err) { $('content').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+        E.forEach(e => e.grade = String(e.grade || '').toLowerCase());
+        if (examId) { const e = E.find(x => x.id === examId); if (e) grade = e.grade; else examId = null; }
+
+        A.gradeSelect($('gradePick'), grade, (v) => { grade = v; A.store.set('results_grade', v); examId = null; fillExams(); });
+        A.segmented($('branchSeg'), branch, (v) => { branch = v; render(); });
+        $('examPick').addEventListener('change', (e) => { examId = e.target.value; loadResults(); });
+
+        function fillExams() {
+            const list = E.filter(e => e.grade === grade).sort((a, b) => A.toMs(b.expires_at) - A.toMs(a.expires_at));
+            if (!list.length) {
+                $('examPick').innerHTML = '<option>No online exams for this grade</option>'; $('examPick').disabled = true;
+                $('content').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('clipboard', 'lg')}</div><h3>No exams yet</h3><p>${A.can('exams.create') ? '<a class="link" href="/admin/exams.html?new=1">Create an online exam</a>' : 'Nothing to show for this grade.'}</p></div>`;
+                return;
+            }
+            $('examPick').disabled = false;
+            if (!examId || !list.some(e => e.id === examId)) examId = list[0].id;
+            $('examPick').innerHTML = list.map(e => `<option value="${esc(e.id)}" ${e.id === examId ? 'selected' : ''}>${esc(e.title)} · ${A.toMs(e.expires_at) > Date.now() ? 'open' : esc(A.fmtDate(e.expires_at))}</option>`).join('');
+            loadResults();
+        }
+        async function loadResults() {
+            history.replaceState(null, '', `${location.pathname}?exam=${encodeURIComponent(examId)}`);
+            $('content').innerHTML = '<div class="kpis"><div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div></div><div class="skel" style="height:300px;border-radius:18px"></div>';
+            try { R = await api(`/api/exams?action=results&examId=${encodeURIComponent(examId)}`); } catch (err) { $('content').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            render();
+        }
+        const inB = (x) => branch === 'all' || (x.branch || 'none') === branch;
+        const stud = (r) => ({ ...r, grade });
+
+        function render() {
+            if (!R) return;
+            const ex = R.exam, total = ex.total;
+            const done = R.results.filter(r => r.status === 'submitted' && inB(r)).sort((a, b) => (b.score - a.score) || String(a.firstName).localeCompare(String(b.firstName)));
+            const started = R.results.filter(r => r.status !== 'submitted' && inB(r));
+            const notTaken = (ex.closed ? R.missed : R.notYet).filter(inB);
+            const notStarted = notTaken.filter(r => r.reason !== 'opened');
+            const b = branch === 'all' ? { students: R.stats.eligible } : R.stats.byBranch[branch];
+            const avg = done.length ? done.reduce((a, r) => a + r.score, 0) / done.length / total * 100 : null;
+            const top = done.length ? done[0].score : null;
+            $('headLine').innerHTML = `<b dir="auto">${esc(ex.title)}</b> · ${esc(A.GRADES[grade])} · ${total} questions`;
+            let rank = 0, prev = null;
+            const rows = done.map((r, i) => { if (r.score !== prev) { rank = i + 1; prev = r.score; } return { ...r, rank }; });
+            const canReset = !ex.closed && A.can('exams.reset-attempt');
+
+            $('content').innerHTML = `
+                <div class="banner ${ex.closed ? 'info' : ''} fade-up">${icon(ex.closed ? 'lock' : 'clock')}
+                    <div class="grow">${ex.closed
+                        ? `<b>Closed ${esc(A.fmtDate(ex.expiresAt, true))}.</b> Students can review their answers from ${esc(A.fmtDate(ex.reviewUnlocksAt, true))}.`
+                        : `<b>Open — ${esc(A.timeLeft(ex.expiresAt))}.</b> Questions and answers stay hidden from students until ${esc(A.fmtDate(ex.reviewUnlocksAt, true))}. "Didn't take it" becomes final when it closes.`}</div></div>
+                <div class="kpis">
+                    <div class="kpi fade-up" style="--i:0"><b class="num">${done.length}<small style="display:inline;font-size:15px"> / ${b.students}</small></b><span>Submitted</span><small>${b.students ? Math.round(done.length / b.students * 100) : 0}% of ${branch === 'all' ? 'the grade' : A.BRANCHES[branch]}</small></div>
+                    <div class="kpi fade-up" style="--i:1"><b class="num">${A.fmtPct(avg)}</b><span>Average score</span><small>of those who submitted</small></div>
+                    <div class="kpi fade-up" style="--i:2"><b class="num">${top === null ? '—' : `${top}/${total}`}</b><span>Top score</span><small>${done.filter(r => r.score === top).length || 0} student${done.filter(r => r.score === top).length === 1 ? '' : 's'}</small></div>
+                    <div class="kpi fade-up" style="--i:3"><b class="num" style="color:${notTaken.length ? 'var(--danger)' : 'inherit'}">${notTaken.length}</b><span>${ex.closed ? 'Missed it' : 'Not yet'}</span><small>${started.length} opened but didn't submit</small></div>
+                </div>
+                <div class="grid-2c">
+                    <div class="card fade-up" style="--i:2">
+                        <div class="card-head"><h2 class="card-title">${icon('trophy')}Scores</h2><span class="small muted">highest first</span></div>
+                        ${rows.length ? `<div>${rows.map(r => {
+                            const p = r.score / total * 100, lvl = A.levelOf(p);
+                            return `<div class="res-row"><span class="rk">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}</span>
+                                <div style="min-width:0"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b><small class="muted">${esc(r.studentId)}${r.branch ? ' · ' + A.BRANCHES[r.branch] : ''} · ${esc(A.fmtDate(r.submittedAt, true))}</small></div>
+                                <span class="lvl ${lvl} small">${A.LEVEL_LABEL[lvl]}</span>
+                                <span class="score">${r.score}/${total}${canReset ? ` <button class="icon-btn" data-reset="${esc(r.studentId)}" title="Re-open for this student" aria-label="Re-open">${icon('refresh', 'sm')}</button>` : ''}</span></div>`;
+                        }).join('')}</div>` : '<div class="empty-state" style="padding:24px"><p>Nobody has submitted yet.</p></div>'}
+                    </div>
+                    <div class="stack" style="gap:18px">
+                        <div class="card fade-up" style="--i:3">
+                            <div class="card-head"><h2 class="card-title">${icon('alert')}${ex.closed ? 'Didn\'t take it' : 'Haven\'t taken it yet'}</h2>
+                                ${notTaken.length && A.can('reports.send') ? `<button class="btn btn-wa btn-sm" id="sendAll">${icon('whatsapp', 'sm')}Message parents</button>` : ''}</div>
+                            ${notTaken.length ? notTaken.map(r => `<div class="res-row" style="grid-template-columns:minmax(0,1fr) auto">
+                                <div style="min-width:0"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b>
+                                    <small class="muted">${r.reason === 'opened' ? '<span style="color:var(--warning)">Opened it, didn\'t submit</span>' : 'Didn\'t open it'}${r.branch ? ' · ' + A.BRANCHES[r.branch] : ' · no group'}</small></div>
+                                <div style="display:flex;gap:4px">
+                                    ${canReset && r.reason === 'opened' ? `<button class="icon-btn" data-reset="${esc(r.studentId)}" title="Re-open for this student" aria-label="Re-open">${icon('refresh', 'sm')}</button>` : ''}
+                                    ${A.can('reports.send') && r.parentPhone ? `<button class="icon-btn ql-wa" data-msg="${esc(r.studentId)}" title="Message the parent" aria-label="Message the parent">${icon('whatsapp', 'sm')}</button>` : ''}</div>
+                            </div>`).join('') : `<div class="empty-state" style="padding:24px"><p>${ex.closed ? 'Everyone took it 🎉' : 'Everyone has taken it so far.'}</p></div>`}
+                            ${R.stats.joinedAfterClose ? `<p class="small muted" style="margin:10px 0 0">${R.stats.joinedAfterClose} student${R.stats.joinedAfterClose > 1 ? 's' : ''} joined after it closed — not counted.</p>` : ''}
+                        </div>
+                        ${started.length && !ex.closed ? `<div class="notice warning fade-up">${icon('info')}<div>${started.length} student${started.length > 1 ? 's are' : ' is'} in the middle of it (or left the page). Re-open only if something went wrong — it's recorded in the activity log with your reason.</div></div>` : ''}
+                    </div>
+                </div>`;
+
+            const message = (r) => r.reason === 'opened'
+                ? ParentMessages.notSubmitted({ student: stud(r), examTitle: ex.title })
+                : ParentMessages.missedOnline({ student: stud(r), examTitle: ex.title, closedAt: ex.expiresAt });
+            $('sendAll')?.addEventListener('click', () => A.queue(notTaken.filter(r => r.parentPhone), (r) => message(r), { title: ex.closed ? 'Missed exam' : 'Not taken yet', key: ex.id + branch }));
+            $('content').querySelectorAll('[data-msg]').forEach(btn => btn.addEventListener('click', () => {
+                const r = notTaken.find(x => x.studentId === btn.dataset.msg); if (r) A.preview(stud(r), message(r), r.reason === 'opened' ? 'Didn\'t submit' : 'Missed exam');
+            }));
+            $('content').querySelectorAll('[data-reset]').forEach(btn => btn.addEventListener('click', () => {
+                const r = R.results.find(x => x.studentId === btn.dataset.reset); if (r) reopen(r);
+            }));
+        }
+        function reopen(r) {
+            Site.sheet({
+                iconName: 'refresh', title: `Re-open for ${r.firstName}?`,
+                subtitle: r.status === 'submitted' ? `Their score (${r.score}/${R.exam.total}) is removed and they start again. The old score is kept in the activity log.` : 'They can start the exam again from the beginning.',
+                html: `<div class="field" style="margin:0"><label for="why">Reason <small>(required — saved in the activity log)</small></label><input class="fin" id="why" dir="auto" maxlength="300" placeholder="e.g. internet cut off"></div>`,
+                actions: [{ label: 'Re-open exam', cls: 'btn-primary', onClick: async (close) => {
+                    const reason = document.getElementById('why').value.trim();
+                    if (reason.length < 3) return Site.toast('Write a short reason', 'error');
+                    try { await api('/api/exams?action=reset-attempt', { body: { examId: R.exam.id, studentId: r.studentId, reason } }); close(); Site.toast('Re-opened ✅', 'success'); loadResults(); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+            setTimeout(() => document.getElementById('why')?.focus(), 250);
+        }
+        fillExams();
+    })();
+    </script>
+</body>
+</html>

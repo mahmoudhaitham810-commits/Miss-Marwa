@@ -11,6 +11,9 @@
         search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
         trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
         arrowUp: '<path d="m18 15-6-6-6 6"/>',
+        chevronRight: '<path d="m9 18 6-6-6-6"/>',
+        link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+        video: '<path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
         arrowDown: '<path d="m6 9 6 6 6-6"/>',
         minus: '<path d="M5 12h14"/>',
         edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
@@ -30,6 +33,14 @@
     function icon(name, cls = '') {
         if (EXTRA[name]) return `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${EXTRA[name]}</svg>`;
         return Site.icon(name, cls);
+    }
+
+    // Like Site.hydrateIcons, but also knows the staff-only icons (search, trash…)
+    function hydrate(root = document) {
+        root.querySelectorAll('[data-icon]').forEach(el => {
+            el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.iconClass || ''));
+            el.removeAttribute('data-icon');
+        });
     }
 
     const GRADES = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
@@ -84,15 +95,19 @@
     function nav() {
         const teacher = STAFF && STAFF.role === 'teacher';
         return [
-            { key: 'portal', short: 'Students', label: 'Students & exams', icon: 'users', href: '/admin/#students' },
-            { key: 'results', label: 'Online results', icon: 'clipboard', href: '/admin/#results' },
+            { key: 'today', short: 'Today', label: 'Today', icon: 'home', href: '/admin/' },
+            { key: 'students', short: 'Students', label: 'Students', icon: 'users', href: '/admin/students.html' },
+            { key: 'content', label: 'Lessons & files', icon: 'book', href: '/admin/content.html' },
+            { key: 'exams', label: 'Online exams', icon: 'clipboard', href: '/admin/exams.html' },
+            { key: 'results', label: 'Online results', icon: 'checkCircle', href: '/admin/results.html' },
             { key: 'grades', short: 'Grades', label: 'Center grades', icon: 'edit', href: '/admin/grades.html' },
             { key: 'analytics', short: 'Analytics', label: 'Analytics', icon: 'trophy', href: '/admin/analytics.html' },
-            { key: 'reports', short: 'Reports', label: 'Parent reports', icon: 'whatsapp', href: '/admin/#reports' },
+            { key: 'reports', label: 'Parent reports', icon: 'whatsapp', href: '/admin/reports.html' },
             { key: 'duplicates', label: 'Duplicate accounts', icon: 'merge', href: '/admin/duplicates.html' },
             { key: 'inbox', label: 'Questions · أسئلتي', icon: 'inbox', soon: true },
             teacher ? { key: 'copilot', label: 'AI Co-Pilot', icon: 'sparkles', soon: true } : null,
-            { key: 'settings', label: teacher ? 'Settings' : 'My password', icon: 'settings', href: '/admin/settings.html' }
+            { key: 'settings', label: teacher ? 'Settings' : 'My password', icon: 'settings', href: '/admin/settings.html' },
+            { key: 'classic', label: 'Classic portal', icon: 'layout', href: '/admin/classic.html' }
         ].filter(Boolean);
     }
     function shell({ active, title }) {
@@ -115,7 +130,7 @@
                     <button class="icon-btn menu-trigger" aria-label="Menu" data-menu>${icon('menu')}</button>
                 </div></header>`;
         const bottom = `<nav class="bottomnav" aria-label="Staff navigation">
-                ${['portal', 'grades', 'analytics', 'reports'].map(k => items.find(i => i.key === k)).map(n => `<a href="${n.href}" class="${n.key === active ? 'active' : ''}">${icon(n.icon)}<span>${esc(n.short)}</span></a>`).join('')}
+                ${['today', 'students', 'grades', 'analytics'].map(k => items.find(i => i.key === k)).map(n => `<a href="${n.href}" class="${n.key === active ? 'active' : ''}">${icon(n.icon)}<span>${esc(n.short)}</span></a>`).join('')}
                 <button data-menu>${icon('menu')}<span>More</span></button></nav>`;
         document.body.insertAdjacentHTML('afterbegin', sidebar + topbar);
         document.body.insertAdjacentHTML('beforeend', bottom);
@@ -179,9 +194,76 @@
         });
     }
     function normalizeDigits(s) { return Site.normalizeDigits(String(s ?? '')); }
+    function toMs(v) {
+        if (!v) return NaN;
+        const str = String(v);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str + 'T12:00:00Z').getTime();
+        return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(str) || !/\d:\d/.test(str) ? str : str.replace(' ', 'T') + 'Z').getTime();
+    }
+    function fmtDate(v, withTime = false) {
+        const ms = toMs(v);
+        if (isNaN(ms)) return v ? String(v) : '—';
+        const d = new Date(ms);
+        return withTime ? d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+            : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+    function timeLeft(v) {
+        const ms = toMs(v) - Date.now();
+        if (isNaN(ms)) return '';
+        if (ms <= 0) return 'closed';
+        const h = Math.floor(ms / 3600e3), m = Math.floor(ms % 3600e3 / 60e3);
+        return h >= 48 ? `${Math.floor(h / 24)} days left` : h >= 1 ? `${h}h ${m}m left` : `${m} min left`;
+    }
+    const PRE = (text) => `<pre dir="rtl" style="white-space:pre-wrap;font-family:var(--font-ar);background:var(--surface-2);padding:12px;border-radius:12px;margin:0;max-height:46vh;overflow:auto">${esc(text)}</pre>`;
+    // One WhatsApp message: preview it, then open WhatsApp
+    function preview(student, text, title) {
+        const href = window.ParentMessages ? ParentMessages.waLink(student.parentPhone, text) : null;
+        Site.sheet({
+            iconName: 'whatsapp', title, subtitle: student.parentPhone ? `Parent: ${student.parentPhone}` : 'No parent phone saved',
+            html: PRE(text),
+            actions: href ? [{ label: 'Open WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href, external: true }, { label: 'Close', cls: 'btn-ghost' }] : [{ label: 'Close', cls: 'btn-ghost' }]
+        });
+    }
+    // Many messages, one after another (each opened by a tap, so nothing is blocked)
+    function queue(list, makeText, { title = 'Send', key = '' } = {}) {
+        let sent = {};
+        try { sent = JSON.parse(sessionStorage.getItem('sent_' + key) || '{}'); } catch (e) { }
+        let i = Math.max(0, list.findIndex(s => !sent[s.studentId]));
+        if (!list.length) return Site.toast('Nobody to message', 'info');
+        const show = async () => {
+            const s = list[i];
+            if (!s) { Site.toast('All messages opened ✅', 'success'); return; }
+            let text;
+            try { text = await makeText(s); } catch (e) { Site.toast(e.message, 'error'); return; }
+            const href = s.parentPhone && text ? ParentMessages.waLink(s.parentPhone, text) : null;
+            Site.sheet({
+                iconName: 'whatsapp', title: `${title} · ${i + 1} of ${list.length}`,
+                subtitle: `${s.firstName} ${s.lastName}${s.parentPhone ? ' · ' + s.parentPhone : ' · no parent phone — skip'}${sent[s.studentId] ? ' · already opened' : ''}`,
+                html: text ? PRE(text) : '<p class="muted">Nothing to send for this student.</p>',
+                actions: [
+                    ...(href ? [{ label: 'Open WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href, external: true, onClick: () => { sent[s.studentId] = 1; try { sessionStorage.setItem('sent_' + key, JSON.stringify(sent)); } catch (e) { } } }] : []),
+                    { label: i + 1 < list.length ? 'Next student' : 'Finish', cls: 'btn-primary', onClick: (close) => { close(); i++; setTimeout(show, 240); } },
+                    { label: 'Stop', cls: 'btn-ghost' }
+                ]
+            });
+        };
+        show();
+    }
+    function downloadCsv(name, rows) {
+        const csv = '\uFEFF' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+        a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    }
+    function gradeSelect(el, value, onChange, { all = false } = {}) {
+        el.innerHTML = (all ? '<option value="all">All grades</option>' : '') + Object.entries(GRADES).map(([k, v]) => `<option value="${k}" ${k === value ? 'selected' : ''}>${v}</option>`).join('');
+        if (all && value === 'all') el.value = 'all';
+        el.addEventListener('change', (e) => onChange(e.target.value));
+    }
 
     window.Admin = {
         boot, api, icon, esc, can, store, GRADES, BRANCHES, fmtPct, levelOf, LEVEL_LABEL, initials, segmented, normalizeDigits,
+        toMs, fmtDate, timeLeft, preview, queue, downloadCsv, gradeSelect, hydrate,
         get staff() { return STAFF; }
     };
 })();

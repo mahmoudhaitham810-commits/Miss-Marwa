@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Online exams · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <!-- List -->
+            <section id="listView">
+                <div class="page-head">
+                    <div><h1>Online exams</h1><p id="countLine">Multiple-choice exams students take on the website.</p></div>
+                    <button class="btn btn-primary" id="newBtn" hidden><span data-icon="plus" style="display:contents"></span>New exam</button>
+                </div>
+                <div class="toolbar sticky-bar">
+                    <select class="pick" id="gradePick" aria-label="Grade"></select>
+                    <div class="segmented" id="stateSeg" aria-label="Status">
+                        <button data-value="all">All</button><button data-value="open">Open</button><button data-value="closed">Closed</button>
+                    </div>
+                </div>
+                <div id="list"></div>
+            </section>
+
+            <!-- Editor -->
+            <section id="editView" hidden>
+                <div class="page-head">
+                    <div style="display:flex;gap:12px;align-items:center">
+                        <button class="icon-btn" id="backBtn" aria-label="Back to exams" data-icon="arrowLeft"></button>
+                        <div><h1 id="edTitle">New online exam</h1><p id="edSub">Paste the questions, check the preview, publish.</p></div>
+                    </div>
+                </div>
+                <div class="grid-2c">
+                    <div class="card">
+                        <div class="form-grid">
+                            <div class="field full"><label for="fTitle">Exam title</label><input class="fin" id="fTitle" dir="auto" maxlength="150" placeholder="e.g. Unit 1 quiz"></div>
+                            <div class="field"><label for="fGrade">Grade</label><select class="pick" id="fGrade" style="width:100%"></select></div>
+                            <div class="field"><label for="fDays">Open for</label><select class="pick" id="fDays" style="width:100%">
+                                <option value="1">1 day</option><option value="2">2 days</option><option value="3" selected>3 days</option><option value="5">5 days</option><option value="7">1 week</option><option value="14">2 weeks</option></select></div>
+                            <div class="field"><label for="fTimer">Timer <small>(minutes — empty = no timer)</small></label><input class="fin" id="fTimer" type="number" min="1" max="600" inputmode="numeric" placeholder="No timer"></div>
+                            <div class="field" style="justify-content:flex-end"><label class="check"><input type="checkbox" id="fShuffle" checked> Shuffle questions & choices for each student</label></div>
+                            <div class="field full"><label for="fText">Questions <small>— number each question, letter each choice, put * right after the correct choice</small></label>
+                                <textarea class="ta" id="fText" dir="auto" rows="16" spellcheck="false" placeholder="1) What is the unit of force?&#10;A) Joule&#10;B) Newton*&#10;C) Watt&#10;&#10;2) …"></textarea></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-head"><h2 class="card-title">Preview</h2><span class="parse-state" id="parseState"></span></div>
+                        <div id="preview" class="q-preview"><p class="muted">Questions you type appear here.</p></div>
+                        <button class="btn btn-primary btn-block" id="saveBtn" disabled style="margin-top:14px"><span data-icon="check" style="display:contents"></span><span id="saveLabel">Publish exam</span></button>
+                        <p class="small muted" id="saveNote" style="margin:8px 0 0">Students of this grade get a notification as soon as it's published.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'exams', title: 'Online exams' });
+        A.hydrate();
+        const qs = new URLSearchParams(location.search);
+        let grade = A.store.get('exams_grade', 'all'), state = 'all', E = [], editing = null;
+        const isOpen = (e) => A.toMs(e.expires_at) > Date.now();
+        const qCount = (e) => { try { return JSON.parse(e.questions).length; } catch (x) { return 0; } };
+
+        A.gradeSelect($('gradePick'), grade, (v) => { grade = v; A.store.set('exams_grade', v); render(); }, { all: true });
+        A.segmented($('stateSeg'), state, (v) => { state = v; render(); });
+        A.gradeSelect($('fGrade'), 'prep1', () => { });
+        if (A.can('exams.create')) { $('newBtn').hidden = false; $('newBtn').addEventListener('click', () => openEditor(null)); }
+
+        async function load() {
+            $('list').innerHTML = '<div class="skel" style="height:260px;border-radius:18px"></div>';
+            try { E = await api('/api/exams?action=list'); } catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            E.forEach(e => e.grade = String(e.grade || '').toLowerCase());
+            render();
+        }
+        function render() {
+            const inGrade = E.filter(e => grade === 'all' || e.grade === grade);
+            const list = inGrade.filter(e => state === 'all' || (state === 'open') === isOpen(e))
+                .sort((a, b) => (isOpen(b) - isOpen(a)) || (isOpen(a) ? A.toMs(a.expires_at) - A.toMs(b.expires_at) : A.toMs(b.expires_at) - A.toMs(a.expires_at)));
+            const open = inGrade.filter(isOpen).length;
+            $('countLine').innerHTML = `<b>${open}</b> open · <b>${inGrade.length - open}</b> closed${grade === 'all' ? '' : ' in ' + esc(A.GRADES[grade])}`;
+            if (!list.length) { $('list').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('clipboard', 'lg')}</div><h3>No exams here</h3><p>${E.length ? 'Try another grade or status.' : 'Create the first online exam.'}</p></div>`; return; }
+            $('list').innerHTML = `<div class="exam-cards">${list.map((e, i) => {
+                const op = isOpen(e), n = qCount(e);
+                const editable = op && !e.attempts && A.can('exams.edit');
+                return `<div class="exam-card fade-up" style="--i:${Math.min(i, 14)}">
+                    <div class="top"><div style="min-width:0"><h3 dir="auto">${esc(e.title)}</h3>
+                        <div class="meta">${esc(A.GRADES[e.grade] || e.grade)} · ${n} questions${e.timeLimitMinutes ? ` · ${e.timeLimitMinutes} min` : ''}${e.shuffle === 0 ? ' · fixed order' : ''}</div></div>
+                        <span class="pill ${op ? (A.toMs(e.expires_at) - Date.now() < 864e5 ? 'legacy' : 'success') : ''}">${op ? esc(A.timeLeft(e.expires_at)) : 'Closed'}</span></div>
+                    <div class="meta">${op ? 'Closes' : 'Closed'} ${esc(A.fmtDate(e.expires_at, true))} · <b>${e.attempts || 0}</b> opened it</div>
+                    <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+                        <a class="btn btn-soft btn-sm" href="/admin/results.html?exam=${encodeURIComponent(e.id)}">${icon('chart', 'sm')}Results</a>
+                        ${editable ? `<button class="btn btn-ghost btn-sm" data-edit="${esc(e.id)}">${icon('edit', 'sm')}Edit</button>` : ''}
+                        ${A.can('exams.create') ? `<button class="btn btn-ghost btn-sm" data-copy="${esc(e.id)}" title="New exam with the same questions">${icon('copy2', 'sm')}Duplicate</button>` : ''}
+                        ${A.can('exams.delete') ? `<button class="btn btn-ghost btn-sm danger-text" data-del="${esc(e.id)}">${icon('trash', 'sm')}Delete</button>` : ''}
+                    </div></div>`;
+            }).join('')}</div>`;
+        }
+        $('list').addEventListener('click', (ev) => {
+            const ed = ev.target.closest('[data-edit]'), cp = ev.target.closest('[data-copy]'), dl = ev.target.closest('[data-del]');
+            if (ed) openEditor(E.find(e => e.id === ed.dataset.edit), false);
+            else if (cp) openEditor(E.find(e => e.id === cp.dataset.copy), true);
+            else if (dl) del(E.find(e => e.id === dl.dataset.del));
+        });
+
+        function del(e) {
+            if (!e) return;
+            Site.sheet({
+                iconName: 'alert', title: 'Delete this exam?', subtitle: `${e.title} — ${e.attempts || 0} student result${e.attempts === 1 ? '' : 's'} will be removed too. A full copy is kept in the activity log.`,
+                actions: [{ label: 'Delete exam and results', cls: 'btn-danger', onClick: async (close) => {
+                    try { await api('/api/exams?action=delete', { body: { examId: e.id } }); E = E.filter(x => x !== e); close(); render(); Site.toast('Exam deleted', 'success'); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+        }
+
+        // ---------- Editor ----------
+        const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+        function parseExamText(text) {
+            const questions = [], errors = [];
+            let cur = null;
+            const qRe = /^\s*\d+\s*[\)\.\-]\s*(.+)$/, oRe = /^\s*[A-Fa-f]\s*[\)\.\-]\s*(.+)$/;
+            A.normalizeDigits(text).split(/\r?\n/).forEach((raw) => {
+                const line = raw.trim(); if (!line) return;
+                const qm = line.match(qRe);
+                if (qm) { if (cur) questions.push(cur); cur = { question: qm[1].trim(), options: [], correctIndex: -1 }; return; }
+                const om = line.match(oRe);
+                if (om && cur) {
+                    let t = om[1].trim(), ok = false;
+                    if (t.endsWith('*')) { ok = true; t = t.slice(0, -1).trim(); }
+                    cur.options.push(t);
+                    if (ok) { if (cur.correctIndex !== -1) errors.push(`Question ${questions.length + 1} has more than one choice marked with *`); cur.correctIndex = cur.options.length - 1; }
+                } else if (cur && !cur.options.length) cur.question += ' ' + line; // question text on two lines
+            });
+            if (cur) questions.push(cur);
+            questions.forEach((q, i) => {
+                if (q.options.length < 2) errors.push(`Question ${i + 1} needs at least 2 choices`);
+                if (q.correctIndex === -1) errors.push(`Question ${i + 1} has no correct answer — put * right after it`);
+            });
+            return { questions, errors };
+        }
+        const questionsToText = (qsx) => qsx.map((q, i) => `${i + 1}) ${q.question}\n` + q.options.map((o, j) => `${LETTERS[j]}) ${o}${j === q.correctIndex ? '*' : ''}`).join('\n')).join('\n\n');
+
+        function renderPreview() {
+            const text = $('fText').value;
+            if (!text.trim()) { $('preview').innerHTML = '<p class="muted">Questions you type appear here.</p>'; $('parseState').textContent = ''; $('saveBtn').disabled = true; return; }
+            const { questions, errors } = parseExamText(text);
+            $('parseState').className = 'parse-state ' + (errors.length || !questions.length ? 'bad' : 'ok');
+            $('parseState').textContent = errors.length ? `${errors.length} to fix` : `${questions.length} question${questions.length === 1 ? '' : 's'} ✓`;
+            $('preview').innerHTML = (errors.length ? `<div class="notice danger"><div><b>Fix before publishing:</b><ul style="margin:6px 0 0;padding-left:18px">${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div></div>` : '')
+                + questions.map((q, i) => `<div class="q-item"><div class="qt" dir="auto">${i + 1}. ${esc(q.question)}</div>
+                    <ol type="A" dir="auto">${q.options.map((o, j) => `<li class="${j === q.correctIndex ? 'ok' : ''}">${esc(o)}${j === q.correctIndex ? ' ✓' : ''}</li>`).join('')}</ol></div>`).join('');
+            $('saveBtn').disabled = !!errors.length || !questions.length || !$('fTitle').value.trim();
+        }
+        $('fText').addEventListener('input', renderPreview);
+        $('fTitle').addEventListener('input', renderPreview);
+
+        function openEditor(exam, asCopy) {
+            editing = exam && !asCopy ? exam : null;
+            let qsx = []; if (exam) { try { qsx = JSON.parse(exam.questions); } catch (x) { } }
+            $('edTitle').textContent = editing ? 'Edit exam' : asCopy ? 'New exam (copy)' : 'New online exam';
+            $('edSub').textContent = editing ? 'Allowed only until the first student opens it.' : 'Paste the questions, check the preview, publish.';
+            $('fTitle').value = exam ? (asCopy ? exam.title + ' (2)' : exam.title) : '';
+            $('fGrade').value = exam ? exam.grade : (grade === 'all' ? 'prep1' : grade);
+            $('fGrade').disabled = !!editing; $('fDays').disabled = !!editing;
+            $('fDays').value = '3';
+            $('fTimer').value = exam && exam.timeLimitMinutes ? exam.timeLimitMinutes : '';
+            $('fShuffle').checked = !exam || exam.shuffle !== 0;
+            $('fText').value = qsx.length ? questionsToText(qsx) : '';
+            $('saveLabel').textContent = editing ? 'Save changes' : 'Publish exam';
+            $('saveNote').textContent = editing ? 'Grade and closing time can\'t change after publishing.' : 'Students of this grade get a notification as soon as it\'s published.';
+            renderPreview();
+            $('listView').hidden = true; $('editView').hidden = false; window.scrollTo(0, 0);
+            history.pushState({ editor: 1 }, '', location.pathname + (editing ? '?edit=' + encodeURIComponent(editing.id) : '?new=1'));
+            setTimeout(() => $('fTitle').focus(), 50);
+        }
+        function closeEditor(push = true) {
+            $('editView').hidden = true; $('listView').hidden = false; editing = null;
+            if (push) history.pushState({}, '', location.pathname);
+        }
+        $('backBtn').addEventListener('click', () => {
+            if ($('fText').value.trim() && !editing) {
+                Site.sheet({ iconName: 'alert', title: 'Leave without publishing?', subtitle: 'The questions you typed will be lost.',
+                    actions: [{ label: 'Leave', cls: 'btn-danger', onClick: (c) => { c(); closeEditor(); } }, { label: 'Keep editing', cls: 'btn-ghost' }] });
+            } else closeEditor();
+        });
+        window.addEventListener('popstate', () => { if (!$('editView').hidden) closeEditor(false); });
+
+        $('saveBtn').addEventListener('click', async () => {
+            const { questions, errors } = parseExamText($('fText').value);
+            const title = $('fTitle').value.trim();
+            if (errors.length || !questions.length || !title) return;
+            const payload = { title, grade: $('fGrade').value, durationDays: parseInt($('fDays').value, 10), timeLimitMinutes: parseInt($('fTimer').value, 10) || null, shuffle: $('fShuffle').checked, questions };
+            $('saveBtn').disabled = true;
+            try {
+                if (editing) {
+                    await api('/api/exams?action=update', { body: { examId: editing.id, ...payload } });
+                    Site.toast('Changes saved ✅', 'success');
+                } else {
+                    await api('/api/exams?action=create', { body: payload });
+                    Site.toast(`Published — ${questions.length} questions ✅`, 'success');
+                    grade = payload.grade; $('gradePick').value = grade; A.store.set('exams_grade', grade);
+                }
+                $('fText').value = '';
+                closeEditor(); await load();
+            } catch (err) { Site.toast(err.message, 'error'); $('saveBtn').disabled = false; }
+        });
+
+        await load();
+        if (qs.get('new') === '1' && A.can('exams.create')) openEditor(null);
+        else if (qs.get('edit')) { const e = E.find(x => x.id === qs.get('edit')); if (e && isOpen(e) && !e.attempts) openEditor(e); }
+    })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Lessons & files · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>Lessons & files</h1><p id="countLine">Videos, summaries and exam papers students see in their grade.</p></div>
+                <button class="btn btn-primary" id="addBtn" hidden><span data-icon="plus" style="display:contents"></span>Add a lesson</button>
+            </div>
+            <div class="toolbar sticky-bar">
+                <div class="input" style="flex:1;min-width:220px"><span data-icon="search" style="display:contents"></span>
+                    <input id="q" placeholder="Search title or notes…" autocomplete="off" style="height:44px"></div>
+                <select class="pick" id="gradePick" aria-label="Grade"></select>
+                <div class="segmented" id="catSeg" aria-label="Type">
+                    <button data-value="all">All</button><button data-value="videos">Videos</button><button data-value="summaries">Summaries</button><button data-value="exams">Exam papers</button>
+                </div>
+            </div>
+            <div id="list"></div>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'content', title: 'Lessons & files' });
+        A.hydrate();
+        const qs = new URLSearchParams(location.search);
+        let grade = qs.get('grade') || 'all', cat = 'all', L = [];
+        const CAT = { videos: { label: 'Video', ic: 'video' }, summaries: { label: 'Summary', ic: 'book' }, exams: { label: 'Exam paper', ic: 'file' } };
+
+        A.gradeSelect($('gradePick'), grade, (v) => { grade = v; render(); }, { all: true });
+        A.segmented($('catSeg'), cat, (v) => { cat = v; render(); });
+        $('q').addEventListener('input', render);
+        if (A.can('lessons.create')) { $('addBtn').hidden = false; $('addBtn').addEventListener('click', addLesson); }
+
+        async function load() {
+            $('list').innerHTML = '<div class="skel" style="height:260px;border-radius:18px"></div>';
+            try { L = await api('/api/lessons'); } catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            L.forEach(l => { l.grade = String(l.grade || '').toLowerCase(); l.category = String(l.category || '').toLowerCase(); });
+            render();
+        }
+        function render() {
+            const q = $('q').value.trim().toLowerCase();
+            const inGrade = L.filter(l => grade === 'all' || l.grade === grade);
+            const list = inGrade.filter(l => (cat === 'all' || l.category === cat) && (!q || `${l.title} ${l.notes || ''}`.toLowerCase().includes(q)));
+            const n = (c) => inGrade.filter(l => l.category === c).length;
+            $('countLine').innerHTML = `<b>${n('videos')}</b> videos · <b>${n('summaries')}</b> summaries · <b>${n('exams')}</b> exam papers${grade === 'all' ? '' : ' in ' + esc(A.GRADES[grade])}`;
+            if (!list.length) {
+                $('list').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('book', 'lg')}</div><h3>Nothing here yet</h3><p>${L.length ? 'Try another grade, type or search.' : 'Add the first lesson for your students.'}</p></div>`;
+                return;
+            }
+            $('list').innerHTML = `<div class="lessons">${list.map((l, i) => {
+                const c = CAT[l.category] || { label: l.category, ic: 'file' };
+                return `<div class="lesson ${esc(l.category)} fade-up" style="--i:${Math.min(i, 14)}">
+                    <div class="lic">${icon(c.ic)}</div>
+                    <div class="lbody"><b dir="auto">${esc(l.title)}</b>
+                        <div class="small">${esc(A.GRADES[l.grade] || l.grade)} · ${esc(c.label)} · ${esc(A.fmtDate(l.created_at || l.createdAt))}</div>
+                        ${l.notes ? `<div class="small" dir="auto" style="margin-top:4px">${esc(l.notes)}</div>` : ''}</div>
+                    <div class="lactions">
+                        <a class="icon-btn" href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener" title="Open link" aria-label="Open link">${icon('link', 'sm')}</a>
+                        ${A.can('lessons.delete') ? `<button class="icon-btn danger-text" data-del="${esc(l.id)}" title="Delete" aria-label="Delete">${icon('trash', 'sm')}</button>` : ''}
+                    </div></div>`;
+            }).join('')}</div>`;
+        }
+        const safeUrl = (u) => /^https?:\/\//i.test(String(u || '').trim()) ? String(u).trim() : '#';
+        $('list').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-del]'); if (!b) return;
+            const l = L.find(x => x.id === b.dataset.del); if (!l) return;
+            Site.sheet({
+                iconName: 'alert', title: 'Delete this lesson?', subtitle: `${l.title} — students won't see it any more. A copy is kept in the activity log.`,
+                actions: [{ label: 'Delete', cls: 'btn-danger', onClick: async (close) => {
+                    try { await api('/api/lessons?id=' + encodeURIComponent(l.id), { method: 'DELETE' }); L = L.filter(x => x !== l); close(); render(); Site.toast('Lesson deleted', 'success'); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+        });
+
+        function addLesson() {
+            Site.sheet({
+                iconName: 'book', title: 'Add a lesson', subtitle: 'Students of that grade get a notification.',
+                html: `<div class="form-grid">
+                    <div class="field full"><label for="lt">Title</label><input class="fin" id="lt" dir="auto" maxlength="150" placeholder="e.g. Unit 2 — Lesson 3 explanation"></div>
+                    <div class="field"><label for="lg">Grade</label><select class="pick" id="lg" style="width:100%">${Object.entries(A.GRADES).map(([k, v]) => `<option value="${k}" ${k === (grade === 'all' ? 'prep1' : grade) ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+                    <div class="field"><label for="lc">Type</label><select class="pick" id="lc" style="width:100%"><option value="videos">Video</option><option value="summaries">Summary</option><option value="exams">Exam paper</option></select></div>
+                    <div class="field full"><label for="lu">Link <small>(YouTube, Google Drive…)</small></label><input class="fin" id="lu" type="url" inputmode="url" placeholder="https://"></div>
+                    <div class="field full"><label for="ln">Notes <small>(optional — unit, lesson…)</small></label><input class="fin" id="ln" dir="auto" maxlength="300"></div>
+                    <p class="small full" id="lerr" style="color:var(--danger);margin:0"></p></div>`,
+                actions: [{ label: 'Publish', icon: 'check', onClick: async (close) => {
+                    const v = (id) => document.getElementById(id).value.trim();
+                    const body = { id: 'ITEM-' + Date.now(), title: v('lt'), grade: v('lg'), category: v('lc'), url: v('lu'), notes: v('ln') };
+                    const err = (m) => { document.getElementById('lerr').textContent = m; };
+                    if (!body.title) return err('Write a title.');
+                    if (!/^https?:\/\/\S+$/i.test(body.url)) return err('The link must start with https://');
+                    try {
+                        await api('/api/lessons', { body });
+                        close(); Site.toast('Published ✅', 'success'); load();
+                    } catch (e) { err(e.message); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+            setTimeout(() => document.getElementById('lt')?.focus(), 250);
+        }
+        await load();
+        if (qs.get('new') === '1' && A.can('lessons.create')) addLesson();
+    })();
+    </script>
+</body>
+</html>

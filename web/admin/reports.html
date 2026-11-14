@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Parent reports · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>Parent reports</h1><p id="headLine">A WhatsApp report for every parent — online and center exams.</p></div>
+            </div>
+            <div class="toolbar sticky-bar">
+                <select class="pick" id="gradePick" aria-label="Grade"></select>
+                <div class="segmented" id="groupSeg" aria-label="Group">
+                    <button data-value="center">Center</button><button data-value="private">Private</button><button data-value="all">All</button>
+                </div>
+                <div class="input" style="flex:1;min-width:200px"><span data-icon="search" style="display:contents"></span>
+                    <input id="q" placeholder="Search a student…" autocomplete="off" style="height:44px"></div>
+            </div>
+            <div id="content"></div>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/admin/assets/messages.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'reports', title: 'Parent reports' });
+        A.hydrate();
+        let grade = A.store.get('reports_grade', 'prep1'), group = A.store.get('reports_group', 'center'), rows = [];
+
+        A.gradeSelect($('gradePick'), grade, (v) => { grade = v; A.store.set('reports_grade', v); load(); });
+        A.segmented($('groupSeg'), group, (v) => { group = v; A.store.set('reports_group', v); render(); });
+        $('q').addEventListener('input', render);
+
+        async function load() {
+            $('content').innerHTML = '<div class="skel" style="height:320px;border-radius:18px"></div>';
+            try {
+                const d = await api(`/api/analytics?action=leaderboard&grade=${grade}&branch=all&board=combined`);
+                rows = [...d.leaderboard, ...d.unranked].map(r => ({ ...r, grade }));
+                rows.sort((a, b) => String(a.firstName).localeCompare(String(b.firstName)) || String(a.lastName).localeCompare(String(b.lastName)));
+            } catch (err) { $('content').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            render();
+        }
+        const inGroup = (r) => group === 'all' || r.branch === group;
+        const centerText = async (r) => {
+            const d = await api(`/api/analytics?action=student&studentId=${encodeURIComponent(r.studentId)}`);
+            const rowsC = d.center.history || [];
+            if (!rowsC.some(h => h.status !== 'not-entered')) return null;
+            return ParentMessages.fullCenter({ student: { ...d.student, grade }, rows: rowsC });
+        };
+        const onlineText = async (r) => {
+            const rep = await api(`/api/exams?action=student-report&studentId=${encodeURIComponent(r.studentId)}`);
+            if (!rep.exams.length) return null;
+            return ParentMessages.onlineReport(rep);
+        };
+
+        function render() {
+            const q = A.normalizeDigits($('q').value).trim().toLowerCase();
+            const list = rows.filter(r => inGroup(r) && (!q || `${r.firstName} ${r.lastName} ${r.studentId}`.toLowerCase().includes(q)));
+            const noPhone = list.filter(r => !r.parentPhone).length;
+            $('headLine').innerHTML = `<b>${list.length}</b> student${list.length === 1 ? '' : 's'} · ${esc(A.GRADES[grade])} · ${group === 'all' ? 'all groups' : A.BRANCHES[group]}${noPhone ? ` · <span style="color:var(--warning)">${noPhone} without a parent phone</span>` : ''}`;
+            if (!list.length) { $('content').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('users', 'lg')}</div><h3>No students</h3><p>Try another grade or group.</p></div>`; return; }
+            const sendable = list.filter(r => r.parentPhone);
+            $('content').innerHTML = `
+                ${A.can('reports.send') ? `<div class="card fade-up" style="margin-bottom:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                    <div style="flex:1;min-width:220px"><b>Send to everyone in this list</b><div class="small muted">One message at a time — you tap send in WhatsApp for each parent. Students with nothing to report are skipped.</div></div>
+                    <button class="btn btn-wa" id="allCenter">${icon('whatsapp', 'sm')}Center reports (${sendable.length})</button>
+                    <button class="btn btn-soft" id="allOnline">${icon('whatsapp', 'sm')}Online reports (${sendable.length})</button></div>` : ''}
+                <div class="card fade-up" style="--i:1;padding:6px 12px">
+                    ${list.map(r => `<div class="rep-row">
+                        <div style="min-width:0"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b>
+                            <div class="nums"><span>${esc(r.studentId)}</span>${r.branch ? `<span class="pill ${r.branch}">${A.BRANCHES[r.branch]}</span>` : '<span class="pill legacy">No group</span>'}
+                                <span>Center <b class="lvl ${A.levelOf(r.centerPct) || ''}">${A.fmtPct(r.centerPct)}</b></span>
+                                <span>Online <b class="lvl ${A.levelOf(r.onlinePct) || ''}">${A.fmtPct(r.onlinePct)}</b></span>
+                                ${r.missed ? `<span style="color:var(--danger)">${r.missed} missed</span>` : ''}</div></div>
+                        <div class="acts">${r.parentPhone && A.can('reports.send') ? `
+                            <button class="btn btn-ghost btn-sm" data-c="${esc(r.studentId)}">${icon('whatsapp', 'sm')}Center</button>
+                            <button class="btn btn-ghost btn-sm" data-o="${esc(r.studentId)}">${icon('whatsapp', 'sm')}Online</button>` : '<span class="small muted">No parent phone</span>'}</div>
+                    </div>`).join('')}
+                </div>`;
+            const skipEmpty = (fn) => async (r) => { const t = await fn(r); return t || ''; };
+            $('allCenter')?.addEventListener('click', () => A.queue(sendable, skipEmpty(centerText), { title: 'Center report', key: `c-${grade}-${group}` }));
+            $('allOnline')?.addEventListener('click', () => A.queue(sendable, skipEmpty(onlineText), { title: 'Online report', key: `o-${grade}-${group}` }));
+        }
+        $('content').addEventListener('click', async (e) => {
+            const c = e.target.closest('[data-c]'), o = e.target.closest('[data-o]');
+            const id = (c || o)?.dataset[c ? 'c' : 'o']; if (!id) return;
+            const r = rows.find(x => x.studentId === id); if (!r) return;
+            try {
+                const text = await (c ? centerText(r) : onlineText(r));
+                if (!text) return Site.toast(c ? 'No center marks yet for this student' : 'No online exams counted yet for this student', 'info');
+                A.preview(r, text, c ? 'Center report' : 'Online report');
+            } catch (err) { Site.toast(err.message, 'error'); }
+        });
+        load();
+    })();
+    </script>
+</body>
+</html>
