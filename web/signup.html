@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>
+        try {
+            var s = JSON.parse(localStorage.getItem('student_session') || 'null');
+            if (s && s.id) location.replace(s.grade === 'all' || s.role === 'admin' ? '/home.html?grade=prep1' : '/home.html');
+        } catch (e) { }
+    </script>
+    <title>Create account · Science Academy</title>
+    <meta name="description" content="Create your free Science Academy account and start learning with Miss Marwa.">
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="apple-touch-icon" href="/assets/img/logo-192.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+</head>
+<body class="site">
+    <div class="auth">
+        <aside class="auth-side">
+            <canvas id="sideCanvas" aria-hidden="true"></canvas>
+            <a class="site-brand" href="/index.html"><img src="/assets/img/logo-96.png" alt="" width="42" height="42"><div><strong>Science Academy</strong><span>with Miss Marwa</span></div></a>
+            <div class="side-body">
+                <h2 class="reveal">Join Science Academy.<br>It takes a minute.</h2>
+                <p class="reveal">Create your account and get your personal student code.</p>
+                <div class="perks">
+                    <div class="reveal"><i data-icon="book"></i>Lessons organised by unit</div>
+                    <div class="reveal"><i data-icon="clipboard"></i>Timed online exams, instant results</div>
+                    <div class="reveal"><i data-icon="chart"></i>Track your progress every week</div>
+                </div>
+                <div class="teacher reveal"><img src="/assets/img/marwa-160.png" alt="" width="54" height="54"><div><strong>Miss Marwa</strong><small>15+ years teaching science · 1,000+ students</small></div></div>
+            </div>
+        </aside>
+
+        <main class="auth-main">
+            <div class="auth-top">
+                <a class="site-brand" href="/index.html"><img src="/assets/img/logo-96.png" alt="" width="42" height="42"><div><strong>Science Academy</strong><span>with Miss Marwa</span></div></a>
+                <div class="row" style="gap:6px">
+                    <a class="icon-btn" href="/index.html" aria-label="Back to home" title="Back to home" data-icon="home"></a>
+                    <button class="icon-btn theme-btn" data-theme-toggle aria-label="Switch light / dark mode" title="Light / dark mode"><span data-icon="moon" data-icon-class="moon" style="display:contents"></span><span data-icon="sun" data-icon-class="sun" style="display:contents"></span></button>
+                </div>
+            </div>
+
+            <div class="auth-card" id="card">
+                <div id="formView">
+                    <h1 class="reveal">Create your account</h1>
+                    <p class="sub reveal">Free · Takes about a minute</p>
+
+                    <div class="stepper reveal" id="stepper" aria-hidden="true">
+                        <div class="st active" data-st="1"><b>1</b><span>You</span></div><div class="bar"><i></i></div>
+                        <div class="st" data-st="2"><b>2</b><span>Grade</span></div><div class="bar"><i></i></div>
+                        <div class="st" data-st="3"><b>3</b><span>Account</span></div>
+                    </div>
+
+                    <div class="notice danger form-error" id="formError" role="alert"><span data-icon="alert"></span><span id="formErrorText" dir="auto"></span></div>
+
+                    <form id="signupForm" novalidate>
+                        <div class="panes">
+                            <!-- Step 1 -->
+                            <section class="pane active" data-pane="1" aria-label="Step 1 of 3: About you">
+                                <div class="row" style="gap:12px;align-items:flex-start">
+                                    <div class="field" id="fFirst" style="flex:1;min-width:0">
+                                        <label for="firstName">First name</label>
+                                        <div class="input"><span data-icon="user" style="display:contents"></span><input id="firstName" autocomplete="given-name" placeholder="Ahmed" maxlength="40" dir="auto"></div>
+                                        <span class="msg"></span>
+                                    </div>
+                                    <div class="field" id="fLast" style="flex:1;min-width:0">
+                                        <label for="lastName">Last name</label>
+                                        <div class="input"><span data-icon="user" style="display:contents"></span><input id="lastName" autocomplete="family-name" placeholder="Mohamed" maxlength="40" dir="auto"></div>
+                                        <span class="msg"></span>
+                                    </div>
+                                </div>
+                                <div class="field" id="fGender">
+                                    <label>I am a</label>
+                                    <div class="choice">
+                                        <label><input type="radio" name="gender" value="male"><span class="opt"><i>👦</i><span><strong>Boy</strong><small>طالب</small></span></span></label>
+                                        <label><input type="radio" name="gender" value="female"><span class="opt"><i>👧</i><span><strong>Girl</strong><small>طالبة</small></span></span></label>
+                                    </div>
+                                    <span class="msg"></span>
+                                </div>
+                                <div class="pane-actions"><button type="button" class="btn btn-primary btn-lg" data-next>Continue<svg class="icon arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button></div>
+                            </section>
+
+                            <!-- Step 2 -->
+                            <section class="pane" data-pane="2" aria-label="Step 2 of 3: Grade">
+                                <div class="field" id="fGrade">
+                                    <label>Your grade</label>
+                                    <div class="choice" id="gradeChoice"></div>
+                                    <span class="msg"></span>
+                                </div>
+                                <div class="field" id="fBranch">
+                                    <label>How do you study with Miss Marwa?</label>
+                                    <div class="choice">
+                                        <label><input type="radio" name="branch" value="center"><span class="opt"><i data-icon="building"></i><span><strong>Center</strong><small>سنتر</small></span></span></label>
+                                        <label><input type="radio" name="branch" value="private"><span class="opt"><i data-icon="users"></i><span><strong>Private</strong><small>درس خاص</small></span></span></label>
+                                    </div>
+                                    <span class="msg"></span>
+                                </div>
+                                <div class="pane-actions">
+                                    <button type="button" class="btn btn-ghost btn-lg" data-back aria-label="Back"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
+                                    <button type="button" class="btn btn-primary btn-lg" data-next>Continue<svg class="icon arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+                                </div>
+                            </section>
+
+                            <!-- Step 3 -->
+                            <section class="pane" data-pane="3" aria-label="Step 3 of 3: Account">
+                                <div class="field" id="fPhone">
+                                    <label for="phone">Your phone number</label>
+                                    <div class="input"><span data-icon="phone" style="display:contents"></span><input id="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="01xxxxxxxxx" maxlength="11" dir="ltr"></div>
+                                    <span class="msg"></span>
+                                </div>
+                                <div class="field" id="fParent">
+                                    <label for="parentPhone">Parent's phone number <small>· for progress reports</small></label>
+                                    <div class="input"><span data-icon="users" style="display:contents"></span><input id="parentPhone" type="tel" inputmode="numeric" placeholder="01xxxxxxxxx" maxlength="11" dir="ltr"></div>
+                                    <span class="msg"></span>
+                                </div>
+                                <div class="field" id="fPass">
+                                    <label for="password">Create a password</label>
+                                    <div class="input"><span data-icon="lock" style="display:contents"></span><input id="password" type="password" class="has-eye" autocomplete="new-password" placeholder="At least 4 characters" maxlength="64"><button type="button" class="eye" data-eye="password" aria-label="Show password" data-icon="eye"></button></div>
+                                    <div class="strength" id="strength" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+                                    <span class="msg"></span>
+                                </div>
+                                <div class="field" id="fConfirm">
+                                    <label for="confirm">Confirm password</label>
+                                    <div class="input"><span data-icon="lock" style="display:contents"></span><input id="confirm" type="password" autocomplete="new-password" placeholder="Type it again" maxlength="64"></div>
+                                    <span class="msg"></span>
+                                </div>
+                                <div class="pane-actions">
+                                    <button type="button" class="btn btn-ghost btn-lg" data-back aria-label="Back"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
+                                    <button type="submit" class="btn btn-primary btn-lg btn-glow" id="submitBtn">Create account</button>
+                                </div>
+                            </section>
+                        </div>
+                    </form>
+                    <p class="auth-foot reveal">Already have an account? <a href="/login.html">Sign in</a></p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/assets/site.js"></script>
+    <script>
+    (function () {
+        const $ = (id) => document.getElementById(id);
+        const { icon, esc } = Site;
+        Site.init();
+        Site.particles($('sideCanvas'), { density: .8, light: true, lineAlpha: .22 });
+
+        // Grade options (preselected from ?grade= when coming from the landing page)
+        const GRADES = [['prep1', 'Prep 1', 'أولى إعدادي'], ['prep2', 'Prep 2', 'تانية إعدادي'], ['prep3', 'Prep 3', 'تالتة إعدادي'], ['sec1', 'Sec 1', 'أولى ثانوي']];
+        $('gradeChoice').innerHTML = GRADES.map(([v, en, ar], i) =>
+            `<label><input type="radio" name="grade" value="${v}"><span class="opt"><i style="font-weight:800">${v === 'sec1' ? 'S1' : 'P' + (i + 1)}</i><span><strong>${en}</strong><small>${ar}</small></span></span></label>`).join('');
+        const preGrade = new URLSearchParams(location.search).get('grade');
+        const preInput = document.querySelector(`input[name="grade"][value="${CSS.escape(preGrade || '')}"]`);
+        if (preInput) preInput.checked = true;
+
+        // ---------- Helpers ----------
+        const NAME_RE = /^[؀-ۿa-zA-Z\s'\-.]{2,40}$/;
+        const PHONE_RE = /^01[0125][0-9]{8}$/;
+        const radio = (name) => (document.querySelector(`input[name="${name}"]:checked`) || {}).value || '';
+        function setErr(id, msg) { const f = $(id); f.classList.remove('err'); void f.offsetWidth; f.classList.add('err'); f.querySelector('.msg').textContent = msg; }
+        function clearErr(id) { $(id).classList.remove('err'); }
+        function formError(msg) { const b = $('formError'); b.classList.remove('show'); void b.offsetWidth; $('formErrorText').textContent = msg; b.classList.add('show'); }
+        document.querySelectorAll('.field').forEach(f => f.addEventListener('input', () => { f.classList.remove('err'); $('formError').classList.remove('show'); }));
+        document.querySelectorAll('.field').forEach(f => f.addEventListener('change', () => f.classList.remove('err')));
+
+        // Phones: Arabic digits → English, digits only
+        ['phone', 'parentPhone'].forEach(id => $(id).addEventListener('input', (e) => {
+            e.target.value = Site.normalizeDigits(e.target.value).replace(/\D/g, '').slice(0, 11);
+        }));
+
+        // Show / hide password + strength meter
+        document.querySelectorAll('[data-eye]').forEach(b => b.addEventListener('click', () => {
+            const show = $('password').type === 'password';
+            ['password', 'confirm'].forEach(id => $(id).type = show ? 'text' : 'password');
+            b.innerHTML = icon(show ? 'eyeOff' : 'eye');
+            b.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        }));
+        $('password').addEventListener('input', (e) => {
+            const v = e.target.value; let s = 0;
+            if (v.length >= 4) s = 1;
+            if (v.length >= 6) s++;
+            if (v.length >= 8 && /\d/.test(v) && /[a-z]/i.test(v)) s++;
+            if (v.length >= 10 && /[^a-z0-9]/i.test(v)) s++;
+            $('strength').className = 'strength' + (v ? ' s' + Math.max(1, s) : '');
+        });
+
+        // ---------- Validation per step (mirrors the server rules) ----------
+        function validate(step) {
+            let ok = true;
+            if (step === 1) {
+                const f = $('firstName').value.trim(), l = $('lastName').value.trim();
+                if (!NAME_RE.test(f)) { setErr('fFirst', f ? 'Letters only (2–40)' : 'Enter your first name'); ok = false; }
+                if (!NAME_RE.test(l)) { setErr('fLast', l ? 'Letters only (2–40)' : 'Enter your last name'); ok = false; }
+                if (!radio('gender')) { setErr('fGender', 'Choose one'); ok = false; }
+            }
+            if (step === 2) {
+                if (!radio('grade')) { setErr('fGrade', 'Choose your grade'); ok = false; }
+                if (!radio('branch')) { setErr('fBranch', 'Choose center or private'); ok = false; }
+            }
+            if (step === 3) {
+                const p = $('phone').value, pp = $('parentPhone').value, pw = $('password').value, c = $('confirm').value;
+                if (!PHONE_RE.test(p)) { setErr('fPhone', 'Enter a valid Egyptian number (11 digits, starts with 010/011/012/015)'); ok = false; }
+                if (!PHONE_RE.test(pp)) { setErr('fParent', 'Enter a valid Egyptian number (11 digits)'); ok = false; }
+                else if (pp === p) { setErr('fParent', 'Use your parent\'s number, not yours'); ok = false; }
+                if (pw.length < 4) { setErr('fPass', 'Use at least 4 characters'); ok = false; }
+                if (!c || c !== pw) { setErr('fConfirm', 'Passwords don\'t match'); ok = false; }
+            }
+            if (!ok) { const first = document.querySelector('.pane.active .field.err input'); if (first && first.type !== 'radio') first.focus(); }
+            return ok;
+        }
+
+        // ---------- Step navigation ----------
+        let step = 1;
+        function go(n) {
+            const back = n < step;
+            step = n;
+            document.querySelectorAll('.pane').forEach(p => {
+                const on = Number(p.dataset.pane) === n;
+                p.classList.toggle('active', on);
+                p.classList.toggle('back', on && back);
+            });
+            document.querySelectorAll('.stepper .st').forEach(s => {
+                const k = Number(s.dataset.st);
+                s.classList.toggle('active', k === n);
+                s.classList.toggle('done', k < n);
+                s.querySelector('b').innerHTML = k < n ? icon('check', 'sm') : k;
+            });
+            document.querySelectorAll('.stepper .bar i').forEach((b, i) => b.style.width = i + 1 < n ? '100%' : '0');
+            $('formError').classList.remove('show');
+            const first = document.querySelector('.pane.active input:not([type=radio])');
+            if (first && Site.finePointer) first.focus({ preventScroll: true });
+            $('card').scrollIntoView({ block: 'start', behavior: Site.reduced ? 'auto' : 'smooth' });
+        }
+        document.querySelectorAll('[data-next]').forEach(b => b.addEventListener('click', () => { if (validate(step)) go(step + 1); }));
+        document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => go(step - 1)));
+        // Enter key moves forward instead of submitting early
+        $('signupForm').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && step < 3 && e.target.tagName === 'INPUT') { e.preventDefault(); if (validate(step)) go(step + 1); }
+        });
+
+        // ---------- Submit ----------
+        const btn = $('submitBtn'), btnHtml = btn.innerHTML;
+        $('signupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (step !== 3) return;
+            if (!validate(3)) return;
+            for (const s of [1, 2]) if (!validate(s)) { go(s); return; }
+
+            const payload = {
+                firstName: $('firstName').value.trim().replace(/\s+/g, ' '),
+                lastName: $('lastName').value.trim().replace(/\s+/g, ' '),
+                gender: radio('gender'), grade: radio('grade'), branch: radio('branch'),
+                phone: $('phone').value, parentPhone: $('parentPhone').value,
+                password: $('password').value
+            };
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Creating…';
+            try {
+                const res = await fetch('/api/auth?action=signup', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                let data = {};
+                try { data = await res.json(); } catch (err) { }
+                if (!res.ok || !data.success || !data.student) {
+                    formError(data.error || 'Something went wrong. Please try again.');
+                    btn.disabled = false; btn.innerHTML = btnHtml;
+                    return;
+                }
+                Site.saveSession(data.student);
+                try { localStorage.setItem('last_code', data.student.id); } catch (err) { }
+                showSuccess(data.student);
+            } catch (err) {
+                formError('No internet connection. Check your connection and try again.');
+                btn.disabled = false; btn.innerHTML = btnHtml;
+            }
+        });
+
+        // ---------- Success ----------
+        function showSuccess(s) {
+            const code = s.id;
+            $('card').innerHTML = `
+                <div class="success">
+                    <div class="check pop">${icon('checkCircle')}</div>
+                    <h1>Welcome, <span dir="auto">${esc(s.firstName)}</span>! 🎉</h1>
+                    <p class="sub" style="margin:0">Your account is ready. This is your student code — you'll use it to sign in.</p>
+                    <div class="code-card"><span>YOUR STUDENT CODE</span><strong id="codeText">${esc(code)}</strong>
+                        <button class="btn btn-soft btn-sm" id="copyBtn" style="margin-top:12px">${icon('copy', 'sm')}Copy code</button></div>
+                    <div class="notice warning" style="text-align:left;margin-bottom:18px">${icon('alert')}<span>Save it now — take a screenshot or write it down. You'll need it every time you sign in.</span></div>
+                    <a class="btn btn-primary btn-lg btn-block btn-glow" id="goHome" href="${Site.homeUrl(s)}">Go to my dashboard${icon('arrowRight', 'arrow')}</a>
+                </div>`;
+            $('copyBtn').addEventListener('click', async () => {
+                try { await navigator.clipboard.writeText(code); Site.toast('Code copied', 'success'); }
+                catch (e) { const r = document.createRange(); r.selectNodeContents($('codeText')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); Site.toast('Select & copy the code', 'info'); }
+            });
+            $('card').scrollIntoView({ block: 'start' });
+            confetti();
+        }
+        function confetti() {
+            if (Site.reduced) return;
+            const box = document.createElement('div'); box.className = 'confetti';
+            const colors = ['#2F5BEA', '#F97316', '#22C55E', '#22B8F0', '#A855F7', '#FACC15'];
+            box.innerHTML = Array.from({ length: 90 }, () => {
+                const x = Math.random() * 100, d = Math.random() * .8, t = 2.2 + Math.random() * 1.6, r = Math.random() * 720 - 360, dx = Math.random() * 160 - 80;
+                return `<i style="left:${x}%;background:${colors[Math.floor(Math.random() * colors.length)]};--dx:${dx}px;--r:${r}deg;animation-delay:${d}s;animation-duration:${t}s"></i>`;
+            }).join('');
+            document.body.appendChild(box);
+            setTimeout(() => box.remove(), 5000);
+        }
+    })();
+    </script>
+</body>
+</html>

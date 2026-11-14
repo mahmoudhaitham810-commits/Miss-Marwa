@@ -11,7 +11,7 @@
     let session = null;
     try { session = JSON.parse(localStorage.getItem('student_session') || 'null'); } catch (e) { session = null; }
     if (!session || !session.id) {
-        window.location.replace('/index.html');
+        window.location.replace('/login.html');
         return;
     }
 
@@ -311,7 +311,7 @@
                 if (d && d.valid === false) {
                     localStorage.removeItem('student_session');
                     alert('This account is no longer active. Please contact Miss Marwa.');
-                    location.replace('/index.html');
+                    location.replace('/login.html');
                 }
             }).catch(() => { });
     }
