@@ -30,6 +30,7 @@ const TEACHER = ['teacher'];
 export const PERMISSIONS = {
     'students.view': BOTH,
     'students.reset-password': BOTH,
+    'students.edit': BOTH,       // branch assignment, 'not a duplicate'
     'students.delete': TEACHER,
     'students.export': TEACHER,
     'lessons.view': BOTH,
@@ -117,6 +118,66 @@ export async function ensureStaffSchema(db) {
         )`)
     ]);
     schemaReady = true;
+}
+
+// ---------- App schema upgrades (Phase 2) ----------
+// Only ADDS nullable columns / new tables — never rewrites or drops existing data.
+// Safe to run on every cold start: each step is skipped when already done.
+let appSchemaReady = false;
+export async function ensureAppSchema(db) {
+    if (appSchemaReady) return;
+    const cols = async (table) => {
+        try { const { results } = await db.prepare(`PRAGMA table_info(${table})`).all(); return (results || []).map(r => r.name); }
+        catch (e) { return null; }
+    };
+    const steps = [];
+    const oe = await cols('offline_exams');
+    if (oe && oe.length) {
+        if (!oe.includes('branch')) steps.push('ALTER TABLE offline_exams ADD COLUMN branch TEXT');        // 'center' | 'private' | NULL (= before the split)
+        if (!oe.includes('group_id')) steps.push('ALTER TABLE offline_exams ADD COLUMN group_id TEXT');    // future: private sub-groups
+        if (!oe.includes('exam_date')) steps.push('ALTER TABLE offline_exams ADD COLUMN exam_date TEXT');  // YYYY-MM-DD
+    }
+    const og = await cols('offline_grades');
+    if (og && og.length && !og.includes('absent')) steps.push('ALTER TABLE offline_grades ADD COLUMN absent INTEGER NOT NULL DEFAULT 0');
+    const st = await cols('students');
+    if (st && st.length && !st.includes('group_id')) steps.push('ALTER TABLE students ADD COLUMN group_id TEXT');
+    const ex = await cols('exams');
+    if (ex && ex.length && !ex.includes('shuffle')) steps.push('ALTER TABLE exams ADD COLUMN shuffle INTEGER NOT NULL DEFAULT 1');
+    const es = await cols('exam_submissions');
+    if (es && es.length && !es.includes('shuffle_seed')) steps.push('ALTER TABLE exam_submissions ADD COLUMN shuffle_seed TEXT');
+    steps.push(`CREATE TABLE IF NOT EXISTS student_groups (
+        id TEXT PRIMARY KEY, grade TEXT NOT NULL, branch TEXT NOT NULL, name TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    steps.push(`CREATE TABLE IF NOT EXISTS duplicate_dismissals (
+        pair_key TEXT PRIMARY KEY, staff_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_students_grade_phone ON students(grade, phone)');
+    for (const q of steps) {
+        try { await db.prepare(q).run(); } catch (e) { /* another request may have added it at the same moment */ }
+    }
+    appSchemaReady = true;
+}
+
+// ---------- Shared helpers ----------
+// Any Egyptian mobile written any way → 01XXXXXXXXX (Arabic/Persian digits, spaces, +20, 0020, 20…)
+export function normalizeEgyptPhone(value) {
+    let s = String(value ?? '')
+        .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0))
+        .replace(/\D/g, '');
+    if (s.startsWith('0020')) s = s.slice(4);
+    else if (s.startsWith('20') && s.length === 12) s = s.slice(2);
+    if (s.length === 10 && s.startsWith('1')) s = '0' + s;
+    return s;
+}
+// A rough "sound" of a name that matches Arabic and English spellings of the same name
+// (أحمد / Ahmed → "md", محمد / Mohamed → "mmd", يوسف / Youssef → "sf"). One signal only, never proof.
+const AR_LATIN = { 'ا': 'a', 'أ': 'a', 'إ': 'a', 'آ': 'a', 'ء': '', 'ؤ': 'w', 'ئ': 'y', 'ب': 'b', 'ت': 't', 'ة': 'a', 'ث': 's', 'ج': 'g', 'ح': 'h', 'خ': 'k', 'د': 'd', 'ذ': 'z', 'ر': 'r', 'ز': 'z', 'س': 's', 'ش': 's', 'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z', 'ع': '', 'غ': 'g', 'ف': 'f', 'ق': 'k', 'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n', 'ه': 'h', 'و': 'w', 'ى': 'y', 'ي': 'y' };
+export function nameKey(name) {
+    let s = String(name || '').trim().split(/\s+/)[0] || '';
+    s = s.toLowerCase().replace(/[ً-ٰٟ]/g, '').split('').map(c => AR_LATIN[c] ?? c).join('');
+    s = s.replace(/sh/g, 's').replace(/kh/g, 'k').replace(/ph/g, 'f').replace(/q/g, 'k').replace(/c/g, 'k').replace(/j/g, 'g').replace(/[^a-z]/g, '');
+    s = s.replace(/^(el|al)(?=..)/, '').replace(/[aeiouwyh]/g, '').replace(/(.)\1+/g, '$1');
+    return s;
 }
 
 // ---------- Crypto helpers ----------

@@ -1,3 +1,5 @@
+import { ensureAppSchema, normalizeEgyptPhone } from './admin-auth.js';
+
 // بتحسب تحديث المتابعة اليومية (Streak) للطالب.
 // اتعملها اختبارات كاملة قبل ما تتحط هنا (8 حالات مختلفة اتأكدنا منها).
 function computeStreakUpdate(lastLoginISO, currentStreak, longestStreak) {
@@ -130,8 +132,9 @@ export async function onRequestPost(context) {
             // يتنفذ جوه لوحة التحكم ويمسح بيانات. فبنسمح بحروف عربي/إنجليزي ومسافات بس.
             const firstName = String(data.firstName || '').trim();
             const lastName = String(data.lastName || '').trim();
-            const phone = String(data.phone || '').trim();
-            const parentPhone = String(data.parentPhone || '').trim();
+            // الأرقام بتتوحد لصيغة واحدة (01xxxxxxxxx) مهما اتكتبت: أرقام عربي، +20، مسافات...
+            const phone = normalizeEgyptPhone(data.phone);
+            const parentPhone = normalizeEgyptPhone(data.parentPhone);
             const grade = String(data.grade || '').trim().toLowerCase();
             const password = String(data.password || '');
             const NAME_RE = /^[؀-ۿa-zA-Z\s'\-.]{2,40}$/;
@@ -151,6 +154,23 @@ export async function onRequestPost(context) {
             }
             if (password.length < 4 || password.length > 64) {
                 return Response.json({ error: 'كلمة المرور لازم تكون 4 حروف/أرقام على الأقل' }, { status: 400 });
+            }
+            if (phone === parentPhone) {
+                return Response.json({ error: 'رقم ولي الأمر لازم يكون مختلف عن رقم الطالب', code: 'SAME_PHONE' }, { status: 400 });
+            }
+
+            // ── منع الحسابات المكررة: رقم الطالب نفسه + نفس المرحلة = نفس الطالب ──
+            // (رقم ولي الأمر ممكن يتكرر عادي — إخوات أو توأم). بنقارن بعد توحيد صيغة الأرقام،
+            // عشان 01012345678 و +201012345678 و ٠١٠١٢٣٤٥٦٧٨ يتعرفوا إنهم نفس الرقم.
+            await ensureAppSchema(db);
+            const { results: sameGrade } = await db.prepare(
+                "SELECT phone FROM students WHERE grade = ?"
+            ).bind(grade).all();
+            if ((sameGrade || []).some(r => normalizeEgyptPhone(r.phone) === phone)) {
+                return Response.json({
+                    error: 'فيه حساب متسجل بالفعل برقم الموبايل ده في نفس المرحلة. لو نسيت الكود أو كلمة السر، كلّمنا على واتساب.',
+                    code: 'PHONE_EXISTS'
+                }, { status: 409 });
             }
 
             // توليد كود طالب عشوائي — ولو الكود طلع متكرر (نادر بس بيحصل مع زيادة الطلاب)

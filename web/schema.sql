@@ -92,3 +92,21 @@ CREATE TABLE IF NOT EXISTS auth_throttle (
     first_fail_at INTEGER NOT NULL DEFAULT 0,
     locked_until INTEGER NOT NULL DEFAULT 0
 );
+
+-- ===== Phase 2 (added automatically by ensureAppSchema in functions/api/admin-auth.js) =====
+-- Only new nullable columns / new tables; existing data is never rewritten.
+-- ALTER TABLE offline_exams ADD COLUMN branch TEXT;        -- 'center' | 'private' | NULL = before the split
+-- ALTER TABLE offline_exams ADD COLUMN group_id TEXT;      -- future: private sub-groups (Saturday group…)
+-- ALTER TABLE offline_exams ADD COLUMN exam_date TEXT;     -- YYYY-MM-DD
+-- ALTER TABLE offline_grades ADD COLUMN absent INTEGER NOT NULL DEFAULT 0;
+-- ALTER TABLE students ADD COLUMN group_id TEXT;           -- future: private sub-groups
+-- ALTER TABLE exams ADD COLUMN shuffle INTEGER NOT NULL DEFAULT 1;
+-- ALTER TABLE exam_submissions ADD COLUMN shuffle_seed TEXT;
+CREATE TABLE IF NOT EXISTS student_groups (
+    id TEXT PRIMARY KEY, grade TEXT NOT NULL, branch TEXT NOT NULL, name TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS duplicate_dismissals (
+    pair_key TEXT PRIMARY KEY, staff_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_students_grade_phone ON students(grade, phone);

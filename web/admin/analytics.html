@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Analytics · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>Analytics</h1><p id="subline">Who to celebrate, and who needs a hand.</p></div>
+            </div>
+            <div class="toolbar">
+                <select class="pick" id="gradePick" aria-label="Grade"></select>
+                <div class="segmented" id="branchSeg" aria-label="Group">
+                    <button data-value="center">Center</button><button data-value="private">Private</button><button data-value="all">All</button>
+                </div>
+                <div class="segmented" id="boardSeg" aria-label="Leaderboard">
+                    <button data-value="center">Center exams</button><button data-value="online">Online</button><button data-value="combined">Combined</button>
+                </div>
+            </div>
+            <div id="content"></div>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/admin/assets/messages.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api, fmtPct } = A;
+        await A.boot({ active: 'analytics', title: 'Analytics' });
+
+        let grade = A.store.get('staff_grade', 'prep1'); if (!A.GRADES[grade]) grade = 'prep1';
+        let branch = A.store.get('staff_an_branch', 'center'); if (!['center', 'private', 'all'].includes(branch)) branch = 'center';
+        let board = 'center'; // Center leaderboard opens first (approved)
+        let D = null;
+
+        $('gradePick').innerHTML = Object.entries(A.GRADES).map(([k, v]) => `<option value="${k}" ${k === grade ? 'selected' : ''}>${v}</option>`).join('');
+        $('gradePick').addEventListener('change', (e) => { grade = e.target.value; A.store.set('staff_grade', grade); load(); });
+        A.segmented($('branchSeg'), branch, (v) => { branch = v; A.store.set('staff_an_branch', v); load(); });
+        A.segmented($('boardSeg'), board, (v) => { board = v; load(); });
+
+        const GROUP_AR = { center: 'مجموعة السنتر', private: 'مجموعة الخاص', all: 'الدفعة' };
+        const BOARD_LABEL = { center: 'center exams', online: 'online exams', combined: 'center + online' };
+        const nameOf = (r) => `${r.firstName} ${r.lastName}`.trim();
+        const byId = () => Object.fromEntries([...D.leaderboard, ...D.unranked].map(r => [r.studentId, r]));
+
+        async function load() {
+            $('content').innerHTML = `<div class="kpis">${'<div class="skel" style="height:86px;border-radius:18px"></div>'.repeat(4)}</div><div class="skel" style="height:260px;border-radius:18px"></div>`;
+            try { D = await api(`/api/analytics?action=leaderboard&grade=${grade}&branch=${branch}&board=${board}`); }
+            catch (err) { $('content').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            render();
+        }
+
+        function moveChip(r) {
+            if (!r.rank) return '';
+            if (r.prevRank === null) return `<span class="move new" title="Newly ranked">NEW</span>`;
+            if (r.move > 0) return `<span class="move up" title="Up ${r.move} since the last exam">${icon('arrowUp')}${r.move}</span>`;
+            if (r.move < 0) return `<span class="move down" title="Down ${-r.move} since the last exam">${icon('arrowDown')}${-r.move}</span>`;
+            return `<span class="move same" title="Same place">${icon('minus')}</span>`;
+        }
+        function spark(values) {
+            if (!values || values.length < 2) return '<svg class="spark"></svg>';
+            const w = 72, h = 26, step = w / (values.length - 1);
+            const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - 3 - (v / 100) * (h - 6)).toFixed(1)}`).join(' ');
+            const up = values[values.length - 1] >= values[0];
+            return `<svg class="spark" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${up ? 'var(--success)' : 'var(--danger)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        }
+        function lineChart(series) {
+            const pts = series.filter(s => s.avg !== null);
+            if (pts.length < 2) return '<p class="muted small" style="margin:0">The trend appears after 2 exams.</p>';
+            const W = 520, H = 180, L = 34, R = 10, T = 12, B = 26;
+            const x = (i) => L + (i * (W - L - R)) / (pts.length - 1);
+            const y = (v) => T + (1 - v / 100) * (H - T - B);
+            const line = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.avg).toFixed(1)}`).join(' ');
+            const area = `${L},${H - B} ${line} ${x(pts.length - 1).toFixed(1)},${H - B}`;
+            const grid = [0, 50, 100].map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--border)" /><text class="lbl" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}%</text>`).join('');
+            const dots = pts.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.avg)}" r="4" fill="var(--surface)" stroke="var(--primary)" stroke-width="2.5"><title>${esc(p.name)}: ${fmtPct(p.avg)} (${p.count} students)</title></circle>`).join('');
+            const labels = pts.map((p, i) => (i === 0 || i === pts.length - 1 || pts.length <= 6) ? `<text class="lbl" x="${x(i)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === pts.length - 1 ? 'end' : 'middle'}">${esc((p.name || '').slice(0, 12))}</text>` : '').join('');
+            return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Group average after each exam"><defs><linearGradient id="ga" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--primary)" stop-opacity=".22"/><stop offset="1" stop-color="var(--primary)" stop-opacity="0"/></linearGradient></defs>${grid}<polygon points="${area}" fill="url(#ga)"/><polyline points="${line}" fill="none" stroke="var(--primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}${labels}</svg>`;
+        }
+
+        function render() {
+            const s = D.summary;
+            $('subline').innerHTML = D.latestExam
+                ? `Ranking on ${BOARD_LABEL[board]} · last exam: <b dir="auto">${esc(D.latestExam.name)}</b>`
+                : `No ${BOARD_LABEL[board]} with marks yet for this group.`;
+            const top = D.leaderboard.slice(0, 3);
+            const podOrder = [top[1], top[0], top[2]];
+            const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
+            const total = Math.max(1, D.bands.excellent + D.bands.good + D.bands.average + D.bands.weak);
+
+            $('content').innerHTML = `
+                <div class="kpis">
+                    <div class="kpi fade-up" style="--i:0"><b class="num">${s.ranked}<span class="muted" style="font-size:16px"> / ${s.students}</span></b><span>Students ranked</span><small>60%+ of exams taken</small></div>
+                    <div class="kpi fade-up" style="--i:1"><b class="num lvl ${A.levelOf(s.centerAvg) || ''}">${fmtPct(s.centerAvg, 1)}</b><span>Center average</span><small>absences count as 0</small></div>
+                    <div class="kpi fade-up" style="--i:2"><b class="num lvl ${A.levelOf(s.onlineAvg) || ''}">${fmtPct(s.onlineAvg, 1)}</b><span>Online average</span><small>missed exams count as 0</small></div>
+                    <div class="kpi fade-up" style="--i:3"><b class="num">${s.exams}</b><span>Exams counted</span><small>${esc(BOARD_LABEL[board])}</small></div>
+                </div>
+
+                ${top.length ? `<div class="card fade-up" style="--i:2;margin-bottom:22px">
+                    <div class="card-head"><h2 class="card-title">${icon('trophy')}Top of ${esc(A.GRADES[grade])} · ${branch === 'all' ? 'all students' : A.BRANCHES[branch]}</h2></div>
+                    <div class="podium">${podOrder.map(r => {
+                        if (!r) return '<div></div>';
+                        return `<div class="pod p${r.rank > 3 ? 3 : r.rank}" data-student="${esc(r.studentId)}" title="Open ${esc(nameOf(r))}">
+                            <div class="face">${A.initials(r)}<span class="medal">${medals[r.rank] || ''}</span></div>
+                            <div class="nm" dir="auto">${esc(nameOf(r))}</div>
+                            <div class="sc lvl ${r.level}">${fmtPct(r.pct, 1)}</div>
+                            <div class="row" style="gap:6px;justify-content:center">${moveChip(r)}</div>
+                            <div class="block">${r.rank}</div></div>`;
+                    }).join('')}</div></div>` : ''}
+
+                ${D.movers.length ? `<h2 class="h2" style="margin:0 0 12px">${'🎉'} Movers since the last exam</h2>
+                    <div class="movers">${D.movers.map((m, i) => {
+                        const title = m.type === 'new-first' ? `New #1! ${esc(m.name)}` : m.type === 'top-3' ? `${esc(m.name)} is now #${m.to}` : `${esc(m.name)} jumped ${m.places} places`;
+                        const sub = m.type === 'new-first' ? (m.from ? `Moved up from #${m.from}${m.overtook ? ` — overtook ${esc(m.overtook)}` : ''}` : 'First time on the leaderboard') : m.from ? `From #${m.from} to #${m.to}` : `New on the leaderboard at #${m.to}`;
+                        return `<div class="mover ${m.type === 'new-first' ? 'gold' : ''} fade-up" style="--i:${i}">
+                            ${m.type === 'new-first' ? '<span class="shine"></span>' : ''}
+                            <div class="ic">${m.type === 'new-first' ? '👑' : m.type === 'top-3' ? '🏅' : '🚀'}</div>
+                            <div class="tx"><b dir="auto">${title}</b><span dir="auto">${sub}</span></div>
+                            <button class="btn btn-soft btn-sm" data-congrats="${esc(m.studentId)}" data-rank="${m.to}" data-from="${m.from ?? ''}">${icon('party', 'sm')}Congratulate</button></div>`;
+                    }).join('')}</div>` : ''}
+
+                <div class="grid-2c">
+                    <div class="card fade-up" style="--i:3">
+                        <div class="card-head"><h2 class="card-title">${icon('chart')}Leaderboard</h2><span class="small muted">${D.leaderboard.length} ranked</span></div>
+                        <div class="lb">${D.leaderboard.map(r => `
+                            <div class="lb-row" data-student="${esc(r.studentId)}">
+                                <div class="lb-rank">${r.rank <= 3 ? medals[r.rank] : '#' + r.rank}</div>
+                                <div class="lb-main"><b dir="auto">${esc(nameOf(r))} ${branch === 'all' && r.branch ? `<span class="pill ${r.branch}">${A.BRANCHES[r.branch]}</span>` : ''}</b>
+                                    <div class="bar"><i style="width:${Math.max(2, Math.min(100, r.pct || 0))}%"></i></div></div>
+                                <div class="lb-end">${spark(r.trend)}${moveChip(r)}<span class="lb-pct lvl ${r.level}">${fmtPct(r.pct, 1)}</span></div>
+                            </div>`).join('') || '<div class="empty-state"><p>No one is ranked yet — students need marks in 60% of their exams.</p></div>'}
+                        </div>
+                        ${D.unranked.length ? `<details style="margin-top:12px"><summary class="small" style="cursor:pointer;font-weight:600;color:var(--primary)">Not ranked yet (${D.unranked.length})</summary>
+                            <div class="lb" style="margin-top:6px">${D.unranked.map(r => `<div class="lb-row" data-student="${esc(r.studentId)}"><div class="lb-rank muted">—</div>
+                                <div class="lb-main"><b dir="auto">${esc(nameOf(r))}</b><span class="small muted">${r.taken} of ${r.applicable} exams taken</span></div>
+                                <div class="lb-end"><span class="lb-pct muted">${fmtPct(r.pct)}</span></div></div>`).join('')}</div></details>` : ''}
+                    </div>
+                    <div class="stack" style="gap:18px">
+                        <div class="card fade-up" style="--i:4">
+                            <div class="card-head"><h2 class="card-title">${icon('alert')}Needs attention</h2><span class="small muted">${D.attention.length}</span></div>
+                            ${D.attention.length ? D.attention.map(a => `<div class="attn">
+                                <div class="ic">${icon(a.reasons.some(r => r.code === 'gap') ? 'target' : a.reasons.some(r => r.code === 'missing') ? 'clock' : 'alert', 'sm')}</div>
+                                <div class="tx"><b dir="auto" style="cursor:pointer" data-student="${esc(a.studentId)}">${esc(a.name)}</b><ul>${a.reasons.map(r => `<li>${esc(r.text)}</li>`).join('')}</ul>
+                                ${a.reasons.some(r => r.code === 'gap') ? `<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-gap="${esc(a.studentId)}">${icon('whatsapp', 'sm')}Message parent</button>` : ''}</div></div>`).join('')
+                                : '<div class="empty-state" style="padding:20px"><p>Nobody needs attention right now. 👏</p></div>'}
+                        </div>
+                        <div class="card fade-up" style="--i:5">
+                            <div class="card-head"><h2 class="card-title">${icon('chart')}Grade picture</h2></div>
+                            <div class="bands">${['excellent', 'good', 'average', 'weak'].map(k => `<i class="${k}" style="width:${(D.bands[k] / total) * 100}%"></i>`).join('')}</div>
+                            <div class="legend">${['excellent', 'good', 'average', 'weak'].map(k => `<span class="${k}">${A.LEVEL_LABEL[k]}<b>${D.bands[k]}</b></span>`).join('')}</div>
+                            <p class="small muted" style="margin:14px 0 6px">Group average after each exam (students who sat it)</p>
+                            <div class="chart-box">${lineChart(D.series)}</div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        // ---------- Clicks ----------
+        $('content').addEventListener('click', (e) => {
+            const c = e.target.closest('[data-congrats]');
+            if (c) { e.stopPropagation(); congrats(c.dataset.congrats, Number(c.dataset.rank), c.dataset.from ? Number(c.dataset.from) : null); return; }
+            const g = e.target.closest('[data-gap]');
+            if (g) { e.stopPropagation(); gapMsg(g.dataset.gap); return; }
+            const s = e.target.closest('[data-student]');
+            if (s) openStudent(s.dataset.student);
+        });
+
+        function preview(student, text, title) {
+            const href = ParentMessages.waLink(student.parentPhone, text);
+            Site.sheet({
+                iconName: 'whatsapp', title, subtitle: student.parentPhone ? `Parent: ${student.parentPhone}` : 'No parent phone saved',
+                html: `<pre dir="rtl" style="white-space:pre-wrap;font-family:var(--font-ar);background:var(--surface-2);padding:12px;border-radius:12px;margin:0;max-height:46vh;overflow:auto">${esc(text)}</pre>`,
+                actions: href ? [{ label: 'Open WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href, external: true }, { label: 'Close', cls: 'btn-ghost' }] : [{ label: 'Close', cls: 'btn-ghost' }]
+            });
+        }
+        function congrats(studentId, rank, before) {
+            const r = byId()[studentId]; if (!r) return;
+            const text = ParentMessages.congrats({ student: r, rank, before, groupLabel: GROUP_AR[branch], grade, examName: D.latestExam && D.latestExam.name });
+            preview(r, text, `Congratulate ${nameOf(r)}'s parents`);
+        }
+        function gapMsg(studentId) {
+            const a = D.attention.find(x => x.studentId === studentId); const r = byId()[studentId];
+            const gap = a.reasons.find(x => x.code === 'gap');
+            preview(r, ParentMessages.gap({ student: r, onlinePct: gap.onlinePct, centerPct: gap.centerPct }), `Message ${nameOf(r)}'s parents`);
+        }
+
+        async function openStudent(studentId) {
+            let d;
+            try { d = await api(`/api/analytics?action=student&studentId=${encodeURIComponent(studentId)}`); }
+            catch (err) { return Site.toast(err.message, 'error'); }
+            const st = d.student;
+            const row = (h) => `<div><span dir="auto">${esc(h.name)}</span><span class="muted small">${h.kind === 'online' ? 'Online' : 'Center'}</span>
+                <b class="${h.status === 'taken' ? 'lvl ' + (A.levelOf(h.pct) || '') : ''}" style="${h.status !== 'taken' ? 'color:var(--danger)' : ''}">${h.status === 'taken' ? `${h.score}/${h.total}` : h.status === 'absent' ? 'Absent' : h.status === 'missed' ? 'Missed' : '—'}</b></div>`;
+            const hist = [...d.center.history, ...d.online.history].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+            const r = byId()[studentId];
+            Site.sheet({
+                iconName: 'user', title: nameOf(st), subtitle: `${st.studentId} · ${A.GRADES[st.grade]}${st.branch ? ' · ' + A.BRANCHES[st.branch] : ''}${r && r.rank ? ` · Rank #${r.rank}` : ''}`,
+                html: `<div class="summary-grid" style="margin-top:0">
+                        <div><b class="lvl ${A.levelOf(d.center.pct) || ''}">${fmtPct(d.center.pct, 1)}</b><span>Center (${d.center.taken} taken, ${d.center.missed} absent)</span></div>
+                        <div><b class="lvl ${A.levelOf(d.online.pct) || ''}">${fmtPct(d.online.pct, 1)}</b><span>Online (${d.online.taken} taken, ${d.online.missed} missed)</span></div>
+                        <div><b class="lvl ${A.levelOf(d.combinedPct) || ''}">${fmtPct(d.combinedPct, 1)}</b><span>Combined</span></div>
+                        <div><b>${r && r.trend && r.trend.length ? spark(r.trend) : '—'}</b><span>Trend</span></div></div>
+                    <div class="hist">${hist.map(row).join('') || '<p class="muted">No exams yet.</p>'}</div>`,
+                actions: [
+                    { label: 'Center report to parent', icon: 'whatsapp', cls: 'btn-soft', onClick: (close) => { close(); setTimeout(() => preview(st, ParentMessages.fullCenter({ student: st, rows: d.center.history }), 'Center report'), 240); } },
+                    { label: 'Online report to parent', icon: 'whatsapp', cls: 'btn-soft', onClick: async (close) => {
+                        close();
+                        try { const rep = await api(`/api/exams?action=student-report&studentId=${encodeURIComponent(studentId)}`); setTimeout(() => preview(st, ParentMessages.onlineReport(rep), 'Online report'), 240); }
+                        catch (err) { Site.toast(err.message, 'error'); }
+                    } },
+                    { label: 'Close', cls: 'btn-ghost' }
+                ]
+            });
+        }
+
+        load();
+    })();
+    </script>
+</body>
+</html>

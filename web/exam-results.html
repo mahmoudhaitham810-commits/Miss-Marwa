@@ -100,6 +100,7 @@
                 <section class="rlist">${list.length ? list.map(r => `
                     <a class="card ritem reveal" href="${url('exam-results.html', { id: r.examId })}">
                         <div class="info"><span class="xs muted">${fmtDate(r.submittedAt)}</span><strong>${txt(r.title)}</strong></div>
+                        ${r.locked ? `<span class="chip" title="Full review unlocks after the deadline">${icon('lock', 'sm')}Review soon</span>` : ''}
                         <span class="score-pill num ${scoreTone(r.score, r.total)}">${r.score}/${r.total}</span>
                         <span class="muted">${icon('chevronRight')}</span>
                     </a>`).join('') : `<div class="card reveal"><div class="empty"><div class="bubble">${icon('chart')}</div><h3>No results yet</h3>
@@ -109,6 +110,21 @@
         }
 
         function renderReview(r) {
+            // Until nobody can still submit, the server sends only the score — no questions or answers
+            if (r.locked) {
+                const tone = scoreTone(r.score, r.total);
+                root.innerHTML = `
+                    <a class="back reveal" href="${url('exam-results.html')}">${icon('arrowLeft', 'sm')}All results</a>
+                    <section class="card reveal">
+                        <div class="hero">${ring(r.score, r.total, { size: 'lg', label: 'Score' })}
+                            <div class="info"><span class="chip primary">${icon('clipboard', 'sm')}Submitted ${fmtDate(r.submittedAt, true)}</span>
+                                <h1>${txt(r.title)}</h1><p class="muted" style="margin:0">${tone === 'good' ? 'Excellent work!' : tone === 'bad' ? 'Keep going — the review will show you what to fix.' : 'Good job!'}</p></div></div>
+                    </section>
+                    <div class="notice warning reveal" style="margin-top:16px">${icon('lock')}<div><b>Full review unlocks after the deadline.</b>
+                        The questions, your answers and the correct answers appear here on <b>${fmtDate(r.reviewUnlocksAt, true)}</b>, once the exam is closed for everyone.</div></div>`;
+                App.reveal(root);
+                return;
+            }
             const qs = Array.isArray(r.questions) ? r.questions : [];
             const ans = Array.isArray(r.answers) ? r.answers : [];
             // correctIndex only comes back from the server after the exam closes for everyone
