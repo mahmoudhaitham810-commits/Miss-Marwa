@@ -308,3 +308,40 @@ a.kpi:hover { transform: translateY(-2px); border-color: var(--primary-line); }
 [hidden] { display: none !important; }
 /* On phones a 2–3 row filter bar would cover half the screen while scrolling — keep it in the page (Analytics keeps it sticky) */
 @media (max-width: 640px) { .sticky-bar:not(.keep-sticky) { position: static; box-shadow: none; margin-top: 0; padding: 0; } }
+
+/* ---------- Custom pickers (replace native <select>) ---------- */
+.dd { position: relative; display: inline-block; min-width: 140px; }
+.dd-btn {
+    width: 100%; height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 0 12px 0 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font: inherit; font-weight: 600; box-shadow: var(--shadow-sm); cursor: pointer; text-align: left;
+    transition: border-color .15s, box-shadow .15s;
+}
+.dd-btn:hover { border-color: var(--primary-line, var(--border)); }
+.dd-btn:focus-visible, .dd-btn[aria-expanded="true"] { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft); }
+.dd-btn:disabled { opacity: .6; cursor: default; }
+.dd-btn .dd-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-btn .icon { color: var(--muted); flex: none; transition: transform .2s; }
+.dd-btn[aria-expanded="true"] .icon { transform: rotate(180deg); }
+.dd-menu {
+    position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 80; min-width: 100%; max-height: 320px; overflow: auto;
+    padding: 6px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border);
+    box-shadow: 0 18px 40px -12px rgba(15, 23, 42, .28), 0 4px 10px -4px rgba(15, 23, 42, .12);
+    opacity: 0; transform: translateY(-4px) scale(.98); transform-origin: top; transition: opacity .14s, transform .14s;
+}
+.dd-menu.up { top: auto; bottom: calc(100% + 6px); transform-origin: bottom; }
+.dd-menu.open { opacity: 1; transform: none; }
+.dd-menu button {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px;
+    text-align: left; font: inherit; font-weight: 550; color: var(--text); background: transparent;
+}
+.dd-menu button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-menu button:hover, .dd-menu button:focus-visible { background: var(--surface-2); outline: none; }
+.dd-menu button.on { color: var(--primary); background: var(--primary-soft); }
+.dd-menu button.on .icon { color: var(--primary); }
+.dd-menu button:disabled { opacity: .45; }
+[data-theme="dark"] .dd-menu { box-shadow: 0 18px 40px -12px rgba(0, 0, 0, .7); }
+.pill-pick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.pill-pick::-webkit-scrollbar { display: none; }
+.pill-pick button { white-space: nowrap; }
+.sheet .dd { width: 100%; }

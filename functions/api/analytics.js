@@ -70,7 +70,8 @@ async function loadGrade(db, grade) {
     }
     for (const m of cMarks) {
         const key = 'c' + m.examId;
-        if (marks[key] && (m.score !== null || m.absent)) marks[key][m.studentId] = { score: m.score, absent: !!m.absent };
+        const score = m.score === null || m.score === '' || !Number.isFinite(Number(m.score)) ? null : Number(m.score);
+        if (marks[key] && (score !== null || m.absent)) marks[key][m.studentId] = { score: m.absent ? null : score, absent: !!m.absent };
     }
     for (const e of oExams) {
         let total = 0; try { total = JSON.parse(e.questions).length; } catch (x) { }
@@ -295,7 +296,9 @@ export async function onRequestGet(context) {
             const top = (board) => {
                 const rows = group.map(s => ({ s, v: boardValue(s, data, board, null) }));
                 const ranks = rankMap(rows.map(r => ({ studentId: r.s.studentId, pct: r.v.pct, ranked: r.v.ranked })));
-                return rows.filter(r => r.v.ranked).sort((a, b) => b.v.pct - a.v.pct).slice(0, 10)
+                // Top 10 by rank — a tie for 10th place keeps everyone on that mark (nobody is cut by alphabet)
+                return rows.filter(r => r.v.ranked && ranks[r.s.studentId] <= 10)
+                    .sort((a, b) => ranks[a.s.studentId] - ranks[b.s.studentId] || String(a.s.firstName).localeCompare(String(b.s.firstName)))
                     .map(r => ({ ...pack(r.s, r.v), rank: ranks[r.s.studentId] }));
             };
             const weakest = group.map(s => ({ s, v: boardValue(s, data, 'combined', null) }))

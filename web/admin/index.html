@@ -51,11 +51,12 @@
         $('todayLine').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
         const get = (p) => api(p).catch(() => null);
-        const [students, exams, dups, log] = await Promise.all([
+        const [students, exams, dups, log, check] = await Promise.all([
             get('/api/students'),
             get('/api/exams?action=list'),
             get('/api/students?action=duplicates'),
-            A.can('audit.view') ? get('/api/admin-auth?action=audit-log&limit=6') : Promise.resolve(null)
+            A.can('audit.view') ? get('/api/admin-auth?action=audit-log&limit=6') : Promise.resolve(null),
+            get('/api/offline-exams?action=data-check')
         ]);
         const S = Array.isArray(students) ? students : [];
         const E = Array.isArray(exams) ? exams : [];
@@ -72,6 +73,7 @@
         const dupCount = dups && dups.pairs ? dups.pairs.length : 0;
 
         const todo = [];
+        if (check && check.issueCount) todo.push({ ic: 'shield', tone: 'danger', t: `Data check found ${check.issueCount} thing${check.issueCount > 1 ? 's' : ''} to look at`, href: '/admin/data-check.html', cta: 'Open' });
         if (closingSoon.length) todo.push({ ic: 'clock', tone: 'warn', t: `${closingSoon.length} online exam${closingSoon.length > 1 ? 's close' : ' closes'} within 24 hours`, href: '/admin/exams.html', cta: 'View' });
         if (recentClosed.length) todo.push({ ic: 'whatsapp', tone: '', t: `${recentClosed.length} exam${recentClosed.length > 1 ? 's' : ''} closed this week — check who missed ${recentClosed.length > 1 ? 'them' : 'it'}`, href: `/admin/results.html?exam=${encodeURIComponent(recentClosed[0].id)}`, cta: 'Open results' });
         if (noGroup) todo.push({ ic: 'users', tone: 'warn', t: `${noGroup} student${noGroup > 1 ? 's have' : ' has'} no Center / Private group`, href: '/admin/students.html?group=none', cta: 'Assign' });

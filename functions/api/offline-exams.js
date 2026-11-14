@@ -16,6 +16,9 @@ const BRANCHES = ['center', 'private'];
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const cellText = (score, absent) => (absent ? 'A' : score);
+// A stored mark as a number, or null when nothing (or nothing usable) was entered.
+// Old rows can hold NULL; a few very old ones could hold text — those show up in the data check, never as a mark.
+export const numOrNull = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 
 export async function onRequestGet(context) {
     const { request, env } = context;
@@ -55,7 +58,7 @@ export async function onRequestGet(context) {
                     const { results } = await db.prepare(
                         `SELECT exam_id as examId, student_id as studentId, score, absent FROM offline_grades WHERE exam_id IN (${chunk.map(() => '?').join(',')})`
                     ).bind(...chunk).all();
-                    grades = grades.concat(results.map(g => ({ ...g, absent: !!g.absent })));
+                    grades = grades.concat(results.map(g => ({ ...g, score: numOrNull(g.score), absent: !!g.absent })));
                 }
             }
             const unassigned = await db.prepare(
@@ -69,6 +72,9 @@ export async function onRequestGet(context) {
                 unassignedCount: unassigned ? unassigned.c : 0
             });
         }
+
+        // === Data check: proves nothing is missing, hidden or changed by mistake ===
+        if (action === 'data-check') return Response.json(await dataCheck(db));
 
         return Response.json({ error: 'إجراء غير معروف' }, { status: 400 });
     } catch (err) {
@@ -122,8 +128,22 @@ export async function onRequestPost(context) {
             }
             let branch = before.branch;
             if (data.branch !== undefined) {
-                if (!BRANCHES.includes(String(data.branch))) return Response.json({ error: 'اختاري سنتر أو خاص' }, { status: 400 });
-                branch = data.branch;
+                const b = String(data.branch || '').toLowerCase();
+                if (b === 'both') {
+                    if (before.branch) return Response.json({ error: 'الامتحان ده متسجل لمجموعة واحدة بالفعل' }, { status: 400 });
+                    branch = null; // stays "before the split" — shows for both groups
+                } else if (!BRANCHES.includes(b)) return Response.json({ error: 'اختاري سنتر أو خاص' }, { status: 400 });
+                else branch = b;
+            }
+            // Tagging a column with one group must never hide marks students of the other group already have
+            if (branch && branch !== before.branch) {
+                const other = await db.prepare(
+                    `SELECT COUNT(*) as c FROM offline_grades g JOIN students s ON s.student_id = g.student_id
+                     WHERE g.exam_id = ? AND (g.score IS NOT NULL OR g.absent = 1) AND (s.branch IS NULL OR s.branch <> ?)`
+                ).bind(examId, branch).first();
+                if (other && other.c > 0) {
+                    return Response.json({ error: `فيه ${other.c} طالب من مجموعة تانية ليهم درجات في الامتحان ده — لو اتسجل ${branch === 'center' ? 'سنتر' : 'خاص'} بس، درجاتهم هتختفي. سيبيه "قبل التقسيم".`, code: 'WOULD_HIDE_MARKS', count: other.c }, { status: 409 });
+                }
             }
             let examDate = before.exam_date;
             if (data.examDate !== undefined) {
@@ -215,4 +235,75 @@ export async function onRequestPost(context) {
     } catch (err) {
         return Response.json({ error: 'حصل خطأ في السيرفر' }, { status: 500 });
     }
+}
+
+
+// ============================================================
+// Data check — read-only. Counts every student and every saved mark and
+// reports anything the portal could miss, hide or misread.
+// ============================================================
+async function dataCheck(db) {
+    const all = async (q, ...a) => (await db.prepare(q).bind(...a).all()).results || [];
+    const students = await all("SELECT student_id as id, first_name as f, last_name as l, grade, branch FROM students");
+    const exams = await all("SELECT id, exam_name as name, grade, branch, total_marks as total FROM offline_exams");
+    const rows = await all("SELECT exam_id as examId, student_id as studentId, score, absent, typeof(score) as t FROM offline_grades");
+    const stuById = Object.fromEntries(students.map(s => [s.id, s]));
+    const exById = Object.fromEntries(exams.map(e => [e.id, e]));
+    const nm = (s) => s ? `${s.f || ''} ${s.l || ''}`.trim() : '';
+
+    // Students the portal can't place (grade spelled differently, unknown group value)
+    const oddGrade = students.filter(s => !GRADES.includes(s.grade)).map(s => ({ studentId: s.id, name: nm(s), grade: s.grade }));
+    const oddBranch = students.filter(s => s.branch !== null && s.branch !== '' && !BRANCHES.includes(s.branch)).map(s => ({ studentId: s.id, name: nm(s), branch: s.branch }));
+
+    const perGrade = {};
+    for (const g of GRADES) {
+        const st = students.filter(s => s.grade === g);
+        const ex = exams.filter(e => e.grade === g);
+        const exIds = new Set(ex.map(e => e.id));
+        const r = rows.filter(x => exIds.has(x.examId));
+        perGrade[g] = {
+            students: { total: st.length, center: st.filter(s => s.branch === 'center').length, private: st.filter(s => s.branch === 'private').length, none: st.filter(s => !BRANCHES.includes(s.branch)).length },
+            exams: { total: ex.length, beforeSplit: ex.filter(e => !e.branch).length, center: ex.filter(e => e.branch === 'center').length, private: ex.filter(e => e.branch === 'private').length },
+            rows: { total: r.length, marks: r.filter(x => !x.absent && numOrNull(x.score) !== null).length, absent: r.filter(x => x.absent).length, empty: r.filter(x => !x.absent && (x.score === null || x.score === '')).length }
+        };
+    }
+
+    const problems = { missingStudent: [], missingExam: [], otherGrade: [], hiddenByGroup: [], unreadable: [], outOfRange: [], absentWithScore: [] };
+    for (const x of rows) {
+        const s = stuById[x.studentId], e = exById[x.examId];
+        const has = x.absent || numOrNull(x.score) !== null;
+        if (!e) { problems.missingExam.push({ examId: x.examId, studentId: x.studentId, score: x.score }); continue; }
+        if (!s) { if (has) problems.missingStudent.push({ exam: e.name, grade: e.grade, studentId: x.studentId, score: x.absent ? 'A' : x.score }); continue; }
+        const item = { exam: e.name, examId: e.id, grade: e.grade, studentId: s.id, name: nm(s), score: x.absent ? 'A' : x.score };
+        if (has && s.grade !== e.grade) problems.otherGrade.push({ ...item, studentGrade: s.grade });
+        if (has && e.branch && s.branch !== e.branch) problems.hiddenByGroup.push({ ...item, studentGroup: s.branch || null, examGroup: e.branch });
+        if (!x.absent && x.score !== null && x.score !== '' && numOrNull(x.score) === null) problems.unreadable.push(item);
+        const n = numOrNull(x.score);
+        if (n !== null && (n < 0 || n > (e.total || 100))) problems.outOfRange.push({ ...item, total: e.total });
+        if (x.absent && x.score !== null) problems.absentWithScore.push(item);
+    }
+
+    // Every "Absent" in the database was set in the new portal (the old one had no absent at all),
+    // so each one is in the activity log: who, when and what the cell held before.
+    const absentRows = rows.filter(x => x.absent);
+    const logs = await all("SELECT staff_name as who, created_at as at, target, details FROM audit_log WHERE action = 'offline.save-grades' ORDER BY id ASC");
+    const lastToA = {};
+    for (const l of logs) {
+        let d = null; try { d = JSON.parse(l.details); } catch (e) { continue; }
+        for (const c of (d && d.changes) || []) if (c.to === 'A') lastToA[`${l.target}|${c.s}`] = { who: l.who, at: l.at, from: c.from === undefined ? null : c.from };
+    }
+    const absences = absentRows.map(x => {
+        const s = stuById[x.studentId], e = exById[x.examId];
+        const src = lastToA[`${x.examId}|${x.studentId}`] || null;
+        return { examId: x.examId, exam: e ? e.name : '?', grade: e ? e.grade : '', beforeSplit: e ? !e.branch : false, studentId: x.studentId, name: nm(s), setBy: src ? src.who : null, setAt: src ? src.at : null, before: src ? src.from : null };
+    }).sort((a, b) => String(b.setAt || '').localeCompare(String(a.setAt || '')));
+
+    const counts = {
+        students: students.length, centerExams: exams.length, markRows: rows.length,
+        onlineExams: ((await db.prepare("SELECT COUNT(*) as c FROM exams").first()) || {}).c || 0,
+        onlineSubmissions: ((await db.prepare("SELECT COUNT(*) as c FROM exam_submissions").first()) || {}).c || 0,
+        onlineOrphans: ((await db.prepare("SELECT COUNT(*) as c FROM exam_submissions sub LEFT JOIN students s ON s.student_id = sub.student_id WHERE s.student_id IS NULL").first()) || {}).c || 0
+    };
+    const issueCount = oddGrade.length + oddBranch.length + Object.values(problems).reduce((a, l) => a + l.length, 0);
+    return { checkedAt: new Date().toISOString(), counts, perGrade, oddGrade, oddBranch, problems, absences, issueCount };
 }

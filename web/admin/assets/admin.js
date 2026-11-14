@@ -104,6 +104,7 @@
             { key: 'analytics', short: 'Analytics', label: 'Analytics', icon: 'trophy', href: '/admin/analytics.html' },
             { key: 'reports', label: 'Parent reports', icon: 'whatsapp', href: '/admin/reports.html' },
             { key: 'duplicates', label: 'Duplicate accounts', icon: 'merge', href: '/admin/duplicates.html' },
+            { key: 'datacheck', label: 'Data check', icon: 'shield', href: '/admin/data-check.html' },
             { key: 'inbox', label: 'Questions · أسئلتي', icon: 'inbox', soon: true },
             teacher ? { key: 'copilot', label: 'AI Co-Pilot', icon: 'sparkles', soon: true } : null,
             { key: 'settings', label: teacher ? 'Settings' : 'My password', icon: 'settings', href: '/admin/settings.html' },
@@ -172,7 +173,16 @@
         }
         STAFF = me.staff; PERMS = me.permissions || [];
         shell({ active, title });
+        hydrate(); // staff-only icons first (Site.init would fill them with blanks)
         Site.init();
+        // Native <select>s become portal-styled pickers (after the page has filled them in)
+        setTimeout(() => {
+            document.querySelectorAll('select.pick').forEach(enhanceSelect);
+            new MutationObserver((list) => list.forEach(m => m.addedNodes.forEach(n => {
+                if (n.nodeType !== 1) return;
+                if (n.matches('select.pick')) enhanceSelect(n); else n.querySelectorAll?.('select.pick').forEach(enhanceSelect);
+            }))).observe(document.body, { childList: true, subtree: true });
+        }, 0);
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('/OneSignalSDKWorker.js').catch(() => { });
         return STAFF;
     }
@@ -256,14 +266,100 @@
         a.download = name; document.body.appendChild(a); a.click(); a.remove();
     }
     function gradeSelect(el, value, onChange, { all = false } = {}) {
+        el.dataset.ui = 'pills';
         el.innerHTML = (all ? '<option value="all">All grades</option>' : '') + Object.entries(GRADES).map(([k, v]) => `<option value="${k}" ${k === value ? 'selected' : ''}>${v}</option>`).join('');
         if (all && value === 'all') el.value = 'all';
         el.addEventListener('change', (e) => onChange(e.target.value));
     }
 
+    // ---------- Custom pickers that replace the OS <select> look ----------
+    // The real <select> stays in the page (hidden) and keeps the value + 'change' events,
+    // so page code keeps using select.value / addEventListener('change') as before.
+    function enhanceSelect(sel) {
+        if (sel.dataset.enhanced) return;
+        sel.dataset.enhanced = '1';
+        const pills = sel.dataset.ui === 'pills';
+        const wrap = document.createElement('div');
+        wrap.className = pills ? 'segmented pill-pick' : 'dd';
+        if (sel.style.cssText) wrap.style.cssText = sel.style.cssText;
+        if (!pills) wrap.style.height = '';
+        sel.after(wrap);
+        sel.hidden = true; sel.tabIndex = -1;
+        const label = sel.getAttribute('aria-label') || '';
+        const opts = () => [...sel.options];
+        const choose = (value) => {
+            if (sel.value === value) { close && close(); return; }
+            sel.value = value; sync();
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        let menu = null, btn = null, close = null;
+        function sync() {
+            if (pills) {
+                wrap.setAttribute('role', 'tablist'); wrap.setAttribute('aria-label', label);
+                wrap.innerHTML = opts().map(o => `<button type="button" role="tab" data-value="${esc(o.value)}" class="${o.value === sel.value ? 'active' : ''}" aria-selected="${o.value === sel.value}" ${o.disabled || sel.disabled ? 'disabled' : ''}>${esc(o.textContent)}</button>`).join('');
+                return;
+            }
+            const cur = sel.options[sel.selectedIndex];
+            if (!btn) {
+                wrap.insertAdjacentHTML('afterbegin', `<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(label)}"><span class="dd-label"></span>${icon('arrowDown', 'sm')}</button>`);
+                btn = wrap.firstElementChild;
+                wrap.appendChild(sel); // the real select lives inside its picker
+            }
+            btn.querySelector('.dd-label').textContent = cur ? cur.textContent : '';
+            btn.disabled = sel.disabled;
+        }
+        if (pills) {
+            wrap.addEventListener('click', (e) => { const b = e.target.closest('button[data-value]'); if (b && !b.disabled) choose(b.dataset.value); });
+        } else {
+            const open = () => {
+                if (menu || sel.disabled) return;
+                menu = document.createElement('div');
+                menu.className = 'dd-menu'; menu.setAttribute('role', 'listbox');
+                menu.innerHTML = opts().map((o, i) => `<button type="button" role="option" data-opt="${i}" aria-selected="${o.value === sel.value}" class="${o.value === sel.value ? 'on' : ''}" ${o.disabled ? 'disabled' : ''}><span>${esc(o.textContent)}</span>${o.value === sel.value ? icon('check', 'sm') : ''}</button>`).join('');
+                wrap.appendChild(menu);
+                // open upwards when there's no room below
+                const r = wrap.getBoundingClientRect();
+                if (r.bottom + Math.min(menu.scrollHeight, 320) > innerHeight - 12 && r.top > innerHeight / 2) menu.classList.add('up');
+                requestAnimationFrame(() => menu && menu.classList.add('open'));
+                btn.setAttribute('aria-expanded', 'true');
+                (menu.querySelector('.on') || menu.querySelector('button:not([disabled])'))?.focus({ preventScroll: true });
+                setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
+            };
+            close = (focusBtn) => {
+                if (!menu) return;
+                menu.remove(); menu = null;
+                btn.setAttribute('aria-expanded', 'false');
+                document.removeEventListener('pointerdown', outside, true);
+                if (focusBtn) btn.focus({ preventScroll: true });
+            };
+            const outside = (e) => { if (!wrap.contains(e.target)) close(); };
+            wrap.addEventListener('click', (e) => {
+                if (e.target.closest('.dd-btn')) { menu ? close() : open(); return; }
+                const o = e.target.closest('.dd-menu [data-opt]');
+                if (o && !o.disabled) { close(true); choose(sel.options[Number(o.dataset.opt)].value); }
+            });
+            wrap.addEventListener('keydown', (e) => {
+                if (!menu) { if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key) && e.target.closest('.dd-btn')) { e.preventDefault(); open(); } return; }
+                const items = [...menu.querySelectorAll('button:not([disabled])')];
+                const i = items.indexOf(document.activeElement);
+                if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(items.length - 1, i + 1)]?.focus(); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); items[Math.max(0, i - 1)]?.focus(); }
+                else if (e.key === 'Home') { e.preventDefault(); items[0]?.focus(); }
+                else if (e.key === 'End') { e.preventDefault(); items[items.length - 1]?.focus(); }
+                else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+                else if (e.key === 'Tab') close();
+            });
+        }
+        // Keep the picker in step when page code changes the select (new options, .value = …, disabled)
+        const proto = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        Object.defineProperty(sel, 'value', { configurable: true, get() { return proto.get.call(this); }, set(v) { proto.set.call(this, v); sync(); } });
+        new MutationObserver(() => sync()).observe(sel, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+        sync();
+    }
+
     window.Admin = {
         boot, api, icon, esc, can, store, GRADES, BRANCHES, fmtPct, levelOf, LEVEL_LABEL, initials, segmented, normalizeDigits,
-        toMs, fmtDate, timeLeft, preview, queue, downloadCsv, gradeSelect, hydrate,
+        toMs, fmtDate, timeLeft, preview, queue, downloadCsv, gradeSelect, hydrate, enhanceSelect,
         get staff() { return STAFF; }
     };
 })();
