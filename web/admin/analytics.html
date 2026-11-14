@@ -23,7 +23,7 @@
             <div class="page-head">
                 <div><h1>Analytics</h1><p id="subline">Who to celebrate, and who needs a hand.</p></div>
             </div>
-            <div class="toolbar">
+            <div class="toolbar sticky-bar">
                 <select class="pick" id="gradePick" aria-label="Grade"></select>
                 <div class="segmented" id="branchSeg" aria-label="Group">
                     <button data-value="center">Center</button><button data-value="private">Private</button><button data-value="all">All</button>
@@ -56,13 +56,23 @@
         A.segmented($('boardSeg'), board, (v) => { board = v; load(); });
 
         const GROUP_AR = { center: 'مجموعة السنتر', private: 'مجموعة الخاص', all: 'الدفعة' };
+        const GRADE_LONG = { prep1: '1st Prep', prep2: '2nd Prep', prep3: '3rd Prep', sec1: '1st Secondary' };
+        const GRADE_AR = { prep1: 'أولى إعدادي', prep2: 'تانية إعدادي', prep3: 'تالتة إعدادي', sec1: 'أولى ثانوي' };
+        const BRANCH_LONG = { center: 'Center students', private: 'Private students', all: 'All branches' };
+        const BOARD_TITLE = { center: 'Center', online: 'Online', combined: 'Combined (center + online)' };
+        let QL = null;
         const BOARD_LABEL = { center: 'center exams', online: 'online exams', combined: 'center + online' };
         const nameOf = (r) => `${r.firstName} ${r.lastName}`.trim();
-        const byId = () => Object.fromEntries([...D.leaderboard, ...D.unranked].map(r => [r.studentId, r]));
+        const byId = () => Object.fromEntries([...(QL ? [...QL.top10Center, ...QL.top10Combined, ...QL.weakest20] : []), ...D.leaderboard, ...D.unranked].map(r => [r.studentId, r]));
 
         async function load() {
             $('content').innerHTML = `<div class="kpis">${'<div class="skel" style="height:86px;border-radius:18px"></div>'.repeat(4)}</div><div class="skel" style="height:260px;border-radius:18px"></div>`;
-            try { D = await api(`/api/analytics?action=leaderboard&grade=${grade}&branch=${branch}&board=${board}`); }
+            try {
+                [D, QL] = await Promise.all([
+                    api(`/api/analytics?action=leaderboard&grade=${grade}&branch=${branch}&board=${board}`),
+                    api(`/api/analytics?action=quicklists&grade=${grade}&branch=${branch}`)
+                ]);
+            }
             catch (err) { $('content').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
             render();
         }
@@ -113,6 +123,20 @@
                     <div class="kpi fade-up" style="--i:3"><b class="num">${s.exams}</b><span>Exams counted</span><small>${esc(BOARD_LABEL[board])}</small></div>
                 </div>
 
+                <div class="card context-card fade-up" style="--i:1">
+                    <div>
+                        <div class="ctx-title">${esc(BOARD_TITLE[board])} leaderboard — ${esc(GRADE_LONG[grade])} <span class="muted ar">${esc(GRADE_AR[grade])}</span> · ${esc(BRANCH_LONG[branch])}</div>
+                        <div class="ctx-chips">
+                            <span class="pill">${icon('clipboard', 'sm')}Based on ${s.exams} ${board === 'combined' ? 'center + online' : board} exam${s.exams === 1 ? '' : 's'}</span>
+                            <span class="pill">${icon('users', 'sm')}${s.ranked} of ${s.students} ranked</span>
+                            <span class="pill legacy" title="A student is ranked once they have taken at least 60% of the exams they were registered for. Absences and missed online exams count as 0.">${icon('info', 'sm')}Ranked = took ≥60% of exams</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" id="howBtn">${icon('help', 'sm')}How ranking works</button>
+                </div>
+
+                ${QL ? quickLists() : ''}
+
                 ${top.length ? `<div class="card fade-up" style="--i:2;margin-bottom:22px">
                     <div class="card-head"><h2 class="card-title">${icon('trophy')}Top of ${esc(A.GRADES[grade])} · ${branch === 'all' ? 'all students' : A.BRANCHES[branch]}</h2></div>
                     <div class="podium">${podOrder.map(r => {
@@ -138,7 +162,9 @@
 
                 <div class="grid-2c">
                     <div class="card fade-up" style="--i:3">
-                        <div class="card-head"><h2 class="card-title">${icon('chart')}Leaderboard</h2><span class="small muted">${D.leaderboard.length} ranked</span></div>
+                        <div class="card-head" style="align-items:flex-start"><div><h2 class="card-title">${icon('chart')}Full leaderboard</h2>
+                            <div class="small muted" style="margin-top:2px">${esc(BOARD_TITLE[board])} · ${esc(GRADE_LONG[grade])} · ${esc(BRANCH_LONG[branch])} · ${s.exams} exams</div></div>
+                            <span class="pill">${D.leaderboard.length} ranked</span></div>
                         <div class="lb">${D.leaderboard.map(r => `
                             <div class="lb-row" data-student="${esc(r.studentId)}">
                                 <div class="lb-rank">${r.rank <= 3 ? medals[r.rank] : '#' + r.rank}</div>
@@ -172,10 +198,73 @@
                 </div>`;
         }
 
+        // ---------- Quick lists: Top 10 center, Top 10 combined, Weakest 20 ----------
+        function qRow(r, i, kind) {
+            const val = kind === 'center' ? r.centerPct : r.pct;
+            return `<div class="ql-row" data-student="${esc(r.studentId)}">
+                <span class="ql-n ${kind === 'weak' ? 'weak' : ''}">${kind === 'weak' ? i + 1 : (r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank)}</span>
+                <span class="ql-name"><b dir="auto">${esc(nameOf(r))}</b>${branch === 'all' && r.branch ? ` <span class="pill ${r.branch}">${A.BRANCHES[r.branch]}</span>` : ''}
+                    ${kind === 'weak' ? `<small class="muted">${r.taken}/${r.applicable} exams taken${r.missed ? ` · ${r.missed} missed/absent` : ''}</small>` : ''}</span>
+                <span class="ql-pct lvl ${A.levelOf(val) || ''}">${fmtPct(val, 1)}</span>
+                ${kind === 'weak' ? `<button class="icon-btn ql-wa" title="Message parent" data-weak="${esc(r.studentId)}">${icon('whatsapp', 'sm')}</button>` : ''}
+            </div>`;
+        }
+        function quickLists() {
+            const empty = (t) => `<div class="empty-state" style="padding:18px"><p class="small">${t}</p></div>`;
+            return `<div class="ql-grid">
+                <div class="card fade-up" style="--i:2">
+                    <div class="card-head"><div><h2 class="card-title">${icon('trophy')}Top 10 · Center exams</h2><div class="small muted ar" dir="rtl">أشطر ١٠ طلاب (سنتر)</div></div><span class="pill">${QL.counts.centerExams} exams</span></div>
+                    <div class="ql">${QL.top10Center.map((r, i) => qRow(r, i, 'center')).join('') || empty('No one is ranked on center exams yet.')}</div></div>
+                <div class="card fade-up" style="--i:3">
+                    <div class="card-head"><div><h2 class="card-title">${icon('star')}Top 10 · Center + online</h2><div class="small muted ar" dir="rtl">أشطر ١٠ طلاب (سنتر + أونلاين)</div></div><span class="pill">${QL.counts.centerExams + QL.counts.onlineExams} exams</span></div>
+                    <div class="ql">${QL.top10Combined.map((r, i) => qRow(r, i, 'combined')).join('') || empty('No one is ranked yet.')}</div></div>
+                <div class="card fade-up ql-weak" style="--i:4">
+                    <div class="card-head"><div><h2 class="card-title">${icon('alert')}Weakest 20 · lowest averages</h2><div class="small muted ar" dir="rtl">أضعف ٢٠ طالب — من الأقل للأعلى للمتابعة</div></div><span class="pill danger">center + online</span></div>
+                    <div class="ql">${QL.weakest20.map((r, i) => qRow(r, i, 'weak')).join('') || empty('No marks yet.')}</div></div>
+            </div>`;
+        }
+        function weakMsg(studentId) {
+            const r = byId()[studentId]; if (!r) return;
+            Site.sheet({
+                iconName: 'whatsapp', title: `Follow up with ${nameOf(r)}'s parent`,
+                subtitle: `Center ${fmtPct(r.centerPct, 1)} · Online ${fmtPct(r.onlinePct, 1)}${r.missed ? ` · ${r.missed} missed/absent` : ''}`,
+                html: '<p class="muted" style="margin:0">Choose which report to send. You\'ll see the message before WhatsApp opens.</p>',
+                actions: [
+                    { label: 'Center report', icon: 'whatsapp', cls: 'btn-soft', onClick: async (close) => {
+                        close();
+                        try { const d = await api(`/api/analytics?action=student&studentId=${encodeURIComponent(studentId)}`); setTimeout(() => preview(d.student, ParentMessages.fullCenter({ student: d.student, rows: d.center.history }), 'Center report'), 240); }
+                        catch (err) { Site.toast(err.message, 'error'); }
+                    } },
+                    { label: 'Online report', icon: 'whatsapp', cls: 'btn-soft', onClick: async (close) => {
+                        close();
+                        try { const rep = await api(`/api/exams?action=student-report&studentId=${encodeURIComponent(studentId)}`); setTimeout(() => preview(r, ParentMessages.onlineReport(rep), 'Online report'), 240); }
+                        catch (err) { Site.toast(err.message, 'error'); }
+                    } },
+                    { label: 'Cancel', cls: 'btn-ghost' }
+                ]
+            });
+        }
+        function howSheet() {
+            Site.sheet({
+                iconName: 'help', title: 'How ranking works',
+                html: `<ul style="margin:0;padding-left:18px;line-height:1.8">
+                    <li><b>Percentage</b> = marks earned ÷ marks possible across the exams shown.</li>
+                    <li><b>Absent</b> (center) and <b>missed</b> (online, after it closed) count as 0. Exams still open don't count yet.</li>
+                    <li><b>Ranked</b> students took at least 60% of the exams they were registered for. Others appear under "Not ranked yet".</li>
+                    <li><b>Combined</b> = the average of the center % and the online %, so a long paper exam doesn't outweigh a short online quiz.</li>
+                    <li><b>Arrows</b> compare with the ranking before the latest exam.</li>
+                    <li><b>Weakest 20</b> includes everyone with at least one exam counted — low attendance is a reason to follow up.</li></ul>`,
+                actions: [{ label: 'Got it', cls: 'btn-ghost' }]
+            });
+        }
+
         // ---------- Clicks ----------
         $('content').addEventListener('click', (e) => {
             const c = e.target.closest('[data-congrats]');
             if (c) { e.stopPropagation(); congrats(c.dataset.congrats, Number(c.dataset.rank), c.dataset.from ? Number(c.dataset.from) : null); return; }
+            const w = e.target.closest('[data-weak]');
+            if (w) { e.stopPropagation(); weakMsg(w.dataset.weak); return; }
+            if (e.target.closest('#howBtn')) { howSheet(); return; }
             const g = e.target.closest('[data-gap]');
             if (g) { e.stopPropagation(); gapMsg(g.dataset.gap); return; }
             const s = e.target.closest('[data-student]');

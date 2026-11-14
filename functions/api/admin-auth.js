@@ -145,6 +145,7 @@ export async function ensureAppSchema(db) {
     if (og && og.length && !og.includes('absent')) steps.push('ALTER TABLE offline_grades ADD COLUMN absent INTEGER NOT NULL DEFAULT 0');
     const st = await cols('students');
     if (st && st.length && !st.includes('group_id')) steps.push('ALTER TABLE students ADD COLUMN group_id TEXT');
+    if (st && st.length && !st.includes('session_version')) steps.push('ALTER TABLE students ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1');
     const ex = await cols('exams');
     if (ex && ex.length && !ex.includes('shuffle')) steps.push('ALTER TABLE exams ADD COLUMN shuffle INTEGER NOT NULL DEFAULT 1');
     const es = await cols('exam_submissions');
@@ -258,6 +259,56 @@ function clientIp(request) {
 }
 const publicStaff = (s) => ({ id: s.id, username: s.username, name: s.display_name, role: s.role });
 
+// ---------- Student sessions (server-verified) ----------
+// Sign-in / sign-up set an HttpOnly cookie signed on the server. Student APIs read WHO is asking
+// from that cookie — never from a student code sent by the browser — so nobody can open, submit
+// or read another student's exams by typing their code.
+// Resetting a student's password (or deleting the account) signs them out everywhere.
+// STUDENT_LEGACY_SESSIONS=allow (Cloudflare setting) temporarily accepts old sign-ins without the cookie.
+const STUDENT_COOKIE = 'student_session';
+const STUDENT_DAYS = 60;
+function studentSecret(env) {
+    const s = getTokenSecret(env);
+    return s ? s + '|student-session' : null;
+}
+export async function studentCookieFor(env, studentId, version) {
+    const secret = studentSecret(env);
+    if (!secret) return null;
+    const token = await createToken({ sid: studentId, v: version || 1, iat: Date.now(), exp: Date.now() + STUDENT_DAYS * 864e5 }, secret);
+    return `${STUDENT_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${STUDENT_DAYS * 86400}`;
+}
+export const CLEAR_STUDENT_COOKIE = `${STUDENT_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
+export function studentSessionsEnabled(env) { return !!studentSecret(env); }
+export function legacyStudentsAllowed(env) {
+    return !studentSecret(env) || String(env.STUDENT_LEGACY_SESSIONS || '').toLowerCase() === 'allow';
+}
+// → { id, grade, firstName, lastName, gender, branch } or null
+export async function verifyStudentRequest(request, env, db) {
+    const secret = studentSecret(env);
+    if (!secret) return null;
+    const token = parseCookies(request.headers.get('Cookie'))[STUDENT_COOKIE];
+    const payload = await readToken(token, secret);
+    if (!payload || !payload.sid) return null;
+    await ensureAppSchema(db);
+    const row = await db.prepare(
+        'SELECT student_id, grade, first_name, last_name, gender, branch, session_version FROM students WHERE student_id = ?'
+    ).bind(payload.sid).first();
+    if (!row || (row.session_version || 1) !== payload.v) return null;
+    return { id: row.student_id, grade: String(row.grade || '').toLowerCase(), firstName: row.first_name, lastName: row.last_name, gender: row.gender, branch: row.branch };
+}
+// Use in student APIs:
+//   const who = await requireStudent(request, env, db, claimedId);
+//   if (who.error) return who.error;     who.id is the verified student code
+export async function requireStudent(request, env, db, claimedId) {
+    const st = await verifyStudentRequest(request, env, db);
+    if (st) return st;
+    if (legacyStudentsAllowed(env) && claimedId) {
+        const row = await db.prepare('SELECT student_id, grade, first_name, last_name, gender, branch FROM students WHERE student_id = ?').bind(String(claimedId).trim()).first();
+        if (row) return { id: row.student_id, grade: String(row.grade || '').toLowerCase(), firstName: row.first_name, lastName: row.last_name, gender: row.gender, branch: row.branch, legacy: true };
+    }
+    return { error: Response.json({ error: 'Please sign in again.', code: 'STUDENT_SESSION_REQUIRED' }, { status: 401 }) };
+}
+
 // ---------- Exported: who is calling? ----------
 // Returns the staff member (truthy) or null. The role is read fresh from the database,
 // so disabling an account or changing its password signs it out everywhere immediately.
@@ -308,11 +359,11 @@ export async function audit(db, request, staff, action, target, details) {
 }
 
 // ---------- Brute-force protection ----------
-async function throttleState(db, key) {
+export async function throttleState(db, key) {
     const row = await db.prepare('SELECT fails, first_fail_at, locked_until FROM auth_throttle WHERE key = ?').bind(key).first();
     return row || { fails: 0, first_fail_at: 0, locked_until: 0 };
 }
-async function recordFail(db, key, rule) {
+export async function recordFail(db, key, rule) {
     const now = Date.now();
     const st = await throttleState(db, key);
     const inWindow = now - st.first_fail_at < rule.windowMs;

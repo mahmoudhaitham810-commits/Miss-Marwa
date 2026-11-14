@@ -92,8 +92,10 @@ export async function onRequestPost(context) {
             }
             const exists = await db.prepare('SELECT student_id FROM students WHERE student_id = ?').bind(studentId).first();
             if (!exists) return Response.json({ error: 'الطالب غير موجود' }, { status: 404 });
+            await ensureAppSchema(db);
             await db.batch([
-                db.prepare('UPDATE students SET password = ? WHERE student_id = ?').bind(password.trim(), studentId),
+                // session_version + 1 signs the student out on every device that used the old password
+                db.prepare('UPDATE students SET password = ?, session_version = COALESCE(session_version, 1) + 1 WHERE student_id = ?').bind(password.trim(), studentId),
                 auditStmt(db, request, auth.staff, 'students.reset-password', studentId, null)
             ]);
             return Response.json({ success: true });

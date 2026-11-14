@@ -1,4 +1,9 @@
-import { ensureAppSchema, normalizeEgyptPhone } from './admin-auth.js';
+import { ensureAppSchema, ensureStaffSchema, normalizeEgyptPhone, studentCookieFor, CLEAR_STUDENT_COOKIE, verifyStudentRequest, requireStudent, legacyStudentsAllowed, throttleState, recordFail } from './admin-auth.js';
+
+// Student sign-in: 10 wrong passwords for one code (or 30 from one network) → 15 minutes pause
+const STUDENT_CODE_LOCK = { fails: 10, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 };
+const STUDENT_IP_LOCK = { fails: 30, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 };
+const clientIp = (request) => request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || '';
 
 // بتحسب تحديث المتابعة اليومية (Streak) للطالب.
 // اتعملها اختبارات كاملة قبل ما تتحط هنا (8 حالات مختلفة اتأكدنا منها).
@@ -90,11 +95,23 @@ export async function onRequestPost(context) {
             }
 
             // البحث عن الطالب في الداتا بيز
+            await ensureStaffSchema(db);
+            await ensureAppSchema(db);
+            const codeKey = 'student:' + studentId, ipKey = 'student-ip:' + clientIp(request);
+            const [cSt, iSt] = await Promise.all([throttleState(db, codeKey), throttleState(db, ipKey)]);
+            const lockedUntil = Math.max(cSt.locked_until, iSt.locked_until);
+            if (lockedUntil > Date.now()) {
+                const mins = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 60000));
+                return Response.json({ error: `محاولات غلط كتير — جرّب تاني بعد ${mins} دقيقة`, code: 'LOCKED' }, { status: 429 });
+            }
+
             const stmt = db.prepare("SELECT * FROM students WHERE student_id = ? AND password = ?").bind(studentId, password);
             const user = await stmt.first();
 
             if (user) {
                 const streakInfo = await updateStreakAndGetBadges(db, user);
+                await db.prepare('DELETE FROM auth_throttle WHERE key = ?').bind(codeKey).run();
+                const cookie = await studentCookieFor(env, user.student_id, user.session_version || 1);
                 return Response.json({
                     success: true,
                     student: {
@@ -107,8 +124,10 @@ export async function onRequestPost(context) {
                         longestStreak: streakInfo.longestStreak,
                         badges: streakInfo.badges
                     }
-                });
+                }, cookie ? { headers: { 'Set-Cookie': cookie } } : undefined);
             } else {
+                await recordFail(db, codeKey, STUDENT_CODE_LOCK);
+                await recordFail(db, ipKey, STUDENT_IP_LOCK);
                 return Response.json({ error: 'كود الطالب أو كلمة المرور غير صحيحة' }, { status: 401 });
             }
         }
@@ -193,6 +212,7 @@ export async function onRequestPost(context) {
                 return Response.json({ error: 'حصلت مشكلة أثناء إنشاء الكود، جرّب تاني' }, { status: 500 });
             }
 
+            const cookie = await studentCookieFor(env, studentId, 1);
             return Response.json({
                 success: true,
                 studentId: studentId,
@@ -205,48 +225,42 @@ export async function onRequestPost(context) {
                     gender: data.gender,
                     branch: data.branch
                 }
-            });
+            }, cookie ? { headers: { 'Set-Cookie': cookie } } : undefined);
         }
 
-        // 3. حالة التحقق من وجود الحساب (Session Validation)
+        // 3. Is this browser still signed in? (the server-verified cookie decides — not the code in the request)
         if (action === 'validate') {
-            const { studentId } = await request.json();
-
-            // جلسة الأدمن القديمة (MM-ADMIN) مبقتش صالحة — بتتقفل وترجع لصفحة الدخول
-            if (!studentId || String(studentId).trim().toUpperCase() === 'MM-ADMIN') {
-                return Response.json({ valid: false });
+            const body = await request.json().catch(() => ({}));
+            if (body.studentId && String(body.studentId).trim().toUpperCase() === 'MM-ADMIN') return Response.json({ valid: false });
+            const st = await verifyStudentRequest(request, env, db);
+            if (st) return Response.json({ valid: true, student: { id: st.id, grade: st.grade, firstName: st.firstName, lastName: st.lastName } });
+            // Old sign-in (before sessions): only accepted while STUDENT_LEGACY_SESSIONS=allow
+            if (legacyStudentsAllowed(env) && body.studentId) {
+                const user = await db.prepare("SELECT student_id FROM students WHERE student_id = ?").bind(String(body.studentId).trim()).first();
+                return Response.json({ valid: !!user, legacy: true });
             }
-
-            // نسأل الداتا بيز: هل الطالب ده لسه موجود؟
-            const user = await db.prepare("SELECT student_id FROM students WHERE student_id = ?").bind(studentId).first();
-
-            if (user) {
-                return Response.json({ valid: true }); // الحساب موجود
-            } else {
-                return Response.json({ valid: false }); // الحساب اتحذف
-            }
+            return Response.json({ valid: false, code: 'STUDENT_SESSION_REQUIRED' });
         }
 
-        // 4. حالة "تسجيل حضور" خفيفة بتتنادى من أي صفحة الطالب بيفتحها
-        // (مش بس صفحة تسجيل الدخول) عشان الـ streak يبقى معبّر عن نشاطه الحقيقي كل يوم
+        // 4. Daily check-in for the streak — for the signed-in student only
         if (action === 'checkin') {
-            const { studentId } = await request.json();
-
-            if (!studentId || studentId.trim().toUpperCase() === 'MM-ADMIN') {
-                return Response.json({ success: true, skipped: true });
-            }
-
-            const user = await db.prepare("SELECT * FROM students WHERE student_id = ?").bind(studentId.trim()).first();
-            if (!user) {
-                return Response.json({ error: 'الحساب غير موجود' }, { status: 404 });
-            }
-
+            const body = await request.json().catch(() => ({}));
+            if (body.studentId && String(body.studentId).trim().toUpperCase() === 'MM-ADMIN') return Response.json({ success: true, skipped: true });
+            const who = await requireStudent(request, env, db, body.studentId);
+            if (who.error) return who.error;
+            const user = await db.prepare("SELECT * FROM students WHERE student_id = ?").bind(who.id).first();
+            if (!user) return Response.json({ error: 'الحساب غير موجود' }, { status: 404 });
             const streakInfo = await updateStreakAndGetBadges(db, user);
             return Response.json({ success: true, ...streakInfo });
         }
 
+        // 5. Sign out (clears the session cookie)
+        if (action === 'logout') {
+            return Response.json({ success: true }, { headers: { 'Set-Cookie': CLEAR_STUDENT_COOKIE } });
+        }
+
         return Response.json({ error: 'Action not found' }, { status: 404 });
     } catch (err) {
-        return Response.json({ error: err.message }, { status: 500 });
+        return Response.json({ error: 'حصل خطأ في السيرفر' }, { status: 500 });
     }
 }

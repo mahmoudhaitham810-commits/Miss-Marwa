@@ -121,6 +121,7 @@
             throw err;
         }
         const data = await res.json().catch(() => ({}));
+        if (res.status === 401 && data.code === 'STUDENT_SESSION_REQUIRED' && !isAdmin) { sessionEnded(); }
         if (!res.ok) {
             const err = new Error(data.error || `Request failed (${res.status})`);
             err.status = res.status;
@@ -324,16 +325,20 @@
     }
 
     // Ask the server in the background whether this account still exists (deleted accounts are signed out)
+    // The server decides who is signed in (HttpOnly cookie). If that session is gone — signed out,
+    // password reset, account removed, or a sign-in from before sessions existed — sign in again.
+    let ending = false;
+    function sessionEnded() {
+        if (ending) return; ending = true;
+        const code = session && session.id ? session.id : '';
+        try { localStorage.removeItem('student_session'); } catch (e) { }
+        location.replace('/login.html?reason=session' + (code ? '&code=' + encodeURIComponent(code) : ''));
+    }
     function validate() {
         if (isAdmin) return;
         api('/api/auth?action=validate', { method: 'POST', body: { studentId: session.id } })
-            .then(d => {
-                if (d && d.valid === false) {
-                    localStorage.removeItem('student_session');
-                    alert('This account is no longer active. Please contact Miss Marwa.');
-                    location.replace('/login.html');
-                }
-            }).catch(() => { });
+            .then(d => { if (d && d.valid === false) sessionEnded(); })
+            .catch(() => { });
     }
 
     // ---------- Notifications (OneSignal) ----------
@@ -449,6 +454,7 @@
                         }
                         localStorage.removeItem('student_session');
                         sessionStorage.removeItem('preview_grade');
+                        fetch('/api/auth?action=logout', { method: 'POST', keepalive: true }).catch(() => { });
                         setTimeout(() => location.replace('/index.html'), 150);
                     }
                 },
@@ -565,6 +571,6 @@
         esc, txt, hasArabic, icon, api, url, safeUrl,
         timeLeft, fmtDate, scoreTone, ring, animateRings,
         isViewed, openLesson, lastOpened,
-        toast, sheet, soon, reveal, checkin, shell, profile, logout
+        toast, sheet, soon, reveal, checkin, shell, profile, logout, sessionEnded
     };
 })();

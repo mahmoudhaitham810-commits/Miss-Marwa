@@ -270,6 +270,46 @@ export async function onRequestGet(context) {
             });
         }
 
+        // Miss Marwa's three quick lists for one grade + group:
+        //   top10Center   — best center-exam averages (ranked students only)
+        //   top10Combined — best center + online averages (ranked students only)
+        //   weakest20     — lowest combined averages, ALL students with at least one exam counted
+        //                   (low attendance is a reason to follow up, so they are not filtered out)
+        if (action === 'quicklists') {
+            const grade = (url.searchParams.get('grade') || '').toLowerCase();
+            const branch = (url.searchParams.get('branch') || 'center').toLowerCase();
+            if (!GRADES.includes(grade)) return Response.json({ error: 'المرحلة الدراسية مطلوبة' }, { status: 400 });
+            const data = await loadGrade(db, grade);
+            const group = data.students.filter(s => branch === 'all' || s.branch === branch);
+            const examCount = (kind) => data.exams.filter(e => {
+                if (kind && e.kind !== kind) return false;
+                if (e.kind === 'center' && branch !== 'all' && e.branch && e.branch !== branch) return false;
+                return group.some(s => data.marks[e.key][s.studentId]) || (e.kind === 'online' && e.closed);
+            }).length;
+            const pack = (s, v) => ({
+                studentId: s.studentId, firstName: s.firstName, lastName: s.lastName, gender: s.gender, branch: s.branch, parentPhone: s.parentPhone,
+                pct: r1(v.pct), taken: v.taken, applicable: v.applicable, ranked: v.ranked,
+                centerPct: r1(v.center.pct), onlinePct: r1(v.online.pct),
+                missed: v.history.filter(h => h.status === 'missed' || h.status === 'absent').length
+            });
+            const top = (board) => {
+                const rows = group.map(s => ({ s, v: boardValue(s, data, board, null) }));
+                const ranks = rankMap(rows.map(r => ({ studentId: r.s.studentId, pct: r.v.pct, ranked: r.v.ranked })));
+                return rows.filter(r => r.v.ranked).sort((a, b) => b.v.pct - a.v.pct).slice(0, 10)
+                    .map(r => ({ ...pack(r.s, r.v), rank: ranks[r.s.studentId] }));
+            };
+            const weakest = group.map(s => ({ s, v: boardValue(s, data, 'combined', null) }))
+                .filter(r => r.v.pct !== null && r.v.applicable > 0)
+                .sort((a, b) => a.v.pct - b.v.pct || b.v.applicable - b.v.taken - (a.v.applicable - a.v.taken))
+                .slice(0, 20).map(r => pack(r.s, r.v));
+            return Response.json({
+                grade, branch,
+                counts: { students: group.length, centerExams: examCount('center'), onlineExams: examCount('online') },
+                top10Center: top('center'), top10Combined: top('combined'), weakest20: weakest,
+                rules: { minParticipation: MIN_PARTICIPATION }
+            });
+        }
+
         // One student's full picture (both kinds, absences and missed exams included)
         if (action === 'student') {
             const studentId = url.searchParams.get('studentId') || '';

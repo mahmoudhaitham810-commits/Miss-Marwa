@@ -1,4 +1,4 @@
-import { requireStaff, audit, auditStmt, ensureAppSchema } from './admin-auth.js';
+import { requireStaff, audit, auditStmt, ensureAppSchema, requireStudent, verifyStudentRequest, verifyAdminRequest } from './admin-auth.js';
 
 // ── Timing rules shared by submit, review and reports ──
 // Late submit grace: the timer length + 5 min, or 60 min when there is no timer.
@@ -146,8 +146,18 @@ export async function onRequestGet(context) {
         // === تستخدمها صفحة الطالب عشان تعرض الامتحانات المتاحة لمرحلته ===
         // بترجع بيانات الامتحان من غير الإجابات الصح، وبتقول حالة كل امتحان بالنسبالله
         if (action === 'list-for-student') {
-            const grade = (url.searchParams.get('grade') || '').toLowerCase();
-            const studentId = url.searchParams.get('studentId') || '';
+            // The signed-in student sees their own grade with their own statuses.
+            // Staff (Preview as student) may look at any grade, without statuses.
+            let grade = (url.searchParams.get('grade') || '').toLowerCase();
+            let studentId = '';
+            const me = await verifyStudentRequest(request, env, db);
+            if (me) { grade = me.grade; studentId = me.id; }
+            else if (await verifyAdminRequest(request, env)) { studentId = ''; }
+            else {
+                const who = await requireStudent(request, env, db, url.searchParams.get('studentId'));
+                if (who.error) return who.error;
+                grade = who.grade; studentId = who.id;
+            }
 
             if (!grade) {
                 return Response.json({ error: 'المرحلة الدراسية مطلوبة' }, { status: 400 });
@@ -262,8 +272,10 @@ export async function onRequestGet(context) {
         // While the exam can still be submitted by anyone, only the score goes out — no questions,
         // no chosen answers, no correct answers. Nothing to screenshot and pass around.
         if (action === 'my-results') {
-            const studentId = url.searchParams.get('studentId');
-            if (!studentId) return Response.json({ error: 'كود الطالب مطلوب' }, { status: 400 });
+            // Only the signed-in student's own results (the code in the URL is ignored)
+            const who = await requireStudent(request, env, db, url.searchParams.get('studentId'));
+            if (who.error) return who.error;
+            const studentId = who.id;
 
             const { results } = await db.prepare(
                 `SELECT sub.exam_id as examId, sub.score, sub.answers, sub.submitted_at as submittedAt,
@@ -511,8 +523,11 @@ export async function onRequestPost(context) {
 
         // === الطالب بيفتح الامتحان لأول مرة (وده اللي بيقفل الدخول تاني) ===
         if (action === 'start') {
-            const { examId, studentId } = data;
-            if (!examId || !studentId) {
+            const who = await requireStudent(request, env, db, data.studentId);
+            if (who.error) return who.error;
+            const studentId = who.id;
+            const { examId } = data;
+            if (!examId) {
                 return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
             }
 
@@ -612,8 +627,11 @@ export async function onRequestPost(context) {
 
         // === الطالب بيسلم إجاباته، والسيرفر هو اللي بيحسب الدرجة ===
         if (action === 'submit') {
-            const { examId, studentId, answers } = data;
-            if (!examId || !studentId || !Array.isArray(answers)) {
+            const who = await requireStudent(request, env, db, data.studentId);
+            if (who.error) return who.error;
+            const studentId = who.id;
+            const { examId, answers } = data;
+            if (!examId || !Array.isArray(answers)) {
                 return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
             }
 

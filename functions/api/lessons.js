@@ -1,4 +1,4 @@
-import { requireStaff, audit, auditStmt } from './admin-auth.js';
+import { requireStaff, audit, auditStmt, requireStudent } from './admin-auth.js';
 
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
 // الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
@@ -97,8 +97,12 @@ export async function onRequestPost(context) {
         // === تسجيل مشاهدة محتوى (فيديو/ملخص/امتحان قديم) من طالب ===
         // بتُستخدم من صفحة materials.html كل ما طالب يفتح حاجة
         if (action === 'view') {
-            const { studentId, contentId, contentType } = await request.json();
-            if (!studentId || !contentId) {
+            const body = await request.json();
+            const { contentId, contentType } = body;
+            const who = await requireStudent(request, env, db, body.studentId);
+            if (who.error) return who.error;
+            const studentId = who.id;
+            if (!contentId) {
                 return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
             }
             await db.prepare(

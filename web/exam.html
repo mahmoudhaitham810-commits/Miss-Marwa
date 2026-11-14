@@ -363,6 +363,12 @@
                         body: JSON.stringify({ examId, studentId: session.id, answers })
                     });
                     const data = await res.json().catch(() => ({}));
+                    if (res.status === 401 && data.code === 'STUDENT_SESSION_REQUIRED') {
+                        // Signed out mid-exam: keep the answers on screen and ask to sign in in a new tab
+                        lastError = new Error('You were signed out. Open Science Academy in a new tab, sign in, then come back here and tap "Submit again".');
+                        lastError.final = false;
+                        break;
+                    }
                     if (!res.ok) {
                         lastError = new Error(data.error || 'The exam could not be submitted.');
                         lastError.final = true;   // a real refusal from the server — retrying won't help
@@ -454,6 +460,7 @@
                     body: JSON.stringify({ examId, studentId: session.id })
                 });
                 data = await res.json().catch(() => ({}));
+                if (res.status === 401 && data.code === 'STUDENT_SESSION_REQUIRED') { App.sessionEnded(); return; }
             } catch (e) {
                 renderStatus('wifiOff', 'No connection', "We couldn't reach the server. Check your internet and open the exam again.", 'danger');
                 return;

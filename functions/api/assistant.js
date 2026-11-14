@@ -1,3 +1,4 @@
+import { requireStudent } from './admin-auth.js';
 let tablesCreated = false;
 
 async function ensureTables(db) {
@@ -769,11 +770,11 @@ export async function onRequestPost({ request, env }) {
     const url = new URL(request.url);
     const action = url.searchParams.get("action");
     const body = await request.json();
-    const { studentId, message } = body;
-
-    if (!studentId) {
-      return Response.json({ error: "studentId is required" }, { status: 400 });
-    }
+    const { message } = body;
+    // The signed-in student (server-verified cookie) — never a code typed into the request
+    const who = await requireStudent(request, env, db, body.studentId);
+    if (who.error) return who.error;
+    const studentId = who.id;
 
     // Validate student — column is "student_id", NOT "id"
     let studentCheck = null;

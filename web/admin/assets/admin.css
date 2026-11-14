@@ -192,3 +192,27 @@ table.book td.avg { font-weight: 750; }
 body.staff .page-title-desktop { visibility: hidden; }
 .mover { flex-wrap: wrap; }
 .mover .tx { min-width: 150px; }
+
+/* Analytics: sticky filters, context, quick lists */
+.sticky-bar { position: sticky; top: var(--topbar-h); z-index: 25; background: var(--canvas); padding: 10px 0; margin-top: -10px; box-shadow: 0 8px 12px -12px rgba(15, 23, 42, .25); }
+.context-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.ctx-title { font-size: 18px; font-weight: 750; letter-spacing: -.01em; }
+.ctx-title .ar { font-weight: 500; font-size: 15px; }
+.ctx-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.ctx-chips .pill { padding: 4px 10px; font-size: 12.5px; }
+.ctx-chips .pill .icon { width: 14px; height: 14px; }
+.ql-grid { display: grid; gap: 18px; grid-template-columns: 1fr; margin-bottom: 22px; }
+@media (min-width: 900px) { .ql-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ql-grid .ql-weak { grid-column: 1 / -1; } }
+@media (min-width: 1400px) { .ql-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ql-grid .ql-weak { grid-column: auto; } }
+.ql { display: flex; flex-direction: column; }
+.ql-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 6px; border-top: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.ql-row:first-child { border-top: 0; }
+.ql-row:hover { background: var(--surface-2); }
+.ql-n { font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.ql-n.weak { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--danger-soft); color: var(--danger); font-size: 12.5px; }
+.ql-name { min-width: 0; }
+.ql-name b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ql-name small { display: block; font-size: 12px; }
+.ql-pct { font-weight: 800; font-variant-numeric: tabular-nums; }
+.ql-wa { width: 34px; height: 34px; color: #16a34a; }
+.ar { font-family: var(--font-ar); }
