@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Center grades · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <!-- ===== List of exams / gradebook ===== -->
+            <section id="listView">
+                <div class="page-head">
+                    <div><h1>Center grades</h1><p>Paper exams for center and private students — one exam at a time.</p></div>
+                    <button class="btn btn-primary" id="newExamBtn"><span data-icon="plus" style="display:contents"></span>New exam</button>
+                </div>
+                <div class="toolbar">
+                    <select class="pick" id="gradePick" aria-label="Grade" data-ui="pills"></select>
+                    <div class="segmented" id="branchSeg" role="tablist" aria-label="Group">
+                        <button data-value="center">Center</button><button data-value="private">Private</button><button data-value="all">All students</button>
+                    </div>
+                    <div class="segmented" id="viewSeg" aria-label="View">
+                        <button data-value="exams">Exams</button><button data-value="book">Gradebook</button>
+                    </div>
+                </div>
+                <div id="unassignedBanner"></div>
+                <div id="examsPane"></div>
+                <div id="bookPane" hidden></div>
+            </section>
+
+            <!-- ===== Entry mode ===== -->
+            <section id="entryView" hidden>
+                <div class="entry-head">
+                    <div class="row1">
+                        <button class="icon-btn" id="backBtn" aria-label="Back to exams" data-icon="arrowLeft"></button>
+                        <div style="flex:1;min-width:0">
+                            <h2 id="entryTitle" dir="auto"></h2>
+                            <div class="muted small" id="entryMeta"></div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" id="editExamBtn"><span data-icon="edit" style="display:contents"></span>Edit</button>
+                        <button class="btn btn-soft btn-sm" id="voiceBtn" title="Say a name and a mark"></button>
+                    </div>
+                    <div class="progress-line">
+                        <div class="bar" id="entryBar"><i></i></div>
+                        <span class="small num" id="entryCount" style="white-space:nowrap"></span>
+                    </div>
+                    <div class="row" style="gap:10px;margin-top:10px;flex-wrap:wrap">
+                        <div class="input" style="flex:1;min-width:200px">
+                            <input class="plain" id="searchBox" placeholder="Search a student…" style="height:44px" autocomplete="off">
+                        </div>
+                        <span class="hint-keys"><kbd>Enter</kbd> next · tap <kbd>A</kbd> for absent · empty = not entered</span>
+                    </div>
+                </div>
+                <div class="entry-list" id="entryList"></div>
+                <div class="card summary-card" id="summaryCard"></div>
+            </section>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/admin/assets/messages.js"></script>
+    <script src="/admin/assets/voice.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api, fmtPct } = A;
+        await A.boot({ active: 'grades', title: 'Center grades' });
+
+        let grade = A.store.get('staff_grade', 'prep1');
+        let branch = A.store.get('staff_branch', 'center');
+        if (!A.GRADES[grade]) grade = 'prep1';
+        if (!A.BRANCHES[branch] && branch !== 'all') branch = 'center';
+        let view = 'exams';
+        let data = { students: [], exams: [], grades: [], unassignedCount: 0 };
+        let marks = {};     // examId → studentId → { score, absent }
+        let current = null; // exam in entry mode
+
+        $('gradePick').innerHTML = Object.entries(A.GRADES).map(([k, v]) => `<option value="${k}" ${k === grade ? 'selected' : ''}>${v}</option>`).join('');
+        $('gradePick').addEventListener('change', (e) => { grade = e.target.value; A.store.set('staff_grade', grade); load(); });
+        A.segmented($('branchSeg'), branch, (v) => { branch = v; A.store.set('staff_branch', v); load(); });
+        A.segmented($('viewSeg'), view, (v) => { view = v; render(); });
+        if (!A.can('offline.create-exam')) $('newExamBtn').hidden = true;
+        $('voiceBtn').innerHTML = `${icon('mic', 'sm')}Voice`;
+        if (!window.VoiceGrading.supported) $('voiceBtn').hidden = true;
+        Site.hydrateIcons();
+
+        // ---------- Data ----------
+        async function load() {
+            $('examsPane').innerHTML = `<div class="exam-cards">${'<div class="skel" style="height:150px;border-radius:18px"></div>'.repeat(3)}</div>`;
+            try {
+                data = await api(`/api/offline-exams?action=grade-data&grade=${grade}&branch=${branch}`);
+            } catch (err) {
+                $('examsPane').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`;
+                return;
+            }
+            marks = {};
+            data.exams.forEach(e => { marks[e.id] = {}; });
+            data.grades.forEach(g => { if (marks[g.examId]) marks[g.examId][g.studentId] = { score: g.score, absent: g.absent }; });
+            render();
+            const want = Number((location.hash.match(/exam=(\d+)/) || [])[1]);
+            if (want && data.exams.some(e => e.id === want)) openEntry(want);
+        }
+        const has = (m) => m && (m.absent || (m.score !== null && m.score !== undefined));
+        // A Center column is for center students, a Private column for private ones; a "Before split" column for everyone shown
+        const studentsFor = (e) => e && e.branch ? data.students.filter(s => s.branch === e.branch) : data.students;
+        function examStats(e) {
+            const ms = studentsFor(e).map(s => marks[e.id][s.studentId]).filter(has);
+            const present = ms.filter(m => !m.absent);
+            const scores = present.map(m => m.score);
+            const sum = scores.reduce((a, b) => a + b, 0);
+            return {
+                entered: ms.length, total: studentsFor(e).length, absent: ms.length - present.length,
+                avg: present.length ? (sum / (present.length * e.totalMarks)) * 100 : null,
+                high: scores.length ? Math.max(...scores) : null, low: scores.length ? Math.min(...scores) : null, present: present.length
+            };
+        }
+        const fmtDate = (d) => {
+            if (!d) return '';
+            const x = new Date(/^\d{4}-\d{2}-\d{2}$/.test(d) ? d + 'T12:00:00Z' : String(d).replace(' ', 'T') + 'Z');
+            return isNaN(x) ? d : x.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        };
+
+        // ---------- Render list ----------
+        function render() {
+            $('unassignedBanner').innerHTML = data.unassignedCount
+                ? `<div class="banner fade-up">${icon('alert')}<div class="grow"><b>${data.unassignedCount} student${data.unassignedCount === 1 ? '' : 's'} in ${A.GRADES[grade]} ${data.unassignedCount === 1 ? 'has' : 'have'} no group yet.</b><br><span class="small">They don't appear in Center or Private until you assign them.</span></div><button class="btn btn-primary btn-sm" id="assignBtn">Assign group</button></div>`
+                : '';
+            $('assignBtn')?.addEventListener('click', assignSheet);
+            $('examsPane').hidden = view !== 'exams';
+            $('bookPane').hidden = view !== 'book';
+            if (view === 'exams') renderExams(); else renderBook();
+        }
+        function renderExams() {
+            if (!data.exams.length) {
+                $('examsPane').innerHTML = `<div class="card empty-state fade-up"><div class="bubble">${icon('clipboard', 'lg')}</div><h3>No ${branch === 'all' ? '' : A.BRANCHES[branch].toLowerCase() + ' '}exams for ${A.GRADES[grade]} yet</h3><p>Create the first one to start entering marks.</p></div>`;
+                return;
+            }
+            const list = [...data.exams].reverse();
+            $('examsPane').innerHTML = `<div class="exam-cards">${list.map((e, i) => {
+                const st = examStats(e);
+                const done = st.total && st.entered >= st.total;
+                return `<button class="exam-card fade-up" style="--i:${i}" data-exam="${e.id}">
+                    <div class="top"><div style="min-width:0"><h3 dir="auto">${esc(e.examName)}</h3><div class="meta">${esc(fmtDate(e.examDate || e.createdAt))} · out of ${esc(e.totalMarks)}</div></div>
+                        ${e.legacy ? '<span class="pill legacy">Before split</span>' : `<span class="pill ${e.branch}">${A.BRANCHES[e.branch]}</span>`}</div>
+                    <div class="bar ${done ? 'ok' : ''}"><i style="width:${st.total ? Math.round(st.entered / st.total * 100) : 0}%"></i></div>
+                    <div class="foot"><span>${st.entered} / ${st.total} entered${st.absent ? ` · ${st.absent} absent` : ''}</span><span>${st.avg === null ? '' : 'Avg ' + fmtPct(st.avg)}</span></div>
+                </button>`;
+            }).join('')}</div>`;
+        }
+        $('examsPane').addEventListener('click', (e) => { const c = e.target.closest('[data-exam]'); if (c) openEntry(Number(c.dataset.exam)); });
+
+        function renderBook() {
+            if (!data.exams.length || !data.students.length) { $('bookPane').innerHTML = `<div class="card empty-state"><p>Nothing to show yet.</p></div>`; return; }
+            const ex = data.exams;
+            const rows = data.students.map(s => {
+                let earned = 0, possible = 0;
+                const cells = ex.map(e => {
+                    const m = marks[e.id][s.studentId];
+                    if (e.branch && s.branch !== e.branch && !has(m)) return `<td class="none" title="${A.BRANCHES[e.branch]} exam">·</td>`;
+                    if (m && m.absent) { possible += e.totalMarks; return '<td class="abs">A</td>'; }
+                    if (has(m)) { earned += m.score; possible += e.totalMarks; return `<td class="num">${esc(m.score)}</td>`; }
+                    return '<td class="none">—</td>';
+                }).join('');
+                const p = possible ? (earned / possible) * 100 : null;
+                return `<tr><td><b dir="auto">${esc(s.firstName)} ${esc(s.lastName)}</b><br><span class="small muted num">${esc(s.studentId)}</span></td>${cells}
+                    <td class="avg"><span class="lvl ${A.levelOf(p) || ''}">${fmtPct(p)}</span></td>
+                    <td><button class="icon-btn" style="width:34px;height:34px" title="Send full report to parent" data-report="${esc(s.studentId)}">${icon('whatsapp', 'sm')}</button></td></tr>`;
+            }).join('');
+            $('bookPane').innerHTML = `<div class="table-wrap fade-up"><table class="book"><thead><tr><th>Student</th>${ex.map(e => `<th title="${esc(e.examName)}"><span dir="auto">${esc(e.examName.length > 16 ? e.examName.slice(0, 15) + '…' : e.examName)}</span><br><span class="muted">/${esc(e.totalMarks)}</span></th>`).join('')}<th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+                <p class="small muted" style="margin-top:10px">Total = marks earned ÷ marks possible. <b>A</b> (absent) counts as 0; "—" (not entered) is left out.</p>`;
+        }
+        $('bookPane').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-report]'); if (!b) return;
+            const s = data.students.find(x => x.studentId === b.dataset.report);
+            const rows = data.exams.filter(ex => !ex.branch || ex.branch === s.branch || has(marks[ex.id][s.studentId])).map(ex => {
+                const m = marks[ex.id][s.studentId];
+                return { name: ex.examName, total: ex.totalMarks, status: m && m.absent ? 'absent' : has(m) ? 'taken' : 'not-entered', score: m ? m.score : null };
+            });
+            sendOne(s, ParentMessages.fullCenter({ student: { ...s, grade }, rows }), 'Full report');
+        });
+
+        // ---------- WhatsApp: one message preview ----------
+        const sendOne = (student, text, title) => A.preview(student, text, `${title} — ${student.firstName} ${student.lastName}`, title === 'Full report' ? 'center-report' : 'center-exam');
+
+        // ---------- New / edit / delete exam ----------
+        function examForm(e) {
+            const today = new Date().toISOString().slice(0, 10);
+            return `<div class="field"><label for="fName">Exam name</label><div class="input"><input class="plain" id="fName" maxlength="80" dir="auto" value="${esc(e ? e.examName : '')}" placeholder="e.g. Week 5 quiz"></div></div>
+                <div class="row" style="gap:12px">
+                    <div class="field" style="flex:1"><label for="fTotal">Out of</label><div class="input"><input class="plain" id="fTotal" inputmode="decimal" value="${esc(e ? e.totalMarks : 20)}"></div></div>
+                    <div class="field" style="flex:1.4"><label for="fDate">Date</label><div class="input"><input class="plain" id="fDate" type="date" value="${esc(e ? (e.examDate || String(e.createdAt || '').slice(0, 10)) : today)}"></div></div>
+                </div>
+                <div class="field" style="margin:0"><label>Group</label><div class="segmented" id="fBranch"><button data-value="center" type="button">Center</button><button data-value="private" type="button">Private</button>${e && e.legacy ? '<button data-value="both" type="button">Both (before split)</button>' : ''}</div>
+                ${e && e.legacy ? '<p class="small muted" style="margin:8px 0 0">Made before the Center / Private split, so it shows for both groups. Keep "Both" unless only one group took it — tagging is refused if it would hide anyone\'s marks.</p>' : ''}</div>`;
+        }
+        $('newExamBtn').addEventListener('click', () => {
+            let chosen = branch === 'all' ? 'center' : branch;
+            Site.sheet({
+                iconName: 'clipboard', title: `New exam · ${A.GRADES[grade]}`, subtitle: 'Then enter marks one student at a time.',
+                html: examForm(null),
+                actions: [{
+                    label: 'Create & start entering', onClick: async (close) => {
+                        const body = { grade, branch: chosen, examName: $('fName').value.trim(), totalMarks: A.normalizeDigits($('fTotal').value), examDate: $('fDate').value };
+                        if (!body.examName) return Site.toast('Enter the exam name', 'error');
+                        if (!(Number(body.totalMarks) > 0)) return Site.toast('Enter the total marks', 'error');
+                        try {
+                            const r = await api('/api/offline-exams?action=create-exam', { body });
+                            close();
+                            if (branch !== 'all' && chosen !== branch) { branch = chosen; A.store.set('staff_branch', branch); $('branchSeg').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.value === branch)); }
+                            location.hash = 'exam=' + r.examId;
+                            await load();
+                        } catch (err) { Site.toast(err.message, 'error'); }
+                    }
+                }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+            A.segmented($('fBranch'), chosen, (v) => { chosen = v; });
+            setTimeout(() => $('fName')?.focus(), 250);
+        });
+        $('editExamBtn').addEventListener('click', () => {
+            const e = current; if (!e) return;
+            let chosen = e.branch || 'both';
+            const actions = [];
+            if (A.can('offline.edit-exam')) actions.push({
+                label: 'Save changes', onClick: async (close) => {
+                    const body = { examId: e.id, examName: $('fName').value.trim(), totalMarks: A.normalizeDigits($('fTotal').value), examDate: $('fDate').value, branch: chosen };
+                    try { await api('/api/offline-exams?action=update-exam', { body }); close(); Site.toast('Saved', 'success'); await load(); openEntry(e.id); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                }
+            });
+            if (A.can('offline.delete-exam')) actions.push({ label: 'Delete this exam…', icon: 'trash', cls: 'btn-ghost danger-text', onClick: (close) => { close(); setTimeout(() => confirmDelete(e), 260); } });
+            actions.push({ label: 'Cancel', cls: 'btn-ghost' });
+            Site.sheet({ iconName: 'clipboard', title: 'Edit exam', html: examForm(e), actions });
+            A.segmented($('fBranch'), chosen, (v) => { chosen = v; });
+        });
+
+        // Teacher only (inside Edit): delete a center exam — all its marks are copied into the activity log first
+        function confirmDelete(e) {
+            if (!e || !A.can('offline.delete-exam')) return;
+            const st = examStats(e);
+            Site.sheet({
+                iconName: 'alert', title: `Delete "${e.examName}"?`,
+                subtitle: `Every mark saved for this exam${e.branch ? '' : ' — Center and Private'} is removed with it (${st.entered} on this screen${st.absent ? `, ${st.absent} absent` : ''}). A full copy is kept in the activity log.`,
+                html: `<div class="field" style="margin:0"><label for="delConfirm">Type <b dir="auto">${esc(e.examName)}</b> to confirm</label><input class="fin" id="delConfirm" dir="auto" autocomplete="off"></div>`,
+                actions: [{ label: 'Delete exam and its marks', cls: 'btn-danger', onClick: async (close) => {
+                    if ($('delConfirm').value.trim() !== String(e.examName).trim()) return Site.toast('The name doesn\'t match', 'error');
+                    try { await api('/api/offline-exams?action=delete-exam', { body: { examId: e.id } }); close(); Site.toast('Exam deleted', 'success'); closeEntry(); await load(); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+            setTimeout(() => $('delConfirm')?.focus(), 250);
+        }
+
+        // ---------- Assign group to students with none ----------
+        async function assignSheet() {
+            let list;
+            try { list = (await api(`/api/offline-exams?action=grade-data&grade=${grade}&branch=none`)).students; }
+            catch (err) { return Site.toast(err.message, 'error'); }
+            Site.sheet({
+                iconName: 'users', title: `Assign a group · ${A.GRADES[grade]}`, subtitle: 'Tap Center or Private for each student.',
+                html: `<div class="stack" id="asList" style="gap:8px;max-height:52vh;overflow:auto">${list.map(s => `
+                    <div class="row" style="gap:10px;padding:10px;border-radius:12px;background:var(--surface-2)" data-sid="${esc(s.studentId)}">
+                        <div style="flex:1;min-width:0"><b dir="auto">${esc(s.firstName)} ${esc(s.lastName)}</b><div class="small muted num">${esc(s.studentId)}</div></div>
+                        <button class="btn btn-soft btn-sm" data-b="center">Center</button><button class="btn btn-ghost btn-sm" data-b="private">Private</button>
+                    </div>`).join('') || '<p class="muted">Everyone has a group.</p>'}</div>`,
+                actions: [{ label: 'Done', cls: 'btn-ghost', onClick: (close) => { close(); load(); } }]
+            });
+            document.getElementById('asList').addEventListener('click', async (ev) => {
+                const b = ev.target.closest('[data-b]'); if (!b) return;
+                const row = b.closest('[data-sid]');
+                try {
+                    await api('/api/students?action=set-branch', { body: { studentIds: [row.dataset.sid], branch: b.dataset.b } });
+                    row.innerHTML = `<div style="flex:1"><b dir="auto">${row.querySelector('b').innerHTML}</b></div><span class="pill ${b.dataset.b}">${A.BRANCHES[b.dataset.b]} ✓</span>`;
+                } catch (err) { Site.toast(err.message, 'error'); }
+            });
+        }
+
+        // ---------- Entry mode ----------
+        const pending = new Map(); // studentId → timer
+        const inflight = new Set();
+        function openEntry(id) {
+            current = data.exams.find(e => e.id === id);
+            if (!current) return;
+            if (location.hash !== '#exam=' + id) history.replaceState(null, '', '#exam=' + id);
+            $('listView').hidden = true; $('entryView').hidden = false;
+            $('entryTitle').textContent = current.examName;
+            $('entryMeta').innerHTML = `${esc(A.GRADES[grade])} · ${current.legacy ? '<span class="pill legacy">Before split</span>' : `<span class="pill ${current.branch}">${A.BRANCHES[current.branch]}</span>`} · ${esc(fmtDate(current.examDate || current.createdAt))} · out of <b>${esc(current.totalMarks)}</b>`;
+            $('editExamBtn').hidden = !A.can('offline.edit-exam');
+            $('searchBox').value = '';
+            renderEntry();
+            window.scrollTo({ top: 0 });
+        }
+        function closeEntry() {
+            current = null;
+            history.replaceState(null, '', location.pathname);
+            $('entryView').hidden = true; $('listView').hidden = false;
+            render();
+        }
+        $('backBtn').addEventListener('click', () => closeEntry());
+
+        function renderEntry() {
+            const q = $('searchBox').value.trim().toLowerCase();
+            const list = studentsFor(current).filter(s => !q || `${s.firstName} ${s.lastName} ${s.studentId}`.toLowerCase().includes(q));
+            $('entryList').innerHTML = list.map((s, i) => {
+                const m = marks[current.id][s.studentId];
+                const absent = m && m.absent;
+                const val = absent ? 'Absent' : (has(m) ? m.score : '');
+                return `<div class="entry fade-up" style="--i:${Math.min(i, 12)}" data-sid="${esc(s.studentId)}">
+                    <div class="avatar">${A.initials(s)}</div>
+                    <div class="who"><b dir="auto">${esc(s.firstName)} ${esc(s.lastName)}</b><small class="num">${esc(s.studentId)}</small></div>
+                    <div class="ctrl">
+                        <input class="mark ${absent ? 'is-absent' : ''}" inputmode="decimal" autocomplete="off" aria-label="Mark for ${esc(s.firstName)}" value="${esc(val)}" ${has(m) ? 'data-has="1"' : ''} ${absent ? 'readonly' : ''}>
+                        <span class="of">/${esc(current.totalMarks)}</span>
+                        <button class="abs-btn ${absent ? 'on' : ''}" title="Absent (A)" data-abs>A</button>
+                        <span class="save-state" aria-live="polite"></span>
+                    </div></div>`;
+            }).join('') || '<div class="card empty-state"><p>No students match.</p></div>';
+            updateProgress();
+        }
+        $('searchBox').addEventListener('input', renderEntry);
+
+        function updateProgress() {
+            const st = examStats(current);
+            $('entryBar').querySelector('i').style.width = (st.total ? Math.round(st.entered / st.total * 100) : 0) + '%';
+            $('entryBar').classList.toggle('ok', st.total > 0 && st.entered >= st.total);
+            $('entryCount').textContent = `${st.entered} / ${st.total} entered`;
+            renderSummary(st);
+        }
+        function renderSummary(st) {
+            $('summaryCard').innerHTML = `<div class="card-head"><h2 class="card-title">${icon('chart')}Summary</h2><span class="muted small">${st.entered === st.total && st.total ? 'All marks entered 🎉' : `${st.total - st.entered} left`}</span></div>
+                <div class="summary-grid">
+                    <div><b class="lvl ${A.levelOf(st.avg) || ''}">${fmtPct(st.avg)}</b><span>Class average (present)</span></div>
+                    <div><b>${st.high ?? '—'}</b><span>Highest</span></div>
+                    <div><b>${st.low ?? '—'}</b><span>Lowest</span></div>
+                    <div><b>${st.absent}</b><span>Absent</span></div>
+                </div>
+                <div class="row" style="gap:10px;flex-wrap:wrap">
+                    <button class="btn btn-primary" id="sendAllBtn" ${st.entered ? '' : 'disabled'}>${icon('whatsapp', 'sm')}Send marks to parents</button>
+                    <button class="btn btn-ghost" id="honorBtn" ${st.present ? '' : 'disabled'}>${icon('award', 'sm')}Honor board</button>
+                </div>`;
+            $('sendAllBtn').onclick = sendQueue;
+            $('honorBtn').onclick = honorBoard;
+        }
+
+        function setState(row, state) {
+            const el = row.querySelector('.save-state');
+            el.className = 'save-state ' + state;
+            el.innerHTML = state === 'saving' ? icon('refresh', 'sm') : state === 'saved' ? icon('checkCircle', 'sm') : state === 'error' ? icon('alert', 'sm') : '';
+        }
+        function parseMark(raw) {
+            const v = A.normalizeDigits(raw).replace(/[٫,]/g, '.').trim();
+            if (v === '') return { empty: true };
+            const n = Number(v);
+            if (!Number.isFinite(n) || n < 0 || n > current.totalMarks) return { bad: true };
+            return { score: n };
+        }
+        function queueSave(row, entry, delay = 650) {
+            const sid = row.dataset.sid;
+            clearTimeout(pending.get(sid));
+            pending.set(sid, setTimeout(() => save(row, sid, entry), delay));
+        }
+        async function save(row, sid, entry) {
+            pending.delete(sid);
+            inflight.add(sid);
+            setState(row, 'saving');
+            const examId = current.id;
+            try {
+                await api('/api/offline-exams?action=save-grades', { body: { examId, grades: [{ studentId: sid, ...entry }] } });
+                marks[examId][sid] = entry.absent ? { score: null, absent: true } : { score: entry.score === '' ? null : entry.score, absent: false };
+                if (current && current.id === examId && document.contains(row)) { setState(row, 'saved'); updateProgress(); }
+            } catch (err) {
+                if (document.contains(row)) setState(row, 'error');
+                Site.toast(err.message, 'error');
+            } finally { inflight.delete(sid); }
+        }
+        function focusNext(row, dir = 1) {
+            const rows = [...document.querySelectorAll('#entryList .entry')];
+            const i = rows.indexOf(row);
+            const next = rows[i + dir];
+            if (next) { const inp = next.querySelector('.mark'); inp.focus(); inp.select(); next.scrollIntoView({ block: 'center', behavior: Site.reduced ? 'auto' : 'smooth' }); }
+        }
+        // Absent is only ever set by tapping the A button — never by a key press — and replacing a real mark asks first
+        function toggleAbsent(row, confirmed = false) {
+            const inp = row.querySelector('.mark'), btn = row.querySelector('[data-abs]');
+            const on = !btn.classList.contains('on');
+            const prev = parseMark(inp.value);
+            if (on && !confirmed && !prev.empty && !prev.bad) {
+                const s = studentsFor(current).find(x => x.studentId === row.dataset.sid);
+                Site.sheet({ iconName: 'alert', title: `Replace ${prev.score} with Absent?`, subtitle: s ? `${s.firstName} ${s.lastName} already has a mark in this exam.` : '',
+                    actions: [{ label: 'Mark absent', cls: 'btn-danger', onClick: (c) => { c(); toggleAbsent(row, true); } }, { label: 'Keep the mark', cls: 'btn-ghost' }] });
+                return;
+            }
+            btn.classList.toggle('on', on);
+            inp.classList.toggle('is-absent', on); inp.classList.remove('bad');
+            inp.readOnly = on;
+            inp.value = on ? 'Absent' : '';
+            queueSave(row, on ? { absent: true, score: null } : { score: '' }, 0);
+            if (on) focusNext(row);
+        }
+
+        $('entryList').addEventListener('input', (e) => {
+            const inp = e.target.closest('.mark'); if (!inp || inp.readOnly) return;
+            const row = inp.closest('.entry');
+            const p = parseMark(inp.value);
+            inp.classList.toggle('bad', !!p.bad);
+            if (p.bad) { clearTimeout(pending.get(row.dataset.sid)); setState(row, 'error'); return; }
+            queueSave(row, p.empty ? { score: '' } : { score: p.score });
+        });
+        $('entryList').addEventListener('keydown', (e) => {
+            const inp = e.target.closest('.mark'); if (!inp) return;
+            const row = inp.closest('.entry');
+            if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                const sid = row.dataset.sid;
+                if (pending.has(sid)) { clearTimeout(pending.get(sid)); const p = parseMark(inp.value); if (!p.bad && !inp.readOnly) save(row, sid, p.empty ? { score: '' } : { score: p.score }); }
+                focusNext(row, 1);
+            } else if (e.key === 'ArrowUp') { e.preventDefault(); focusNext(row, -1); }
+            else if ((e.key === 'Backspace' || e.key === 'Delete') && inp.readOnly) { e.preventDefault(); toggleAbsent(row); }
+        });
+        $('entryList').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-abs]'); if (b) toggleAbsent(b.closest('.entry'));
+        });
+        $('entryList').addEventListener('focusin', (e) => { e.target.closest('.entry')?.classList.add('focus'); });
+        $('entryList').addEventListener('focusout', (e) => { e.target.closest('.entry')?.classList.remove('focus'); });
+        window.addEventListener('beforeunload', (e) => { if (pending.size || inflight.size) { e.preventDefault(); e.returnValue = ''; } });
+
+        // ---------- Voice ----------
+        $('voiceBtn').addEventListener('click', () => {
+            if (!current) return;
+            let closeFn = null;
+            Site.sheet({
+                iconName: 'mic', title: 'Listening…', subtitle: 'Say the student\'s name and the mark — e.g. "أحمد محمد خمسة عشر"',
+                html: '<p id="vText" dir="auto" style="font-size:18px;font-weight:600;margin:0;min-height:28px"></p>',
+                actions: [{ label: 'Stop', cls: 'btn-ghost', onClick: (close) => { try { rec && rec.stop(); } catch (x) { } close(); } }]
+            });
+            const rec = VoiceGrading.listen({
+                onInterim: (t) => { const el = $('vText'); if (el) el.textContent = t; },
+                onFinal: (t) => {
+                    const r = VoiceGrading.parse(t, studentsFor(current));
+                    document.querySelector('.overlay.open [data-i="0"]')?.click();
+                    if (r.error) return Site.toast(r.error === 'no-match' ? `Heard "${r.heard}" — no student matches "${r.namepart}"` : `Heard "${r.heard}" — couldn't find a mark`, 'error');
+                    if (r.score > current.totalMarks) return Site.toast(`${r.score} is more than ${current.totalMarks}`, 'error');
+                    $('searchBox').value = ''; renderEntry();
+                    const row = document.querySelector(`.entry[data-sid="${CSS.escape(r.student.studentId)}"]`);
+                    const inp = row.querySelector('.mark');
+                    if (inp.readOnly) toggleAbsent(row);
+                    inp.value = r.score; inp.classList.remove('bad');
+                    queueSave(row, { score: r.score }, 0);
+                    row.scrollIntoView({ block: 'center' }); row.classList.add('focus'); setTimeout(() => row.classList.remove('focus'), 1800);
+                    Site.toast(`${r.score} for ${r.student.firstName} ${r.student.lastName}`, 'success');
+                },
+                onError: (code) => { document.querySelector('.overlay.open [data-i="0"]')?.click(); Site.toast(code === 'not-allowed' ? 'Allow the microphone in your browser settings' : code === 'no-speech' ? 'Didn\'t hear anything — try again' : 'Voice input isn\'t available here', 'error'); }
+            });
+            void closeFn;
+        });
+
+        // ---------- Send marks to parents, one after another ----------
+        function sendQueue() {
+            const e = current, st = examStats(e);
+            const list = studentsFor(e).filter(s => has(marks[e.id][s.studentId]));
+            A.queue(list, (s) => {
+                const m = marks[e.id][s.studentId];
+                return ParentMessages.latestCenter({ student: s, examName: e.examName, date: e.examDate, score: m.score, total: e.totalMarks, absent: m.absent, groupAvg: st.avg });
+            }, { title: e.examName, kind: 'center-exam' });
+        }
+
+        // ---------- Honor board: the exact top 3 scores (ties included) ----------
+        function honorBoard() {
+            const e = current;
+            const present = studentsFor(e).map(s => ({ s, m: marks[e.id][s.studentId] })).filter(x => has(x.m) && !x.m.absent);
+            const tops = [...new Set(present.map(x => x.m.score))].sort((a, b) => b - a).slice(0, 3);
+            const students = present.filter(x => tops.includes(x.m.score)).sort((a, b) => b.m.score - a.m.score)
+                .map(x => ({ name: `${x.s.firstName} ${x.s.lastName}`, score: x.m.score, total: e.totalMarks }));
+            const GA = ParentMessages.GRADE_AR;
+            try {
+                localStorage.setItem('honorBoardData', JSON.stringify({
+                    brand: 'Science Academy', teacher: 'Miss Marwa',
+                    label: `${GA[grade] || grade} — ${e.examName}`,
+                    subtitle: 'أوائل الطلاب في امتحان الأسبوع',
+                    footer: 'مبروك لأبطالنا، وعقبال الدرجة النهائية الأسبوع الجاي',
+                    students
+                }));
+            } catch (x) { }
+            window.open('/honor-board.html', '_blank');
+        }
+
+        load();
+    })();
+    </script>
+</body>
+</html>

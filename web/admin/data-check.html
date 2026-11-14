@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Data check · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>Data check</h1><p>Counts every student and every saved mark straight from the database and flags anything that could be missing, hidden or wrong. It only reads — nothing changes unless you press a fix button.</p></div>
+                <button class="btn btn-ghost" id="againBtn"><span data-icon="refresh" style="display:contents"></span>Check again</button>
+            </div>
+            <div id="content"><div class="skel" style="height:320px;border-radius:18px"></div></div>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'datacheck', title: 'Data check' });
+        A.hydrate();
+        let D = null;
+        const G = (g) => A.GRADES[g] || g || '—';
+        const cell = (v) => v === null || v === undefined || v === '' ? '<span class="muted">empty</span>' : v === 'A' ? '<b style="color:var(--danger)">Absent</b>' : `<b>${esc(v)}</b>`;
+
+        async function run() {
+            $('content').innerHTML = '<div class="skel" style="height:320px;border-radius:18px"></div>';
+            try { D = await api('/api/offline-exams?action=data-check'); } catch (err) { $('content').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            render();
+        }
+        function list(title, items, row, help) {
+            if (!items.length) return '';
+            return `<div class="card fade-up" style="margin-bottom:18px"><div class="card-head"><h2 class="card-title">${icon('alert')}${esc(title)} <span class="pill danger">${items.length}</span></h2></div>
+                <p class="small muted" style="margin:0 0 8px">${help}</p>
+                <div class="table-wrap" style="max-height:420px"><table class="book"><tbody>${items.map(row).join('')}</tbody></table></div></div>`;
+        }
+        function render() {
+            const P = D.problems, c = D.counts;
+            const fixable = D.absences.filter(a => a.setBy && (a.before === null || a.before === ''));
+            const ok = D.issueCount === 0;
+            $('content').innerHTML = `
+                <div class="banner ${ok ? 'info' : ''} fade-up">${icon(ok ? 'shield' : 'alert')}<div class="grow">
+                    <b>${ok ? 'Everything adds up.' : `${D.issueCount} thing${D.issueCount === 1 ? '' : 's'} to look at below.`}</b>
+                    <span class="small"> Checked ${esc(A.fmtDate(D.checkedAt, true))} — ${c.students} students · ${c.centerExams} center exams · ${c.markRows} saved center cells · ${c.onlineExams} online exams · ${c.onlineSubmissions} online attempts.</span></div></div>
+
+                <div class="card fade-up" style="margin-bottom:18px">
+                    <div class="card-head"><h2 class="card-title">${icon('users')}Per grade</h2></div>
+                    <div class="table-wrap"><table class="book"><thead><tr><th>Grade</th><th>Students</th><th>Center</th><th>Private</th><th>No group</th><th>Center exams</th><th>Before split</th><th>Marks</th><th>Absent</th><th>Empty cells</th></tr></thead>
+                    <tbody>${Object.entries(D.perGrade).map(([g, v]) => `<tr><td><b>${G(g)}</b></td><td class="num"><b>${v.students.total}</b></td><td class="num">${v.students.center}</td><td class="num">${v.students.private}</td>
+                        <td class="num" style="${v.students.none ? 'color:var(--warning);font-weight:700' : ''}">${v.students.none}</td><td class="num">${v.exams.total}</td><td class="num">${v.exams.beforeSplit}</td>
+                        <td class="num">${v.rows.marks}</td><td class="num">${v.rows.absent}</td><td class="num muted">${v.rows.empty}</td></tr>`).join('')}</tbody></table></div>
+                    <p class="small muted" style="margin:10px 0 0">Center + Private + No group = Students for every grade. "Empty cells" are blanks saved by the old table — they stay blank (not entered) and are never counted as absent. A "Before split" exam shows for both groups, so its students are split between the Center and Private screens.</p>
+                </div>
+
+                <div class="card fade-up" style="margin-bottom:18px">
+                    <div class="card-head"><h2 class="card-title">${icon('clipboard')}Every "Absent" in the database <span class="pill">${D.absences.length}</span></h2>
+                        ${fixable.length && A.can('offline.save-grades') ? `<button class="btn btn-danger btn-sm" id="undoAll">Set ${fixable.length} back to not entered</button>` : ''}</div>
+                    <p class="small muted" style="margin:0 0 8px">The old table had no "absent" at all, so every one of these was set in the new portal — this shows who set it, when, and what the cell held before.</p>
+                    ${D.absences.length ? `<div class="table-wrap" style="max-height:480px"><table class="book"><thead><tr><th>Student</th><th>Exam</th><th>Set by</th><th>When</th><th>Before</th><th></th></tr></thead><tbody>
+                        ${D.absences.map((a, i) => `<tr><td><b dir="auto">${esc(a.name || a.studentId)}</b><br><span class="small muted">${G(a.grade)}</span></td>
+                            <td dir="auto">${esc(a.exam)}${a.beforeSplit ? ' <span class="pill legacy">Before split</span>' : ''}</td>
+                            <td>${esc(a.setBy || '—')}</td><td class="small">${esc(a.setAt ? A.fmtDate(a.setAt, true) : '—')}</td><td>${a.setBy ? cell(a.before) : '—'}</td>
+                            <td>${A.can('offline.save-grades') ? `<button class="btn btn-ghost btn-sm" data-undo="${i}">${a.setBy && a.before !== null && a.before !== '' ? 'Restore ' + esc(a.before) : 'Clear'}</button>` : ''}</td></tr>`).join('')}
+                    </tbody></table></div>` : '<p class="muted" style="margin:0">No absences saved yet.</p>'}
+                </div>
+
+                ${list('Students with an unknown grade', D.oddGrade, (s) => `<tr><td><b dir="auto">${esc(s.name)}</b> <span class="small muted">${esc(s.studentId)}</span></td><td>grade saved as "<b>${esc(s.grade)}</b>"</td></tr>`, 'They don\'t appear on any grade screen. Tell me and I\'ll correct the spelling — nothing is lost.')}
+                ${list('Students with an unknown group', D.oddBranch, (s) => `<tr><td><b dir="auto">${esc(s.name)}</b> <span class="small muted">${esc(s.studentId)}</span></td><td>group saved as "<b>${esc(s.branch)}</b>"</td></tr>`, 'They show under "No group" until you assign Center or Private on the Students page.')}
+                ${list('Marks hidden by a group tag', P.hiddenByGroup, (x) => `<tr><td><b dir="auto">${esc(x.name)}</b> <span class="small muted">${G(x.grade)} · ${x.studentGroup ? A.BRANCHES[x.studentGroup] : 'no group'}</span></td><td dir="auto">${esc(x.exam)} <span class="pill ${x.examGroup}">${A.BRANCHES[x.examGroup]}</span></td><td>${cell(x.score)}</td></tr>`, 'The student has a mark in an exam tagged for the other group, so neither screen shows it. Fix: move the student to the right group, or edit the exam back to "Both".')}
+                ${list('Marks of students now in another grade', P.otherGrade, (x) => `<tr><td><b dir="auto">${esc(x.name)}</b> <span class="small muted">now ${G(x.studentGrade)}</span></td><td dir="auto">${esc(x.exam)} (${G(x.grade)})</td><td>${cell(x.score)}</td></tr>`, 'Saved safely, but not shown on either grade\'s screen.')}
+                ${list('Marks of deleted students', P.missingStudent, (x) => `<tr><td class="small">${esc(x.studentId)}</td><td dir="auto">${esc(x.exam)} (${G(x.grade)})</td><td>${cell(x.score)}</td></tr>`, 'The account is gone; the marks are still stored.')}
+                ${list('Unreadable marks', P.unreadable, (x) => `<tr><td><b dir="auto">${esc(x.name)}</b></td><td dir="auto">${esc(x.exam)}</td><td>saved as "<b>${esc(x.score)}</b>"</td></tr>`, 'Text instead of a number (from the very old table). Shown as blank until you type the real mark.')}
+                ${list('Marks above the exam total', P.outOfRange, (x) => `<tr><td><b dir="auto">${esc(x.name)}</b></td><td dir="auto">${esc(x.exam)}</td><td>${cell(x.score)} / ${esc(x.total)}</td></tr>`, 'Check the mark or the exam\'s "out of".')}
+                ${list('Cells for exams that no longer exist', P.missingExam, (x) => `<tr><td class="small">exam #${esc(x.examId)}</td><td class="small">${esc(x.studentId)}</td><td>${cell(x.score)}</td></tr>`, 'Leftovers — not shown anywhere.')}
+                ${c.onlineOrphans ? `<div class="notice warning">${icon('info')}<div>${c.onlineOrphans} online attempt${c.onlineOrphans === 1 ? '' : 's'} belong to deleted students (kept, not shown).</div></div>` : ''}`;
+
+            $('content').querySelectorAll('[data-undo]').forEach(b => b.addEventListener('click', () => undo([D.absences[Number(b.dataset.undo)]])));
+            $('undoAll')?.addEventListener('click', () => {
+                Site.sheet({ iconName: 'alert', title: `Set ${fixable.length} absences back to "not entered"?`, subtitle: 'Only cells that were empty before someone marked them absent. Each change is saved in the activity log.',
+                    actions: [{ label: 'Set back to not entered', cls: 'btn-danger', onClick: (close) => { close(); undo(fixable); } }, { label: 'Cancel', cls: 'btn-ghost' }] });
+            });
+        }
+        async function undo(items) {
+            const byExam = {};
+            items.forEach(a => {
+                const restore = a.setBy && a.before !== null && a.before !== '' && a.before !== 'A' ? a.before : '';
+                (byExam[a.examId] ||= []).push({ studentId: a.studentId, score: restore });
+            });
+            try {
+                for (const [examId, grades] of Object.entries(byExam)) await api('/api/offline-exams?action=save-grades', { body: { examId: Number(examId), grades } });
+                Site.toast(`${items.length} cell${items.length === 1 ? '' : 's'} restored`, 'success');
+            } catch (err) { Site.toast(err.message, 'error'); }
+            run();
+        }
+        $('againBtn').addEventListener('click', run);
+        run();
+    })();
+    </script>
+</body>
+</html>

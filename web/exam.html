@@ -12,7 +12,18 @@
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/student.css">
     <style>
-        body { user-select: none; -webkit-user-select: none; }
+        body { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+        /* Anti-sharing: a faint watermark with the student's name + code over the exam */
+        .wm { position: fixed; inset: 0; z-index: 35; pointer-events: none; overflow: hidden; opacity: .07; }
+        [data-theme="dark"] .wm { opacity: .09; }
+        .wm span { position: absolute; white-space: nowrap; font-weight: 700; font-size: 14px; color: var(--text); transform: rotate(-24deg); transform-origin: left top; }
+        .wm .wm-move { font-size: 22px; opacity: 1.6; animation: wmDrift 26s linear infinite alternate; }
+        @keyframes wmDrift { from { left: 4%; top: 18%; } 25% { left: 46%; top: 72%; } 50% { left: 62%; top: 22%; } 75% { left: 10%; top: 60%; } to { left: 52%; top: 44%; } }
+        /* Hidden while the window is not in focus (screenshot tools, other apps) */
+        .away-shield { position: fixed; inset: 0; z-index: 70; display: none; align-items: center; justify-content: center; text-align: center; padding: 24px; background: var(--canvas); }
+        body.away .away-shield { display: flex; }
+        body.away #root { visibility: hidden; }
+        @media print { body * { visibility: hidden !important; } body::after { content: "Printing is turned off during exams."; visibility: visible; position: fixed; top: 40%; left: 0; right: 0; text-align: center; font: 600 18px sans-serif; } }
         .xbar {
             position: sticky; top: 0; z-index: 40; background: var(--glass);
             backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--border);
@@ -106,8 +117,40 @@
         let timeIsUp = false;
         let timerInterval = null;
         let tabSwitchCount = 0;
+        let autoReason = null; // 'left-page' | 'time-up' — saved with the submission for the staff portal
         let pendingWarning = false;
         const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+        // ==================== Anti-sharing: watermark + hide when the window loses focus ====================
+        // Web pages can't block screenshots. Instead: every screenshot carries the student's name
+        // and code, and the questions disappear while another app/tool has the focus.
+        let wmTimer = null;
+        function watermark(on) {
+            document.querySelector('.wm')?.remove();
+            clearInterval(wmTimer);
+            if (!on) return;
+            const wm = document.createElement('div');
+            wm.className = 'wm'; wm.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(wm);
+            const draw = () => {
+                const t = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                const label = `${session.firstName || ''} ${session.lastName || ''} · ${session.id} · ${t}`;
+                const stepX = 300, stepY = 130, cols = Math.ceil(innerWidth / stepX) + 2, rows = Math.ceil(innerHeight / stepY) + 3;
+                let html = '';
+                for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) html += `<span style="left:${c * stepX - (r % 2) * 150 - 60}px;top:${r * stepY}px" dir="auto">${esc(label)}</span>`;
+                wm.innerHTML = html + `<span class="wm-move" dir="auto">${esc(label)}</span>`;
+            };
+            draw();
+            wmTimer = setInterval(draw, 60000);
+            window.addEventListener('resize', draw);
+        }
+        const shield = document.createElement('div');
+        shield.className = 'away-shield';
+        shield.innerHTML = `<div><div class="empty" style="padding:0"><div class="bubble">${App.icon('eye')}</div></div><h2 style="margin:0 0 6px">Exam hidden</h2><p class="muted" style="margin:0">The questions are hidden while this window isn't active.<br>Tap here to continue.</p></div>`;
+        shield.addEventListener('click', () => { document.body.classList.remove('away'); window.focus(); });
+        document.body.appendChild(shield);
+        window.addEventListener('blur', () => { if (inExam) document.body.classList.add('away'); });
+        window.addEventListener('focus', () => document.body.classList.remove('away'));
 
         // ==================== Anti-cheat ====================
         document.addEventListener('contextmenu', (e) => { if (inExam) e.preventDefault(); });
@@ -133,6 +176,9 @@
             if (!inExam) return;
             if (document.hidden) {
                 tabSwitchCount++;
+                // Record every time the student leaves the page — saved even if they never come back
+                try { fetch('/api/exams?action=leave', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examId }) }).catch(() => { }); } catch (e) { }
+                if (tabSwitchCount >= 2) autoReason = 'left-page';
                 if (tabSwitchCount >= 2) {
                     submitAnswers(true, 'You left the exam page more than once, so it was submitted automatically with your current answers.');
                 } else {
@@ -165,6 +211,7 @@
                     clearInterval(timerInterval);
                     timerInterval = null;
                     timeIsUp = true;
+                    autoReason = autoReason || 'time-up';
                     submitAnswers(true, "Time's up — your exam was submitted automatically with your current answers.");
                 }
             };
@@ -318,9 +365,15 @@
                 try {
                     const res = await fetch('/api/exams?action=submit', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ examId, studentId: session.id, answers })
+                        body: JSON.stringify({ examId, studentId: session.id, answers, leaves: tabSwitchCount, autoReason: isAuto ? autoReason : null })
                     });
                     const data = await res.json().catch(() => ({}));
+                    if (res.status === 401 && data.code === 'STUDENT_SESSION_REQUIRED') {
+                        // Signed out mid-exam: keep the answers on screen and ask to sign in in a new tab
+                        lastError = new Error('You were signed out. Open Science Academy in a new tab, sign in, then come back here and tap "Submit again".');
+                        lastError.final = false;
+                        break;
+                    }
                     if (!res.ok) {
                         lastError = new Error(data.error || 'The exam could not be submitted.');
                         lastError.final = true;   // a real refusal from the server — retrying won't help
@@ -328,7 +381,7 @@
                     }
                     isSubmitting = false;
                     clearTimeout(slowToast);
-                    renderResult(data.score, data.total, isAuto ? autoNote : null, false);
+                    renderResult(data.score, data.total, isAuto ? autoNote : null, false, data.reviewUnlocksAt);
                     return;
                 } catch (err) {
                     lastError = err;
@@ -366,9 +419,11 @@
         }
 
         // ==================== Result & status screens ====================
-        function renderResult(score, total, note, canReview) {
+        function renderResult(score, total, note, canReview, unlocksAt) {
             stopTimer();
             inExam = false;
+            watermark(false);
+            document.body.classList.remove('away');
             window.onbeforeunload = null;
             const tone = scoreTone(score, total);
             const title = tone === 'good' ? 'Excellent work!' : tone === 'bad' ? "Let's review this together" : 'Good job!';
@@ -378,7 +433,7 @@
                 <h2>${title}</h2>
                 <p>${msg}</p>
                 ${note ? `<div class="notice warning" style="margin-top:14px;text-align:left">${icon('info')}<div>${esc(note)}</div></div>` : ''}
-                ${canReview ? '' : `<p class="xs muted" style="margin-top:14px">The full answer review opens once the exam closes for everyone.</p>`}
+                ${canReview ? '' : `<div class="notice" style="margin-top:14px;text-align:left">${icon('lock')}<div>The questions and answers stay hidden until the exam closes for everyone${unlocksAt ? ` — the review opens on <b>${App.fmtDate(unlocksAt, true)}</b>` : ''}.</div></div>`}
                 <div class="btns">
                     ${canReview ? `<a class="btn btn-primary" href="${url('exam-results.html', { id: examId })}">${icon('eye')}Review answers</a>` : ''}
                     <a class="btn ${canReview ? 'btn-ghost' : 'btn-primary'}" href="${url('exams.html')}">${icon('clipboard')}Back to exams</a>
@@ -391,6 +446,7 @@
         function renderStatus(ic, title, text, tone = '') {
             stopTimer();
             inExam = false;
+            watermark(false);
             const style = tone === 'danger' ? 'background:var(--danger-soft);color:var(--danger)' : tone === 'warning' ? 'background:var(--warning-soft);color:var(--warning)' : '';
             root.innerHTML = `<div class="card result reveal">
                 <div class="empty" style="padding:0"><div class="bubble" style="${style}">${icon(ic)}</div></div>
@@ -409,6 +465,7 @@
                     body: JSON.stringify({ examId, studentId: session.id })
                 });
                 data = await res.json().catch(() => ({}));
+                if (res.status === 401 && data.code === 'STUDENT_SESSION_REQUIRED') { App.sessionEnded(); return; }
             } catch (e) {
                 renderStatus('wifiOff', 'No connection', "We couldn't reach the server. Check your internet and open the exam again.", 'danger');
                 return;
@@ -420,14 +477,18 @@
                 if (!questions.length) { renderStatus('alert', 'This exam has no questions', 'Please let Miss Marwa know.', 'warning'); return; }
                 answers = questions.map(() => -1);
                 inExam = true;
+                watermark(true);
                 renderExam();
                 if (data.timeLimitMinutes) startTimer(data.timeLimitMinutes);
             } else if (data.status === 'expired_taken') {
                 renderResult(data.score, data.total, null, true);
             } else if (data.status === 'active_taken') {
-                renderStatus('checkCircle', 'Already submitted', "You've already taken this exam. You can review your answers once it closes for everyone.");
+                if (typeof data.score === 'number') renderResult(data.score, data.total, null, false, data.reviewUnlocksAt);
+                else renderStatus('checkCircle', 'Already submitted', "You've already taken this exam. You can review your answers once it closes for everyone.");
             } else if (data.status === 'expired_nottaken' || data.status === 'expired') {
                 renderStatus('clock', 'This exam has closed', "The time for this exam is over and it wasn't taken.", 'warning');
+            } else if (data.status === 'forbidden') {
+                renderStatus('lock', 'Not your exam', data.error || "This exam isn't for your grade.", 'danger');
             } else if (data.status === 'locked') {
                 renderStatus('lock', "This exam can't be reopened", 'You opened this exam before. Ask Miss Marwa if you need it reopened.', 'danger');
             } else {

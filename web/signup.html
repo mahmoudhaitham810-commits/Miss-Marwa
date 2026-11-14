@@ -8,7 +8,8 @@
     <script>
         try {
             var s = JSON.parse(localStorage.getItem('student_session') || 'null');
-            if (s && s.id) location.replace(s.grade === 'all' || s.role === 'admin' ? '/home.html?grade=prep1' : '/home.html');
+            if (s && (s.role === 'admin' || s.grade === 'all' || String(s.id).toUpperCase() === 'MM-ADMIN')) localStorage.removeItem('student_session');
+            else if (s && s.id) location.replace('/home.html');
         } catch (e) { }
     </script>
     <title>Create account · Science Academy</title>
@@ -269,7 +270,24 @@
                 });
                 let data = {};
                 try { data = await res.json(); } catch (err) { }
+                if (data.code === 'PHONE_EXISTS') {
+                    btn.disabled = false; btn.innerHTML = btnHtml;
+                    setErr('fPhone', 'This number already has an account in this grade');
+                    Site.sheet({
+                        iconName: 'idCard', title: 'You already have an account',
+                        subtitle: 'An account with this phone number is already registered in this grade.',
+                        html: `<p class="muted" style="margin:0 0 6px">Forgot your student code or password? Message us on WhatsApp and we'll help you sign in.</p>
+                               <p class="muted" dir="rtl" lang="ar" style="margin:0;font-family:var(--font-ar)">فيه حساب متسجل بالرقم ده في نفس المرحلة. لو نسيت الكود أو كلمة السر، كلّمنا على واتساب.</p>`,
+                        actions: [
+                            { label: 'Message us on WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href: Site.waLink(`Hello Miss Marwa, I already have an account but I can't sign in. My name: ${payload.firstName} ${payload.lastName}. My phone: ${payload.phone}`), external: true },
+                            { label: 'Go to sign in', cls: 'btn-primary', href: '/login.html' },
+                            { label: 'Close', cls: 'btn-ghost' }
+                        ]
+                    });
+                    return;
+                }
                 if (!res.ok || !data.success || !data.student) {
+                    if (data.code === 'SAME_PHONE') setErr('fParent', "Use your parent's number, not yours");
                     formError(data.error || 'Something went wrong. Please try again.');
                     btn.disabled = false; btn.innerHTML = btnHtml;
                     return;

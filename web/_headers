@@ -1,0 +1,10 @@
+# Staff pages and the API must never be served from a cache
+/admin/*
+  Cache-Control: no-store
+/api/*
+  Cache-Control: no-store
+
+/parent.html
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex, nofollow

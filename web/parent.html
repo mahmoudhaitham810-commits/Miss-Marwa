@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>متابعة الطالب · Science Academy</title>
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <style>
+        body { background: var(--canvas, var(--bg)); font-family: var(--font-ar); }
+        .wrap { max-width: 760px; margin: 0 auto; padding: 18px 16px 48px; }
+        .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+        .top .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+        .top .brand img { width: 42px; height: 42px; border-radius: 50%; background: #fff; }
+        .top .brand strong { display: block; font-size: 15px; }
+        .top .brand span { font-size: 12px; color: var(--muted); }
+        .hero { padding: 20px; border-radius: 22px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 16px; }
+        .hero h1 { margin: 0; font-size: 24px; }
+        .hero p { margin: 6px 0 0; color: var(--text-2); }
+        .avgs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .avg { padding: 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+        .avg b { display: block; font-size: 30px; font-family: var(--font); letter-spacing: -.02em; }
+        .avg span { font-weight: 700; }
+        .avg small { display: block; color: var(--muted); margin-top: 2px; }
+        .sec { padding: 6px 16px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 16px; }
+        .sec h2 { font-size: 17px; margin: 12px 0 4px; }
+        .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+        .sec h2 + .row { border-top: 0; }
+        .row b { display: block; overflow-wrap: anywhere; }
+        .row small { color: var(--muted); }
+        .sc { display: flex; align-items: center; gap: 8px; flex: none; font-family: var(--font); font-weight: 800; direction: ltr; }
+        .tag { font-family: var(--font-ar); font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+        .tag.bad { background: var(--danger-soft); color: var(--danger); }
+        .ex { color: var(--success); } .gd { color: var(--primary); } .av { color: var(--warning); } .wk { color: var(--danger); }
+        .note { color: var(--muted); font-size: 13px; text-align: center; margin-top: 18px; line-height: 1.8; }
+        .msg { text-align: center; padding: 36px 20px; }
+        .msg h1 { font-size: 20px; }
+        .skel { background: var(--surface-2); border-radius: 18px; animation: pulse 1.2s ease-in-out infinite; }
+        @keyframes pulse { 50% { opacity: .55; } }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="top">
+            <a class="brand" href="/"><img src="/assets/img/logo-96.png" alt=""><div><strong>Science Academy</strong><span>مس مروة</span></div></a>
+        </div>
+        <div id="app"><div class="skel" style="height:110px;margin-bottom:16px"></div><div class="skel" style="height:300px"></div></div>
+    </div>
+    <script>
+    (function () {
+        'use strict';
+        const GRADE = { prep1: 'الصف الأول الإعدادي', prep2: 'الصف الثاني الإعدادي', prep3: 'الصف الثالث الإعدادي', sec1: 'الصف الأول الثانوي' };
+        const BR = { center: 'سنتر', private: 'خاص' };
+        const WA = 'https://wa.me/201003021917';
+        const app = document.getElementById('app');
+        const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const pct = (v) => v === null || v === undefined ? '—' : Math.round(v) + '%';
+        const cls = (v) => v === null || v === undefined ? '' : v >= 85 ? 'ex' : v >= 70 ? 'gd' : v >= 50 ? 'av' : 'wk';
+        const lvl = (v) => v === null || v === undefined ? '' : v >= 85 ? 'ممتاز' : v >= 70 ? 'جيد' : v >= 50 ? 'متوسط' : 'يحتاج متابعة';
+        const day = (d) => { if (!d) return ''; const t = new Date(String(d).length === 10 ? d + 'T12:00:00' : d); return isNaN(t) ? '' : t.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }); };
+        const token = location.hash.slice(1);
+        const fail = (title, text) => { app.innerHTML = `<div class="hero msg"><h1>${title}</h1><p>${text}</p><a class="btn btn-primary" href="${WA}" target="_blank" rel="noopener">تواصل مع مس مروة</a></div>`; };
+        if (!/^[A-Za-z0-9_-]{32}$/.test(token)) return fail('الرابط مش كامل', 'افتح الرابط من رسالة الواتساب زي ما هو، أو اطلب رابط جديد.');
+
+        fetch('/api/parent?action=view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }), credentials: 'omit', referrerPolicy: 'no-referrer' })
+            .then(r => r.json().then(d => ({ ok: r.ok, d })))
+            .then(({ ok, d }) => {
+                if (!ok) return fail('الرابط ده مش شغال', esc(d.error || 'اطلب رابط جديد من مس مروة.'));
+                render(d);
+            })
+            .catch(() => fail('مفيش اتصال', 'اتأكد من الإنترنت وافتح الرابط تاني.'));
+
+        function row(r, online) {
+            const right = r.status === 'taken'
+                ? `<span class="${cls(r.pct)}">${pct(r.pct)}</span><span>${r.score}/${r.total}</span>`
+                : `<span class="tag bad">${r.status === 'absent' ? 'غياب' : 'لم يُحل'}</span>`;
+            return `<div class="row"><div style="min-width:0"><b dir="auto">${esc(r.name)}</b><small>${esc(day(r.date))}</small></div><div class="sc">${right}</div></div>`;
+        }
+        function render(d) {
+            const s = d.student, m = d.summary, girl = s.gender === 'female';
+            document.title = `${s.firstName} ${s.lastName} · Science Academy`;
+            app.innerHTML = `
+                <div class="hero"><h1>${esc(s.firstName)} ${esc(s.lastName)}</h1>
+                    <p>${esc(GRADE[s.grade] || '')}${s.branch ? ' · ' + BR[s.branch] : ''}</p></div>
+                <div class="avgs">
+                    <div class="avg"><b class="${cls(m.centerPct)}">${pct(m.centerPct)}</b><span>امتحانات السنتر</span><small>${m.centerTaken} امتحان${m.centerAbsent ? ` · ${m.centerAbsent} غياب` : ''}${m.centerPct !== null ? ' · ' + lvl(m.centerPct) : ''}</small></div>
+                    <div class="avg"><b class="${cls(m.onlinePct)}">${pct(m.onlinePct)}</b><span>الامتحانات الأونلاين</span><small>${m.onlineTaken} امتحان${m.onlineMissed ? ` · ${m.onlineMissed} لم ${girl ? 'تحلها' : 'يحلها'}` : ''}${m.onlinePct !== null ? ' · ' + lvl(m.onlinePct) : ''}</small></div>
+                </div>
+                <div class="sec"><h2>امتحانات السنتر</h2>${d.center.length ? d.center.map(r => row(r)).join('') : '<p class="row" style="color:var(--muted)">لسه مفيش درجات.</p>'}</div>
+                <div class="sec"><h2>الامتحانات الأونلاين</h2>${d.online.length ? d.online.map(r => row(r, true)).join('') : '<p class="row" style="color:var(--muted)">لسه مفيش امتحانات.</p>'}</div>
+                <p class="note">الصفحة دي بتتحدث لوحدها مع كل درجة جديدة — احفظ الرابط عندك.<br>الرابط ده خاص بيكم، يا ريت ما يتبعتش لحد تاني.</p>
+                <p style="text-align:center;margin-top:14px"><a class="btn btn-wa" href="${WA}" target="_blank" rel="noopener">عندك سؤال؟ كلّم مس مروة على واتساب</a></p>`;
+        }
+    })();
+    </script>
+</body>
+</html>

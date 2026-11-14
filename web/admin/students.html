@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Students · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>Students</h1><p id="countLine">Everyone registered, by grade and group.</p></div>
+                <button class="btn btn-ghost teacher-only" id="exportBtn" hidden><span data-icon="download" style="display:contents"></span>Export CSV</button>
+            </div>
+            <div class="toolbar sticky-bar">
+                <div class="input" style="flex:1;min-width:220px"><span data-icon="search" style="display:contents"></span>
+                    <input id="q" placeholder="Search name, code or phone…" autocomplete="off" style="height:44px"></div>
+                <select class="pick" id="gradePick" aria-label="Grade" data-ui="pills"></select>
+                <div class="segmented" id="groupSeg" aria-label="Group">
+                    <button data-value="all">All</button><button data-value="center">Center</button><button data-value="private">Private</button><button data-value="none">No group</button>
+                </div>
+                <select class="pick" id="sortPick" aria-label="Sort">
+                    <option value="name">A → Z</option><option value="new">Newest first</option><option value="grade">By grade</option>
+                </select>
+            </div>
+            <div id="list"></div>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/admin/assets/messages.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'students', title: 'Students' });
+        A.hydrate();
+        const qs = new URLSearchParams(location.search);
+        let grade = qs.get('grade') || 'all';
+        let group = qs.get('group') || 'all';
+        let sort = qs.get('sort') || 'name';
+        let S = [];
+        const LIMIT_STEP = 60;
+        let limit = LIMIT_STEP;
+
+        A.gradeSelect($('gradePick'), grade, (v) => { grade = v; limit = LIMIT_STEP; render(); }, { all: true });
+        A.segmented($('groupSeg'), group, (v) => { group = v; limit = LIMIT_STEP; render(); });
+        $('sortPick').value = sort;
+        $('sortPick').addEventListener('change', (e) => { sort = e.target.value; render(); });
+        $('q').addEventListener('input', () => { limit = LIMIT_STEP; render(); });
+        if (A.can('students.export')) $('exportBtn').hidden = false;
+
+        async function load() {
+            $('list').innerHTML = '<div class="skel" style="height:300px;border-radius:18px"></div>';
+            try { S = await api('/api/students'); } catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            S.forEach(s => { s.grade = String(s.grade || '').toLowerCase(); s._q = `${s.first_name} ${s.last_name} ${s.student_id} ${s.phone} ${s.parent_phone}`.toLowerCase(); });
+            render();
+            const open = qs.get('open'); if (open) openStudent(open);
+        }
+        const groupOf = (s) => ['center', 'private'].includes(s.branch) ? s.branch : 'none';
+        function filtered() {
+            const q = A.normalizeDigits($('q').value).trim().toLowerCase();
+            let list = S.filter(s => (grade === 'all' || s.grade === grade) && (group === 'all' || groupOf(s) === group) && (!q || s._q.includes(q)));
+            if (sort === 'new') list.sort((a, b) => A.toMs(b.created_at) - A.toMs(a.created_at));
+            else if (sort === 'grade') list.sort((a, b) => a.grade.localeCompare(b.grade) || String(a.first_name).localeCompare(String(b.first_name)));
+            else list.sort((a, b) => String(a.first_name).localeCompare(String(b.first_name)) || String(a.last_name).localeCompare(String(b.last_name)));
+            return list;
+        }
+        function render() {
+            const list = filtered();
+            const counts = { center: 0, private: 0, none: 0 };
+            S.filter(s => grade === 'all' || s.grade === grade).forEach(s => counts[groupOf(s)]++);
+            $('countLine').innerHTML = `<b>${list.length}</b> shown · ${counts.center} center · ${counts.private} private${counts.none ? ` · <span style="color:var(--warning)">${counts.none} without a group</span>` : ''}`;
+            if (!list.length) { $('list').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('search', 'lg')}</div><h3>No students match</h3><p>Try another grade, group or search.</p></div>`; return; }
+            $('list').innerHTML = `<div class="card" style="padding:6px 10px"><div class="srows">${list.slice(0, limit).map((s, i) => `
+                <button class="srow fade-up" style="--i:${Math.min(i, 14)}" data-sid="${esc(s.student_id)}">
+                    <span class="avatar">${A.initials({ firstName: s.first_name })}</span>
+                    <span class="sname"><b dir="auto">${esc(s.first_name)} ${esc(s.last_name)}</b><small class="num muted">${esc(s.student_id)} · ${esc(s.phone || '')}</small></span>
+                    <span class="sgrade">${esc(A.GRADES[s.grade] || s.grade)}</span>
+                    <span>${groupOf(s) === 'none' ? '<span class="pill legacy">No group</span>' : `<span class="pill ${s.branch}">${A.BRANCHES[s.branch]}</span>`}</span>
+                    <span class="sdate small muted">${esc(A.fmtDate(s.created_at))}</span>
+                    <span class="muted">${icon('chevronRight', 'sm')}</span>
+                </button>`).join('')}</div>
+                ${list.length > limit ? `<button class="btn btn-ghost btn-block" id="moreBtn" style="margin:8px 0">Show ${Math.min(LIMIT_STEP, list.length - limit)} more (${list.length - limit} left)</button>` : ''}</div>`;
+            $('moreBtn')?.addEventListener('click', () => { limit += LIMIT_STEP; render(); });
+        }
+        $('list').addEventListener('click', (e) => { const r = e.target.closest('[data-sid]'); if (r) openStudent(r.dataset.sid); });
+
+        function openStudent(sid) {
+            const s = S.find(x => x.student_id === sid); if (!s) return;
+            const stud = { studentId: s.student_id, firstName: s.first_name, lastName: s.last_name, gender: s.gender, branch: s.branch, grade: s.grade, parentPhone: s.parent_phone };
+            const actions = [];
+            if (s.parent_phone) actions.push({ label: 'WhatsApp the parent', icon: 'whatsapp', cls: 'btn-wa', href: ParentMessages.waLink(s.parent_phone, `السلام عليكم — تيم مس مروة 🌷\nولي أمر ${s.gender === 'female' ? 'الطالبة' : 'الطالب'}: \u200E${s.first_name} ${s.last_name}\u200E`), external: true });
+            actions.push({ label: 'Results & exam alerts', icon: 'chart', cls: 'btn-soft', href: `/admin/student.html?id=${encodeURIComponent(s.student_id)}` });
+            if (A.can('students.reset-password')) actions.push({ label: 'Reset password', icon: 'lock', cls: 'btn-ghost', onClick: (close) => { close(); setTimeout(() => resetPw(s), 240); } });
+            if (A.can('students.delete')) actions.push({ label: 'Delete account', icon: 'trash', cls: 'btn-ghost danger-text', onClick: (close) => { close(); setTimeout(() => del(s), 240); } });
+            Site.sheet({
+                iconName: 'user', title: `${s.first_name} ${s.last_name}`, subtitle: `${s.student_id} · ${A.GRADES[s.grade] || s.grade}`,
+                html: `<div class="kv">
+                        <div><span>Student phone</span><b class="num">${esc(s.phone || '—')}</b></div>
+                        <div><span>Parent phone</span><b class="num">${esc(s.parent_phone || '—')}</b></div>
+                        <div><span>Gender</span><b>${s.gender === 'female' ? 'Girl' : s.gender === 'male' ? 'Boy' : '—'}</b></div>
+                        <div><span>Joined</span><b>${esc(A.fmtDate(s.created_at))}</b></div></div>
+                    <div class="field" style="margin:14px 0 0"><label>Group</label>
+                        <div class="segmented" id="grpSeg"><button data-value="center" type="button">Center</button><button data-value="private" type="button">Private</button></div>
+                        ${groupOf(s) === 'none' ? '<p class="small" style="color:var(--warning);margin:6px 0 0">No group yet — pick one.</p>' : ''}</div>`,
+                actions
+            });
+            const seg = document.getElementById('grpSeg');
+            if (!A.can('students.edit')) seg.querySelectorAll('button').forEach(b => b.disabled = true);
+            A.segmented(seg, groupOf(s), async (v) => {
+                try { await api('/api/students?action=set-branch', { body: { studentIds: [s.student_id], branch: v } }); s.branch = v; render(); Site.toast(`Moved to ${A.BRANCHES[v]}`, 'success'); }
+                catch (err) { Site.toast(err.message, 'error'); }
+            });
+        }
+        function resetPw(s) {
+            const suggested = String(Math.floor(1000 + Math.random() * 9000));
+            Site.sheet({
+                iconName: 'lock', title: `New password for ${s.first_name}`, subtitle: 'They are signed out on every device and must use the new password.',
+                html: `<div class="field" style="margin:0"><label for="npw">New password</label><div class="input"><input class="plain" id="npw" value="${suggested}" autocomplete="off"></div></div>`,
+                actions: [{ label: 'Set password', onClick: async (close) => {
+                    const pw = A.normalizeDigits(document.getElementById('npw').value).trim();
+                    if (pw.length < 4) return Site.toast('At least 4 characters', 'error');
+                    try {
+                        await api('/api/students?action=reset-password', { body: { studentId: s.student_id, password: pw } });
+                        close();
+                        const text = `السلام عليكم — تيم مس مروة 🌷\nالطالب/ة: \u200E${s.first_name} ${s.last_name}\u200E\nكلمة السر الجديدة لحسابك على Science Academy: \u200E${pw}\u200E\nكود الطالب: \u200E${s.student_id}\u200E`;
+                        setTimeout(() => Site.sheet({
+                            iconName: 'checkCircle', title: 'Password changed', subtitle: `${s.student_id} · new password: ${pw}`,
+                            actions: [
+                                ...(s.phone ? [{ label: 'Send it to the student', icon: 'whatsapp', cls: 'btn-wa', href: ParentMessages.waLink(s.phone, text), external: true }] : []),
+                                ...(s.parent_phone ? [{ label: 'Send it to the parent', icon: 'whatsapp', cls: 'btn-soft', href: ParentMessages.waLink(s.parent_phone, text), external: true }] : []),
+                                { label: 'Done', cls: 'btn-ghost' }]
+                        }), 240);
+                    } catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+        }
+        function del(s) {
+            Site.sheet({
+                iconName: 'alert', title: `Delete ${s.first_name} ${s.last_name}?`, subtitle: `${s.student_id} — they can't sign in any more. A copy is kept in the activity log.`,
+                actions: [{ label: 'Delete account', cls: 'btn-danger', onClick: async (close) => {
+                    try { await api('/api/students?action=delete', { body: { studentId: s.student_id } }); S = S.filter(x => x !== s); close(); render(); Site.toast('Account deleted', 'success'); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+        }
+        $('exportBtn').addEventListener('click', () => {
+            const list = filtered();
+            A.downloadCsv(`students-${grade}-${group}-${new Date().toISOString().slice(0, 10)}.csv`, [
+                ['Code', 'First name', 'Last name', 'Grade', 'Group', 'Gender', 'Student phone', 'Parent phone', 'Joined'],
+                ...list.map(s => [s.student_id, s.first_name, s.last_name, A.GRADES[s.grade] || s.grade, A.BRANCHES[s.branch] || '', s.gender || '', s.phone, s.parent_phone, A.fmtDate(s.created_at)])
+            ]);
+        });
+        load();
+    })();
+    </script>
+</body>
+</html>

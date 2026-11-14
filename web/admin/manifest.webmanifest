@@ -1,0 +1,17 @@
+{
+  "id": "/admin/",
+  "name": "Science Academy · Staff",
+  "short_name": "SA Staff",
+  "description": "Teacher & assistant portal for Science Academy with Miss Marwa.",
+  "start_url": "/admin/?source=pwa",
+  "scope": "/admin/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B1220",
+  "theme_color": "#0B1220",
+  "icons": [
+    { "src": "/admin/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/admin/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/admin/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

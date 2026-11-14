@@ -1,9 +1,9 @@
-import { verifyAdminRequest } from './admin-auth.js';
+import { requireStaff, audit, auditStmt, requireStudent } from './admin-auth.js';
 
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
 // الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
 function getDb(env) {
-    return env.DB || env.D1_DB;
+    return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
 }
 
 // بتبعت إشعار Push للطلاب المشتركين. لو معانا "grade"، بتستهدف بس الطلاب
@@ -97,8 +97,12 @@ export async function onRequestPost(context) {
         // === تسجيل مشاهدة محتوى (فيديو/ملخص/امتحان قديم) من طالب ===
         // بتُستخدم من صفحة materials.html كل ما طالب يفتح حاجة
         if (action === 'view') {
-            const { studentId, contentId, contentType } = await request.json();
-            if (!studentId || !contentId) {
+            const body = await request.json();
+            const { contentId, contentType } = body;
+            const who = await requireStudent(request, env, db, body.studentId);
+            if (who.error) return who.error;
+            const studentId = who.id;
+            if (!contentId) {
                 return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
             }
             await db.prepare(
@@ -109,11 +113,27 @@ export async function onRequestPost(context) {
 
         // === إضافة محتوى جديد (السلوك الأصلي، من غير أي action محدد) ===
         // ── حماية: لازم يكون أدمن عشان يضيف محتوى ──
-        const isAdmin = await verifyAdminRequest(request, env);
-        if (!isAdmin) {
-            return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
-        }
+        const auth = await requireStaff(request, env, 'lessons.create');
+        if (auth.error) return auth.error;
         const lesson = await request.json();
+        if (!lesson || !lesson.id || !lesson.title || !lesson.grade || !lesson.category || !lesson.url) {
+            return Response.json({ error: 'بيانات المحتوى ناقصة' }, { status: 400 });
+        }
+        // Only real web links (a "javascript:" link would run code on students' phones)
+        let parsedUrl = null;
+        try { parsedUrl = new URL(String(lesson.url).trim()); } catch (e) { }
+        if (!parsedUrl || !['http:', 'https:'].includes(parsedUrl.protocol)) {
+            return Response.json({ error: 'الرابط لازم يبدأ بـ https://' }, { status: 400 });
+        }
+        if (!['prep1', 'prep2', 'prep3', 'sec1'].includes(String(lesson.grade).toLowerCase()) || !['videos', 'summaries', 'exams'].includes(String(lesson.category).toLowerCase())) {
+            return Response.json({ error: 'المرحلة أو القسم غير صحيح' }, { status: 400 });
+        }
+        lesson.grade = String(lesson.grade).toLowerCase();
+        lesson.category = String(lesson.category).toLowerCase();
+        lesson.title = String(lesson.title).trim().slice(0, 150);
+        lesson.url = parsedUrl.toString();
+        // Always a sortable server time (older entries were saved with a local Arabic date)
+        lesson.createdAt = new Date().toISOString();
 
         // إدخال الدرس الجديد في الداتا بيز
         await db.prepare(
@@ -121,6 +141,7 @@ export async function onRequestPost(context) {
         ).bind(
             lesson.id, lesson.title, lesson.grade, lesson.category, lesson.url, lesson.notes || '', lesson.createdAt || new Date().toISOString()
         ).run();
+        await audit(db, request, auth.staff, 'lessons.create', lesson.id, { title: lesson.title, grade: lesson.grade, category: lesson.category });
 
         // بمجرد ما المحتوى يتحفظ بنجاح، ابعتي إشعار لطلاب نفس المرحلة بس
         const label = CATEGORY_LABELS[(lesson.category || '').toLowerCase()] || '📚 محتوى جديد';
@@ -143,15 +164,18 @@ export async function onRequestDelete(context) {
     const id = url.searchParams.get('id');
 
     // ── حماية: لازم يكون أدمن عشان يمسح محتوى ──
-    const isAdmin = await verifyAdminRequest(request, env);
-    if (!isAdmin) {
-        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
-    }
+    const auth = await requireStaff(request, env, 'lessons.delete');
+    if (auth.error) return auth.error;
 
     try {
-        // حذف الدرس بناءً على الـ ID
+        // حذف الدرس بناءً على الـ ID (ونسخة كاملة منه بتتحفظ في سجل النشاط)
         if (id) {
-            await db.prepare("DELETE FROM lessons WHERE id = ?").bind(id).run();
+            const row = await db.prepare("SELECT * FROM lessons WHERE id = ?").bind(id).first();
+            if (!row) return Response.json({ error: 'المحتوى غير موجود' }, { status: 404 });
+            await db.batch([
+                db.prepare("DELETE FROM lessons WHERE id = ?").bind(id),
+                auditStmt(db, request, auth.staff, 'lessons.delete', id, { lesson: row })
+            ]);
             return Response.json({ success: true });
         }
         return Response.json({ error: 'ID is required' }, { status: 400 });

@@ -8,17 +8,37 @@
     'use strict';
 
     // ---------- Session guard ----------
+    const params = new URLSearchParams(location.search);
     let session = null;
     try { session = JSON.parse(localStorage.getItem('student_session') || 'null'); } catch (e) { session = null; }
+    // The old shared admin login (MM-ADMIN) no longer exists on the student side — drop it
+    if (session && (session.role === 'admin' || session.grade === 'all' || String(session.id).toUpperCase() === 'MM-ADMIN')) {
+        try { localStorage.removeItem('student_session'); } catch (e) { }
+        session = null;
+    }
+    // Staff "Preview as student" (opened from the teacher portal). The server confirms the
+    // staff sign-in below; without it the preview is closed straight away.
+    if (params.get('staffPreview') === '1') { try { sessionStorage.setItem('staff_preview', '1'); } catch (e) { } }
+    let staffPreview = false;
+    try { staffPreview = !session && sessionStorage.getItem('staff_preview') === '1'; } catch (e) { }
+    if (staffPreview) session = { id: 'PREVIEW', firstName: 'Preview', lastName: '', grade: 'all', role: 'admin' };
     if (!session || !session.id) {
         window.location.replace('/login.html');
         return;
     }
+    if (staffPreview) {
+        fetch('/api/admin-auth?action=me', { credentials: 'same-origin' })
+            .then(r => r.json()).then(d => {
+                if (!d || !d.authenticated) {
+                    try { sessionStorage.removeItem('staff_preview'); } catch (e) { }
+                    location.replace('/admin/login.html');
+                }
+            }).catch(() => { });
+    }
 
     const GRADES = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
     const GRADES_AR = { prep1: 'أولى إعدادي', prep2: 'تانية إعدادي', prep3: 'تالتة إعدادي', sec1: 'أولى ثانوي' };
-    const params = new URLSearchParams(location.search);
-    const isAdmin = session.role === 'admin' || session.grade === 'all';
+    const isAdmin = staffPreview;
 
     // Students always see their own grade. The admin (Miss Marwa) can preview any grade with ?grade=
     let grade = String(session.grade || '').toLowerCase();
@@ -101,6 +121,7 @@
             throw err;
         }
         const data = await res.json().catch(() => ({}));
+        if (res.status === 401 && data.code === 'STUDENT_SESSION_REQUIRED' && !isAdmin) { sessionEnded(); }
         if (!res.ok) {
             const err = new Error(data.error || `Request failed (${res.status})`);
             err.status = res.status;
@@ -304,16 +325,20 @@
     }
 
     // Ask the server in the background whether this account still exists (deleted accounts are signed out)
+    // The server decides who is signed in (HttpOnly cookie). If that session is gone — signed out,
+    // password reset, account removed, or a sign-in from before sessions existed — sign in again.
+    let ending = false;
+    function sessionEnded() {
+        if (ending) return; ending = true;
+        const code = session && session.id ? session.id : '';
+        try { localStorage.removeItem('student_session'); } catch (e) { }
+        location.replace('/login.html?reason=session' + (code ? '&code=' + encodeURIComponent(code) : ''));
+    }
     function validate() {
         if (isAdmin) return;
         api('/api/auth?action=validate', { method: 'POST', body: { studentId: session.id } })
-            .then(d => {
-                if (d && d.valid === false) {
-                    localStorage.removeItem('student_session');
-                    alert('This account is no longer active. Please contact Miss Marwa.');
-                    location.replace('/login.html');
-                }
-            }).catch(() => { });
+            .then(d => { if (d && d.valid === false) sessionEnded(); })
+            .catch(() => { });
     }
 
     // ---------- Notifications (OneSignal) ----------
@@ -421,8 +446,15 @@
                 {
                     label: 'Sign out', cls: 'btn-danger', onClick: () => {
                         (window.OneSignalDeferred || []).push?.(async (OneSignal) => { try { await OneSignal.User.removeTag('grade'); } catch (e) { } });
+                        if (isAdmin) {
+                            sessionStorage.removeItem('staff_preview');
+                            sessionStorage.removeItem('preview_grade');
+                            setTimeout(() => location.replace('/admin/'), 150);
+                            return;
+                        }
                         localStorage.removeItem('student_session');
                         sessionStorage.removeItem('preview_grade');
+                        fetch('/api/auth?action=logout', { method: 'POST', keepalive: true }).catch(() => { });
                         setTimeout(() => location.replace('/index.html'), 150);
                     }
                 },
@@ -539,6 +571,6 @@
         esc, txt, hasArabic, icon, api, url, safeUrl,
         timeLeft, fmtDate, scoreTone, ring, animateRings,
         isViewed, openLesson, lastOpened,
-        toast, sheet, soon, reveal, checkin, shell, profile, logout
+        toast, sheet, soon, reveal, checkin, shell, profile, logout, sessionEnded
     };
 })();

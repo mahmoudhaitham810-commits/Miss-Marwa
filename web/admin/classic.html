@@ -3,7 +3,13 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#020617">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="SA Staff">
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
     <title>لوحة تحكم المعلم | Science Academy</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -917,8 +923,22 @@
             .an-raw-data-container { flex-direction: column; }
         }
     </style>
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
+    <!-- PWA Manifest (staff app, separate from the student app) -->
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <style>
+        /* Role-based UI: the server blocks these actions anyway — this just hides what the assistant can't use */
+        body.role-assistant .btn-delete, body.role-assistant .teacher-only { display: none !important; }
+        .staff-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; padding: 10px 14px; border-radius: 16px; background: rgba(15, 23, 42, .75); border: 1px solid rgba(0, 229, 255, .2); }
+        .staff-bar .who { display: flex; align-items: center; gap: 10px; margin-inline-end: auto; }
+        .staff-bar .avatar { width: 38px; height: 38px; border-radius: 50%; background: #fff; object-fit: cover; }
+        .staff-bar .name { font-weight: 800; color: #fff; }
+        .role-chip { font-size: .75rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; }
+        .role-chip.teacher { background: rgba(249, 115, 22, .18); color: #fdba74; }
+        .role-chip.assistant { background: rgba(37, 99, 235, .2); color: #93c5fd; }
+        .staff-bar a, .staff-bar button { font-family: inherit; font-size: .9rem; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 12px; border: 1px solid rgba(148, 163, 184, .25); background: transparent; color: #e2e8f0; text-decoration: none; cursor: pointer; }
+        .staff-bar a:hover, .staff-bar button:hover { border-color: #00E5FF; }
+        .relogin-field { width: 100%; padding: 14px; margin: 8px 0; border-radius: 12px; border: 1px solid rgba(0, 229, 255, .3); background: rgba(2, 6, 23, .7); color: #fff; font-family: inherit; font-size: 1rem; }
+    </style>
 </head>
 
 <body>
@@ -927,17 +947,29 @@
     <div class="lock-screen" id="adminLockScreen">
         <div class="lock-box">
             <i class="fas fa-shield-halved" style="font-size: 3.5rem; color: var(--glowing-cyan);"></i>
-            <h2 style="margin-top: 15px;">لوحة تحكم المعلم</h2>
-            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 5px;">أدخل الرمز السري للوصول</p>
-            <input type="password" id="adminPinInput" placeholder="PIN Code" autofocus>
-            <button class="action-btn" style="width: 100%; justify-content: center;"
-                onclick="unlockAdmin()">دخول</button>
-            <div id="pinError" style="color: #ef4444; margin-top: 10px; display: none;">الرمز السري غير صحيح!</div>
+            <h2 style="margin-top: 15px;" id="lockTitle">جاري التحقق…</h2>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 5px;" id="lockSub"></p>
+            <div id="reloginForm" style="display:none;">
+                <input class="relogin-field" id="reloginUser" placeholder="Username" autocapitalize="none" autocomplete="username" dir="ltr">
+                <input class="relogin-field" id="reloginPass" type="password" placeholder="Password" autocomplete="current-password" dir="ltr">
+                <button class="action-btn" style="width: 100%; justify-content: center;" onclick="relogin()">دخول</button>
+            </div>
+            <div id="pinError" style="color: #ef4444; margin-top: 10px; display: none;"></div>
         </div>
     </div>
 
     <!-- Admin Panel -->
     <div id="adminPanel" style="display: none;">
+        <div class="staff-bar">
+            <div class="who">
+                <img class="avatar" src="/assets/img/marwa-160.png" alt="">
+                <div><div class="name" id="staffName" dir="auto"></div><span class="role-chip" id="staffRole"></span></div>
+            </div>
+            <a href="/admin/"><i class="fas fa-house"></i> البوابة الجديدة</a>
+            <a href="/home.html?staffPreview=1&grade=prep1" target="_blank" rel="noopener"><i class="fas fa-eye"></i> معاينة كطالب</a>
+            <a href="/admin/settings.html"><i class="fas fa-gear"></i> <span id="settingsLabel">الإعدادات</span></a>
+            <button onclick="staffLogout()"><i class="fas fa-right-from-bracket"></i> خروج</button>
+        </div>
         <div class="admin-header">
             <div>
                 <h1 style="font-size: 2.2rem;">لوحة إدارة المنصة</h1>
@@ -966,13 +998,13 @@
                     <i class="fas fa-rotate"></i>
                     <span>تحديث البيانات</span>
                 </button>
-                <button class="action-btn secondary" onclick="exportToCSV()">
+                <button class="action-btn secondary teacher-only" onclick="exportToCSV()">
                     <i class="fas fa-file-excel"></i>
                     <span>تصدير الطلاب CSV</span>
                 </button>
-                <a href="index.html" class="action-btn secondary">
-                    <i class="fas fa-arrow-right"></i>
-                    <span>الرئيسية</span>
+                <a href="/" class="action-btn secondary" target="_blank" rel="noopener">
+                    <i class="fas fa-arrow-up-right-from-square"></i>
+                    <span>الموقع</span>
                 </a>
             </div>
         </div>
@@ -998,14 +1030,21 @@
                 <i class="fab fa-whatsapp"></i>
                 <span>تقارير أولياء الأمور</span>
             </button>
-            <button class="nav-tab" id="tabOfflineBtn" onclick="switchSection('offline')">
+            <a class="nav-tab" href="/admin/grades.html" style="text-decoration:none">
                 <i class="fas fa-pen-to-square"></i>
-                <span>الامتحانات الأوفلاين</span>
-            </button>
-            <button class="nav-tab" id="tabAnalyticsBtn" onclick="switchSection('analytics')">
-                <i class="fas fa-chart-line"></i>
-                <span>تحليلات الأداء</span>
-            </button>
+                <span>درجات السنتر والخاص ✨</span>
+            </a>
+            <a class="nav-tab" href="/admin/analytics.html" style="text-decoration:none">
+                <i class="fas fa-trophy"></i>
+                <span>التحليلات والأوائل ✨</span>
+            </a>
+            <a class="nav-tab" href="/admin/duplicates.html" style="text-decoration:none">
+                <i class="fas fa-user-group"></i>
+                <span>حسابات مكررة</span>
+            </a>
+            <!-- The old center-grades and analytics tabs moved to the new pages above -->
+            <button class="nav-tab" id="tabOfflineBtn" style="display:none"></button>
+            <button class="nav-tab" id="tabAnalyticsBtn" style="display:none"></button>
         </div>
 
         <!-- STUDENTS SECTION -->
@@ -1077,7 +1116,7 @@
                 </div>
                 <div class="stat-card">
                     <h3 id="totalExamsCount">0</h3>
-                    <p>Exams (الامتحانات)</p>
+                    <p>Exam papers (PDF)</p>
                 </div>
             </div>
 
@@ -1179,7 +1218,13 @@
                 <select class="filter-select" id="resultsExamSelect" onchange="loadExamResults()" disabled>
                     <option value="">-- اختاري الامتحان --</option>
                 </select>
+                <select class="filter-select" id="resultsBranchSelect" onchange="renderResults()">
+                    <option value="all">كل الطلاب (سنتر + خاص)</option>
+                    <option value="center">طلاب السنتر</option>
+                    <option value="private">طلاب الخاص</option>
+                </select>
             </div>
+            <div id="resultsExamStatus" style="display:none; margin: -6px 0 16px; padding: 12px 16px; border-radius: 12px; background: rgba(37,99,235,.12); color: #bfdbfe;"></div>
 
             <div class="stats-grid" id="resultsStatsGrid" style="display: none;">
                 <div class="stat-card">
@@ -1193,6 +1238,10 @@
                 <div class="stat-card">
                     <h3 id="statInProgress">0</h3>
                     <p>لسه بيحلوا دلوقتي</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="statNotTaken">0</h3>
+                    <p id="statNotTakenLabel">لم يحلوا</p>
                 </div>
             </div>
 
@@ -1216,9 +1265,9 @@
                 <div class="controls-bar" style="justify-content: space-between;">
                     <h3 style="color: #fff; font-size: 1.2rem;">
                         <i class="fas fa-user-clock" style="color: #ef4444; margin-left: 8px;"></i>
-                        الطلاب اللي لم يحضروا الامتحان (<span id="missedCount">0</span>)
+                        <span id="missedTitle">الطلاب اللي لم يحلوا الامتحان</span> (<span id="missedCount">0</span>)
                     </h3>
-                    <button class="action-btn secondary" onclick="exportMissedToCSV()">
+                    <button class="action-btn secondary teacher-only" onclick="exportMissedToCSV()">
                         <i class="fas fa-file-export"></i>
                         <span>تصدير Excel</span>
                     </button>
@@ -1567,7 +1616,7 @@
             <button class="close-btn" onclick="closeAddExamModal()">&times;</button>
             <h2 style="margin-bottom: 20px; font-size: 1.5rem; color: #fff;">
                 <i class="fas fa-file-pen" style="color: var(--glowing-cyan); margin-left: 8px;"></i>
-                إضافة امتحان جديد
+                <span id="examModalTitle">إضافة امتحان جديد</span>
             </h2>
 
 
@@ -1625,6 +1674,11 @@ D) 120</pre>
                         style="font-family: monospace; direction: ltr; text-align: left;"></textarea>
                 </div>
 
+                <label style="display:flex; gap:10px; align-items:flex-start; margin-bottom: 15px; color:#e2e8f0; cursor:pointer;">
+                    <input type="checkbox" id="examShuffle" checked style="width:18px;height:18px;margin-top:3px">
+                    <span>ترتيب مختلف لكل طالب (الأسئلة والاختيارات)<br><small style="color:#64748b">بيصعّب تبادل الإجابات بين الطلاب. الاختيارات زي "كل ما سبق" بتفضل في مكانها تلقائياً.</small></span>
+                </label>
+
                 <div id="examPreviewBox" style="margin-bottom: 15px;">
                     <p style="color: #64748b;">اكتب أو الصق الأسئلة فوق عشان تظهر هنا المعاينة</p>
                 </div>
@@ -1632,7 +1686,7 @@ D) 120</pre>
                 <button type="submit" id="examSubmitBtn" class="action-btn" disabled
                     style="width: 100%; justify-content: center; margin-top: 10px;">
                     <i class="fas fa-check"></i>
-                    <span>نشر الامتحان</span>
+                    <span id="examSubmitLabel">نشر الامتحان</span>
                 </button>
             </form>
         </div>
@@ -1694,7 +1748,8 @@ D) 120</pre>
     </div>
 
     <!-- Universal Cloud Database Adapter -->
-    <script src="./db.js"></script>
+    <script src="/db.js"></script>
+    <script src="/admin/assets/messages.js"></script>
 
     <script>
         let allStudents = [];
@@ -1708,75 +1763,88 @@ D) 120</pre>
             return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
-        // لو جلسة الأدمن خلصت (12 ساعة) وهي فاتحة الصفحة، كل الطلبات كانت بتفشل بصمت
-        // (جداول فاضية، "مفيش طلاب"). دلوقتي أول ما أي طلب يرجع 401 بنرجّع شاشة الرمز السري.
+        // ── جلسة الموظفين (مس مروة / المساعد) ──
+        // لو الجلسة خلصت وهي فاتحة الصفحة، بنطلب الدخول تاني فوق الصفحة نفسها
+        // (من غير ما نقفلها) عشان أي درجات اتكتبت ومااتحفظتش متضيعش.
+        let STAFF = null;
         const _origFetch = window.fetch.bind(window);
         window.fetch = async (...args) => {
             const res = await _origFetch(...args);
             const url = String(args[0] && args[0].url ? args[0].url : args[0]);
-            if (res.status === 401 && url.startsWith('/api/') && !url.startsWith('/api/admin-auth')) {
-                showSessionExpired();
+            if (url.startsWith('/api/') && !url.startsWith('/api/admin-auth')) {
+                if (res.status === 401) showSessionExpired();
+                if (res.status === 403) showSmartToast('الصلاحية دي لمس مروة بس 🔒', 'error');
             }
             return res;
         };
+        function applyStaff(staff) {
+            STAFF = staff;
+            document.body.classList.toggle('role-assistant', staff.role !== 'teacher');
+            document.body.classList.toggle('role-teacher', staff.role === 'teacher');
+            document.getElementById('staffName').textContent = staff.name;
+            document.querySelector('.staff-bar .avatar').src = staff.role === 'teacher' ? '/assets/img/marwa-160.png' : '/assets/img/logo-96.png';
+            const chip = document.getElementById('staffRole');
+            chip.textContent = staff.role === 'teacher' ? 'المعلمة — صلاحيات كاملة' : 'مساعد';
+            chip.className = 'role-chip ' + staff.role;
+            document.getElementById('settingsLabel').textContent = staff.role === 'teacher' ? 'الإعدادات والحسابات' : 'كلمة السر';
+        }
         function showSessionExpired() {
             const lock = document.getElementById('adminLockScreen');
             if (!lock || lock.style.display !== 'none') return;
-            document.getElementById('adminPanel').style.display = 'none';
             lock.style.display = '';
+            document.getElementById('lockTitle').textContent = 'انتهت الجلسة';
+            document.getElementById('lockSub').textContent = 'سجّلي دخول تاني — الشغل اللي مااتحفظش لسه موجود في الصفحة.';
+            document.getElementById('reloginForm').style.display = 'block';
+            if (STAFF) document.getElementById('reloginUser').value = STAFF.username;
+            document.getElementById('reloginPass').focus();
+        }
+        async function relogin() {
             const pinError = document.getElementById('pinError');
-            if (pinError) {
-                pinError.textContent = 'انتهت الجلسة — ادخلي الرمز السري تاني (الشغل اللي مااتحفظش لسه موجود في الصفحة).';
+            pinError.style.display = 'none';
+            try {
+                const res = await _origFetch('/api/admin-auth?action=login', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                    body: JSON.stringify({ username: document.getElementById('reloginUser').value.trim().toLowerCase(), password: document.getElementById('reloginPass').value })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'بيانات الدخول غير صحيحة');
+                if (STAFF && data.staff.id !== STAFF.id) { location.reload(); return; }
+                applyStaff(data.staff);
+                document.getElementById('reloginPass').value = '';
+                document.getElementById('adminLockScreen').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+            } catch (err) {
+                pinError.textContent = err.message;
                 pinError.style.display = 'block';
             }
+        }
+        document.getElementById('reloginPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') relogin(); });
+        async function staffLogout() {
+            if (!confirm('تسجيل الخروج من لوحة التحكم؟')) return;
+            await _origFetch('/api/admin-auth?action=logout', { method: 'POST', credentials: 'same-origin' }).catch(() => { });
+            // بيانات الطلاب المحفوظة مؤقتاً على الجهاز بتتمسح مع الخروج (مهم لو الجهاز مشترك)
+            ['mm_students_db', 'mm_lessons_db', 'honorBoardData'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
+            location.replace('/admin/login.html');
         }
 
         // ── التحقق من الجلسة عند فتح الصفحة ──
         (async function checkExistingSession() {
             try {
-                const res = await fetch('/api/admin-auth?action=check', { credentials: 'same-origin' });
+                const res = await _origFetch('/api/admin-auth?action=me', { credentials: 'same-origin' });
                 const data = await res.json();
-                if (data.authenticated) {
-                    document.getElementById('adminLockScreen').style.display = 'none';
-                    document.getElementById('adminPanel').style.display = 'block';
-                    loadData();
-                }
+                if (!data.authenticated) { location.replace('/admin/login.html'); return; }
+                applyStaff(data.staff);
+                document.getElementById('adminLockScreen').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+                loadData();
+                const sec = location.hash.slice(1);
+                if (['students', 'lessons', 'exams', 'results', 'reports'].includes(sec)) switchSection(sec);
             } catch (e) {
-                // لو فشل — خلي شاشة القفل ظاهرة عادي
+                document.getElementById('lockTitle').textContent = 'مفيش اتصال بالسيرفر';
+                document.getElementById('lockSub').textContent = 'اتأكدي من النت وحدّثي الصفحة.';
             }
         })();
-
-        async function unlockAdmin() {
-            const input = document.getElementById('adminPinInput').value;
-            const pinError = document.getElementById('pinError');
-            pinError.style.display = 'none';
-
-            try {
-                const res = await fetch('/api/admin-auth?action=login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ password: input })
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    document.getElementById('adminLockScreen').style.display = 'none';
-                    document.getElementById('adminPanel').style.display = 'block';
-                    loadData();
-                } else {
-                    pinError.textContent = data.error || 'الرمز السري غير صحيح!';
-                    pinError.style.display = 'block';
-                }
-            } catch (err) {
-                pinError.textContent = 'خطأ في الاتصال بالسيرفر';
-                pinError.style.display = 'block';
-            }
-        }
-
-        document.getElementById('adminPinInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') unlockAdmin();
-        });
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register('/OneSignalSDKWorker.js').catch(() => { });
 
         // دالة تنظيف الذاكرة لسحب البيانات الطازجة من السيرفر
         function clearLocalCache() {
@@ -1787,6 +1855,7 @@ D) 120</pre>
         }
 
         function switchSection(section) {
+            try { history.replaceState(null, '', '#' + section); } catch (e) { }
             document.getElementById('studentsSection').style.display = (section === 'students') ? 'block' : 'none';
             document.getElementById('lessonsSection').style.display = (section === 'lessons') ? 'block' : 'none';
             document.getElementById('examsSection').style.display = (section === 'exams') ? 'block' : 'none';
@@ -2089,7 +2158,37 @@ D) 120</pre>
             document.getElementById('addExamModal').classList.add('active');
         }
 
+        // ===== تعديل امتحان (قبل ما أي طالب يفتحه بس) =====
+        let editingExamId = null;
+        function questionsToText(questions) {
+            const L = ['A', 'B', 'C', 'D', 'E', 'F'];
+            return questions.map((q, i) => `${i + 1}) ${q.question}\n` + q.options.map((o, j) => `${L[j]}) ${o}${j === q.correctIndex ? '*' : ''}`).join('\n')).join('\n\n');
+        }
+        function openEditExam(examId) {
+            const ex = allExams.find(e => e.id === examId);
+            if (!ex) return;
+            if (ex.attempts > 0) { alert(`فيه ${ex.attempts} طالب فتحوا الامتحان ده بالفعل، فمينفعش يتعدل (عشان الدرجات متتغيرش). اعملي امتحان جديد بدل كده.`); return; }
+            let qs = []; try { qs = JSON.parse(ex.questions); } catch (e) { }
+            editingExamId = examId;
+            document.getElementById('examModalTitle').textContent = 'تعديل الامتحان';
+            document.getElementById('examSubmitLabel').textContent = 'حفظ التعديلات';
+            document.getElementById('examTitle').value = ex.title;
+            document.getElementById('examGrade').value = ex.grade;
+            document.getElementById('examGrade').disabled = true;
+            document.getElementById('examDuration').disabled = true;
+            document.getElementById('examTimeLimit').value = ex.timeLimitMinutes || '';
+            document.getElementById('examShuffle').checked = ex.shuffle !== 0;
+            document.getElementById('examQuestionsInput').value = questionsToText(qs);
+            renderExamPreview();
+            document.getElementById('addExamModal').classList.add('active');
+        }
+
         function closeAddExamModal() {
+            editingExamId = null;
+            document.getElementById('examModalTitle').textContent = 'إضافة امتحان جديد';
+            document.getElementById('examSubmitLabel').textContent = 'نشر الامتحان';
+            document.getElementById('examGrade').disabled = false;
+            document.getElementById('examDuration').disabled = false;
             document.getElementById('addExamModal').classList.remove('active');
             document.getElementById('addExamForm').reset();
             document.getElementById('examPreviewBox').innerHTML = '<p style="color: #64748b;">اكتب أو الصق الأسئلة فوق عشان تظهر هنا المعاينة</p>';
@@ -2112,8 +2211,27 @@ D) 120</pre>
                 grade: document.getElementById('examGrade').value,
                 durationDays: parseInt(document.getElementById('examDuration').value, 10) || 3,
                 timeLimitMinutes: parseInt(document.getElementById('examTimeLimit').value, 10) || null,
+                shuffle: document.getElementById('examShuffle').checked,
                 questions
             };
+
+            if (editingExamId) {
+                try {
+                    const res = await fetch('/api/exams?action=update', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ examId: editingExamId, ...payload })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'فشل التعديل');
+                    alert('تم حفظ التعديلات ✅');
+                    closeAddExamModal();
+                    await loadExams();
+                } catch (err) {
+                    alert('حصل خطأ: ' + err.message);
+                    submitBtn.disabled = false;
+                }
+                return;
+            }
 
             try {
                 const res = await fetch('/api/exams?action=create', {
@@ -2174,7 +2292,7 @@ D) 120</pre>
             const examsForGrade = allExams.filter(ex => (ex.grade || '').toLowerCase() === grade.toLowerCase());
             nameSelect.disabled = false;
             nameSelect.innerHTML = '<option value="">-- اختاري الامتحان --</option>' +
-                examsForGrade.map(ex => `<option value="${ex.id}">${ex.title}</option>`).join('');
+                examsForGrade.map(ex => `<option value="${ex.id}">${esc(ex.title)}</option>`).join('');
 
             // لو الامتحان اللي كان متختار قبل كده لسه موجود في القائمة، سيبيه زي ما هو
             if (examsForGrade.some(ex => ex.id === currentValue)) {
@@ -2214,12 +2332,12 @@ D) 120</pre>
             const isExpired = expires < new Date();
 
             tbody.innerHTML = `<tr>
-                <td><strong>${ex.title}</strong></td>
+                <td><strong>${esc(ex.title)}</strong></td>
                 <td>${(ex.grade || '').toUpperCase()}</td>
                 <td>${qCount}</td>
                 <td>${expires.toLocaleDateString('ar-EG')}</td>
-                <td>${isExpired ? '<span style="color:#ef4444;">منتهي</span>' : '<span style="color:#4ade80;">شغال</span>'}</td>
-                <td><button class="btn-table btn-delete" onclick="deleteExam('${ex.id}')">حذف</button></td>
+                <td>${isExpired ? '<span style="color:#ef4444;">منتهي</span>' : '<span style="color:#4ade80;">شغال</span>'}<br><small style="color:#94a3b8">${ex.attempts || 0} فتحوه${ex.shuffle === 0 ? '' : ' · ترتيب مختلف لكل طالب'}</small></td>
+                <td style="white-space:nowrap">${!isExpired && !ex.attempts ? `<button class="btn-table btn-reset" onclick="openEditExam('${ex.id}')">تعديل</button> ` : ''}<button class="btn-table btn-delete" onclick="deleteExam('${ex.id}')">حذف</button></td>
             </tr>`;
         }
 
@@ -2255,7 +2373,7 @@ D) 120</pre>
             const examsForGrade = allExams.filter(ex => (ex.grade || '').toLowerCase() === grade.toLowerCase());
             nameSelect.disabled = false;
             nameSelect.innerHTML = '<option value="">-- اختاري الامتحان --</option>' +
-                examsForGrade.map(ex => `<option value="${ex.id}">${ex.title}</option>`).join('');
+                examsForGrade.map(ex => `<option value="${ex.id}">${esc(ex.title)}</option>`).join('');
         }
 
         function onResultsGradeChange() {
@@ -2270,110 +2388,114 @@ D) 120</pre>
         let currentResultsExamId = '';
         let currentMissedList = [];
 
+        // ===== نتائج الامتحان الأونلاين (مع فصل السنتر/الخاص وقائمة غياب صحيحة) =====
+        let currentResultsData = null;
+        const BRANCH_LABEL_AR = { center: 'سنتر', private: 'خاص' };
+        function scoreColor(score, total) {
+            const p = total > 0 ? (score / total) * 100 : 0;
+            return p >= 85 ? '#4ade80' : p >= 70 ? '#60a5fa' : p >= 50 ? '#fbbf24' : '#f87171';
+        }
+        function branchPill(b) {
+            if (!b) return '<span style="font-size:.75rem;color:#94a3b8;margin-right:6px">(بدون مجموعة)</span>';
+            return `<span style="font-size:.75rem;font-weight:700;padding:2px 8px;border-radius:999px;margin-right:6px;background:${b === 'center' ? 'rgba(37,99,235,.2)' : 'rgba(249,115,22,.2)'};color:${b === 'center' ? '#93c5fd' : '#fdba74'}">${BRANCH_LABEL_AR[b] || esc(b)}</span>`;
+        }
         async function loadExamResults() {
             const tbody = document.getElementById('resultsTableBody');
             const statsGrid = document.getElementById('resultsStatsGrid');
             const missedSection = document.getElementById('missedSection');
             const examId = document.getElementById('resultsExamSelect').value;
             currentResultsExamId = examId;
+            currentResultsData = null;
+            document.getElementById('resultsExamStatus').style.display = 'none';
+            statsGrid.style.display = 'none';
+            missedSection.style.display = 'none';
 
             if (!examId) {
-                statsGrid.style.display = 'none';
-                missedSection.style.display = 'none';
                 tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">اختاري الامتحان عشان تظهر نتايج الطلاب</td></tr>`;
                 return;
             }
-
-            statsGrid.style.display = 'none';
-            missedSection.style.display = 'none';
             tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">جاري التحميل...</td></tr>`;
-
             try {
                 const res = await fetch(`/api/exams?action=results&examId=${encodeURIComponent(examId)}&t=${Date.now()}`);
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'فشل تحميل النتايج');
-
-                const stats = data.stats || { totalAccessed: 0, completed: 0, inProgress: 0 };
-                const rows = Array.isArray(data.results) ? data.results : [];
-                currentResultsRows = rows;
-                currentMissedList = Array.isArray(data.missed) ? data.missed : [];
-
-                document.getElementById('statTotalAccessed').textContent = stats.totalAccessed;
-                document.getElementById('statCompleted').textContent = stats.completed;
-                document.getElementById('statInProgress').textContent = stats.inProgress;
-                statsGrid.style.display = 'grid';
-
-                // قائمة "الطلاب اللي لم يحضروا" بتظهر دايماً بمجرد ما امتحان يتختار
-                document.getElementById('missedCount').textContent = currentMissedList.length;
-                const missedBody = document.getElementById('missedTableBody');
-                if (currentMissedList.length === 0) {
-                    missedBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 20px;">كل الطلاب المسجلين في المرحلة دي دخلوا الامتحان 🎉</td></tr>`;
-                } else {
-                    missedBody.innerHTML = currentMissedList.map(m => `<tr>
-                        <td><span class="id-badge">${esc(m.studentId)}</span></td>
-                        <td><strong>${esc(m.firstName)} ${esc(m.lastName)}</strong></td>
-                        <td>${esc(m.phone || '')}</td>
-                        <td>${esc(m.parentPhone || '')}</td>
-                        <td><button class="btn-table" style="background:#ef4444; color:#fff;" onclick="sendAbsenceWarning('${m.studentId}', this)">
-                                <i class="fab fa-whatsapp"></i> إرسال تنبيه
-                            </button></td>
-                    </tr>`).join('');
-                }
-                missedSection.style.display = 'block';
-
-                if (rows.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">محدش دخل الامتحان ده لسه</td></tr>`;
-                    return;
-                }
-
-                tbody.innerHTML = rows.map(r => {
-                    let scoreCell = '<span style="color:#94a3b8;">لسه ما سلمش</span>';
-                    const isSubmitted = (r.status === 'submitted' && r.score !== null && r.score !== undefined);
-                    
-                    if (isSubmitted) {
-                        const pct = r.total > 0 ? (r.score / r.total) * 100 : 0;
-                        let color = '#e2e8f0';
-                        if (pct < 50) color = '#ef4444';
-                        else if (r.score >= r.total - 1) color = '#4ade80';
-                        scoreCell = `<strong style="color:${color};">${r.score} / ${r.total}</strong>`;
-                    }
-
-                    // طالب سلّم وجاب صفر "سلّم" فعلاً، فمينفعش يطلع له زرار إنذار "دخل ومسلّمش"
-                    const isSuccessful = isSubmitted;
-                    const fullName = `${r.firstName} ${r.lastName}`;
-                    const safeName = fullName.replace(/'/g, "\\'"); // escape single quotes
-
-                    let statusBadge = '';
-                    if (isSuccessful) {
-                        statusBadge = '<span style="color: #4ade80; font-size: 0.95rem; margin-left: 8px;"><i class="fas fa-check-circle"></i> مكتمل</span>';
-                    }
-
-                    const actionsHTML = `
-                        <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
-                            ${statusBadge}
-                            <button class="btn-table btn-reset" style="padding: 6px 12px; font-size: 0.85rem;" onclick="resetExamAttempt('${r.studentId}')" title="إعادة فتح الامتحان للطالب">إعادة فتح</button>
-                            ${!isSuccessful ? `
-                            <button class="btn-table" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 6px 12px; font-weight: bold; cursor: pointer; font-size: 0.85rem; transition: 0.3s;" onclick="sendCheatingWarningById('${esc(r.studentId)}', this)">
-                                <i class="fab fa-whatsapp"></i> إنذار
-                            </button>
-                            ` : ''}
-                        </div>
-                    `;
-
-                    return `<tr>
-                        <td><span class="id-badge">${esc(r.studentId)}</span></td>
-                        <td><strong>${esc(r.firstName)} ${esc(r.lastName)}</strong></td>
-                        <td>${esc(r.phone || '')}</td>
-                        <td>${esc(r.parentPhone || '')}</td>
-                        <td>${scoreCell}</td>
-                        <td>${actionsHTML}</td>
-                    </tr>`;
-                }).join('');
+                currentResultsData = data;
+                renderResults();
             } catch (err) {
-                statsGrid.style.display = 'none';
-                missedSection.style.display = 'none';
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #ef4444; padding: 30px;">حصل خطأ: ${err.message}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #ef4444; padding: 30px;">حصل خطأ: ${esc(err.message)}</td></tr>`;
             }
+        }
+
+        function renderResults() {
+            const data = currentResultsData;
+            if (!data) return;
+            const tbody = document.getElementById('resultsTableBody');
+            const branch = document.getElementById('resultsBranchSelect').value;
+            const inB = (x) => branch === 'all' || x.branch === branch;
+            const ex = data.exam;
+            const rows = (data.results || []).filter(inB);
+            const notTaken = (ex.closed ? data.missed : data.notYet).filter(inB);
+            currentResultsRows = rows;
+            currentMissedList = ex.closed ? notTaken : [];
+
+            const status = document.getElementById('resultsExamStatus');
+            const unlock = new Date(ex.reviewUnlocksAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+            status.innerHTML = ex.closed
+                ? `🔒 الامتحان انتهى. مراجعة الأسئلة والإجابات بتفتح للطلاب ${new Date(ex.reviewUnlocksAt) > new Date() ? 'يوم ' + unlock : 'دلوقتي (مفتوحة)'}.`
+                : `🟢 الامتحان لسه مفتوح لحد ${new Date(ex.expiresAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })} — اللي لسه محلّوش لسه عندهم وقت، فقائمة الغياب بتظهر بعد ما يقفل.`;
+            status.style.display = 'block';
+
+            document.getElementById('statTotalAccessed').textContent = rows.length;
+            document.getElementById('statCompleted').textContent = rows.filter(r => r.status === 'submitted').length;
+            document.getElementById('statInProgress').textContent = ex.closed ? 0 : rows.filter(r => r.status === 'started').length;
+            document.getElementById('statNotTaken').textContent = notTaken.length;
+            document.getElementById('statNotTakenLabel').textContent = ex.closed ? 'لم يحلوا (غياب)' : 'لسه محلّوش';
+            document.getElementById('resultsStatsGrid').style.display = 'grid';
+
+            // قائمة اللي محلّوش: بعد ما الامتحان يقفل بس، ولطلاب كانوا مسجلين قبل ما يقفل
+            const missedSection = document.getElementById('missedSection');
+            const missedBody = document.getElementById('missedTableBody');
+            document.getElementById('missedTitle').textContent = ex.closed ? 'الطلاب اللي لم يحلوا الامتحان' : 'لسه محلّوش (الامتحان مفتوح)';
+            document.getElementById('missedCount').textContent = notTaken.length;
+            if (notTaken.length === 0) {
+                missedBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 20px;">${ex.closed ? 'كل الطلاب المسجلين حلّوا الامتحان 🎉' : 'كل الطلاب حلّوا لحد دلوقتي 🎉'}</td></tr>`;
+            } else {
+                missedBody.innerHTML = notTaken.map(m => `<tr>
+                    <td><span class="id-badge">${esc(m.studentId)}</span></td>
+                    <td><strong>${esc(m.firstName)} ${esc(m.lastName)}</strong> ${branchPill(m.branch)}${m.reason === 'opened' ? '<br><small style="color:#fbbf24">فتح الامتحان ومسلّمش</small>' : ''}</td>
+                    <td>${esc(m.phone || '')}</td>
+                    <td>${esc(m.parentPhone || '')}</td>
+                    <td>${ex.closed ? (m.reason === 'opened'
+                        ? `<button class="btn-table" style="background:#f59e0b; color:#fff;" onclick="sendCheatingWarningById('${esc(m.studentId)}', this)"><i class="fab fa-whatsapp"></i> فتح ومسلّمش</button>`
+                        : `<button class="btn-table" style="background:#ef4444; color:#fff;" onclick="sendAbsenceWarning('${esc(m.studentId)}', this)"><i class="fab fa-whatsapp"></i> إرسال تنبيه</button>`)
+                        : '<span style="color:#64748b;font-size:.85rem">بعد ما يقفل</span>'}</td>
+                </tr>`).join('');
+            }
+            missedSection.style.display = 'block';
+
+            if (rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 30px;">محدش دخل الامتحان ده لسه</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = rows.map(r => {
+                const isSubmitted = (r.status === 'submitted' && r.score !== null && r.score !== undefined);
+                const scoreCell = isSubmitted
+                    ? `<strong style="color:${scoreColor(r.score, r.total)};">${r.score} / ${r.total}</strong> <small style="color:#94a3b8">(${Math.round(r.score / r.total * 100)}%)</small>`
+                    : `<span style="color:#94a3b8;">${ex.closed ? 'فتح ومسلّمش' : 'لسه بيحل'}</span>`;
+                const actionsHTML = `<div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+                        ${isSubmitted ? '<span style="color: #4ade80; font-size: 0.95rem; margin-left: 8px;"><i class="fas fa-check-circle"></i> مكتمل</span>' : ''}
+                        ${!ex.closed ? `<button class="btn-table btn-reset" style="padding: 6px 12px; font-size: 0.85rem;" onclick="resetExamAttempt('${esc(r.studentId)}')" title="إعادة فتح الامتحان للطالب">إعادة فتح</button>` : ''}
+                        ${!isSubmitted && ex.closed ? `<button class="btn-table" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 6px 12px; font-weight: bold; cursor: pointer; font-size: 0.85rem;" onclick="sendCheatingWarningById('${esc(r.studentId)}', this)"><i class="fab fa-whatsapp"></i> تنبيه</button>` : ''}
+                    </div>`;
+                return `<tr>
+                    <td><span class="id-badge">${esc(r.studentId)}</span></td>
+                    <td><strong>${esc(r.firstName)} ${esc(r.lastName)}</strong> ${branchPill(r.branch)}</td>
+                    <td>${esc(r.phone || '')}</td>
+                    <td>${esc(r.parentPhone || '')}</td>
+                    <td>${scoreCell}</td>
+                    <td>${actionsHTML}</td>
+                </tr>`;
+            }).join('');
         }
 
         function exportMissedToCSV() {
@@ -2395,43 +2517,38 @@ D) 120</pre>
             document.body.removeChild(link);
         }
 
-        // بندوّر على الطالب بالكود بتاعه بدل ما نحط اسمه جوه كود الزرار (الاسم ممكن يكون فيه علامات تكسر الزرار)
+        // رسالة 3: "فتح الامتحان ومسلّمش" — بعد ما الامتحان يقفل بس
         let currentResultsRows = [];
         function sendCheatingWarningById(studentId, btnElement) {
-            const r = currentResultsRows.find(x => x.studentId === studentId);
+            const data = currentResultsData;
+            if (!data) return;
+            const r = [...(data.results || []), ...(data.missed || [])].find(x => x.studentId === studentId);
             if (!r) return;
-            sendCheatingWarning(`${r.firstName} ${r.lastName}`, r.parentPhone || '', btnElement);
+            if (!r.parentPhone) { alert('لا يوجد رقم لولي الأمر لهذا الطالب.'); return; }
+            const text = ParentMessages.notSubmitted({ student: r, examTitle: data.exam.title, reopened: false });
+            openWhatsApp(r.parentPhone, text);
+            markSent(btnElement);
         }
-
-        async function sendCheatingWarning(studentName, parentPhone, btnElement) {
-            if (!parentPhone) {
-                alert('لا يوجد رقم لولي الأمر لهذا الطالب.');
-                return;
-            }
-            const message = `🚨 إشعار هام من منصة Science Academy - تيم مس مروة 🚨\n\nولي الأمر الكريم،\nنحيطكم علماً بأن الطالب/ة: *${studentName}* قد دخل إلى الامتحان الإلكتروني ولكنه لم يقم بتسليم الإجابات، مما أدى إلى إغلاق الامتحان تلقائياً. 🔒\n\n⚠️ *تحذير هام:* هذا الإجراء يحدث عندما يخرج الطالب من شاشة الامتحان (في محاولة للبحث عن إجابة أو فتح تطبيقات أخرى).\n\n🔄 سيتم إعادة فتح الامتحان للطالب مرة أخرى كفرصة أخيرة.\nيرجى التنبيه عليه بأنه بمجرد فتح الامتحان، *يُمنع منعاً باتاً الخروج من الصفحة أو عمل تحديث (Refresh)* حتى يتم تسليم الإجابات نهائياً، وإلا سيتم إغلاق الامتحان ولن يُعاد فتحه مرة أخرى.\n\nمع تحياتنا وتمنياتنا بالتوفيق.. 💐`;
-            openWhatsApp(parentPhone, message);
-
-            if (btnElement) {
-                btnElement.innerHTML = '<i class="fas fa-check-circle"></i> تم الإرسال';
-                btnElement.style.background = 'rgba(74, 222, 128, 0.2)';
-                btnElement.style.borderColor = 'rgba(74, 222, 128, 0.5)';
-                btnElement.style.color = '#4ade80';
-                btnElement.style.cursor = 'not-allowed';
-                btnElement.disabled = true;
-            }
+        function markSent(btnElement) {
+            if (!btnElement) return;
+            btnElement.innerHTML = '<i class="fas fa-check-circle"></i> تم الإرسال';
+            btnElement.style.background = '#64748b';
+            btnElement.style.color = '#fff';
+            btnElement.disabled = true;
         }
 
         async function resetExamAttempt(studentId) {
             if (!currentResultsExamId) return;
-            if (!confirm(`متأكدة إنك عايزة تفتحي المحاولة تاني للطالب (${studentId})؟ لو كان سلّم قبل كده، درجته هتتمسح وهيقدر يدخل الامتحان من الأول.`)) return;
+            const reason = prompt(`إعادة فتح الامتحان للطالب (${studentId})\nلو كان سلّم قبل كده، درجته هتتمسح (بتتحفظ نسخة منها في سجل النشاط) وهيقدر يدخل من الأول.\n\nسبب إعادة الفتح (اختياري):`, '');
+            if (reason === null) return;
 
             try {
                 const res = await fetch('/api/exams?action=reset-attempt', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ examId: currentResultsExamId, studentId })
+                    body: JSON.stringify({ examId: currentResultsExamId, studentId, reason })
                 });
-                if (!res.ok) throw new Error('فشلت إعادة الفتح');
+                if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'فشلت إعادة الفتح'); }
                 await loadExamResults();
             } catch (err) {
                 alert('حصل خطأ: ' + err.message);
@@ -2469,9 +2586,9 @@ D) 120</pre>
                 tbody.innerHTML = currentReportsList.map(s => {
                     const avgCell = s.avgPercent === null
                         ? '<span style="color:#64748b;">-</span>'
-                        : `<strong style="color:${s.avgPercent < 50 ? '#ef4444' : '#4ade80'};">${s.avgPercent}%</strong>`;
+                        : `<strong style="color:${scoreColor(s.avgPercent, 100)};">${s.avgPercent}%</strong>`;
 
-                    const actionCell = s.examsCount === 0
+                    const actionCell = (s.examsCount + s.missedCount) === 0
                         ? '<span style="color:#64748b; font-size:0.85rem;">لا توجد نتائج بعد</span>'
                         : `<button class="btn-table" style="background:#25D366; color:#fff;" onclick="generateReport('${s.studentId}', this)">
                                <i class="fab fa-whatsapp"></i> إنشاء تقرير
@@ -2479,9 +2596,9 @@ D) 120</pre>
 
                     return `<tr>
                         <td><span class="id-badge">${esc(s.studentId)}</span></td>
-                        <td><strong>${esc(s.firstName)} ${esc(s.lastName)}</strong></td>
+                        <td><strong>${esc(s.firstName)} ${esc(s.lastName)}</strong> ${branchPill(s.branch)}</td>
                         <td>${esc(s.parentPhone || '')}</td>
-                        <td>${s.examsCount}</td>
+                        <td>${s.examsCount}${s.missedCount ? ` <small style="color:#f87171">(+${s.missedCount} غياب)</small>` : ''}</td>
                         <td>${avgCell}</td>
                         <td>${actionCell}</td>
                     </tr>`;
@@ -2499,70 +2616,24 @@ D) 120</pre>
             return clean;
         }
 
+        // رسالة 1: تقرير الأونلاين — فيه الامتحانات اللي اتحلت ✅ واللي فاتت ❌ (الغياب بيتحسب صفر)
         async function generateReport(studentId, btnEl) {
             const student = currentReportsList.find(s => s.studentId === studentId);
             if (!student) return;
-
-            if (!student.parentPhone) {
-                alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب');
-                return;
-            }
-
+            if (!student.parentPhone) { alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب'); return; }
             const originalBtnHtml = btnEl ? btnEl.innerHTML : '';
-            if (btnEl) {
-                btnEl.disabled = true;
-                btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري التجهيز...';
-            }
-
+            if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري التجهيز...'; }
             try {
-                const res = await fetch(`/api/exams?action=my-results&studentId=${encodeURIComponent(studentId)}&t=${Date.now()}`);
-                const results = await res.json();
-                if (!res.ok) throw new Error(results.error || 'فشل تحميل نتائج الطالب');
-
-                if (!Array.isArray(results) || results.length === 0) {
-                    alert('لا توجد نتائج امتحانات لهذا الطالب بعد');
+                const res = await fetch(`/api/exams?action=student-report&studentId=${encodeURIComponent(studentId)}&t=${Date.now()}`);
+                const report = await res.json();
+                if (!res.ok) throw new Error(report.error || 'فشل تحميل نتائج الطالب');
+                if (!report.exams.length) {
+                    alert('لا توجد امتحانات منتهية أو محلولة لهذا الطالب بعد');
                     if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = originalBtnHtml; }
                     return;
                 }
-
-                const gradeLabel = GRADE_LABELS[(results[0].grade || '').toLowerCase()] || results[0].grade;
-                let message = `مرحبا 👋 تيم مس مروة\n`;
-                message += `تقرير أداء الطالب/ة: ${student.firstName} ${student.lastName}\n`;
-                message += `المرحلة: ${gradeLabel}\n\n`;
-                message += `📊 نتائج الامتحانات (الأونلاين):\n`;
-
-                let totalPct = 0;
-                results.forEach(r => {
-                    const pct = r.total > 0 ? (r.score / r.total) * 100 : 0;
-                    const icon = pct < 50 ? '⚠️' : '✅';
-                    message += `${icon} ${r.title}: ${r.score}/${r.total}\n`;
-                    totalPct += pct;
-                });
-
-                const avg = Math.round(totalPct / results.length);
-                message += `\nالمعدل العام: ${avg}%`;
-
-                // على الموبايل: wa.me بيفتح تطبيق واتساب مباشرة
-                // على الكمبيوتر: web.whatsapp.com بيفتح واتساب ويب طول، من غير ما يحاول
-                // يفرض فتح تطبيق الديسكتوب المثبت
-                const waNumber = toWhatsAppNumber(student.parentPhone);
-                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-                const waUrl = isMobile
-                    ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
-                    : `whatsapp://send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
-                
-                if (isMobile) {
-                    window.open(waUrl, 'whatsapp_report_tab');
-                } else {
-                    window.location.href = waUrl;
-                }
-
-                // مؤشر بصري بس (مش محفوظ في الداتا بيز) عشان تتجنبي إرسال التقرير مرتين بالغلط
-                if (btnEl) {
-                    btnEl.innerHTML = 'تم الإنشاء ✅';
-                    btnEl.style.background = '#64748b';
-                    btnEl.style.cursor = 'default';
-                }
+                openWhatsApp(student.parentPhone, ParentMessages.onlineReport(report));
+                if (btnEl) { btnEl.innerHTML = 'تم الإنشاء ✅'; btnEl.style.background = '#64748b'; btnEl.style.cursor = 'default'; }
             } catch (err) {
                 alert('حصل خطأ أثناء تجهيز التقرير: ' + err.message);
                 if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = originalBtnHtml; }
@@ -2572,42 +2643,12 @@ D) 120</pre>
         // بترسل تنبيه واتساب لولي أمر طالب غايب عن امتحان معين
         function sendAbsenceWarning(studentId, btnEl) {
             const student = currentMissedList.find(m => m.studentId === studentId);
-            if (!student) return;
-
-            if (!student.parentPhone) {
-                alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب');
-                return;
-            }
-
-            const examTitle = document.getElementById('resultsExamSelect').selectedOptions[0]?.textContent || 'الامتحان';
-            const studentName = `${student.firstName} ${student.lastName}`;
-
-            const message = `⚠️ تنبيه من منصة Science Academy ⚠️\n`
-                + `ولي الأمر المحترم،\n`
-                + `نحيط سيادتكم علماً بأن الطالب: ${studentName}\n`
-                + `لم يقم بأداء الامتحان الأونلاين: ${examTitle}\n`
-                + `برجاء متابعة الطالب والتأكد من إتمام المهام المطلوبة.`;
-
-            // نفس منطق توجيه واتساب اللي اتأكدنا منه في المرحلة اللي فاتت بالظبط
-            const waNumber = toWhatsAppNumber(student.parentPhone);
-            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            const waUrl = isMobile
-                ? `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`
-                : `whatsapp://send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
-            
-            if (isMobile) {
-                window.open(waUrl, 'whatsapp_report_tab');
-            } else {
-                window.location.href = waUrl;
-            }
-
-            // مؤشر بصري بس عشان تتجنبي إرسال نفس التنبيه مرتين بالغلط
-            if (btnEl) {
-                btnEl.innerHTML = 'تم الإرسال ✅';
-                btnEl.style.background = '#64748b';
-                btnEl.style.cursor = 'default';
-                btnEl.disabled = true;
-            }
+            if (!student || !currentResultsData) return;
+            if (!student.parentPhone) { alert('لا يوجد رقم هاتف ولي أمر مسجّل لهذا الطالب'); return; }
+            // رسالة 2: غياب عن امتحان أونلاين (بعد ما يقفل بس)
+            const text = ParentMessages.missedOnline({ student, examTitle: currentResultsData.exam.title, closedAt: currentResultsData.exam.expiresAt });
+            openWhatsApp(student.parentPhone, text);
+            markSent(btnEl);
         }
 
         // ==================== الامتحانات الأوفلاين ====================
@@ -2714,7 +2755,7 @@ D) 120</pre>
                         <button class="btn-table btn-reset" style="padding:2px 8px; font-size:0.75rem; color:#f59e0b;" onclick="openEditOfflineExamModal(${ex.id}, '${escapedName}', ${ex.totalMarks})" title="تعديل الامتحان">
                             <i class="fas fa-pencil-alt"></i>
                         </button>
-                        <button class="btn-table btn-reset" style="padding:2px 8px; font-size:0.75rem; color:#ef4444;" onclick="deleteOfflineExam(${ex.id})" title="حذف الامتحان">
+                        <button class="btn-table btn-reset teacher-only" style="padding:2px 8px; font-size:0.75rem; color:#ef4444;" onclick="deleteOfflineExam(${ex.id})" title="حذف الامتحان">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -2837,7 +2878,7 @@ D) 120</pre>
             };
 
             localStorage.setItem('honorBoardData', JSON.stringify(boardData));
-            window.open('./honor-board.html', '_blank');
+            window.open('/honor-board.html', '_blank');
             closeHonorBoardModal();
         }
 

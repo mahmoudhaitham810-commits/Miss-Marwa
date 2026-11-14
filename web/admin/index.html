@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="SA Staff">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>
+        // Old links like /admin/#results go to the new pages
+        (function () {
+            var map = { students: 'students.html', lessons: 'content.html', exams: 'exams.html', results: 'results.html', reports: 'reports.html', offline: 'grades.html', analytics: 'analytics.html' };
+            function go() { var h = location.hash.slice(1); if (map[h]) location.replace('/admin/' + map[h]); }
+            go(); window.addEventListener('hashchange', go);
+        })();
+    </script>
+    <title>Today · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1 id="hello">Good day</h1><p id="todayLine">Here's what needs you today.</p></div>
+            </div>
+            <div id="content"><div class="kpis">
+                <div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div>
+                <div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div></div></div>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        const staff = await A.boot({ active: 'today', title: 'Today' });
+        const h = new Date().getHours();
+        $('hello').textContent = `${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}, ${staff.name.split(' ')[0] === 'Miss' ? staff.name : staff.name.split(' ')[0]}`;
+        $('todayLine').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+        const get = (p) => api(p).catch(() => null);
+        const [students, exams, dups, log, check] = await Promise.all([
+            get('/api/students'),
+            get('/api/exams?action=list'),
+            get('/api/students?action=duplicates'),
+            A.can('audit.view') ? get('/api/admin-auth?action=audit-log&limit=6') : Promise.resolve(null),
+            get('/api/offline-exams?action=data-check')
+        ]);
+        const S = Array.isArray(students) ? students : [];
+        const E = Array.isArray(exams) ? exams : [];
+        const now = Date.now();
+        const week = now - 7 * 864e5;
+        const newThisWeek = S.filter(s => A.toMs(s.created_at) >= week).length;
+        const noGroup = S.filter(s => !['center', 'private'].includes(s.branch)).length;
+        const open = E.filter(e => A.toMs(e.expires_at) > now).sort((a, b) => A.toMs(a.expires_at) - A.toMs(b.expires_at));
+        const closingSoon = open.filter(e => A.toMs(e.expires_at) - now < 24 * 3600e3);
+        const recentClosed = E.filter(e => { const t = A.toMs(e.expires_at); return t <= now && t > now - 7 * 864e5; })
+            .sort((a, b) => A.toMs(b.expires_at) - A.toMs(a.expires_at));
+        const byGrade = Object.fromEntries(Object.keys(A.GRADES).map(g => [g, S.filter(s => String(s.grade).toLowerCase() === g).length]));
+        const qCount = (e) => { try { return JSON.parse(e.questions).length; } catch (x) { return 0; } };
+        const dupCount = dups && dups.pairs ? dups.pairs.length : 0;
+
+        const todo = [];
+        if (check && check.issueCount) todo.push({ ic: 'shield', tone: 'danger', t: `Data check found ${check.issueCount} thing${check.issueCount > 1 ? 's' : ''} to look at`, href: '/admin/data-check.html', cta: 'Open' });
+        if (closingSoon.length) todo.push({ ic: 'clock', tone: 'warn', t: `${closingSoon.length} online exam${closingSoon.length > 1 ? 's close' : ' closes'} within 24 hours`, href: '/admin/exams.html', cta: 'View' });
+        if (recentClosed.length) todo.push({ ic: 'whatsapp', tone: '', t: `${recentClosed.length} exam${recentClosed.length > 1 ? 's' : ''} closed this week — check who missed ${recentClosed.length > 1 ? 'them' : 'it'}`, href: `/admin/results.html?exam=${encodeURIComponent(recentClosed[0].id)}`, cta: 'Open results' });
+        if (noGroup) todo.push({ ic: 'users', tone: 'warn', t: `${noGroup} student${noGroup > 1 ? 's have' : ' has'} no Center / Private group`, href: '/admin/students.html?group=none', cta: 'Assign' });
+        if (dupCount) todo.push({ ic: 'merge', tone: 'danger', t: `${dupCount} possible duplicate account${dupCount > 1 ? 's' : ''}`, href: '/admin/duplicates.html', cta: 'Review' });
+        if (newThisWeek) todo.push({ ic: 'user', tone: 'ok', t: `${newThisWeek} new student${newThisWeek > 1 ? 's' : ''} signed up this week`, href: '/admin/students.html?sort=new', cta: 'See them' });
+
+        const ACTION_LABEL = { 'auth.login': 'signed in', 'students.reset-password': 'reset a student password', 'students.delete': 'deleted a student', 'lessons.create': 'added a lesson', 'lessons.delete': 'deleted a lesson', 'exams.create': 'created an online exam', 'exams.edit': 'edited an online exam', 'exams.delete': 'deleted an online exam', 'exams.reset-attempt': 're-opened a student\'s exam', 'offline.create-exam': 'added a center exam', 'offline.save-grades': 'saved center marks', 'offline.edit-exam': 'edited a center exam', 'offline.delete-exam': 'deleted a center exam', 'students.set-branch': 'assigned a group', 'staff.create': 'added a staff account' };
+
+        $('content').innerHTML = `
+            <div class="kpis">
+                <a class="kpi fade-up" style="--i:0" href="/admin/students.html"><b class="num">${S.length}</b><span>Students</span><small>${Object.entries(byGrade).map(([g, n]) => `${A.GRADES[g]} ${n}`).join(' · ')}</small></a>
+                <a class="kpi fade-up" style="--i:1" href="/admin/exams.html"><b class="num">${open.length}</b><span>Online exams open</span><small>${closingSoon.length} closing within 24h</small></a>
+                <a class="kpi fade-up" style="--i:2" href="/admin/students.html?sort=new"><b class="num">${newThisWeek}</b><span>New this week</span><small>sign-ups in the last 7 days</small></a>
+                <a class="kpi fade-up" style="--i:3" href="${dupCount ? '/admin/duplicates.html' : '/admin/students.html?group=none'}"><b class="num">${noGroup + dupCount}</b><span>To tidy up</span><small>${noGroup} without a group · ${dupCount} duplicates</small></a>
+            </div>
+
+            <div class="grid-2c">
+                <div class="stack" style="gap:18px">
+                    <div class="card fade-up" style="--i:2">
+                        <div class="card-head"><h2 class="card-title">${icon('checkCircle')}Needs you today</h2></div>
+                        ${todo.length ? todo.map(t => `<a class="todo ${t.tone}" href="${t.href}"><span class="ti">${icon(t.ic, 'sm')}</span><span class="tx">${esc(t.t)}</span><span class="go">${esc(t.cta)}${icon('chevronRight', 'sm')}</span></a>`).join('')
+                            : `<div class="empty-state" style="padding:20px"><div class="bubble">${icon('checkCircle', 'lg')}</div><h3>All clear</h3><p>Nothing urgent right now.</p></div>`}
+                    </div>
+                    <div class="card fade-up" style="--i:3">
+                        <div class="card-head"><h2 class="card-title">${icon('clipboard')}Online exams open now</h2><a class="link small" href="/admin/exams.html">All exams</a></div>
+                        ${open.length ? open.slice(0, 6).map(e => `<a class="row-link" href="/admin/results.html?exam=${encodeURIComponent(e.id)}">
+                            <div style="min-width:0"><b dir="auto">${esc(e.title)}</b><div class="small muted">${A.GRADES[String(e.grade).toLowerCase()] || esc(e.grade)} · ${qCount(e)} questions · ${e.attempts || 0} opened</div></div>
+                            <span class="pill ${A.toMs(e.expires_at) - now < 24 * 3600e3 ? 'legacy' : 'success'}">${esc(A.timeLeft(e.expires_at))}</span></a>`).join('')
+                            : '<div class="empty-state" style="padding:18px"><p>No online exam is open.</p></div>'}
+                    </div>
+                </div>
+                <div class="stack" style="gap:18px">
+                    <div class="card fade-up" style="--i:4">
+                        <div class="card-head"><h2 class="card-title">${icon('sparkles')}Quick actions</h2></div>
+                        <div class="quick">
+                            ${A.can('exams.create') ? `<a href="/admin/exams.html?new=1">${icon('clipboard')}<span>New online exam</span></a>` : ''}
+                            ${A.can('offline.save-grades') ? `<a href="/admin/grades.html">${icon('edit')}<span>Enter center marks</span></a>` : ''}
+                            ${A.can('lessons.create') ? `<a href="/admin/content.html?new=1">${icon('book')}<span>Add a lesson</span></a>` : ''}
+                            <a href="/admin/reports.html">${icon('whatsapp')}<span>Parent reports</span></a>
+                            <a href="/admin/analytics.html">${icon('trophy')}<span>Top students</span></a>
+                            <a href="/home.html?staffPreview=1&grade=prep1" target="_blank" rel="noopener">${icon('eye')}<span>Preview as student</span></a>
+                        </div>
+                    </div>
+                    ${log && log.entries ? `<div class="card fade-up" style="--i:5">
+                        <div class="card-head"><h2 class="card-title">${icon('clock')}Recent activity</h2><a class="link small" href="/admin/settings.html#log">Activity log</a></div>
+                        ${log.entries.map(e => `<div class="act"><b dir="auto">${esc(e.staffName || 'System')}</b> ${esc(ACTION_LABEL[e.action] || e.action)}<span class="small muted"> · ${esc(A.fmtDate(e.createdAt, true))}</span></div>`).join('') || '<p class="muted small">Nothing yet.</p>'}
+                    </div>` : ''}
+                </div>
+            </div>`;
+    })();
+    </script>
+</body>
+</html>

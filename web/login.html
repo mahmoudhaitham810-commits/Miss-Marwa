@@ -8,7 +8,8 @@
     <script>
         try {
             var s = JSON.parse(localStorage.getItem('student_session') || 'null');
-            if (s && s.id) location.replace(s.grade === 'all' || s.role === 'admin' ? '/home.html?grade=prep1' : '/home.html');
+            if (s && (s.role === 'admin' || s.grade === 'all' || String(s.id).toUpperCase() === 'MM-ADMIN')) localStorage.removeItem('student_session');
+            else if (s && s.id) location.replace('/home.html');
         } catch (e) { }
     </script>
     <title>Sign in · Science Academy</title>
@@ -96,8 +97,12 @@
 
         // Remember last code used on this device
         try { const last = localStorage.getItem('last_code'); if (last) code.value = last; } catch (e) { }
-        const pre = new URLSearchParams(location.search).get('code');
+        const qs = new URLSearchParams(location.search);
+        const pre = qs.get('code');
         if (pre) code.value = pre.toUpperCase();
+        if (qs.get('reason') === 'session') {
+            setTimeout(() => formError('For your security, please sign in again. · من فضلك سجّل دخول تاني.'), 50);
+        }
         (code.value ? pass : code).focus({ preventScroll: true });
 
         // Show / hide password

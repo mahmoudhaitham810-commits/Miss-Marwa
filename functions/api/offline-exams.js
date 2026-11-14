@@ -1,148 +1,309 @@
-import { verifyAdminRequest } from './admin-auth.js';
+import { requireStaff, audit, auditStmt, ensureAppSchema } from './admin-auth.js';
 
-// الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
-// الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
+// ============================================================
+// Center / private (paper) exams
+// ============================================================
+// Each exam column belongs to a grade AND a branch ('center' | 'private').
+// Columns made before the split have branch = NULL and show in both lists as "Before split"
+// until someone tags them. group_id is reserved for private sub-groups (Saturday group, …).
+// A mark is either a number, "absent" (absent = 1, score NULL), or not entered yet (no row / score NULL).
+// ============================================================
+
 function getDb(env) {
-    return env.DB || env.D1_DB;
+    return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
 }
+const BRANCHES = ['center', 'private'];
+const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const cellText = (score, absent) => (absent ? 'A' : score);
+// A stored mark as a number, or null when nothing (or nothing usable) was entered.
+// Old rows can hold NULL; a few very old ones could hold text — those show up in the data check, never as a mark.
+export const numOrNull = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 
 export async function onRequestGet(context) {
     const { request, env } = context;
-
-    // ── حماية: أدمن بس ──
-    const isAdmin = await verifyAdminRequest(request, env);
-    if (!isAdmin) {
-        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
-    }
+    const auth = await requireStaff(request, env, 'offline.view');
+    if (auth.error) return auth.error;
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
     const db = getDb(env);
 
     try {
-        // === الطلب الرئيسي: كل حاجة محتاجاها صفحة الامتحانات الأوفلاين لمرحلة معينة ===
-        // (الطلاب + الامتحانات + كل الدرجات) في طلب واحد بس
+        await ensureAppSchema(db);
+
+        // Everything one screen needs: the group's students, its exam columns and all marks
         if (action === 'grade-data') {
             const grade = (url.searchParams.get('grade') || '').toLowerCase();
-            if (!grade) {
-                return Response.json({ error: 'المرحلة الدراسية مطلوبة' }, { status: 400 });
-            }
+            const branch = (url.searchParams.get('branch') || 'all').toLowerCase();
+            if (!GRADES.includes(grade)) return Response.json({ error: 'المرحلة الدراسية مطلوبة' }, { status: 400 });
 
-            const { results: students } = await db.prepare(
-                "SELECT student_id as studentId, first_name as firstName, last_name as lastName, parent_phone as parentPhone FROM students WHERE grade = ? ORDER BY first_name ASC"
-            ).bind(grade).all();
+            let studentSql = "SELECT student_id as studentId, first_name as firstName, last_name as lastName, gender, branch, group_id as groupId, parent_phone as parentPhone, created_at as createdAt FROM students WHERE grade = ?";
+            const studentArgs = [grade];
+            if (BRANCHES.includes(branch)) { studentSql += " AND branch = ?"; studentArgs.push(branch); }
+            else if (branch === 'none') studentSql += " AND (branch IS NULL OR branch NOT IN ('center','private'))";
+            studentSql += " ORDER BY first_name ASC, last_name ASC";
+            const { results: students } = await db.prepare(studentSql).bind(...studentArgs).all();
 
-            const { results: exams } = await db.prepare(
-                "SELECT id, exam_name as examName, total_marks as totalMarks, created_at as createdAt FROM offline_exams WHERE grade = ? ORDER BY created_at ASC"
-            ).bind(grade).all();
+            let examSql = "SELECT id, exam_name as examName, total_marks as totalMarks, branch, group_id as groupId, exam_date as examDate, created_at as createdAt FROM offline_exams WHERE grade = ?";
+            const examArgs = [grade];
+            if (BRANCHES.includes(branch)) { examSql += " AND (branch = ? OR branch IS NULL)"; examArgs.push(branch); }
+            examSql += " ORDER BY COALESCE(exam_date, substr(created_at, 1, 10)) ASC, id ASC";
+            const { results: exams } = await db.prepare(examSql).bind(...examArgs).all();
 
             let grades = [];
             if (exams.length > 0) {
-                const examIds = exams.map(e => e.id);
-                const placeholders = examIds.map(() => '?').join(',');
-                const { results } = await db.prepare(
-                    `SELECT exam_id as examId, student_id as studentId, score FROM offline_grades WHERE exam_id IN (${placeholders})`
-                ).bind(...examIds).all();
-                grades = results;
+                const ids = exams.map(e => e.id);
+                for (let i = 0; i < ids.length; i += 90) {
+                    const chunk = ids.slice(i, i + 90);
+                    const { results } = await db.prepare(
+                        `SELECT exam_id as examId, student_id as studentId, score, absent FROM offline_grades WHERE exam_id IN (${chunk.map(() => '?').join(',')})`
+                    ).bind(...chunk).all();
+                    grades = grades.concat(results.map(g => ({ ...g, score: numOrNull(g.score), absent: !!g.absent })));
+                }
             }
+            const unassigned = await db.prepare(
+                "SELECT COUNT(*) as c FROM students WHERE grade = ? AND (branch IS NULL OR branch NOT IN ('center','private'))"
+            ).bind(grade).first();
 
-            return Response.json({ students, exams, grades });
+            return Response.json({
+                students,
+                exams: exams.map(e => ({ ...e, legacy: !e.branch })),
+                grades,
+                unassignedCount: unassigned ? unassigned.c : 0
+            });
         }
+
+        // === Data check: proves nothing is missing, hidden or changed by mistake ===
+        if (action === 'data-check') return Response.json(await dataCheck(db));
 
         return Response.json({ error: 'إجراء غير معروف' }, { status: 400 });
     } catch (err) {
-        return Response.json({ error: err.message }, { status: 500 });
+        return Response.json({ error: 'حصل خطأ في السيرفر' }, { status: 500 });
     }
 }
 
 export async function onRequestPost(context) {
     const { request, env } = context;
-
-    // ── حماية: أدمن بس ──
-    const isAdmin = await verifyAdminRequest(request, env);
-    if (!isAdmin) {
-        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
-    }
-
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
+    const PERM = { 'create-exam': 'offline.create-exam', 'update-exam': 'offline.edit-exam', 'delete-exam': 'offline.delete-exam', 'save-grades': 'offline.save-grades' };
+    const auth = await requireStaff(request, env, PERM[action] || 'offline.view');
+    if (auth.error) return auth.error;
+    const staff = auth.staff;
     const db = getDb(env);
 
     try {
+        await ensureAppSchema(db);
         const data = await request.json();
 
-        // === إنشاء عمود امتحان أوفلاين جديد لمرحلة معينة ===
+        // === New exam column for one grade + one branch ===
         if (action === 'create-exam') {
-            if (!data.examName || !data.grade) {
+            const examName = String(data.examName || '').trim();
+            const grade = String(data.grade || '').toLowerCase();
+            const branch = String(data.branch || '').toLowerCase();
+            if (!examName || examName.length > 80 || !GRADES.includes(grade)) {
                 return Response.json({ error: 'اسم الامتحان والمرحلة الدراسية مطلوبين' }, { status: 400 });
             }
+            if (!BRANCHES.includes(branch)) return Response.json({ error: 'اختاري سنتر أو خاص' }, { status: 400 });
             const totalMarks = parseFloat(data.totalMarks) > 0 ? parseFloat(data.totalMarks) : 100;
+            if (totalMarks > 1000) return Response.json({ error: 'الدرجة النهائية كبيرة جداً' }, { status: 400 });
+            const examDate = DATE_RE.test(String(data.examDate || '')) ? data.examDate : new Date().toISOString().slice(0, 10);
 
             const result = await db.prepare(
-                "INSERT INTO offline_exams (exam_name, grade, total_marks) VALUES (?, ?, ?)"
-            ).bind(data.examName, data.grade, totalMarks).run();
-
+                "INSERT INTO offline_exams (exam_name, grade, total_marks, branch, exam_date) VALUES (?, ?, ?, ?, ?)"
+            ).bind(examName, grade, totalMarks, branch, examDate).run();
+            await audit(db, request, staff, 'offline.create-exam', result.meta.last_row_id, { examName, grade, branch, totalMarks, examDate });
             return Response.json({ success: true, examId: result.meta.last_row_id });
         }
 
-        // === حفظ (أو تحديث) درجات مجموعة طلاب لامتحان معين دفعة واحدة ===
+        // === Rename / change total / date / tag an old column as Center or Private ===
         if (action === 'update-exam') {
-            const { examId, examName, totalMarks } = data;
-            if (!examId || !examName || parseFloat(totalMarks) <= 0) {
+            const { examId } = data;
+            const before = await db.prepare("SELECT exam_name, total_marks, branch, exam_date FROM offline_exams WHERE id = ?").bind(examId || 0).first();
+            if (!before) return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
+            const examName = data.examName !== undefined ? String(data.examName).trim() : before.exam_name;
+            const totalMarks = data.totalMarks !== undefined ? parseFloat(data.totalMarks) : before.total_marks;
+            if (!examName || examName.length > 80 || !(totalMarks > 0) || totalMarks > 1000) {
                 return Response.json({ error: 'بيانات غير صالحة' }, { status: 400 });
             }
-            await db.prepare(
-                "UPDATE offline_exams SET exam_name = ?, total_marks = ? WHERE id = ?"
-            ).bind(examName, parseFloat(totalMarks), examId).run();
-            return Response.json({ success: true });
-        }
-
-        if (action === 'delete-exam') {
-            const { examId } = data;
-            if (!examId) return Response.json({ error: 'معرف الامتحان مفقود' }, { status: 400 });
-            
+            let branch = before.branch;
+            if (data.branch !== undefined) {
+                const b = String(data.branch || '').toLowerCase();
+                if (b === 'both') {
+                    if (before.branch) return Response.json({ error: 'الامتحان ده متسجل لمجموعة واحدة بالفعل' }, { status: 400 });
+                    branch = null; // stays "before the split" — shows for both groups
+                } else if (!BRANCHES.includes(b)) return Response.json({ error: 'اختاري سنتر أو خاص' }, { status: 400 });
+                else branch = b;
+            }
+            // Tagging a column with one group must never hide marks students of the other group already have
+            if (branch && branch !== before.branch) {
+                const other = await db.prepare(
+                    `SELECT COUNT(*) as c FROM offline_grades g JOIN students s ON s.student_id = g.student_id
+                     WHERE g.exam_id = ? AND (g.score IS NOT NULL OR g.absent = 1) AND (s.branch IS NULL OR s.branch <> ?)`
+                ).bind(examId, branch).first();
+                if (other && other.c > 0) {
+                    return Response.json({ error: `فيه ${other.c} طالب من مجموعة تانية ليهم درجات في الامتحان ده — لو اتسجل ${branch === 'center' ? 'سنتر' : 'خاص'} بس، درجاتهم هتختفي. سيبيه "قبل التقسيم".`, code: 'WOULD_HIDE_MARKS', count: other.c }, { status: 409 });
+                }
+            }
+            let examDate = before.exam_date;
+            if (data.examDate !== undefined) {
+                if (!DATE_RE.test(String(data.examDate))) return Response.json({ error: 'تاريخ غير صحيح' }, { status: 400 });
+                examDate = data.examDate;
+            }
+            // Lowering the total below a mark someone already has would give more than 100%
+            const top = await db.prepare("SELECT MAX(score) as m FROM offline_grades WHERE exam_id = ?").bind(examId).first();
+            if (top && top.m !== null && totalMarks < top.m) {
+                return Response.json({ error: `فيه طالب واخد ${top.m} في الامتحان ده — الدرجة النهائية مينفعش تقل عن كده.` }, { status: 400 });
+            }
             await db.batch([
-                db.prepare("DELETE FROM offline_grades WHERE exam_id = ?").bind(examId),
-                db.prepare("DELETE FROM offline_exams WHERE id = ?").bind(examId)
+                db.prepare("UPDATE offline_exams SET exam_name = ?, total_marks = ?, branch = ?, exam_date = ? WHERE id = ?").bind(examName, totalMarks, branch, examDate, examId),
+                auditStmt(db, request, staff, 'offline.edit-exam', examId, { before, after: { exam_name: examName, total_marks: totalMarks, branch, exam_date: examDate } })
             ]);
             return Response.json({ success: true });
         }
 
+        // === Delete a column (teacher only) — a copy of every mark stays in the activity log ===
+        if (action === 'delete-exam') {
+            const { examId } = data;
+            if (!examId) return Response.json({ error: 'معرف الامتحان مفقود' }, { status: 400 });
+            const exam = await db.prepare("SELECT * FROM offline_exams WHERE id = ?").bind(examId).first();
+            if (!exam) return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
+            const { results: grades } = await db.prepare("SELECT student_id as s, score as sc, absent as ab FROM offline_grades WHERE exam_id = ?").bind(examId).all();
+            await db.batch([
+                db.prepare("DELETE FROM offline_grades WHERE exam_id = ?").bind(examId),
+                db.prepare("DELETE FROM offline_exams WHERE id = ?").bind(examId),
+                auditStmt(db, request, staff, 'offline.delete-exam', examId, { exam, grades })
+            ]);
+            return Response.json({ success: true });
+        }
+
+        // === Save marks: one student (auto-save) or a whole column ===
+        // Each entry: { studentId, score: number|''|null, absent?: true }
         if (action === 'save-grades') {
             const { examId, grades } = data;
-            if (!examId || !Array.isArray(grades)) {
+            if (!examId || !Array.isArray(grades) || grades.length > 1000) {
                 return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
             }
-
-            const exam = await db.prepare("SELECT total_marks FROM offline_exams WHERE id = ?").bind(examId).first();
+            const exam = await db.prepare("SELECT exam_name, total_marks, grade FROM offline_exams WHERE id = ?").bind(examId).first();
             if (!exam) return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
             const maxMarks = exam.total_marks || 100;
 
-            // نتأكد من كل الدرجات الأول قبل ما نحفظ أي حاجة: درجة سالبة أو أكبر من الدرجة النهائية
-            // أو كلام مش رقم كانت بتتحفظ عادي وبتبوّظ التحليلات ولوحة الشرف.
-            const statements = [];
+            // Marks only for real students of this grade
+            const { results: gradeStudents } = await db.prepare("SELECT student_id FROM students WHERE grade = ?").bind(exam.grade).all();
+            const valid = new Set(gradeStudents.map(r => r.student_id));
+
+            // Check every mark before saving anything: one bad mark = nothing saved
+            const clean = [];
             for (const g of grades) {
-                if (!g.studentId) continue;
-                const isEmpty = (g.score === '' || g.score === null || g.score === undefined);
+                if (!g || !g.studentId) continue;
+                if (!valid.has(g.studentId)) return Response.json({ error: `الطالب ${g.studentId} مش في المرحلة دي — مفيش أي درجة اتحفظت.` }, { status: 400 });
+                const absent = g.absent === true;
+                const isEmpty = absent || g.score === '' || g.score === null || g.score === undefined;
                 const score = isEmpty ? null : Number(g.score);
                 if (!isEmpty && (!Number.isFinite(score) || score < 0 || score > maxMarks)) {
                     return Response.json({
                         error: `درجة غير صحيحة (${g.score}) للطالب ${g.studentId} — لازم تكون من 0 لـ ${maxMarks}. مفيش أي درجة اتحفظت.`
                     }, { status: 400 });
                 }
-                statements.push(db.prepare(
-                    `INSERT INTO offline_grades (exam_id, student_id, score) VALUES (?, ?, ?)
-                     ON CONFLICT(exam_id, student_id) DO UPDATE SET score = excluded.score, updated_at = CURRENT_TIMESTAMP`
-                ).bind(examId, g.studentId, score));
+                clean.push({ studentId: g.studentId, score, absent: absent ? 1 : 0 });
             }
 
-            // batch = كل الدرجات تتحفظ مرة واحدة (أسرع بكتير، ومفيش حفظ نص العمود لو حصل خطأ)
+            const { results: oldRows } = await db.prepare("SELECT student_id, score, absent FROM offline_grades WHERE exam_id = ?").bind(examId).all();
+            const oldMap = {};
+            oldRows.forEach(r => { oldMap[r.student_id] = cellText(r.score, r.absent); });
+
+            const statements = [];
+            const changes = [];
+            for (const g of clean) {
+                const prev = oldMap[g.studentId] === undefined ? null : oldMap[g.studentId];
+                const next = cellText(g.score, g.absent);
+                if (prev === next) continue;
+                changes.push({ s: g.studentId, from: prev, to: next });
+                statements.push(db.prepare(
+                    `INSERT INTO offline_grades (exam_id, student_id, score, absent) VALUES (?, ?, ?, ?)
+                     ON CONFLICT(exam_id, student_id) DO UPDATE SET score = excluded.score, absent = excluded.absent, updated_at = CURRENT_TIMESTAMP`
+                ).bind(examId, g.studentId, g.score, g.absent));
+            }
+            // Only changed cells are written and logged (old → new), all in one batch
+            if (changes.length) statements.push(auditStmt(db, request, staff, 'offline.save-grades', examId, { examName: exam.exam_name, changes }));
             if (statements.length > 0) await db.batch(statements);
 
-            return Response.json({ success: true });
+            return Response.json({ success: true, changed: changes.length });
         }
 
         return Response.json({ error: 'إجراء غير معروف' }, { status: 400 });
     } catch (err) {
-        return Response.json({ error: err.message }, { status: 500 });
+        return Response.json({ error: 'حصل خطأ في السيرفر' }, { status: 500 });
     }
+}
+
+
+// ============================================================
+// Data check — read-only. Counts every student and every saved mark and
+// reports anything the portal could miss, hide or misread.
+// ============================================================
+async function dataCheck(db) {
+    const all = async (q, ...a) => (await db.prepare(q).bind(...a).all()).results || [];
+    const students = await all("SELECT student_id as id, first_name as f, last_name as l, grade, branch FROM students");
+    const exams = await all("SELECT id, exam_name as name, grade, branch, total_marks as total FROM offline_exams");
+    const rows = await all("SELECT exam_id as examId, student_id as studentId, score, absent, typeof(score) as t FROM offline_grades");
+    const stuById = Object.fromEntries(students.map(s => [s.id, s]));
+    const exById = Object.fromEntries(exams.map(e => [e.id, e]));
+    const nm = (s) => s ? `${s.f || ''} ${s.l || ''}`.trim() : '';
+
+    // Students the portal can't place (grade spelled differently, unknown group value)
+    const oddGrade = students.filter(s => !GRADES.includes(s.grade)).map(s => ({ studentId: s.id, name: nm(s), grade: s.grade }));
+    const oddBranch = students.filter(s => s.branch !== null && s.branch !== '' && !BRANCHES.includes(s.branch)).map(s => ({ studentId: s.id, name: nm(s), branch: s.branch }));
+
+    const perGrade = {};
+    for (const g of GRADES) {
+        const st = students.filter(s => s.grade === g);
+        const ex = exams.filter(e => e.grade === g);
+        const exIds = new Set(ex.map(e => e.id));
+        const r = rows.filter(x => exIds.has(x.examId));
+        perGrade[g] = {
+            students: { total: st.length, center: st.filter(s => s.branch === 'center').length, private: st.filter(s => s.branch === 'private').length, none: st.filter(s => !BRANCHES.includes(s.branch)).length },
+            exams: { total: ex.length, beforeSplit: ex.filter(e => !e.branch).length, center: ex.filter(e => e.branch === 'center').length, private: ex.filter(e => e.branch === 'private').length },
+            rows: { total: r.length, marks: r.filter(x => !x.absent && numOrNull(x.score) !== null).length, absent: r.filter(x => x.absent).length, empty: r.filter(x => !x.absent && (x.score === null || x.score === '')).length }
+        };
+    }
+
+    const problems = { missingStudent: [], missingExam: [], otherGrade: [], hiddenByGroup: [], unreadable: [], outOfRange: [], absentWithScore: [] };
+    for (const x of rows) {
+        const s = stuById[x.studentId], e = exById[x.examId];
+        const has = x.absent || numOrNull(x.score) !== null;
+        if (!e) { problems.missingExam.push({ examId: x.examId, studentId: x.studentId, score: x.score }); continue; }
+        if (!s) { if (has) problems.missingStudent.push({ exam: e.name, grade: e.grade, studentId: x.studentId, score: x.absent ? 'A' : x.score }); continue; }
+        const item = { exam: e.name, examId: e.id, grade: e.grade, studentId: s.id, name: nm(s), score: x.absent ? 'A' : x.score };
+        if (has && s.grade !== e.grade) problems.otherGrade.push({ ...item, studentGrade: s.grade });
+        if (has && e.branch && s.branch !== e.branch) problems.hiddenByGroup.push({ ...item, studentGroup: s.branch || null, examGroup: e.branch });
+        if (!x.absent && x.score !== null && x.score !== '' && numOrNull(x.score) === null) problems.unreadable.push(item);
+        const n = numOrNull(x.score);
+        if (n !== null && (n < 0 || n > (e.total || 100))) problems.outOfRange.push({ ...item, total: e.total });
+        if (x.absent && x.score !== null) problems.absentWithScore.push(item);
+    }
+
+    // Every "Absent" in the database was set in the new portal (the old one had no absent at all),
+    // so each one is in the activity log: who, when and what the cell held before.
+    const absentRows = rows.filter(x => x.absent);
+    const logs = await all("SELECT staff_name as who, created_at as at, target, details FROM audit_log WHERE action = 'offline.save-grades' ORDER BY id ASC");
+    const lastToA = {};
+    for (const l of logs) {
+        let d = null; try { d = JSON.parse(l.details); } catch (e) { continue; }
+        for (const c of (d && d.changes) || []) if (c.to === 'A') lastToA[`${l.target}|${c.s}`] = { who: l.who, at: l.at, from: c.from === undefined ? null : c.from };
+    }
+    const absences = absentRows.map(x => {
+        const s = stuById[x.studentId], e = exById[x.examId];
+        const src = lastToA[`${x.examId}|${x.studentId}`] || null;
+        return { examId: x.examId, exam: e ? e.name : '?', grade: e ? e.grade : '', beforeSplit: e ? !e.branch : false, studentId: x.studentId, name: nm(s), setBy: src ? src.who : null, setAt: src ? src.at : null, before: src ? src.from : null };
+    }).sort((a, b) => String(b.setAt || '').localeCompare(String(a.setAt || '')));
+
+    const counts = {
+        students: students.length, centerExams: exams.length, markRows: rows.length,
+        onlineExams: ((await db.prepare("SELECT COUNT(*) as c FROM exams").first()) || {}).c || 0,
+        onlineSubmissions: ((await db.prepare("SELECT COUNT(*) as c FROM exam_submissions").first()) || {}).c || 0,
+        onlineOrphans: ((await db.prepare("SELECT COUNT(*) as c FROM exam_submissions sub LEFT JOIN students s ON s.student_id = sub.student_id WHERE s.student_id IS NULL").first()) || {}).c || 0
+    };
+    const issueCount = oddGrade.length + oddBranch.length + Object.values(problems).reduce((a, l) => a + l.length, 0);
+    return { checkedAt: new Date().toISOString(), counts, perGrade, oddGrade, oddBranch, problems, absences, issueCount };
 }

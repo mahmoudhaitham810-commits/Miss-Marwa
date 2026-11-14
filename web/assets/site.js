@@ -79,10 +79,14 @@
 
     // ---------- Session ----------
     function getSession() {
-        try { const s = JSON.parse(localStorage.getItem('student_session') || 'null'); return s && s.id ? s : null; } catch (e) { return null; }
+        try {
+            const s = JSON.parse(localStorage.getItem('student_session') || 'null');
+            if (s && (s.role === 'admin' || s.grade === 'all' || String(s.id).toUpperCase() === 'MM-ADMIN')) { localStorage.removeItem('student_session'); return null; }
+            return s && s.id ? s : null;
+        } catch (e) { return null; }
     }
     function saveSession(student) { localStorage.setItem('student_session', JSON.stringify(student)); }
-    function homeUrl(s) { return s && (s.role === 'admin' || s.grade === 'all') ? '/home.html?grade=prep1' : '/home.html'; }
+    function homeUrl(s) { return '/home.html'; }
 
     // ---------- Theme ----------
     function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
@@ -354,7 +358,7 @@
     }
 
     window.Site = {
-        CONTACT, waLink, esc, icon, hydrateIcons, getSession, saveSession, homeUrl,
+        CONTACT, ICONS, waLink, esc, icon, hydrateIcons, getSession, saveSession, homeUrl,
         setTheme, currentTheme, toast, sheet, reveal, particles, normalizeDigits, forgotPassword, install, init, reduced, finePointer
     };
 })();

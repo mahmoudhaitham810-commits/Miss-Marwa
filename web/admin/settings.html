@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Settings · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <style>
+        body.site { min-height: 100vh; }
+        .s-top { position: sticky; top: 0; z-index: 20; background: var(--glass-nav, var(--canvas)); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+        .s-top .bar { display: flex; align-items: center; gap: 12px; height: 64px; }
+        .s-top .grow { flex: 1; min-width: 0; }
+        .page { max-width: 920px; margin: 0 auto; padding: 24px 16px 80px; display: grid; gap: 18px; }
+        .me-card { display: flex; align-items: center; gap: 14px; }
+        .me-card img { width: 56px; height: 56px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
+        .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab-pane { display: none; }
+        .tab-pane.on { display: grid; gap: 18px; animation: paneIn .4s cubic-bezier(.22, 1, .36, 1); }
+        .acct { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+        .acct:first-of-type { border-top: 0; }
+        .acct .who { flex: 1; min-width: 180px; }
+        .acct .who b { display: block; }
+        .acct .who small { color: var(--muted); }
+        .acct .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .perm-grid { display: grid; gap: 8px; grid-template-columns: 1fr; }
+        @media (min-width: 700px) { .perm-grid { grid-template-columns: 1fr 1fr; } }
+        .perm { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 14px; }
+        .perm .icon { width: 18px; height: 18px; flex: none; }
+        .perm.yes .icon { color: var(--success); }
+        .perm.no { color: var(--muted); }
+        .perm.no .icon { color: var(--danger); }
+        .log-item { display: grid; grid-template-columns: 40px 1fr; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
+        .log-item:first-child { border-top: 0; }
+        .log-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); }
+        .log-ic.danger { background: var(--danger-soft); color: var(--danger); }
+        .log-ic.warn { background: var(--warning-soft); color: var(--warning); }
+        .log-ic.ok { background: var(--success-soft); color: var(--success); }
+        .log-main b { font-weight: 650; }
+        .log-meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+        .log-details { margin-top: 8px; font-size: 13px; }
+        .log-details summary { cursor: pointer; color: var(--primary); font-weight: 600; }
+        .log-details pre { white-space: pre-wrap; word-break: break-word; background: var(--surface-2); padding: 10px; border-radius: 10px; max-height: 260px; overflow: auto; direction: ltr; text-align: left; }
+        .chg { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 0; }
+        .chg s { color: var(--danger); }
+        .chg ins { color: var(--success); text-decoration: none; font-weight: 700; }
+        .field-row { display: grid; gap: 12px; grid-template-columns: 1fr; }
+        @media (min-width: 640px) { .field-row { grid-template-columns: 1fr 1fr; } }
+        .input input.plain { padding-left: 14px; }
+        select.input-select { width: 100%; height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; }
+    </style>
+</head>
+<body class="site">
+    <header class="s-top">
+        <div class="wrap bar">
+            <a class="icon-btn" href="/admin/" aria-label="Back to the portal" title="Back to the portal" data-icon="arrowLeft"></a>
+            <div class="grow"><strong style="font-size:17px">Settings</strong><div class="muted small">Staff portal</div></div>
+            <button class="icon-btn theme-btn" data-theme-toggle aria-label="Switch light / dark mode" title="Light / dark mode"><span data-icon="moon" data-icon-class="moon" style="display:contents"></span><span data-icon="sun" data-icon-class="sun" style="display:contents"></span></button>
+        </div>
+    </header>
+
+    <main class="page" id="page" hidden>
+        <section class="card me-card reveal">
+            <img src="/assets/img/marwa-160.png" alt="" width="56" height="56">
+            <div style="flex:1;min-width:0">
+                <div class="h2" id="meName" dir="auto"></div>
+                <div class="muted small"><span id="meUser"></span> · <span class="chip" id="meRole"></span></div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="logoutBtn"><span data-icon="logout" style="display:contents"></span>Sign out</button>
+        </section>
+
+        <div class="segmented tabs reveal" id="tabs">
+            <button class="active" data-tab="account">My password</button>
+            <button data-tab="staff" class="teacher-tab">Staff accounts</button>
+            <button data-tab="log" class="teacher-tab">Activity log</button>
+            <button data-tab="perms">Permissions</button>
+        </div>
+
+        <!-- My password -->
+        <section class="tab-pane on" data-pane="account">
+            <div class="card">
+                <div class="card-head"><h2 class="card-title"><span data-icon="lock" style="display:contents"></span>Change my password</h2></div>
+                <form id="pwForm" novalidate>
+                    <div class="field"><label for="pwCur">Current password</label><div class="input"><input class="plain" id="pwCur" type="password" autocomplete="current-password"></div></div>
+                    <div class="field-row">
+                        <div class="field"><label for="pwNew">New password</label><div class="input"><input class="plain" id="pwNew" type="password" autocomplete="new-password" placeholder="At least 8 characters"></div></div>
+                        <div class="field"><label for="pwNew2">Confirm new password</label><div class="input"><input class="plain" id="pwNew2" type="password" autocomplete="new-password"></div></div>
+                    </div>
+                    <p class="muted small" style="margin:0 0 14px">Changing it signs you out on every other device.</p>
+                    <button class="btn btn-primary" type="submit" id="pwBtn">Update password</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- Staff accounts (teacher) -->
+        <section class="tab-pane" data-pane="staff">
+            <div class="card">
+                <div class="card-head">
+                    <h2 class="card-title"><span data-icon="users" style="display:contents"></span>Staff accounts</h2>
+                    <button class="btn btn-primary btn-sm" id="addBtn"><span data-icon="plus" style="display:contents"></span>Add assistant</button>
+                </div>
+                <div id="staffList"><div class="skel" style="height:60px"></div></div>
+            </div>
+            <div class="notice"><span data-icon="info" style="display:contents"></span><span>Assistants can't delete anything, export student lists, open Settings or see your AI Co-Pilot. Every change they make appears in the Activity log.</span></div>
+        </section>
+
+        <!-- Activity log (teacher) -->
+        <section class="tab-pane" data-pane="log">
+            <div class="card">
+                <div class="card-head">
+                    <h2 class="card-title"><span data-icon="clipboard" style="display:contents"></span>Activity log</h2>
+                    <select class="pick" id="logFilter" aria-label="Who"><option value="">Everyone</option></select>
+                </div>
+                <div id="logList"><div class="skel" style="height:60px"></div></div>
+                <button class="btn btn-ghost btn-block" id="moreBtn" hidden>Load more</button>
+            </div>
+        </section>
+
+        <!-- Permissions -->
+        <section class="tab-pane" data-pane="perms">
+            <div class="card">
+                <div class="card-head"><h2 class="card-title"><span data-icon="shield" style="display:contents"></span>What each role can do</h2></div>
+                <div class="segmented" id="permRole" style="max-width:360px;margin-bottom:14px">
+                    <button class="active" data-role="teacher">Miss Marwa</button>
+                    <button data-role="assistant">Assistant</button>
+                </div>
+                <div class="perm-grid" id="permGrid"></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script>
+    (function () {
+        const $ = (id) => document.getElementById(id);
+        const { esc, icon, toast, sheet } = Site;
+        let ME = null;
+
+        const PERM_LABELS = [
+            ['students.view', 'See students and their details'],
+            ['students.reset-password', "Reset a student's password"],
+            ['students.delete', 'Delete a student'],
+            ['students.export', 'Export student lists (CSV)'],
+            ['lessons.create', 'Add lessons & files'],
+            ['lessons.delete', 'Delete lessons'],
+            ['exams.create', 'Create online exams'],
+            ['exams.delete', 'Delete online exams'],
+            ['exams.reset-attempt', "Re-open a student's exam (logged)"],
+            ['offline.save-grades', 'Enter center grades'],
+            ['offline.create-exam', 'Add center exam columns'],
+            ['offline.delete-exam', 'Delete center exam columns'],
+            ['analytics.view', 'View analytics'],
+            ['reports.send', 'Send WhatsApp reports & alerts'],
+            ['inbox.reply', 'Answer student questions (soon)'],
+            ['copilot.use', 'AI Co-Pilot (soon)'],
+            ['staff.manage', 'Manage staff accounts'],
+            ['audit.view', 'See the activity log']
+        ];
+        const ROLE_PERMS = {
+            teacher: PERM_LABELS.map(p => p[0]),
+            assistant: ['students.view', 'students.reset-password', 'lessons.create', 'exams.create', 'exams.reset-attempt', 'offline.save-grades', 'offline.create-exam', 'analytics.view', 'reports.send', 'inbox.reply']
+        };
+
+        const ACTION_INFO = {
+            'auth.login': ['Signed in', 'user', 'ok'],
+            'auth.login-failed': ['Failed sign-in attempt', 'alert', 'warn'],
+            'staff.setup': ['Created the main account', 'shield', 'ok'],
+            'staff.create': ['Added a staff account', 'users', ''],
+            'staff.update': ['Changed a staff account', 'users', 'warn'],
+            'staff.change-own-password': ['Changed own password', 'lock', ''],
+            'students.reset-password': ["Reset a student's password", 'lock', 'warn'],
+            'students.delete': ['Deleted a student', 'x', 'danger'],
+            'lessons.create': ['Added a lesson', 'book', ''],
+            'lessons.delete': ['Deleted a lesson', 'x', 'danger'],
+            'exams.create': ['Created an online exam', 'clipboard', ''],
+            'exams.delete': ['Deleted an online exam', 'x', 'danger'],
+            'exams.reset-attempt': ["Re-opened a student's exam", 'clock', 'warn'],
+            'offline.create-exam': ['Added a center exam column', 'clipboard', ''],
+            'offline.edit-exam': ['Edited a center exam column', 'clipboard', 'warn'],
+            'offline.delete-exam': ['Deleted a center exam column', 'x', 'danger'],
+            'offline.save-grades': ['Saved center grades', 'chart', '']
+        };
+
+        async function api(action, body) {
+            const opt = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
+            const res = await fetch('/api/admin-auth?action=' + action, { credentials: 'same-origin', ...opt });
+            let data = {}; try { data = await res.json(); } catch (e) { }
+            if (res.status === 401) { location.replace('/admin/login.html?next=/admin/settings.html'); throw new Error('signed out'); }
+            if (!res.ok || data.error) throw new Error(data.error || 'Request failed');
+            return data;
+        }
+        const fmt = (s) => {
+            if (!s) return '—';
+            const d = new Date(String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z');
+            return isNaN(d) ? s : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        };
+
+        // ---------- Boot ----------
+        (async function boot() {
+            let me;
+            try { me = await (await fetch('/api/admin-auth?action=me', { credentials: 'same-origin' })).json(); }
+            catch (e) { me = null; }
+            if (!me || !me.authenticated) return location.replace('/admin/login.html?next=/admin/settings.html');
+            ME = me.staff;
+            $('meName').textContent = ME.name;
+            $('meUser').textContent = '@' + ME.username;
+            $('meRole').textContent = ME.role === 'teacher' ? 'Miss Marwa · full access' : 'Assistant';
+            $('meRole').className = 'chip ' + (ME.role === 'teacher' ? 'accent' : 'primary');
+            if (ME.role !== 'teacher') document.querySelectorAll('.teacher-tab').forEach(b => b.remove());
+            $('page').hidden = false;
+            Site.init();
+            renderPerms(ME.role === 'teacher' ? 'teacher' : 'assistant');
+            if (ME.role !== 'teacher') document.querySelector('#permRole [data-role="assistant"]').click();
+            const want = location.hash.slice(1);
+            if (want) document.querySelector(`#tabs [data-tab="${CSS.escape(want)}"]`)?.click();
+        })();
+
+        // ---------- Tabs ----------
+        const loaded = {};
+        $('tabs').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-tab]'); if (!b) return;
+            $('tabs').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === b.dataset.tab));
+            history.replaceState(null, '', '#' + b.dataset.tab);
+            if (b.dataset.tab === 'staff' && !loaded.staff) { loaded.staff = 1; loadStaff(); }
+            if (b.dataset.tab === 'log' && !loaded.log) { loaded.log = 1; loadStaff(true); loadLog(true); }
+        });
+
+        $('logoutBtn').addEventListener('click', async () => {
+            await fetch('/api/admin-auth?action=logout', { method: 'POST', credentials: 'same-origin' }).catch(() => { });
+            ['mm_students_db', 'mm_lessons_db', 'honorBoardData'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
+            location.replace('/admin/login.html');
+        });
+
+        // ---------- My password ----------
+        $('pwForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const cur = $('pwCur').value, n1 = $('pwNew').value, n2 = $('pwNew2').value;
+            if (!cur) return toast('Enter your current password', 'error');
+            if (n1.length < 8) return toast('New password: at least 8 characters', 'error');
+            if (n1 !== n2) return toast("New passwords don't match", 'error');
+            $('pwBtn').disabled = true;
+            try {
+                await api('change-password', { currentPassword: cur, newPassword: n1 });
+                $('pwForm').reset();
+                toast('Password updated', 'success');
+            } catch (err) { toast(err.message, 'error'); }
+            $('pwBtn').disabled = false;
+        });
+
+        // ---------- Staff accounts ----------
+        let STAFF = [];
+        async function loadStaff(silent) {
+            try {
+                STAFF = (await api('staff-list')).staff;
+                const f = $('logFilter'), cur = f.value;
+                f.innerHTML = '<option value="">Everyone</option>' + STAFF.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+                f.value = cur;
+                if (silent) return;
+                $('staffList').innerHTML = STAFF.map(s => `
+                    <div class="acct">
+                        <div class="avatar">${icon(s.role === 'teacher' ? 'award' : 'user')}</div>
+                        <div class="who"><b dir="auto">${esc(s.name)}</b><small>@${esc(s.username)} · last sign-in ${esc(fmt(s.lastLoginAt))}</small></div>
+                        <span class="chip ${s.role === 'teacher' ? 'accent' : (s.active ? 'success' : 'danger')}">${s.role === 'teacher' ? 'Miss Marwa' : (s.active ? 'Active' : 'Disabled')}</span>
+                        ${s.role === 'teacher' ? '' : `<div class="actions">
+                            <button class="btn btn-ghost btn-sm" data-act="reset" data-id="${s.id}">${icon('lock', 'sm')}Reset password</button>
+                            <button class="btn ${s.active ? 'btn-ghost' : 'btn-soft'} btn-sm" data-act="toggle" data-id="${s.id}">${s.active ? 'Disable' : 'Enable'}</button>
+                        </div>`}
+                    </div>`).join('') || '<div class="empty"><p>No staff yet.</p></div>';
+            } catch (err) { $('staffList').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; }
+        }
+        $('staffList').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-act]'); if (!b) return;
+            const s = STAFF.find(x => x.id === Number(b.dataset.id)); if (!s) return;
+            if (b.dataset.act === 'toggle') {
+                sheet({
+                    iconName: s.active ? 'lock' : 'checkCircle', title: s.active ? `Disable ${s.name}?` : `Enable ${s.name}?`,
+                    subtitle: s.active ? 'They are signed out immediately and cannot sign in until you enable the account again.' : 'They can sign in again with their current password.',
+                    actions: [
+                        { label: s.active ? 'Disable account' : 'Enable account', cls: s.active ? 'btn-danger' : 'btn-primary', onClick: async (close) => {
+                            try { await api('staff-update', { id: s.id, active: !s.active }); close(); toast('Saved', 'success'); loadStaff(); }
+                            catch (err) { toast(err.message, 'error'); }
+                        } },
+                        { label: 'Cancel', cls: 'btn-ghost' }
+                    ]
+                });
+            }
+            if (b.dataset.act === 'reset') {
+                sheet({
+                    iconName: 'lock', title: `New password for ${s.name}`, subtitle: 'They will be signed out and must use the new password.',
+                    html: `<div class="field"><label for="rp1">New password</label><div class="input"><input class="plain" id="rp1" type="text" autocomplete="off" placeholder="At least 8 characters"></div></div>`,
+                    actions: [
+                        { label: 'Set password', onClick: async (close) => {
+                            const v = document.getElementById('rp1').value;
+                            if (v.length < 8) return toast('At least 8 characters', 'error');
+                            try { await api('staff-update', { id: s.id, password: v }); close(); toast('Password changed', 'success'); }
+                            catch (err) { toast(err.message, 'error'); }
+                        } },
+                        { label: 'Cancel', cls: 'btn-ghost' }
+                    ]
+                });
+            }
+        });
+        $('addBtn').addEventListener('click', () => {
+            sheet({
+                iconName: 'users', title: 'Add an assistant', subtitle: 'They sign in at this same portal with their own username.',
+                html: `<div class="field"><label for="nName">Name</label><div class="input"><input class="plain" id="nName" maxlength="40" dir="auto" placeholder="e.g. Mr. Ahmed"></div></div>
+                       <div class="field"><label for="nUser">Username</label><div class="input"><input class="plain" id="nUser" maxlength="32" autocapitalize="none" spellcheck="false" placeholder="e.g. ahmed"></div></div>
+                       <div class="field" style="margin:0"><label for="nPass">Password</label><div class="input"><input class="plain" id="nPass" type="text" autocomplete="off" placeholder="At least 8 characters"></div></div>`,
+                actions: [
+                    { label: 'Create account', onClick: async (close) => {
+                        const body = { displayName: document.getElementById('nName').value.trim(), username: document.getElementById('nUser').value.trim().toLowerCase(), password: document.getElementById('nPass').value };
+                        if (body.displayName.length < 2) return toast('Enter a name', 'error');
+                        if (!/^[a-z0-9._-]{3,32}$/.test(body.username)) return toast('Username: 3–32 small English letters or numbers', 'error');
+                        if (body.password.length < 8) return toast('Password: at least 8 characters', 'error');
+                        try { await api('staff-create', body); close(); toast('Assistant account created', 'success'); loadStaff(); }
+                        catch (err) { toast(err.message, 'error'); }
+                    } },
+                    { label: 'Cancel', cls: 'btn-ghost' }
+                ]
+            });
+        });
+
+        // ---------- Activity log ----------
+        let lastId = 0;
+        function describe(e) {
+            const d = e.details || {};
+            const parts = [];
+            if (e.action === 'exams.reset-attempt') {
+                parts.push(`<div>Student <b>${esc(e.target)}</b> · exam <b dir="auto">${esc(d.examTitle || d.examId)}</b></div>`);
+                if (d.previous && d.previous.status === 'submitted') parts.push(`<div>Previous score: <b>${esc(d.previous.score)}</b> (kept here)</div>`);
+                if (d.reason) parts.push(`<div>Reason: <span dir="auto">${esc(d.reason)}</span></div>`);
+            } else if (e.action === 'offline.save-grades' && Array.isArray(d.changes)) {
+                parts.push(`<div dir="auto">${esc(d.examName || '')} · ${d.changes.length} change${d.changes.length === 1 ? '' : 's'}</div>`);
+                parts.push(d.changes.slice(0, 6).map(c => `<div class="chg"><span>${esc(c.s)}</span><s>${c.from === null ? '—' : esc(c.from)}</s>→<ins>${c.to === null ? '—' : esc(c.to)}</ins></div>`).join(''));
+            } else if (e.target) {
+                parts.push(`<div dir="auto">${esc(e.target)}${d.title ? ' · ' + esc(d.title) : ''}${d.examName ? ' · ' + esc(d.examName) : ''}</div>`);
+            }
+            return parts.join('');
+        }
+        async function loadLog(reset) {
+            if (reset) { lastId = 0; $('logList').innerHTML = ''; }
+            const q = new URLSearchParams({ limit: 40 });
+            if (lastId) q.set('before', lastId);
+            if ($('logFilter').value) q.set('staffId', $('logFilter').value);
+            try {
+                const data = await api('audit-log&' + q.toString());
+                if (reset && !data.entries.length) $('logList').innerHTML = '<div class="empty"><h3>Nothing yet</h3><p>Changes made by staff will appear here.</p></div>';
+                $('logList').insertAdjacentHTML('beforeend', data.entries.map(e => {
+                    const [label, ic, tone] = ACTION_INFO[e.action] || [e.action, 'info', ''];
+                    return `<div class="log-item">
+                        <div class="log-ic ${tone}">${icon(ic, 'sm')}</div>
+                        <div class="log-main"><b>${esc(label)}</b>
+                            <div class="log-meta"><span dir="auto">${esc(e.staffName || 'System')}</span> · ${esc(fmt(e.createdAt))}</div>
+                            <div class="log-details">${describe(e)}
+                                ${e.details ? `<details><summary>Full details</summary><pre>${esc(JSON.stringify(e.details, null, 2))}</pre></details>` : ''}</div>
+                        </div></div>`;
+                }).join(''));
+                if (data.entries.length) lastId = data.entries[data.entries.length - 1].id;
+                $('moreBtn').hidden = !data.hasMore;
+            } catch (err) { $('logList').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; }
+        }
+        $('moreBtn').addEventListener('click', () => loadLog(false));
+        $('logFilter').addEventListener('change', () => loadLog(true));
+
+        // ---------- Permissions ----------
+        function renderPerms(role) {
+            const allowed = ROLE_PERMS[role];
+            $('permGrid').innerHTML = PERM_LABELS.map(([k, label]) => {
+                const yes = allowed.includes(k);
+                return `<div class="perm ${yes ? 'yes' : 'no'}">${icon(yes ? 'checkCircle' : 'x')}<span>${esc(label)}</span></div>`;
+            }).join('');
+        }
+        $('permRole').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-role]'); if (!b) return;
+            $('permRole').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+            renderPerms(b.dataset.role);
+        });
+    })();
+    </script>
+</body>
+</html>

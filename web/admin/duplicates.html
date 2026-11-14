@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Duplicate accounts · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>Duplicate accounts</h1><p>Pairs of accounts whose details line up — never judged by the name alone.</p></div>
+            </div>
+            <div class="banner info fade-up">
+                <span data-icon="info" style="display:contents"></span>
+                <div class="grow small"><b>How a pair is found:</b> the same student phone in the same grade (<span class="pill danger">Very likely</span>), or the same parent phone + same gender + the same first name in Arabic or English (<span class="pill legacy">Possible</span>). Twins share a parent phone but have their own phone and name, so they are not flagged. New sign-ups with an existing phone in the same grade are now blocked.</div>
+            </div>
+            <div id="list" class="stack" style="gap:14px"></div>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'duplicates', title: 'Duplicate accounts' });
+        Site.hydrateIcons();
+        let pairs = [];
+        const fmt = (s) => { if (!s) return '—'; const d = new Date(String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z'); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
+
+        async function load() {
+            $('list').innerHTML = '<div class="skel" style="height:180px;border-radius:18px"></div>';
+            try { pairs = (await api('/api/students?action=duplicates')).pairs; }
+            catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            render();
+        }
+        function acct(s, m) {
+            const hl = (field, label, val) => `<span class="${m.includes(field) ? 'match' : ''}">${label}: <span dir="auto">${esc(val || '—')}</span></span>`;
+            return `<div class="acct"><b dir="auto">${esc(s.firstName)} ${esc(s.lastName)}</b>
+                <span class="num muted">${esc(s.studentId)} · joined ${esc(fmt(s.createdAt))}</span>
+                ${hl('student phone', 'Student phone', s.phone)}
+                ${hl('parent phone', 'Parent phone', s.parentPhone)}
+                ${hl('grade', 'Grade', A.GRADES[s.grade] || s.grade)} ${s.branch ? `· ${A.BRANCHES[s.branch] || s.branch}` : ''}
+                <span class="muted">${s.onlineExams} online exams · ${s.centerMarks} center marks</span>
+                ${A.can('students.delete') ? `<button class="btn btn-ghost btn-sm" style="justify-self:start;margin-top:6px;color:var(--danger)" data-del="${esc(s.studentId)}">${icon('trash', 'sm')}Delete this account</button>` : ''}</div>`;
+        }
+        function render() {
+            if (!pairs.length) {
+                $('list').innerHTML = `<div class="card empty-state fade-up"><div class="bubble">${icon('checkCircle', 'lg')}</div><h3>No duplicates found</h3><p>Every account looks like a different student.</p></div>`;
+                return;
+            }
+            $('list').innerHTML = pairs.map((p, i) => `<div class="dup ${p.level} fade-up" style="--i:${Math.min(i, 8)}" data-key="${esc(p.key)}">
+                <div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
+                    <span class="pill ${p.level === 'high' ? 'danger' : 'legacy'}">${p.level === 'high' ? 'Very likely the same student' : 'Possibly the same student'}</span>
+                    <span class="small muted">Matching: ${p.matches.map(esc).join(', ')}</span></div>
+                <div class="pair">${acct(p.students[0], p.matches)}${acct(p.students[1], p.matches)}</div>
+                <div class="actions"><button class="btn btn-ghost btn-sm" data-notdup="${esc(p.key)}">${icon('x', 'sm')}Not the same student</button>
+                    <span class="small muted" style="align-self:center">Tip: keep the account that has exam results; delete the empty one.</span></div>
+            </div>`).join('');
+        }
+        $('list').addEventListener('click', async (e) => {
+            const nd = e.target.closest('[data-notdup]');
+            if (nd) {
+                const [a, b] = nd.dataset.notdup.split('|');
+                try { await api('/api/students?action=dismiss-duplicate', { body: { a, b } }); pairs = pairs.filter(p => p.key !== nd.dataset.notdup); render(); Site.toast('Marked as different students', 'success'); }
+                catch (err) { Site.toast(err.message, 'error'); }
+                return;
+            }
+            const del = e.target.closest('[data-del]');
+            if (del) {
+                const sid = del.dataset.del;
+                Site.sheet({
+                    iconName: 'alert', title: `Delete ${sid}?`, subtitle: 'The account is removed; a full copy stays in the activity log.',
+                    actions: [{ label: 'Delete account', cls: 'btn-danger', onClick: async (close) => {
+                        try { await api('/api/students?action=delete', { body: { studentId: sid } }); close(); Site.toast('Account deleted', 'success'); load(); }
+                        catch (err) { Site.toast(err.message, 'error'); }
+                    } }, { label: 'Cancel', cls: 'btn-ghost' }]
+                });
+            }
+        });
+        load();
+    })();
+    </script>
+</body>
+</html>
