@@ -65,6 +65,7 @@ export function permissionsFor(role) {
 
 // ---------- Config ----------
 const COOKIE_NAME = 'admin_session';
+const BUILD = 'auth-diag-2';
 const SESSION_HOURS = { teacher: 24 * 30, assistant: 12 };
 const PBKDF2_ITERATIONS = 100000; // the maximum Cloudflare Workers allows
 const USER_LOCK = { fails: 5, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 };
@@ -384,6 +385,9 @@ export async function onRequest(context) {
                 body.secretState = secretState(env);
                 body.setupState = setupState(env);
                 body.similarNames = nearMissNames(env);
+                // Which settings actually reached this deployment — NAMES only, never values
+                body.settingNames = Object.keys(env || {}).filter(k => typeof env[k] === 'string').sort();
+                body.build = BUILD;
             }
             return json(body);
         }

@@ -138,9 +138,9 @@
 
         (async function boot() {
             try {
-                const me = await (await fetch('/api/admin-auth?action=me', { credentials: 'same-origin' })).json();
+                const me = await (await fetch('/api/admin-auth?action=me', { credentials: 'same-origin', cache: 'no-store' })).json();
                 if (me.authenticated) return location.replace(next);
-                const st = await (await fetch('/api/admin-auth?action=status')).json();
+                const st = await (await fetch('/api/admin-auth?action=status&t=' + Date.now(), { cache: 'no-store' })).json();
                 const MSG = {
                     secret: {
                         'missing': 'The site can\'t see a setting named <code>ADMIN_TOKEN_SECRET</code> in this deployment. Check the exact name (capital letters, no spaces), that it is added for the environment you are opening (Production = main, Preview = other branches), then redeploy.',
@@ -155,14 +155,15 @@
                     }
                 };
                 const hint = (st.similarNames && st.similarNames.length) ? `Settings with similar names found: ${st.similarNames.map(n => '<code>' + Site.esc(n) + '</code>').join(', ')} — is one of them misspelt?` : '';
+                const tech = `<br><span style="font-family:monospace;font-size:12px">server check: build ${Site.esc(st.build || 'old')} · secret ${Site.esc(st.secretState || '?')} · setup code ${Site.esc(st.setupState || '?')} · settings this deployment can see: ${(st.settingNames || []).map(Site.esc).join(', ') || 'none'}</span>`;
                 if (!st.configured) {
                     if (MSG.secret[st.secretState]) $('configMsg').innerHTML = MSG.secret[st.secretState];
-                    $('configHint').innerHTML = hint;
+                    $('configHint').innerHTML = hint + tech;
                     return show('stConfig');
                 }
                 if (st.needsSetup && !st.setupReady) {
                     $('configMsg').innerHTML = MSG.setup[st.setupState] || MSG.setup.missing;
-                    $('configHint').innerHTML = hint;
+                    $('configHint').innerHTML = hint + tech;
                     return show('stConfig');
                 }
                 if (st.needsSetup) { show('stSetup'); $('sOld').focus(); return; }
