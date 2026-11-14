@@ -1369,31 +1369,20 @@
         const modalTabs = document.getElementById('modalTabs');
         const accountPopup = document.getElementById('accountPopup');
 
-        // Fallback Engine if db.js is not loaded
+        // لو db.js ماتحملش لأي سبب، منعملش "دخول وهمي" من المتصفح — نوضح المشكلة بس
         const fallbackAuth = {
-            getStudents: () => {
-                let s = JSON.parse(localStorage.getItem('mm_students_db') || '[]');
-                if (!s.some(x => (x.studentId || '').toUpperCase() === 'MM-ADMIN')) {
-                    s.unshift({ studentId: 'MM-ADMIN', firstName: 'Miss Marwa', lastName: '(Admin)', grade: 'all', role: 'admin', password: 'marwa2026' });
-                    localStorage.setItem('mm_students_db', JSON.stringify(s));
-                }
-                return s;
-            },
-            async login(id, pass) {
-                const cleanId = (id || '').trim().toUpperCase(); const cleanPass = (pass || '').trim();
-                const acc = this.getStudents().find(x => (x.studentId || '').trim().toUpperCase() === cleanId);
-                if (!acc || acc.password !== cleanPass) throw new Error('Wrong ID/Password');
-                return { success: true, student: { id: acc.studentId, firstName: acc.firstName, lastName: acc.lastName, grade: acc.grade, role: acc.role || (acc.grade === 'all' ? 'admin' : 'student') } };
-            },
-            async signup(p) {
-                const s = this.getStudents(); const studentId = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
-                const newS = { studentId, firstName: p.firstName.trim(), lastName: p.lastName.trim(), gender: p.gender, branch: p.branch, phone: p.phone.trim(), parentPhone: p.parentPhone.trim(), grade: p.grade, password: p.password.trim(), role: 'student', createdAt: new Date().toLocaleDateString('ar-EG') };
-                s.push(newS); localStorage.setItem('mm_students_db', JSON.stringify(s));
-                return { success: true, studentId, student: { id: studentId, firstName: newS.firstName, lastName: newS.lastName, grade: newS.grade, role: 'student' } };
-            }
+            async login() { throw new Error('تعذر تحميل الموقع بالكامل، حدّث الصفحة وحاول تاني'); },
+            async signup() { throw new Error('تعذر تحميل الموقع بالكامل، حدّث الصفحة وحاول تاني'); }
         };
 
+        // تنظيف: نسخ قديمة كانت بتحفظ بيانات الطلاب وكلمات السر في المتصفح — ملهاش لازمة دلوقتي
+        try { localStorage.removeItem('mm_students_db'); } catch (e) { /* ignore */ }
+
         const AuthProvider = (typeof DB !== 'undefined' && DB.login) ? DB : fallbackAuth;
+
+        function escapeHtml(v) {
+            return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
 
         // --- Animations Logic ---
         function runPortfolioAnimation() {
@@ -1494,7 +1483,7 @@
                 welcomeDiv.style.textAlign = 'center';
                 welcomeDiv.style.marginTop = '40px';
                 welcomeDiv.innerHTML = `
-                    <h2 style="font-size: 2.5rem; color: var(--glowing-cyan); margin-bottom: 15px;">أهلاً بك يا ${session.firstName} 👋</h2>
+                    <h2 style="font-size: 2.5rem; color: var(--glowing-cyan); margin-bottom: 15px;">أهلاً بك يا ${escapeHtml(session.firstName)} 👋</h2>
                     <p style="font-size: 1.2rem; color: #94a3b8; margin-bottom: 30px;">جاهزين نتعلم حاجة جديدة النهاردة؟ يلا بينا!</p>
                     <button class="auth-btn primary" style="padding: 12px 30px; font-size: 1.1rem;" onclick="enterClassroom()">
                         <i class="fas fa-graduation-cap"></i> الانتقال لصفك الدراسي
@@ -1569,7 +1558,7 @@
                 localStorage.setItem('student_session', JSON.stringify(data.student));
                 closeModal(); window.location.reload();
             } catch (err) {
-                status.innerHTML = `<i class="fas fa-circle-exclamation"></i> <span>${err.message || 'Wrong ID/Password'}</span>`;
+                status.innerHTML = `<i class="fas fa-circle-exclamation"></i> <span>${escapeHtml(err.message || 'كود الطالب أو كلمة المرور غير صحيحة')}</span>`;
                 status.style.display = 'flex'; document.getElementById('loginId').classList.add('input-error'); document.getElementById('loginPassword').classList.add('input-error');
             } finally { submitBtn.disabled = false; }
         });
@@ -1597,7 +1586,7 @@
                 alert(`تم إنشاء الحساب بنجاح!\nكود الدخول الخاص بك هو: ${data.studentId}\nاحتفظ به لتسجيل الدخول.`);
                 closeModal(); window.location.reload();
             } catch (err) {
-                status.innerHTML = `<i class="fas fa-circle-exclamation"></i> <span>${err.message}</span>`; status.style.display = 'flex';
+                status.innerHTML = `<i class="fas fa-circle-exclamation"></i> <span>${escapeHtml(err.message)}</span>`; status.style.display = 'flex';
             } finally { submitBtn.disabled = false; }
         });
 
@@ -1613,7 +1602,7 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
+                navigator.serviceWorker.register('/OneSignalSDKWorker.js')
                     .then(registration => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
                     })

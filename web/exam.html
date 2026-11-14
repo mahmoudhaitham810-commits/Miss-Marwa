@@ -337,6 +337,12 @@
             window.location.href = './index.html';
         }
 
+        // أسئلة العلوم ممكن يبقى فيها علامات زي < و > (مثلاً: "a<b" أو "<H2O>")، ولو اتحطت
+        // في الصفحة زي ما هي المتصفح بيفهمها كود HTML والسؤال بيختفي أو يبوظ. فبنحولها لنص عادي.
+        function esc(v) {
+            return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
         let examQuestions = [];
         let leaveWarningEnabled = false;
         let timerInterval = null;
@@ -414,6 +420,7 @@
 
                 if (remainingSeconds <= 0) {
                     clearInterval(timerInterval);
+                    timeIsUp = true;
                     submitAnswers(true, 'خلص وقت الامتحان، فتم تسليمه تلقائياً بإجاباتك الحالية.');
                 }
             }, 1000);
@@ -437,8 +444,8 @@
             document.getElementById('examContainer').innerHTML = `
                 <div class="status-card">
                     <i class="fas ${icon}"></i>
-                    <h2>${title}</h2>
-                    <p>${text}</p>
+                    <h2>${esc(title)}</h2>
+                    <p>${esc(text)}</p>
                     <a href="${backUrl}" class="back-btn-inline">رجوع لقائمة الامتحانات</a>
                 </div>
             `;
@@ -482,7 +489,7 @@
             data.questions.forEach((q, qi) => {
                 const studentAnswerIndex = (data.answers && data.answers.length > qi) ? data.answers[qi] : -1;
                 html += `<div class="question-card">
-                    <p class="question-text">${qi + 1}. ${q.question}</p>
+                    <p class="question-text">${qi + 1}. ${esc(q.question)}</p>
                     <div class="options-group">`;
                 
                 q.options.forEach((opt, oi) => {
@@ -504,7 +511,7 @@
                     
                     html += `<label class="option-label" style="${styleStr}">
                         <input type="radio" disabled ${isChecked}>
-                        <span>${opt}</span>
+                        <span>${esc(opt)}</span>
                     </label>`;
                 });
                 html += `</div></div>`;
@@ -525,12 +532,12 @@
             let html = '<form id="examForm">';
             questions.forEach((q, qi) => {
                 html += `<div class="question-card">
-                    <p class="question-text">${qi + 1}. ${q.question}</p>
+                    <p class="question-text">${qi + 1}. ${esc(q.question)}</p>
                     <div class="options-group">`;
                 q.options.forEach((opt, oi) => {
                     html += `<label class="option-label">
                         <input type="radio" name="q${qi}" value="${oi}" required>
-                        <span>${opt}</span>
+                        <span>${esc(opt)}</span>
                     </label>`;
                 });
                 html += `</div></div>`;
@@ -561,7 +568,13 @@
 
         // isAutoSubmit=true بتتسلم أي إجابات موجودة من غير ما تشترط إن كل الأسئلة اتجاوبت
         // (بتستخدم لما الوقت يخلص أو لما نظام منع الغش يقفل الامتحان تلقائياً)
+        let isSubmitting = false;
+        let timeIsUp = false;
+
         async function submitAnswers(isAutoSubmit, autoNote) {
+            // نمنع تسليمين في نفس الوقت (مثلاً الوقت خلص وفي نفس اللحظة الطالب داس تسليم)
+            if (isSubmitting) return;
+            isSubmitting = true;
             const submitBtn = document.getElementById('submitExamBtn');
             if (submitBtn) {
                 submitBtn.disabled = true;
@@ -573,29 +586,61 @@
                 return selected ? parseInt(selected.value, 10) : -1;
             });
 
-            try {
-                const res = await fetch('/api/exams?action=submit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ examId, studentId: student.id, answers })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'فشل تسليم الامتحان');
-
-                leaveWarningEnabled = false;
-                renderResultScreen(data.score, data.total, isAutoSubmit ? autoNote : null);
-            } catch (err) {
-                if (isAutoSubmit) {
-                    // لو التسليم التلقائي فشل (مثلاً مشكلة نت)، نوقف كل حاجة ونوضح المشكلة
+            // بنحاول التسليم لحد 3 مرات لو النت فصل لحظة. قبل كده لو التسليم التلقائي فشل
+            // مرة واحدة، الطالب كان بيتقال له "افتح الامتحان تاني" — وده مستحيل لأن الامتحان
+            // بيتقفل بعد أول فتح، فإجاباته كانت بتضيع خالص.
+            let lastError = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    const res = await fetch('/api/exams?action=submit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ examId, studentId: student.id, answers })
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                        // رفض حقيقي من السيرفر (مش مشكلة نت) — مفيش فايدة نعيد المحاولة
+                        lastError = new Error(data.error || 'فشل تسليم الامتحان');
+                        lastError.final = true;
+                        break;
+                    }
                     leaveWarningEnabled = false;
-                    renderMessage('حصل خطأ أثناء التسليم التلقائي', 'حاولي تفتحي الامتحان تاني أو كلمي المدرّسة.', 'fa-triangle-exclamation');
+                    isSubmitting = false;
+                    renderResultScreen(data.score, data.total, isAutoSubmit ? autoNote : null);
                     return;
+                } catch (err) {
+                    lastError = err;
+                    await new Promise(r => setTimeout(r, attempt * 1500));
                 }
-                alert('حصل خطأ أثناء التسليم: ' + err.message);
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> تسليم الامتحان';
-                }
+            }
+
+            isSubmitting = false;
+
+            if (isAutoSubmit || timeIsUp || !document.getElementById('submitExamBtn')) {
+                // الامتحان وقف (الوقت خلص)، بس الإجابات لسه محفوظة في الصفحة — نديله زرار يعيد التسليم
+                // ونقفل الاختيارات عشان محدش يعدّل بعد الوقت (الإجابات المختارة بتتقري عادي)
+                stopTimer();
+                document.querySelectorAll('#examForm input, #submitExamBtn').forEach(el => { el.disabled = true; });
+                document.getElementById('retrySubmitCard')?.remove();
+                leaveWarningEnabled = !lastError?.final;
+                document.getElementById('examContainer').insertAdjacentHTML('afterbegin', `
+                    <div class="status-card" id="retrySubmitCard" style="margin-bottom:20px;">
+                        <i class="fas fa-wifi"></i>
+                        <h2>التسليم ماوصلش</h2>
+                        <p>${esc(lastError?.message || 'مشكلة في الاتصال')}</p>
+                        <p>إجاباتك لسه موجودة. اتأكد من النت ودوس "إعادة التسليم" — متقفلش الصفحة.</p>
+                        <button class="submit-exam-btn" onclick="document.getElementById('retrySubmitCard').remove(); submitAnswers(true, ${JSON.stringify(autoNote || '').replace(/"/g, '&quot;')})">
+                            <i class="fas fa-rotate-right"></i> إعادة التسليم
+                        </button>
+                    </div>`);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+
+            alert('حصل خطأ أثناء التسليم: ' + (lastError?.message || '') + '\nإجاباتك لسه موجودة، حاول تاني.');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> تسليم الامتحان';
             }
         }
 

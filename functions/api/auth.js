@@ -73,11 +73,17 @@ export async function onRequestPost(context) {
     try {
         // 1. حالة تسجيل الدخول (Login)
         if (action === 'login') {
-            const { studentId, password } = await request.json();
+            const body = await request.json();
+            // الكود بيتحول لحروف كبيرة، عشان الطالب اللي يكتب mm-123456 يدخل عادي
+            const studentId = String(body.studentId || '').trim().toUpperCase();
+            const password = String(body.password || '');
+            if (!studentId || !password) {
+                return Response.json({ error: 'يرجى إدخال الكود وكلمة المرور' }, { status: 400 });
+            }
 
             // التحقق من حساب الأدمن الخاص بالمس مروة
             const adminPassword = env.ADMIN_PASSWORD || 'marwa2026';
-            if (studentId.trim().toUpperCase() === 'MM-ADMIN' && password === adminPassword) {
+            if (studentId === 'MM-ADMIN' && password === adminPassword) {
                 return Response.json({
                     success: true,
                     student: { id: 'MM-ADMIN', firstName: 'Miss Marwa', lastName: '(Admin)', grade: 'all', role: 'admin' }
@@ -85,7 +91,7 @@ export async function onRequestPost(context) {
             }
 
             // البحث عن الطالب في الداتا بيز
-            const stmt = db.prepare("SELECT * FROM students WHERE student_id = ? AND password = ?").bind(studentId.trim(), password);
+            const stmt = db.prepare("SELECT * FROM students WHERE student_id = ? AND password = ?").bind(studentId, password);
             const user = await stmt.first();
 
             if (user) {
@@ -122,26 +128,62 @@ export async function onRequestPost(context) {
                 return Response.json({ error: 'يرجى اختيار نظام الدراسة (خاص/سنتر)' }, { status: 400 });
             }
 
-            // توليد كود طالب عشوائي
-            const studentId = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
+            // ── تأكيد البيانات على السيرفر (مش كفاية الفرونت إند) ──
+            // الاسم بيظهر في لوحة الأدمن، فلو حد كتب كود HTML/JavaScript مكان اسمه كان ممكن
+            // يتنفذ جوه لوحة التحكم ويمسح بيانات. فبنسمح بحروف عربي/إنجليزي ومسافات بس.
+            const firstName = String(data.firstName || '').trim();
+            const lastName = String(data.lastName || '').trim();
+            const phone = String(data.phone || '').trim();
+            const parentPhone = String(data.parentPhone || '').trim();
+            const grade = String(data.grade || '').trim().toLowerCase();
+            const password = String(data.password || '');
+            const NAME_RE = /^[؀-ۿa-zA-Z\s'\-.]{2,40}$/;
+            const PHONE_RE = /^01[0125][0-9]{8}$/;
 
-            // إدخال البيانات في الداتا بيز (تم ترتيب gender و branch قبل phone)
-            const stmt = db.prepare(
-                "INSERT INTO students (student_id, first_name, last_name, gender, branch, phone, parent_phone, grade, password, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            ).bind(
-                studentId, data.firstName, data.lastName, data.gender, data.branch, data.phone, data.parentPhone, data.grade, data.password, 'student'
-            );
+            if (!NAME_RE.test(firstName) || !NAME_RE.test(lastName) || /[<>]/.test(firstName + lastName)) {
+                return Response.json({ error: 'الاسم لازم يكون حروف بس (عربي أو إنجليزي) من 2 لـ 40 حرف' }, { status: 400 });
+            }
+            if (!PHONE_RE.test(phone) || !PHONE_RE.test(parentPhone)) {
+                return Response.json({ error: 'يرجى إدخال أرقام هواتف مصرية صحيحة (11 رقم تبدأ بـ 01)' }, { status: 400 });
+            }
+            if (!['prep1', 'prep2', 'prep3', 'sec1'].includes(grade)) {
+                return Response.json({ error: 'يرجى اختيار المرحلة الدراسية' }, { status: 400 });
+            }
+            if (!['male', 'female'].includes(data.gender) || !['private', 'center'].includes(data.branch)) {
+                return Response.json({ error: 'بيانات النوع أو نظام الدراسة غير صحيحة' }, { status: 400 });
+            }
+            if (password.length < 4 || password.length > 64) {
+                return Response.json({ error: 'كلمة المرور لازم تكون 4 حروف/أرقام على الأقل' }, { status: 400 });
+            }
 
-            await stmt.run();
+            // توليد كود طالب عشوائي — ولو الكود طلع متكرر (نادر بس بيحصل مع زيادة الطلاب)
+            // بنجرب كود تاني بدل ما الطالب يشوف رسالة خطأ غريبة
+            let studentId = null;
+            for (let attempt = 0; attempt < 5 && !studentId; attempt++) {
+                const candidate = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
+                try {
+                    await db.prepare(
+                        "INSERT INTO students (student_id, first_name, last_name, gender, branch, phone, parent_phone, grade, password, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    ).bind(
+                        candidate, firstName, lastName, data.gender, data.branch, phone, parentPhone, grade, password, 'student'
+                    ).run();
+                    studentId = candidate;
+                } catch (insertErr) {
+                    if (!String(insertErr.message || '').includes('UNIQUE')) throw insertErr;
+                }
+            }
+            if (!studentId) {
+                return Response.json({ error: 'حصلت مشكلة أثناء إنشاء الكود، جرّب تاني' }, { status: 500 });
+            }
 
             return Response.json({
                 success: true,
                 studentId: studentId,
                 student: {
                     id: studentId,
-                    firstName: data.firstName,
-                    lastName: data.lastName,
-                    grade: data.grade,
+                    firstName,
+                    lastName,
+                    grade,
                     role: 'student',
                     gender: data.gender,
                     branch: data.branch

@@ -100,8 +100,10 @@ export async function onRequestPost(context) {
             const { examId } = data;
             if (!examId) return Response.json({ error: 'معرف الامتحان مفقود' }, { status: 400 });
             
-            await db.prepare("DELETE FROM offline_exams WHERE id = ?").bind(examId).run();
-            await db.prepare("DELETE FROM offline_grades WHERE exam_id = ?").bind(examId).run();
+            await db.batch([
+                db.prepare("DELETE FROM offline_grades WHERE exam_id = ?").bind(examId),
+                db.prepare("DELETE FROM offline_exams WHERE id = ?").bind(examId)
+            ]);
             return Response.json({ success: true });
         }
 
@@ -111,15 +113,30 @@ export async function onRequestPost(context) {
                 return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
             }
 
+            const exam = await db.prepare("SELECT total_marks FROM offline_exams WHERE id = ?").bind(examId).first();
+            if (!exam) return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
+            const maxMarks = exam.total_marks || 100;
+
+            // نتأكد من كل الدرجات الأول قبل ما نحفظ أي حاجة: درجة سالبة أو أكبر من الدرجة النهائية
+            // أو كلام مش رقم كانت بتتحفظ عادي وبتبوّظ التحليلات ولوحة الشرف.
+            const statements = [];
             for (const g of grades) {
                 if (!g.studentId) continue;
-                const score = (g.score === '' || g.score === null || g.score === undefined) ? null : parseFloat(g.score);
-
-                await db.prepare(
+                const isEmpty = (g.score === '' || g.score === null || g.score === undefined);
+                const score = isEmpty ? null : Number(g.score);
+                if (!isEmpty && (!Number.isFinite(score) || score < 0 || score > maxMarks)) {
+                    return Response.json({
+                        error: `درجة غير صحيحة (${g.score}) للطالب ${g.studentId} — لازم تكون من 0 لـ ${maxMarks}. مفيش أي درجة اتحفظت.`
+                    }, { status: 400 });
+                }
+                statements.push(db.prepare(
                     `INSERT INTO offline_grades (exam_id, student_id, score) VALUES (?, ?, ?)
                      ON CONFLICT(exam_id, student_id) DO UPDATE SET score = excluded.score, updated_at = CURRENT_TIMESTAMP`
-                ).bind(examId, g.studentId, score).run();
+                ).bind(examId, g.studentId, score));
             }
+
+            // batch = كل الدرجات تتحفظ مرة واحدة (أسرع بكتير، ومفيش حفظ نص العمود لو حصل خطأ)
+            if (statements.length > 0) await db.batch(statements);
 
             return Response.json({ success: true });
         }

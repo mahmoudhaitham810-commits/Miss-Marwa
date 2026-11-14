@@ -190,12 +190,20 @@ export async function onRequestGet(context) {
                  ORDER BY sub.submitted_at DESC`
             ).bind(studentId).all();
 
+            const nowMs = Date.now();
             const list = results.map(r => {
                 let total = 0;
                 let questionsArr = [];
                 let studentAnswers = [];
                 try { questionsArr = JSON.parse(r.questions); total = questionsArr.length; } catch (e) { /* ignore */ }
                 try { studentAnswers = r.answers ? JSON.parse(r.answers) : []; } catch (e) { /* ignore */ }
+
+                // طول ما الامتحان لسه مفتوح لباقي الطلاب، منبعتش الإجابات الصح (correctIndex).
+                // قبل كده الطالب كان يقدر يسلّم ويفتح الرابط ده ويشوف الإجابات الصح ويبعتها لزمايله.
+                const stillOpen = new Date(r.expiresAt).getTime() > nowMs;
+                if (stillOpen) {
+                    questionsArr = questionsArr.map(q => ({ question: q.question, options: q.options }));
+                }
                 return {
                     examId: r.examId,
                     title: r.title,
@@ -328,8 +336,11 @@ export async function onRequestPost(context) {
             if (!examId) {
                 return Response.json({ error: 'كود الامتحان مطلوب' }, { status: 400 });
             }
-            await db.prepare("DELETE FROM exams WHERE id = ?").bind(examId).run();
-            await db.prepare("DELETE FROM exam_submissions WHERE exam_id = ?").bind(examId).run();
+            // batch = الأمرين يتنفذوا مع بعض أو ميتنفذوش خالص (مفيش نتايج يتيمة)
+            await db.batch([
+                db.prepare("DELETE FROM exam_submissions WHERE exam_id = ?").bind(examId),
+                db.prepare("DELETE FROM exams WHERE id = ?").bind(examId)
+            ]);
             return Response.json({ success: true });
         }
 
@@ -447,9 +458,21 @@ export async function onRequestPost(context) {
                 return Response.json({ error: 'الامتحان ده اتسلم قبل كده، مينفعش تسلمي مرتين' }, { status: 403 });
             }
 
-            const exam = await db.prepare("SELECT questions FROM exams WHERE id = ?").bind(examId).first();
+            const exam = await db.prepare(
+                "SELECT questions, expires_at, time_limit_minutes as timeLimitMinutes FROM exams WHERE id = ?"
+            ).bind(examId).first();
             if (!exam) {
                 return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
+            }
+
+            // بعد ما الامتحان يخلص، الإجابات الصح بتبقى ظاهرة لكل اللي حلّوا (صفحة المراجعة).
+            // فمنقبلش تسليم متأخر جداً، وإلا طالب فاتح الامتحان من بدري يقدر يستنى ويشوف الإجابات
+            // من حد تاني ويسلّمها. بنسيب مهلة = مدة التايمر (لو موجود) أو ساعة، عشان اللي
+            // بدأ قبل النهاية بشوية يلحق يسلّم عادي.
+            const graceMinutes = exam.timeLimitMinutes ? exam.timeLimitMinutes + 5 : 60;
+            const deadlineMs = new Date(exam.expires_at).getTime() + graceMinutes * 60 * 1000;
+            if (Date.now() > deadlineMs) {
+                return Response.json({ error: 'انتهى وقت تسليم هذا الامتحان. كلّم مس مروة لو حصلت مشكلة.' }, { status: 403 });
             }
 
             let questions = [];

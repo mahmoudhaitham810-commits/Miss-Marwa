@@ -1701,6 +1701,36 @@ D) 120</pre>
         let allLessons = [];
         let allExams = [];
 
+        // بيحوّل أي نص جاي من الطلاب (الاسم، الموبايل...) لنص عادي قبل ما يتحط في الصفحة.
+        // من غيره، طالب ممكن يسجّل باسم فيه كود، والكود ده يتنفذ جوه لوحة التحكم
+        // بصلاحيات الأدمن (يمسح طلاب أو محتوى) أول ما مس مروة تفتح الصفحة.
+        function esc(v) {
+            return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        // لو جلسة الأدمن خلصت (12 ساعة) وهي فاتحة الصفحة، كل الطلبات كانت بتفشل بصمت
+        // (جداول فاضية، "مفيش طلاب"). دلوقتي أول ما أي طلب يرجع 401 بنرجّع شاشة الرمز السري.
+        const _origFetch = window.fetch.bind(window);
+        window.fetch = async (...args) => {
+            const res = await _origFetch(...args);
+            const url = String(args[0] && args[0].url ? args[0].url : args[0]);
+            if (res.status === 401 && url.startsWith('/api/') && !url.startsWith('/api/admin-auth')) {
+                showSessionExpired();
+            }
+            return res;
+        };
+        function showSessionExpired() {
+            const lock = document.getElementById('adminLockScreen');
+            if (!lock || lock.style.display !== 'none') return;
+            document.getElementById('adminPanel').style.display = 'none';
+            lock.style.display = '';
+            const pinError = document.getElementById('pinError');
+            if (pinError) {
+                pinError.textContent = 'انتهت الجلسة — ادخلي الرمز السري تاني (الشغل اللي مااتحفظش لسه موجود في الصفحة).';
+                pinError.style.display = 'block';
+            }
+        }
+
         // ── التحقق من الجلسة عند فتح الصفحة ──
         (async function checkExistingSession() {
             try {
@@ -1799,6 +1829,7 @@ D) 120</pre>
                 await loadExams();
             } catch (err) {
                 console.error("Fetch Data Error:", err);
+                if (err.message === 'SESSION_EXPIRED') { showSessionExpired(); return; }
                 alert("حدث خطأ أثناء مزامنة البيانات مع الخادم: " + err.message);
             }
         }
@@ -1831,14 +1862,14 @@ D) 120</pre>
                 const branchAr = sBranch === 'private' ? 'خاص' : (sBranch === 'center' ? 'سنتر' : '—');
 
                 tr.innerHTML = `
-                    <td><span class="id-badge">${sId}</span></td>
-                    <td><strong>${fName} ${lName}</strong></td>
+                    <td><span class="id-badge">${esc(sId)}</span></td>
+                    <td><strong>${esc(fName)} ${esc(lName)}</strong></td>
                     <td>${genderAr}</td>
                     <td>${branchAr}</td>
-                    <td>${(s.grade || '').toUpperCase()}</td>
-                    <td dir="ltr" style="text-align: right;">${s.phone || '—'}</td>
-                    <td dir="ltr" style="text-align: right;">${pPhone || '—'}</td>
-                    <td>${created}</td>
+                    <td>${esc((s.grade || '').toUpperCase())}</td>
+                    <td dir="ltr" style="text-align: right;">${esc(s.phone || '—')}</td>
+                    <td dir="ltr" style="text-align: right;">${esc(pPhone || '—')}</td>
+                    <td>${esc(created)}</td>
                     <td>
                         <button class="btn-table btn-reset" onclick="resetStudentPassword('${sId}')">تغيير الباسورد</button>
                         <button class="btn-table btn-delete" onclick="deleteStudent('${sId}')">حذف</button>
@@ -1866,11 +1897,11 @@ D) 120</pre>
             lessons.forEach(l => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td><strong>${l.title}</strong></td>
-                    <td>${(l.grade || '').toUpperCase()}</td>
-                    <td>${categoryBadges[l.category] || l.category}</td>
-                    <td>${l.notes || '—'}</td>
-                    <td>${l.createdAt || '—'}</td>
+                    <td><strong>${esc(l.title)}</strong></td>
+                    <td>${esc((l.grade || '').toUpperCase())}</td>
+                    <td>${categoryBadges[l.category] || esc(l.category)}</td>
+                    <td>${esc(l.notes || '—')}</td>
+                    <td>${esc(l.createdAt || l.created_at || '—')}</td>
                     <td>
                         <a href="${l.url}" target="_blank" class="btn-table btn-view">فتح الرابط <i class="fas fa-external-link-alt"></i></a>
                         <button class="btn-table btn-delete" onclick="deleteLesson('${l.id}')">حذف</button>
@@ -2264,6 +2295,7 @@ D) 120</pre>
 
                 const stats = data.stats || { totalAccessed: 0, completed: 0, inProgress: 0 };
                 const rows = Array.isArray(data.results) ? data.results : [];
+                currentResultsRows = rows;
                 currentMissedList = Array.isArray(data.missed) ? data.missed : [];
 
                 document.getElementById('statTotalAccessed').textContent = stats.totalAccessed;
@@ -2278,10 +2310,10 @@ D) 120</pre>
                     missedBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 20px;">كل الطلاب المسجلين في المرحلة دي دخلوا الامتحان 🎉</td></tr>`;
                 } else {
                     missedBody.innerHTML = currentMissedList.map(m => `<tr>
-                        <td><span class="id-badge">${m.studentId}</span></td>
-                        <td><strong>${m.firstName} ${m.lastName}</strong></td>
-                        <td>${m.phone || ''}</td>
-                        <td>${m.parentPhone || ''}</td>
+                        <td><span class="id-badge">${esc(m.studentId)}</span></td>
+                        <td><strong>${esc(m.firstName)} ${esc(m.lastName)}</strong></td>
+                        <td>${esc(m.phone || '')}</td>
+                        <td>${esc(m.parentPhone || '')}</td>
                         <td><button class="btn-table" style="background:#ef4444; color:#fff;" onclick="sendAbsenceWarning('${m.studentId}', this)">
                                 <i class="fab fa-whatsapp"></i> إرسال تنبيه
                             </button></td>
@@ -2306,7 +2338,8 @@ D) 120</pre>
                         scoreCell = `<strong style="color:${color};">${r.score} / ${r.total}</strong>`;
                     }
 
-                    const isSuccessful = isSubmitted && r.score > 0;
+                    // طالب سلّم وجاب صفر "سلّم" فعلاً، فمينفعش يطلع له زرار إنذار "دخل ومسلّمش"
+                    const isSuccessful = isSubmitted;
                     const fullName = `${r.firstName} ${r.lastName}`;
                     const safeName = fullName.replace(/'/g, "\\'"); // escape single quotes
 
@@ -2320,7 +2353,7 @@ D) 120</pre>
                             ${statusBadge}
                             <button class="btn-table btn-reset" style="padding: 6px 12px; font-size: 0.85rem;" onclick="resetExamAttempt('${r.studentId}')" title="إعادة فتح الامتحان للطالب">إعادة فتح</button>
                             ${!isSuccessful ? `
-                            <button class="btn-table" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 6px 12px; font-weight: bold; cursor: pointer; font-size: 0.85rem; transition: 0.3s;" onclick="sendCheatingWarning('${safeName}', '${r.parentPhone || ''}', this)">
+                            <button class="btn-table" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 6px 12px; font-weight: bold; cursor: pointer; font-size: 0.85rem; transition: 0.3s;" onclick="sendCheatingWarningById('${esc(r.studentId)}', this)">
                                 <i class="fab fa-whatsapp"></i> إنذار
                             </button>
                             ` : ''}
@@ -2328,10 +2361,10 @@ D) 120</pre>
                     `;
 
                     return `<tr>
-                        <td><span class="id-badge">${r.studentId}</span></td>
-                        <td><strong>${r.firstName} ${r.lastName}</strong></td>
-                        <td>${r.phone || ''}</td>
-                        <td>${r.parentPhone || ''}</td>
+                        <td><span class="id-badge">${esc(r.studentId)}</span></td>
+                        <td><strong>${esc(r.firstName)} ${esc(r.lastName)}</strong></td>
+                        <td>${esc(r.phone || '')}</td>
+                        <td>${esc(r.parentPhone || '')}</td>
                         <td>${scoreCell}</td>
                         <td>${actionsHTML}</td>
                     </tr>`;
@@ -2360,6 +2393,14 @@ D) 120</pre>
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        }
+
+        // بندوّر على الطالب بالكود بتاعه بدل ما نحط اسمه جوه كود الزرار (الاسم ممكن يكون فيه علامات تكسر الزرار)
+        let currentResultsRows = [];
+        function sendCheatingWarningById(studentId, btnElement) {
+            const r = currentResultsRows.find(x => x.studentId === studentId);
+            if (!r) return;
+            sendCheatingWarning(`${r.firstName} ${r.lastName}`, r.parentPhone || '', btnElement);
         }
 
         async function sendCheatingWarning(studentName, parentPhone, btnElement) {
@@ -2437,9 +2478,9 @@ D) 120</pre>
                            </button>`;
 
                     return `<tr>
-                        <td><span class="id-badge">${s.studentId}</span></td>
-                        <td><strong>${s.firstName} ${s.lastName}</strong></td>
-                        <td>${s.parentPhone || ''}</td>
+                        <td><span class="id-badge">${esc(s.studentId)}</span></td>
+                        <td><strong>${esc(s.firstName)} ${esc(s.lastName)}</strong></td>
+                        <td>${esc(s.parentPhone || '')}</td>
                         <td>${s.examsCount}</td>
                         <td>${avgCell}</td>
                         <td>${actionCell}</td>
@@ -2664,8 +2705,8 @@ D) 120</pre>
 
             let headHtml = '<tr><th>كود الطالب (ID)</th><th>اسم الطالب</th><th>هاتف ولي الأمر</th>';
             currentOfflineExams.forEach(ex => {
-                const escapedName = ex.examName.replace(/'/g, "\\'");
-                headHtml += `<th>${ex.examName} (${ex.totalMarks})
+                const escapedName = esc(ex.examName.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+                headHtml += `<th>${esc(ex.examName)} (${ex.totalMarks})
                     <div style="margin-top:4px; display:flex; gap:2px; justify-content:center;">
                         <button class="btn-table btn-reset" style="padding:2px 8px; font-size:0.75rem;" onclick="saveExamColumn(${ex.id})" title="حفظ الدرجات">
                             <i class="fas fa-save"></i>
@@ -2699,9 +2740,9 @@ D) 120</pre>
             }
 
             tbody.innerHTML = filteredStudents.map(s => {
-                let cells = `<td><span class="id-badge">${s.studentId}</span></td>
-                    <td><strong>${s.firstName} ${s.lastName}</strong></td>
-                    <td>${s.parentPhone || ''}</td>`;
+                let cells = `<td><span class="id-badge">${esc(s.studentId)}</span></td>
+                    <td><strong>${esc(s.firstName)} ${esc(s.lastName)}</strong></td>
+                    <td>${esc(s.parentPhone || '')}</td>`;
 
                 currentOfflineExams.forEach(ex => {
                     let existingScore = '';
@@ -2712,7 +2753,7 @@ D) 120</pre>
                     }
                     
                     cells += `<td><input type="number" class="form-input offline-score-input" style="width:80px; padding:6px 8px;"
-                        data-exam="${ex.id}" data-student="${s.studentId}" value="${existingScore === null ? '' : existingScore}" oninput="handleOfflineScoreInput(this, ${ex.id}, '${s.studentId}'); updateOfflineInsights()"></td>`;
+                        data-exam="${ex.id}" data-student="${esc(s.studentId)}" value="${existingScore === null ? '' : esc(existingScore)}" oninput="handleOfflineScoreInput(this, ${ex.id}, '${s.studentId}'); updateOfflineInsights()"></td>`;
                 });
 
                 const hasAnyGrade = currentOfflineExams.some(ex => currentOfflineGradesMap[ex.id] && currentOfflineGradesMap[ex.id][s.studentId] !== undefined && currentOfflineGradesMap[ex.id][s.studentId] !== null);
@@ -2860,18 +2901,39 @@ D) 120</pre>
                 score: inp.value
             }));
 
+            // نتأكد إن مفيش درجة أكبر من الدرجة النهائية أو بالسالب قبل الحفظ، ونعلّم الخانة الغلط بالأحمر
+            const exam = currentOfflineExams.find(e => e.id == examId);
+            const maxMarks = exam ? (exam.totalMarks || 100) : 100;
+            let firstBad = null;
+            inputs.forEach(inp => {
+                const v = inp.value.trim();
+                const bad = v !== '' && (!Number.isFinite(Number(v)) || Number(v) < 0 || Number(v) > maxMarks);
+                inp.style.borderColor = bad ? '#ef4444' : '';
+                if (bad && !firstBad) firstBad = inp;
+            });
+            if (firstBad) {
+                firstBad.focus();
+                alert(`فيه درجة غلط (لازم تكون من 0 لـ ${maxMarks}). اتعلّمت بالأحمر — مفيش حاجة اتحفظت.`);
+                return;
+            }
+
             try {
                 const res = await fetch('/api/offline-exams?action=save-grades', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ examId, grades })
                 });
-                if (!res.ok) throw new Error('فشل حفظ الدرجات');
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || 'فشل حفظ الدرجات');
+                }
 
                 if (!currentOfflineGradesMap[examId]) currentOfflineGradesMap[examId] = {};
                 grades.forEach(g => {
                     currentOfflineGradesMap[examId][g.studentId] = g.score === '' ? null : parseFloat(g.score);
                 });
+                // نشيل المسودات اللي اتحفظت بس (لو فيه بحث شغال، الطلاب المخفيين مسوداتهم تفضل)
+                if (offlinePendingScores[examId]) grades.forEach(g => { delete offlinePendingScores[examId][g.studentId]; });
                 renderOfflineTable();
                 alert('تم حفظ الدرجات بنجاح ✅');
             } catch (err) {
@@ -3721,7 +3783,7 @@ D) 120</pre>
                             const gap = s.onlineAvgPercent - s.offlineAvgPercent;
                             return `
                             <tr>
-                                <td><strong>${s.firstName} ${s.lastName}</strong><br><small style="color: #94a3b8;">${s.studentId}</small></td>
+                                <td><strong>${esc(s.firstName)} ${esc(s.lastName)}</strong><br><small style="color: #94a3b8;">${esc(s.studentId)}</small></td>
                                 <td style="color: #818cf8; font-weight: bold;">${s.onlineAvgPercent}% <small style="color:#64748b;">(${s.onlineRawScore}/${s.onlineRawTotal})</small></td>
                                 <td style="color: #22d3ee; font-weight: bold;">${s.offlineAvgPercent}% <small style="color:#64748b;">(${s.offlineRawScore}/${s.offlineRawTotal})</small></td>
                                 <td style="color: #ef4444; font-weight: bold;">+${gap}%</td>
@@ -3741,7 +3803,7 @@ D) 120</pre>
                 // ── Populate Student Dropdown ──
                 const dropdown = document.getElementById('analyticsStudentDropdown');
                 dropdown.innerHTML = '<option value="">-- اختر طالب من هذه المرحلة --</option>' + 
-                    students.map(s => `<option value="${s.studentId}">${s.firstName} ${s.lastName} (${s.studentId})</option>`).join('');
+                    students.map(s => `<option value="${esc(s.studentId)}">${esc(s.firstName)} ${esc(s.lastName)} (${esc(s.studentId)})</option>`).join('');
 
                 anObserveCards();
 
@@ -3774,10 +3836,10 @@ D) 120</pre>
 
                 // ── Student Header
                 document.getElementById('anStudentHeader').innerHTML = `
-                    <div class="student-avatar">${student.firstName.charAt(0)}</div>
+                    <div class="student-avatar">${esc(student.firstName.charAt(0))}</div>
                     <div class="student-info">
-                        <h2>${fullName}</h2>
-                        <p><strong>الكود:</strong> ${student.studentId} &nbsp; | &nbsp; <strong>المرحلة:</strong> ${student.grade.toUpperCase()} &nbsp; | &nbsp; <strong>هاتف ولي الأمر:</strong> ${student.parentPhone || 'غير متوفر'}</p>
+                        <h2>${esc(fullName)}</h2>
+                        <p><strong>الكود:</strong> ${esc(student.studentId)} &nbsp; | &nbsp; <strong>المرحلة:</strong> ${esc(student.grade.toUpperCase())} &nbsp; | &nbsp; <strong>هاتف ولي الأمر:</strong> ${esc(student.parentPhone || 'غير متوفر')}</p>
                     </div>
                 `;
 
@@ -3819,7 +3881,7 @@ D) 120</pre>
                                 <span class="score-pill" style="background: rgba(34,211,238,0.2); color: #22d3ee;">أوفلاين: ${avgOffline}%</span>
                             </div>
                         </div>
-                        <button class="action-btn" style="flex-shrink: 0;" onclick="sendCheatParentMsg('${fullName.replace(/'/g, "\\'")}', '${student.parentPhone || ''}', ${onlineRawScore}, ${onlineRawTotal}, ${offlineRawScore}, ${offlineRawTotal})">
+                        <button class="action-btn" style="flex-shrink: 0;" onclick="sendCheatParentMsg('${esc(fullName.replace(/\\/g, '\\\\').replace(/'/g, "\\'"))}', '${esc(student.parentPhone || '')}', ${onlineRawScore}, ${onlineRawTotal}, ${offlineRawScore}, ${offlineRawTotal})">
                             <i class="fab fa-whatsapp"></i> مراسلة ولي الأمر
                         </button>`;
                 } else {
@@ -4024,9 +4086,9 @@ D) 120</pre>
 
             resultsDiv.style.display = 'block';
             resultsDiv.innerHTML = matches.map(s => `
-                <div class="search-result-item" onclick="loadStudentDeepDive('${s.studentId}')">
-                    <strong>${s.firstName} ${s.lastName}</strong>
-                    <span style="color: #64748b; margin-right: 10px;">${s.studentId} — ${(s.grade || '').toUpperCase()}</span>
+                <div class="search-result-item" onclick="loadStudentDeepDive('${esc(s.studentId)}')">
+                    <strong>${esc(s.firstName)} ${esc(s.lastName)}</strong>
+                    <span style="color: #64748b; margin-right: 10px;">${esc(s.studentId)} — ${esc((s.grade || '').toUpperCase())}</span>
                 </div>
             `).join('');
         }
@@ -4132,7 +4194,7 @@ D) 120</pre>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
+                navigator.serviceWorker.register('/OneSignalSDKWorker.js')
                     .then(registration => {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
                     })

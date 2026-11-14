@@ -34,13 +34,20 @@ export async function onRequestPost(context) {
         // 1. حالة تغيير الباسورد
         if (action === 'reset-password') {
             const { studentId, password } = await request.json();
-            await db.prepare("UPDATE students SET password = ? WHERE student_id = ?").bind(password, studentId).run();
+            if (!studentId || typeof password !== 'string' || password.trim().length < 4) {
+                return Response.json({ error: 'كلمة المرور يجب ألا تقل عن 4 خانات' }, { status: 400 });
+            }
+            const result = await db.prepare("UPDATE students SET password = ? WHERE student_id = ?").bind(password.trim(), studentId).run();
+            if (result.meta && result.meta.changes === 0) {
+                return Response.json({ error: 'الطالب غير موجود' }, { status: 404 });
+            }
             return Response.json({ success: true });
         }
 
         // 2. حالة حذف طالب
         if (action === 'delete') {
             const { studentId } = await request.json();
+            if (!studentId) return Response.json({ error: 'كود الطالب مطلوب' }, { status: 400 });
             await db.prepare("DELETE FROM students WHERE student_id = ?").bind(studentId).run();
             return Response.json({ success: true });
         }
