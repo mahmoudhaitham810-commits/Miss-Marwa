@@ -458,3 +458,7 @@ body.site { background: var(--canvas); overflow-x: clip; }
     .intro { display: none; }
     .confetti { display: none; }
 }
+
+/* Install-app button in the landing header: icon only on phones */
+.header-install .lbl { display: none; }
+@media (min-width: 640px) { .header-install .lbl { display: inline; } }

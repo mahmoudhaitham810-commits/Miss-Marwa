@@ -461,3 +461,17 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 .topbar .brand-text strong { overflow: hidden; text-overflow: ellipsis; }
 body.no-bottomnav .main { padding-bottom: 24px; }
 body.no-bottomnav .toasts { bottom: 96px; }
+
+/* ---------- Install as app ---------- */
+.pwa-installed [data-install] { display: none !important; }
+.install-steps { margin: 0; padding-inline-start: 22px; line-height: 1.9; color: var(--text-2); }
+.install-steps li + li { margin-top: 4px; }
+.side-install {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; margin: 10px 0 10px;
+    border-radius: 12px; border: 1px dashed var(--primary-line, var(--border)); background: var(--primary-soft);
+    color: var(--primary); font-weight: 650; text-align: start; cursor: pointer; flex: none;
+}
+.side-install:hover { filter: brightness(.97); }
+.side-install small { display: block; font-size: 11.5px; font-weight: 500; opacity: .8; }
+.topbar-install-icon { display: inline-grid; }
+@media (min-width: 1024px) { .topbar-install-icon { display: none; } }

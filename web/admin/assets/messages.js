@@ -10,7 +10,7 @@
     const GRADE_AR = { prep1: 'الصف الأول الإعدادي', prep2: 'الصف الثاني الإعدادي', prep3: 'الصف الثالث الإعدادي', sec1: 'الصف الأول الثانوي' };
     const BRANCH_AR = { center: 'سنتر', private: 'خاص' };
     // Every parent message starts with this line (no sign-off at the end)
-    const OPEN = 'السلام عليكم — تيم مس مروة 🌷';
+    const OPEN = 'السلام عليكم — تيم مس مروة 👋';
     // Right-to-left safety: English names / scores inside Arabic lines are fenced with left-to-right
     // marks so WhatsApp never re-orders them, and each line starts with a right-to-left mark so
     // lines that begin with an emoji or an English word still read right-to-left.

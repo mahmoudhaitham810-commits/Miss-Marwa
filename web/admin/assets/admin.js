@@ -124,6 +124,7 @@
         const sidebar = `<aside class="sidebar" aria-label="Staff navigation"><div>
                 <a class="brand" href="/admin/"><img src="/assets/img/logo-96.png" alt="" width="44" height="44"><div class="brand-text"><strong>Science Academy</strong><span>Staff portal</span></div></a>
                 <nav class="side-nav">${items.map(link).join('')}</nav></div>
+            <button class="side-install" data-install>${icon('download', 'sm')}<span>Install the staff app<small>Phone, tablet or laptop</small></span></button>
             <div class="side-user"><img class="avatar" src="${avatar}" alt="" style="object-fit:cover;background:#fff">
                 <div class="who"><strong dir="auto">${esc(STAFF.name)}</strong><span>${STAFF.role === 'teacher' ? 'Full access' : 'Assistant'}</span></div>
                 <button class="icon-btn" title="Sign out" aria-label="Sign out" data-signout>${icon('logout', 'sm')}</button></div></aside>`;
@@ -131,6 +132,7 @@
                 <a class="brand" href="/admin/"><img src="/assets/img/logo-96.png" alt="" width="38" height="38"><div class="brand-text"><strong>${esc(title)}</strong><span>Staff portal</span></div></a>
                 <div class="page-title-desktop">${esc(title)}</div>
                 <div class="topbar-actions">
+                    <button class="btn btn-soft btn-sm topbar-install" data-install title="Install the staff app">${icon('download', 'sm')}<span>Install app</span></button>
                     <button class="icon-btn theme-btn" data-theme-toggle aria-label="Switch light / dark mode" title="Light / dark mode">${icon('moon', 'moon')}${icon('sun', 'sun')}</button>
                     <button class="icon-btn menu-trigger" aria-label="Menu" data-menu>${icon('menu')}</button>
                 </div></header>`;
@@ -158,6 +160,7 @@
             html: `<div class="stack" style="gap:2px">${nav().map(n => n.soon
                 ? `<button class="list-btn" data-soon="${esc(n.label)}">${icon(n.icon)}${esc(n.label)}<span class="end soon-tag">Soon</span></button>`
                 : `<a class="list-btn" href="${n.href}">${icon(n.icon)}${esc(n.label)}</a>`).join('')}
+                <button class="list-btn" data-install>${icon('download')}Install the staff app</button>
                 <button class="list-btn" data-theme-toggle>${icon('moon')}Light / dark mode</button>
                 <button class="list-btn danger" data-signout>${icon('logout')}Sign out</button></div>`
         });

@@ -9,7 +9,7 @@
     <title>Students · Science Academy Staff</title>
     <link rel="icon" href="/admin/icon-192.png">
     <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
-    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="manifest" href="/admin/admin-manifest.json">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -39,6 +39,7 @@
         </div>
     </main>
 
+    <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
     <script src="/admin/assets/messages.js"></script>
@@ -103,7 +104,7 @@
             const s = S.find(x => x.student_id === sid); if (!s) return;
             const stud = { studentId: s.student_id, firstName: s.first_name, lastName: s.last_name, gender: s.gender, branch: s.branch, grade: s.grade, parentPhone: s.parent_phone };
             const actions = [];
-            if (s.parent_phone) actions.push({ label: 'WhatsApp the parent', icon: 'whatsapp', cls: 'btn-wa', href: ParentMessages.waLink(s.parent_phone, `السلام عليكم — تيم مس مروة 🌷\nولي أمر ${s.gender === 'female' ? 'الطالبة' : 'الطالب'}: \u200E${s.first_name} ${s.last_name}\u200E`), external: true });
+            if (s.parent_phone) actions.push({ label: 'WhatsApp the parent', icon: 'whatsapp', cls: 'btn-wa', href: ParentMessages.waLink(s.parent_phone, `السلام عليكم — تيم مس مروة 👋\nولي أمر ${s.gender === 'female' ? 'الطالبة' : 'الطالب'}: \u200E${s.first_name} ${s.last_name}\u200E`), external: true });
             actions.push({ label: 'Results & exam alerts', icon: 'chart', cls: 'btn-soft', href: `/admin/student.html?id=${encodeURIComponent(s.student_id)}` });
             if (A.can('students.reset-password')) actions.push({ label: 'Reset password', icon: 'lock', cls: 'btn-ghost', onClick: (close) => { close(); setTimeout(() => resetPw(s), 240); } });
             if (A.can('students.delete')) actions.push({ label: 'Delete account', icon: 'trash', cls: 'btn-ghost danger-text', onClick: (close) => { close(); setTimeout(() => del(s), 240); } });
@@ -137,7 +138,7 @@
                     try {
                         await api('/api/students?action=reset-password', { body: { studentId: s.student_id, password: pw } });
                         close();
-                        const text = `السلام عليكم — تيم مس مروة 🌷\nالطالب/ة: \u200E${s.first_name} ${s.last_name}\u200E\nكلمة السر الجديدة لحسابك على Science Academy: \u200E${pw}\u200E\nكود الطالب: \u200E${s.student_id}\u200E`;
+                        const text = `السلام عليكم — تيم مس مروة 👋\nالطالب/ة: \u200E${s.first_name} ${s.last_name}\u200E\nكلمة السر الجديدة لحسابك على Science Academy: \u200E${pw}\u200E\nكود الطالب: \u200E${s.student_id}\u200E`;
                         setTimeout(() => Site.sheet({
                             iconName: 'checkCircle', title: 'Password changed', subtitle: `${s.student_id} · new password: ${pw}`,
                             actions: [

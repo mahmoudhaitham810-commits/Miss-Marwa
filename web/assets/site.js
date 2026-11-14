@@ -304,32 +304,15 @@
         }
         document.addEventListener('click', (e) => {
             if (e.target.closest('[data-theme-toggle]')) setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
-            if (e.target.closest('[data-install]')) install();
         });
     }
 
-    // ---------- Install as app (PWA) ----------
-    let deferredPrompt = null;
-    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
-    async function install() {
-        if (deferredPrompt) {
-            deferredPrompt.prompt();
-            try { await deferredPrompt.userChoice; } catch (e) { }
-            deferredPrompt = null;
-            return;
-        }
-        if (matchMedia('(display-mode: standalone)').matches) { toast('The app is already installed', 'success'); return; }
-        const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-        sheet({
-            iconName: 'download', title: 'Install the app',
-            subtitle: 'Open Science Academy straight from your home screen.',
-            html: ios
-                ? `<ol class="muted" style="margin:0;padding-left:20px;line-height:1.9"><li>Tap the <b>Share</b> button at the bottom of Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>.</li></ol>`
-                : `<ol class="muted" style="margin:0;padding-left:20px;line-height:1.9"><li>Open the browser menu (⋮).</li><li>Choose <b>Install app</b> or <b>Add to Home screen</b>.</li></ol>`,
-            actions: [{ label: 'Got it', cls: 'btn-soft' }]
-        });
-    }
-    if ('serviceWorker' in navigator) {
+    // ---------- Install as app (PWA) — the logic lives in /assets/pwa.js ----------
+    function install() { return window.PWA ? PWA.install({ showHelp: PWA.showHelp }) : null; }
+    if (window.PWA) {
+        PWA.showHelp = (title, html) => sheet({ iconName: 'download', title, subtitle: 'Opens straight from your home screen or desktop, full screen, like a normal app.', html, actions: [{ label: 'Got it', cls: 'btn-soft' }] });
+        PWA.setNotify((msg) => toast(msg, 'success'));
+    } else if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => navigator.serviceWorker.register('/OneSignalSDKWorker.js').catch(() => { }));
     }
 

@@ -391,3 +391,14 @@ a.kpi:hover { transform: translateY(-2px); border-color: var(--primary-line); }
 .wa-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 #waGo kbd, .btn kbd { margin-left: 6px; font: 600 11px/1 var(--font, inherit); padding: 3px 6px; border-radius: 6px; background: rgba(255, 255, 255, .22); }
 @media (hover: none) { #waGo kbd { display: none; } }
+
+/* Install button: in the sidebar on laptops, in the top bar on phones / tablets */
+.topbar-install span { display: none; }
+@media (min-width: 420px) { .topbar-install span { display: inline; } }
+@media (min-width: 1024px) { .topbar-install { display: none; } }
+
+/* Sidebar menu scrolls with wheel / trackpad / touch, but shows no scrollbar */
+@media (min-width: 1024px) {
+    body.staff .side-nav { scrollbar-width: none; -ms-overflow-style: none; }
+    body.staff .side-nav::-webkit-scrollbar { display: none; width: 0; height: 0; }
+}

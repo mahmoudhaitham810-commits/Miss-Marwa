@@ -57,6 +57,7 @@
     const txt = (s) => `<span dir="auto">${esc(s)}</span>`;
 
     const ICONS = {
+        download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
         home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>',
         book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
         clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
@@ -427,6 +428,7 @@
                     <button class="btn btn-sm btn-ghost" id="copyCode">${icon('copy', 'sm')}Copy</button></div>
                 <p class="xs muted" style="margin:8px 2px 12px">You sign in with this code. Keep it safe.</p>
                 <button class="list-btn" data-theme-toggle>${icon('moon')}Dark mode<span class="end" data-theme-state>${currentTheme() === 'dark' ? 'Dark' : 'Light'}</span></button>
+                <button class="list-btn" data-install>${icon('download')}Install the app<span class="end ar">حمّل التطبيق</span></button>
                 <button class="list-btn" id="pfNotif">${icon('bell')}Notifications<span class="end" id="pfNotifState"></span></button>
                 <a class="list-btn" href="${url('exam-results.html')}">${icon('chart')}My results<span class="end">${icon('chevronRight', 'sm')}</span></a>
                 <button class="list-btn danger" id="pfLogout">${icon('logout')}Sign out</button>`
@@ -490,6 +492,7 @@
             ? `<button data-soon="${esc(n.label)}" class="${n.key === active ? 'active' : ''}">${icon(n.icon)}${n.label}<span class="soon-tag">Soon</span></button>`
             : `<a href="${n.href}" class="${n.key === active ? 'active' : ''}" ${n.key === active ? 'aria-current="page"' : ''}>${icon(n.icon)}${n.label}</a>`).join('')}</nav>
             </div>
+            <button class="side-install" data-install>${icon('download', 'sm')}<span>Install the app<small class="ar">حمّل التطبيق</small></span></button>
             <div class="side-user"><div class="avatar">${initial}</div>
                 <div class="who"><strong dir="auto">${esc(first)} ${esc(session.lastName || '')}</strong><span class="num">${esc(session.id)}</span></div>
                 <button class="icon-btn" title="Sign out" aria-label="Sign out" data-logout>${icon('logout', 'sm')}</button></div>
@@ -501,6 +504,7 @@
             <div class="page-title-desktop"></div>
             <div class="topbar-actions">
                 <span class="streak-chip zero" id="streakChip" title="Daily streak">${icon('flame', 'sm')}<span class="num" id="streakNum">0</span></span>
+                <button class="icon-btn topbar-install-icon" data-install aria-label="Install the app" title="Install the app · حمّل التطبيق">${icon('download')}</button>
                 <button class="icon-btn theme-btn" data-theme-toggle aria-label="Switch light / dark mode" title="Light / dark mode">${icon('moon', 'moon')}${icon('sun', 'sun')}</button>
                 ${notifications ? `<button class="icon-btn" data-bell aria-label="Notifications">${icon('bell')}<span class="dot hidden"></span></button>` : ''}
                 <button class="avatar" data-profile aria-label="My account">${initial}</button>
@@ -565,6 +569,11 @@
         });
     }
 
+    // Install-as-app help uses the portal's own sheet + toast
+    if (window.PWA) {
+        PWA.showHelp = (title, html) => sheet({ iconName: 'download', title, subtitle: 'Open Science Academy straight from your home screen, full screen, like a normal app.', html, actions: [{ label: 'Got it', cls: 'btn-soft' }] });
+        PWA.setNotify((msg) => toast(msg, 'success'));
+    }
     window.App = {
         confirmStart, setTheme, toggleTheme, currentTheme,
         session, grade, isAdmin, GRADES, GRADES_AR,
