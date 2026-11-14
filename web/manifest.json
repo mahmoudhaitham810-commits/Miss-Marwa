@@ -1,10 +1,10 @@
 {
-  "name": "Science-Academy",
-  "short_name": "Science-Academy",
-  "start_url": "./index.html",
+  "name": "Science Academy",
+  "short_name": "Science Academy",
+  "start_url": "/index.html?source=pwa",
   "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#020617",
+  "background_color": "#F4F7FC",
+  "theme_color": "#2F5BEA",
   "icons": [
     {
       "src": "images/Miss_Marwa_App_Logo.png",
@@ -16,5 +16,7 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "scope": "/",
+  "description": "Science lessons, online exams and progress tracking with Miss Marwa."
 }

@@ -1,331 +1,214 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
-
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نتائج الامتحانات | Miss Marwa</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Results · Science Academy</title>
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
     <style>
-        :root {
-            --primary-blue: #2563eb;
-            --glowing-cyan: #00E5FF;
-            --bg-deep: #020617;
-            --text-light: #f8fafc;
-            --card-glass: rgba(15, 23, 42, 0.65);
-            --border-glass: rgba(0, 229, 255, 0.2);
-        }
+        .page-head { margin-bottom: 16px; }
+        .page-head p { margin: 6px 0 0; color: var(--text-2); }
+        .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+        .stat .k { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        @media (max-width: 360px) { .stats { gap: 8px; } .stat { padding: 10px !important; } .stat .k .icon { display: none; } }
+        .stat { padding: 14px; }
+        .stat .k { font-size: 12px; color: var(--muted); font-weight: 600; }
+        .stat .v { font-size: 24px; font-weight: 800; letter-spacing: -.02em; margin-top: 4px; }
+        @media (max-width: 420px) { .stat .v { font-size: 20px; } .stat { padding: 12px; } }
+        .rlist { display: flex; flex-direction: column; gap: 10px; }
+        .ritem { display: flex; align-items: center; gap: 14px; transition: transform .15s, box-shadow .15s; }
+        .ritem:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+        .ritem .info { flex: 1; min-width: 0; }
+        .ritem .info strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .score-pill { font-weight: 800; font-size: 15px; padding: 6px 12px; border-radius: 10px; flex-shrink: 0; }
+        .score-pill.good { background: var(--success-soft); color: var(--success); }
+        .score-pill.bad { background: var(--danger-soft); color: var(--danger); }
+        .score-pill.mid { background: var(--primary-soft); color: var(--primary); }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: 'Cairo', sans-serif;
-            background-color: var(--bg-deep);
-            color: var(--text-light);
-            overflow-x: hidden;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-
-        .bg-orbs {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: -1;
-            overflow: hidden;
-            background: radial-gradient(circle at 50% 50%, #0a0f24 0%, #020617 100%);
-        }
-
-        .orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(80px);
-            opacity: 0.4;
-        }
-
-        .orb-1 {
-            width: 400px;
-            height: 400px;
-            background: #00E5FF;
-            top: -10%;
-            left: -10%;
-        }
-
-        .orb-2 {
-            width: 500px;
-            height: 500px;
-            background: #2563eb;
-            bottom: -20%;
-            right: -10%;
-        }
-
-        .top-nav {
-            padding: 18px 5%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-            background: rgba(2, 6, 23, 0.65);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            z-index: 100;
-        }
-
-        .brand-name {
-            font-weight: 900;
-            font-size: 1.3rem;
-            color: #fff;
-        }
-
-        .brand-name span {
-            color: var(--glowing-cyan);
-        }
-
-        .back-link {
-            color: #94a3b8;
-            text-decoration: none;
-            font-weight: 700;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .back-link:hover {
-            color: var(--glowing-cyan);
-        }
-
-        .main-content {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 30px 20px 80px;
-            width: 100%;
-        }
-
-        .header-section {
-            text-align: center;
-            margin-bottom: 30px;
-            width: 100%;
-            max-width: 720px;
-        }
-
-        .header-section h1 {
-            font-size: 2rem;
-            margin: 0 0 6px;
-            font-weight: 900;
-            background: linear-gradient(to right, #ffffff, var(--glowing-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .header-section p {
-            color: #94a3b8;
-            font-size: 0.95rem;
-        }
-
-        .results-wrapper {
-            width: 100%;
-            max-width: 720px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .result-card {
-            background: var(--card-glass);
-            backdrop-filter: blur(14px);
-            border: 1px solid var(--border-glass);
-            border-radius: 16px;
-            padding: 18px 22px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .result-info {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .result-title {
-            font-weight: 700;
-            font-size: 1.05rem;
-        }
-
-        .result-meta {
-            color: #64748b;
-            font-size: 0.82rem;
-        }
-
-        .result-score {
-            font-weight: 900;
-            font-size: 1.3rem;
-            padding: 6px 18px;
-            border-radius: 50px;
-            white-space: nowrap;
-        }
-
-        .score-green {
-            color: #4ade80;
-            background: rgba(74, 222, 128, 0.1);
-        }
-
-        .score-red {
-            color: #ef4444;
-            background: rgba(239, 68, 68, 0.1);
-        }
-
-        .score-neutral {
-            color: #e2e8f0;
-            background: rgba(255, 255, 255, 0.06);
-        }
-
-        .empty-placeholder {
-            text-align: center;
-            padding: 60px 20px;
-            color: #64748b;
-            width: 100%;
-            max-width: 500px;
-        }
-
-        .empty-placeholder i {
-            font-size: 2.5rem;
-            margin-bottom: 14px;
-            display: block;
-            color: #334155;
-        }
-
-        @media (max-width: 600px) {
-            .header-section h1 {
-                font-size: 1.5rem;
-            }
-
-            .result-card {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-        }
+        .back { display: inline-flex; align-items: center; gap: 6px; color: var(--primary); font-weight: 600; font-size: 14px; margin-bottom: 14px; }
+        .hero { display: flex; gap: 20px; align-items: center; }
+        .hero .info { min-width: 0; flex: 1; }
+        .hero h1 { font-size: 20px; margin: 4px 0 8px; line-height: 1.35; }
+        @media (max-width: 560px) { .hero { flex-direction: column; text-align: center; } }
+        .mini-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+        .mini { padding: 12px; border-radius: 14px; background: var(--surface-2); text-align: center; }
+        .mini b { display: block; font-size: 20px; font-weight: 800; }
+        .mini span { font-size: 12px; color: var(--muted); font-weight: 600; }
+        .layout { display: grid; gap: 16px; margin-top: 16px; }
+        @media (min-width: 1024px) { .layout { grid-template-columns: minmax(0, 1fr) 300px; align-items: start; } .layout aside { position: sticky; top: calc(var(--topbar-h) + 20px); } }
+        .q { padding: 20px; }
+        .q.wrong { box-shadow: inset 4px 0 0 var(--danger), var(--shadow); }
+        .q.right { box-shadow: inset 4px 0 0 var(--success), var(--shadow); }
+        .q .qtext { font-size: 16.5px; font-weight: 600; line-height: 1.6; margin: 12px 0 14px; white-space: pre-wrap; }
+        .q .opt { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; background: var(--surface-2); margin-bottom: 8px; border: 1.5px solid transparent; }
+        .q .opt .letter { width: 28px; height: 28px; border-radius: 50%; background: var(--surface); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--text-2); flex-shrink: 0; }
+        .q .opt .otext { flex: 1; }
+        .q .opt .tag { font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        .q .opt.correct { background: var(--success-soft); border-color: var(--success-line); }
+        .q .opt.correct .letter { background: var(--success); color: #fff; }
+        .q .opt.correct .tag { color: var(--success); }
+        .q .opt.picked-wrong { background: var(--danger-soft); border-color: var(--danger-line); }
+        .q .opt.picked-wrong .letter { background: var(--danger); color: #fff; }
+        .q .opt.picked-wrong .tag { color: var(--danger); }
+        .q .opt.picked { background: var(--primary-soft); border-color: var(--primary-line); }
+        .q .opt.picked .letter { background: var(--primary); color: #fff; }
+        .q .opt.picked .tag { color: var(--primary); }
+        .qmap { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+        .qmap a { height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13.5px; background: var(--surface-2); color: var(--text-2); }
+        .qmap a.r { background: var(--success-soft); color: var(--success); }
+        .qmap a.w { background: var(--danger-soft); color: var(--danger); }
+        .qs { display: flex; flex-direction: column; gap: 12px; }
+        .q { scroll-margin-top: calc(var(--topbar-h) + 16px); }
     </style>
 </head>
-
 <body>
-
-    <div class="bg-orbs">
-        <div class="orb orb-1"></div>
-        <div class="orb orb-2"></div>
-    </div>
-
-    <nav class="top-nav">
-        <div class="brand-name">Miss <span>Marwa</span></div>
-        <a href="./index.html" class="back-link" id="dashboardLink">
-            <i class="fas fa-arrow-right"></i> الرئيسية
-        </a>
-    </nav>
-
-    <main class="main-content">
-        <div class="header-section">
-            <h1>نتائج الامتحانات</h1>
-            <p>كل درجاتك في الامتحانات اللي سلمتيها</p>
-        </div>
-
-        <div class="results-wrapper" id="resultsContainer">
-            <div class="empty-placeholder">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>جاري تحميل نتائجك...</p>
-            </div>
+    <main class="main" id="main">
+        <div class="container" id="root">
+            <div class="card"><div class="skel" style="height:96px"></div></div>
         </div>
     </main>
 
+    <script src="/assets/student.js"></script>
     <script>
-        const sessionData = localStorage.getItem('student_session');
-        if (!sessionData) {
-            alert('يرجى تسجيل الدخول أولاً');
-            window.location.href = './index.html';
+    (function () {
+        if (!window.App) return;
+        const { session, esc, txt, icon, api, url, fmtDate, ring, scoreTone } = App;
+        const examId = new URLSearchParams(location.search).get('id');
+        App.shell({ active: 'results', title: examId ? 'Exam review' : 'Results' });
+        const root = document.getElementById('root');
+        const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+        function renderList(results) {
+            const list = results.slice().sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+            const valid = list.filter(r => r.total > 0);
+            const avg = valid.length ? Math.round(valid.reduce((s, r) => s + r.score / r.total, 0) / valid.length * 100) : null;
+            const best = valid.length ? Math.round(Math.max(...valid.map(r => r.score / r.total)) * 100) : null;
+            root.innerHTML = `
+                <section class="page-head reveal"><h1 class="h1">Results</h1><p class="small">Every online exam you've taken, newest first.</p></section>
+                <section class="stats">
+                    <div class="card stat reveal"><div class="k">Exams taken</div><div class="v num">${list.length}</div></div>
+                    <div class="card stat reveal"><div class="k">Average</div><div class="v num" style="color:${avg !== null && avg < 50 ? 'var(--danger)' : 'var(--text)'}">${avg === null ? '—' : avg + '%'}</div></div>
+                    <div class="card stat reveal"><div class="k">Best</div><div class="v num" style="color:var(--success)">${best === null ? '—' : best + '%'}</div></div>
+                </section>
+                <section class="rlist">${list.length ? list.map(r => `
+                    <a class="card ritem reveal" href="${url('exam-results.html', { id: r.examId })}">
+                        <div class="info"><span class="xs muted">${fmtDate(r.submittedAt)}</span><strong>${txt(r.title)}</strong></div>
+                        <span class="score-pill num ${scoreTone(r.score, r.total)}">${r.score}/${r.total}</span>
+                        <span class="muted">${icon('chevronRight')}</span>
+                    </a>`).join('') : `<div class="card reveal"><div class="empty"><div class="bubble">${icon('chart')}</div><h3>No results yet</h3>
+                        <p>Take your first exam and your score will show up here.</p>
+                        <a class="btn btn-primary btn-sm" style="margin-top:14px" href="${url('exams.html')}">Go to exams</a></div></div>`}</section>`;
+            App.reveal(root);
         }
-        const student = JSON.parse(sessionData || '{}');
 
-        // زرار "الرئيسية" يوديها لصفحة مرحلتها الدراسية لو متاحة
-        const gradeRoutes = {
-            prep1: './prep1/prep1.html',
-            prep2: './prep2/prep2.html',
-            prep3: './prep3/prep3.html',
-            sec1: './sec1/Sec1.html'
-        };
-        if (student.grade && gradeRoutes[student.grade]) {
-            document.getElementById('dashboardLink').href = gradeRoutes[student.grade];
-        }
+        function renderReview(r) {
+            const qs = Array.isArray(r.questions) ? r.questions : [];
+            const ans = Array.isArray(r.answers) ? r.answers : [];
+            // correctIndex only comes back from the server after the exam closes for everyone
+            const open = qs.length && qs.every(q => q.correctIndex === undefined);
+            let right = 0, wrong = 0, blank = 0;
+            const state = qs.map((q, i) => {
+                const a = ans[i] ?? -1;
+                if (a < 0) { blank++; return open ? 'n' : 'w'; }
+                if (open) return 'n';
+                if (Number(a) === Number(q.correctIndex)) { right++; return 'r'; }
+                wrong++; return 'w';
+            });
+            const tone = scoreTone(r.score, r.total);
+            const msg = tone === 'good' ? 'Excellent work!' : tone === 'bad' ? "Let's go over your mistakes." : 'Good job — check the questions you missed.';
+            let filter = 'all';
 
-        function esc(v) {
-            return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        }
-
-        function scoreClass(score, total) {
-            if (score === null || score === undefined || total === 0) return 'score-neutral';
-            const pct = (score / total) * 100;
-            if (pct < 50) return 'score-red';
-            if (score >= total - 1) return 'score-green';
-            return 'score-neutral';
-        }
-
-        async function loadMyResults() {
-            const container = document.getElementById('resultsContainer');
-            try {
-                const res = await fetch(`/api/exams?action=my-results&studentId=${encodeURIComponent(student.id || '')}&t=${Date.now()}`);
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'فشل تحميل النتائج');
-
-                if (!Array.isArray(data) || data.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-placeholder">
-                            <i class="fas fa-clipboard-list"></i>
-                            <h3 style="color:#cbd5e1; margin-bottom:6px;">لا توجد نتائج بعد</h3>
-                            <p>لما تسلمي أي امتحان، درجتك هتظهر هنا.</p>
+            root.innerHTML = `
+                <a class="back reveal" href="${url('exam-results.html')}">${icon('arrowLeft', 'sm')}All results</a>
+                <section class="card reveal">
+                    <div class="hero">${ring(r.score, r.total, { size: 'lg', label: 'Score' })}
+                        <div class="info"><span class="chip primary">${icon('clipboard', 'sm')}Submitted ${fmtDate(r.submittedAt, true)}</span>
+                            <h1>${txt(r.title)}</h1><p class="muted" style="margin:0">${msg}</p></div></div>
+                    ${open ? '' : `<div class="mini-stats">
+                        <div class="mini"><b class="num" style="color:var(--success)">${right}</b><span>Correct</span></div>
+                        <div class="mini"><b class="num" style="color:var(--danger)">${wrong}</b><span>Wrong</span></div>
+                        <div class="mini"><b class="num">${blank}</b><span>Skipped</span></div></div>`}
+                </section>
+                ${open ? `<div class="notice warning reveal" style="margin-top:16px">${icon('lock')}<div><b>Correct answers are hidden for now.</b> They'll appear here once the exam closes for everyone${r.expiresAt ? ' on ' + fmtDate(r.expiresAt, true) : ''}. Below are the answers you chose.</div></div>` : ''}
+                <div class="layout">
+                    <section>
+                        ${open || !qs.length ? '' : `<div class="segmented reveal" id="filt" style="margin-bottom:12px">
+                            <button class="active" data-f="all">All<span class="count num">${qs.length}</span></button>
+                            <button data-f="w">Mistakes<span class="count num">${wrong + blank}</span></button>
+                            <button data-f="r">Correct<span class="count num">${right}</span></button></div>`}
+                        <div class="qs" id="qs"></div>
+                    </section>
+                    <aside>
+                        ${qs.length ? `<div class="card reveal"><div class="card-head"><h2 class="card-title">${icon('grid')}Jump to question</h2></div>
+                            <div class="qmap">${state.map((s, i) => `<a href="#q${i + 1}" class="num ${s === 'n' ? '' : s}">${i + 1}</a>`).join('')}</div></div>` : ''}
+                        <div class="card reveal" style="margin-top:16px">
+                            <div class="card-head"><h2 class="card-title">${icon('sparkles')}Need help?</h2></div>
+                            <p class="small muted" style="margin:0 0 12px">Stuck on a question? Ask Miss Marwa or the AI Assistant.</p>
+                            <button class="btn btn-soft btn-block btn-sm" data-soon="Ask Miss Marwa">${icon('help', 'sm')}Ask Miss Marwa<span class="soon-tag">Soon</span></button>
+                            <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-soon="The AI Assistant">${icon('bot', 'sm')}AI Assistant<span class="soon-tag">Soon</span></button>
                         </div>
-                    `;
+                    </aside>
+                </div>`;
+
+            function drawQuestions() {
+                const box = document.getElementById('qs');
+                const html = qs.map((q, i) => {
+                    if (filter !== 'all' && state[i] !== filter) return '';
+                    const a = Number(ans[i] ?? -1);
+                    const s = state[i];
+                    const chip = s === 'r' ? `<span class="chip success">${icon('check', 'sm')}Correct</span>`
+                        : s === 'w' ? `<span class="chip danger">${icon('x', 'sm')}${a < 0 ? 'Not answered' : 'Wrong'}</span>`
+                            : a < 0 ? `<span class="chip">Not answered</span>` : `<span class="chip primary">Answered</span>`;
+                    const opts = (q.options || []).map((o, oi) => {
+                        let cls = '', tag = '';
+                        if (!open && oi === Number(q.correctIndex)) { cls = 'correct'; tag = `${icon('check', 'sm')}${a === oi ? 'Your answer' : 'Correct answer'}`; }
+                        else if (a === oi) { cls = open ? 'picked' : 'picked-wrong'; tag = open ? 'Your answer' : `${icon('x', 'sm')}Your answer`; }
+                        return `<div class="opt ${cls}"><span class="letter">${LETTERS[oi] || oi + 1}</span><span class="otext" dir="auto">${esc(o)}</span>${tag ? `<span class="tag">${tag}</span>` : ''}</div>`;
+                    }).join('');
+                    return `<article class="card q reveal ${s === 'r' ? 'right' : s === 'w' ? 'wrong' : ''}" id="q${i + 1}">
+                        <div class="row between"><span class="chip">Question ${i + 1}</span>${chip}</div>
+                        <p class="qtext" dir="auto">${esc(q.question)}</p>${opts}
+                        ${s === 'w' ? `<button class="btn btn-soft btn-sm" style="margin-top:6px" data-soon="Explain this question with AI">${icon('sparkles', 'sm')}Explain this to me<span class="soon-tag">Soon</span></button>` : ''}
+                    </article>`;
+                }).join('');
+                box.innerHTML = html || `<div class="card"><div class="empty"><div class="bubble">${icon('trophy')}</div><h3>${filter === 'w' ? 'No mistakes!' : 'Nothing here'}</h3><p>${filter === 'w' ? 'You got every question right.' : ''}</p></div></div>`;
+                App.reveal(box);
+            }
+            drawQuestions();
+            document.getElementById('filt')?.addEventListener('click', (e) => {
+                const b = e.target.closest('[data-f]'); if (!b) return;
+                filter = b.dataset.f;
+                document.querySelectorAll('#filt button').forEach(x => x.classList.toggle('active', x === b));
+                drawQuestions();
+            });
+            App.reveal(root);
+        }
+
+        api(`/api/exams?action=my-results&studentId=${encodeURIComponent(session.id)}&t=${Date.now()}`)
+            .then(results => {
+                results = Array.isArray(results) ? results : [];
+                if (!examId) return renderList(results);
+                const r = results.find(x => x.examId === examId);
+                if (!r) {
+                    root.innerHTML = `<a class="back" href="${url('exam-results.html')}">${icon('arrowLeft', 'sm')}All results</a>
+                        <div class="card reveal"><div class="empty"><div class="bubble">${icon('search')}</div><h3>No result for this exam</h3><p>You haven't submitted this exam yet.</p></div></div>`;
+                    App.reveal(root);
                     return;
                 }
-
-                container.innerHTML = data.map(r => `
-                    <a href="./exam.html?id=${encodeURIComponent(r.examId)}" style="text-decoration: none; color: inherit; display: block;">
-                        <div class="result-card" style="cursor: pointer; transition: transform 0.2s; border: 1px solid var(--border-glass);">
-                            <div class="result-info">
-                                <span class="result-title">${esc(r.title)}</span>
-                                <span class="result-meta">${(r.grade || '').toUpperCase()}</span>
-                            </div>
-                            <div style="display:flex; align-items:center; gap: 15px;">
-                                <div class="result-score ${scoreClass(r.score, r.total)}">${r.score} / ${r.total}</div>
-                                <i class="fas fa-chevron-left" style="color: #64748b;"></i>
-                            </div>
-                        </div>
-                    </a>
-                `).join('');
-            } catch (err) {
-                container.innerHTML = `
-                    <div class="empty-placeholder">
-                        <i class="fas fa-triangle-exclamation"></i>
-                        <p>حصل خطأ أثناء تحميل النتائج: ${esc(err.message)}</p>
-                    </div>
-                `;
-            }
-        }
-
-        window.addEventListener('DOMContentLoaded', loadMyResults);
+                renderReview(r);
+            })
+            .catch(() => {
+                root.innerHTML = `<div class="card"><div class="empty"><div class="bubble">${icon('wifiOff')}</div><h3>Couldn't load your results</h3><p>Check your connection and try again.</p>
+                    <button class="btn btn-soft btn-sm" style="margin-top:12px" onclick="location.reload()">${icon('refresh', 'sm')}Retry</button></div></div>`;
+            });
+    })();
     </script>
-
 </body>
-
 </html>

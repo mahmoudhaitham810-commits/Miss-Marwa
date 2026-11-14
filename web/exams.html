@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Exams · Science Academy</title>
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <style>
+        .page-head { margin-bottom: 16px; }
+        .page-head p { margin: 6px 0 0; color: var(--text-2); }
+        .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+        .stat .k { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        @media (max-width: 360px) { .stats { gap: 8px; } .stat { padding: 10px !important; } .stat .k .icon { display: none; } }
+        .stat { padding: 14px; }
+        .stat .k { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .stat .k .icon { width: 15px; height: 15px; }
+        .stat .v { font-size: 24px; font-weight: 800; letter-spacing: -.02em; margin-top: 4px; }
+        .stat .v small { font-size: 13px; color: var(--faint); font-weight: 600; }
+        @media (max-width: 420px) { .stat .v { font-size: 20px; } .stat { padding: 12px; } }
+        .list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+        @media (min-width: 900px) { .list { display: grid; grid-template-columns: 1fr 1fr; } }
+        .exam-card h3 { margin: 10px 0 12px; font-size: 17px; line-height: 1.4; }
+        .exam-card .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .exam-card.urgent { box-shadow: inset 0 3px 0 var(--accent), var(--shadow); }
+        .score-pill { font-weight: 800; font-size: 15px; padding: 6px 12px; border-radius: 10px; }
+        .score-pill.good { background: var(--success-soft); color: var(--success); }
+        .score-pill.bad { background: var(--danger-soft); color: var(--danger); }
+        .score-pill.mid { background: var(--primary-soft); color: var(--primary); }
+        .done-row { display: flex; align-items: center; gap: 14px; }
+        .done-row .info { flex: 1; min-width: 0; }
+        .done-row .info strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+</head>
+<body>
+    <main class="main" id="main">
+        <div class="container">
+            <section class="page-head reveal">
+                <h1 class="h1">Exams</h1>
+                <p class="small">Online exams for your grade. Results appear instantly.</p>
+            </section>
+            <section class="stats" id="stats">
+                <div class="card stat reveal"><div class="skel" style="height:46px"></div></div>
+                <div class="card stat reveal"><div class="skel" style="height:46px"></div></div>
+                <div class="card stat reveal"><div class="skel" style="height:46px"></div></div>
+            </section>
+            <div class="segmented reveal" id="tabs" role="tablist"></div>
+            <section class="list" id="list"></section>
+        </div>
+    </main>
+
+    <script src="/assets/student.js"></script>
+    <script>
+    (function () {
+        if (!window.App) return;
+        const { session, grade, esc, txt, icon, api, url, timeLeft, fmtDate, scoreTone } = App;
+        App.shell({ active: 'exams', title: 'Exams' });
+
+        let exams = [], results = [], tab = null;
+
+        function render() {
+            const available = exams.filter(e => e.status === 'available').sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
+            const completed = exams.filter(e => e.status === 'submitted');
+            const missed = exams.filter(e => e.status === 'expired' || e.status === 'locked');
+            if (!tab) tab = available.length ? 'available' : completed.length ? 'completed' : 'available';
+
+            document.getElementById('tabs').innerHTML = [['available', 'Available', available.length], ['completed', 'Completed', completed.length], ['missed', 'Missed', missed.length]]
+                .map(([k, l, n]) => `<button role="tab" aria-selected="${tab === k}" class="${tab === k ? 'active' : ''}" data-t="${k}">${l}<span class="count num">${n}</span></button>`).join('');
+
+            const byId = Object.fromEntries(results.map(r => [r.examId, r]));
+            const box = document.getElementById('list');
+            let html = '';
+            if (tab === 'available') {
+                html = available.map(e => {
+                    const hoursLeft = (new Date(e.expiresAt) - Date.now()) / 36e5;
+                    return `<article class="card exam-card reveal ${hoursLeft < 24 ? 'urgent' : ''}">
+                        <div class="top"><span class="chip primary">${icon('clipboard', 'sm')}Online exam</span>
+                            <span class="chip ${hoursLeft < 24 ? 'accent' : ''}">${icon('clock', 'sm')}${timeLeft(e.expiresAt)}</span></div>
+                        <h3>${txt(e.title)}</h3>
+                        <div class="meta" style="margin-bottom:14px">
+                            <span>${icon('help')}${e.total} questions</span>
+                            <span>${icon('clock')}${e.timeLimitMinutes ? e.timeLimitMinutes + ' min' : 'No timer'}</span>
+                            <span style="color:var(--danger);background:var(--danger-soft)">${icon('lock')}One attempt</span>
+                        </div>
+                        <button class="btn btn-primary btn-block" data-start="${esc(e.id)}">${icon('play')}Start exam</button>
+                    </article>`;
+                }).join('') || empty('checkCircle', "You're all caught up", 'No exams are waiting for you right now.');
+            } else if (tab === 'completed') {
+                html = completed.sort((a, b) => new Date((byId[b.id] || {}).submittedAt || 0) - new Date((byId[a.id] || {}).submittedAt || 0)).map(e => {
+                    const r = byId[e.id] || {};
+                    const total = r.total ?? e.total;
+                    const tone = scoreTone(e.score, total);
+                    return `<a class="card exam-card reveal" href="${url('exam-results.html', { id: e.id })}">
+                        <div class="done-row">
+                            <div class="info"><span class="xs muted">${r.submittedAt ? 'Submitted ' + fmtDate(r.submittedAt) : 'Submitted'}</span><strong>${txt(e.title)}</strong>
+                                <span class="link" style="margin-top:6px">Review answers ${icon('arrowRight', 'sm')}</span></div>
+                            <span class="score-pill num ${tone}">${e.score ?? 0}/${total}</span>
+                        </div></a>`;
+                }).join('') || empty('clipboard', 'No completed exams yet', 'Your finished exams and scores will appear here.');
+            } else {
+                html = missed.map(e => `<article class="card exam-card reveal">
+                        <div class="top"><span class="chip ${e.status === 'locked' ? 'warning' : 'danger'}">${icon(e.status === 'locked' ? 'alert' : 'lock', 'sm')}${e.status === 'locked' ? 'Not submitted' : 'Closed'}</span>
+                            <span class="xs muted">${e.status === 'locked' ? '' : 'Closed ' + fmtDate(e.expiresAt)}</span></div>
+                        <h3>${txt(e.title)}</h3>
+                        <p class="small muted" style="margin:0">${e.status === 'locked'
+                        ? 'You opened this exam but it was never submitted. Ask Miss Marwa if you need it reopened.'
+                        : 'This exam closed before you took it. Ask Miss Marwa if you need another chance.'}</p>
+                    </article>`).join('') || empty('trophy', 'Nothing missed', 'Great — you haven’t missed any exam.');
+            }
+            box.innerHTML = html;
+            App.reveal(box);
+        }
+        function empty(ic, title, text) {
+            return `<div class="card reveal" style="grid-column:1/-1"><div class="empty"><div class="bubble">${icon(ic)}</div><h3>${title}</h3><p>${text}</p></div></div>`;
+        }
+
+        function renderStats() {
+            const done = results.filter(r => r.total > 0);
+            const avg = done.length ? Math.round(done.reduce((s, r) => s + r.score / r.total, 0) / done.length * 100) : null;
+            const waiting = exams.filter(e => e.status === 'available').length;
+            const completed = exams.filter(e => e.status === 'submitted').length;
+            document.getElementById('stats').innerHTML = `
+                <div class="card stat reveal"><div class="k">${icon('chart')}Average</div><div class="v num" style="color:${avg === null ? 'var(--faint)' : avg < 50 ? 'var(--danger)' : 'var(--text)'}">${avg === null ? '—' : avg + '%'}</div></div>
+                <div class="card stat reveal"><div class="k">${icon('checkCircle')}Completed</div><div class="v num">${completed}<small> / ${exams.length}</small></div></div>
+                <div class="card stat reveal"><div class="k">${icon('hourglass')}Waiting</div><div class="v num" style="color:${waiting ? 'var(--accent)' : 'var(--text)'}">${waiting}</div></div>`;
+            App.reveal(document.getElementById('stats'));
+        }
+
+        document.getElementById('tabs').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-t]'); if (!b) return;
+            tab = b.dataset.t; render();
+        });
+        document.getElementById('list').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-start]'); if (!b) return;
+            const ex = exams.find(x => x.id === b.dataset.start);
+            if (ex) App.confirmStart(ex);
+        });
+
+        const q = encodeURIComponent;
+        Promise.all([
+            api(`/api/exams?action=list-for-student&grade=${q(grade)}&studentId=${q(session.id)}&t=${Date.now()}`),
+            api(`/api/exams?action=my-results&studentId=${q(session.id)}&t=${Date.now()}`).catch(() => [])
+        ]).then(([list, res]) => {
+            exams = Array.isArray(list) ? list : [];
+            results = (Array.isArray(res) ? res : []).filter(r => !r.grade || r.grade === grade);
+            renderStats(); render();
+        }).catch(() => {
+            document.getElementById('stats').innerHTML = '';
+            document.getElementById('list').innerHTML = `<div class="card"><div class="empty"><div class="bubble">${icon('wifiOff')}</div><h3>Couldn't load exams</h3>
+                <p>Check your connection and try again.</p><button class="btn btn-soft btn-sm" style="margin-top:12px" onclick="location.reload()">${icon('refresh', 'sm')}Retry</button></div></div>`;
+        });
+        App.reveal();
+    })();
+    </script>
+</body>
+</html>

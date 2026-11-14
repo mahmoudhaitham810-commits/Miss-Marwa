@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>
+        try {
+            var s = JSON.parse(localStorage.getItem('student_session') || 'null');
+            if (s && s.id) location.replace(s.grade === 'all' || s.role === 'admin' ? '/home.html?grade=prep1' : '/home.html');
+        } catch (e) { }
+    </script>
+    <title>Sign in · Science Academy</title>
+    <meta name="description" content="Sign in to Science Academy with your student code.">
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="apple-touch-icon" href="/assets/img/logo-192.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+</head>
+<body class="site">
+    <div class="auth">
+        <aside class="auth-side">
+            <canvas id="sideCanvas" aria-hidden="true"></canvas>
+            <a class="site-brand" href="/index.html"><img src="/assets/img/logo-96.png" alt="" width="42" height="42"><div><strong>Science Academy</strong><span>with Miss Marwa</span></div></a>
+            <div class="side-body">
+                <h2 class="reveal">Welcome back.<br>Let's keep learning.</h2>
+                <p class="reveal">Your lessons, exams and progress are waiting for you.</p>
+                <div class="perks">
+                    <div class="reveal"><i data-icon="book"></i>New lessons for your grade</div>
+                    <div class="reveal"><i data-icon="clipboard"></i>Online exams with instant results</div>
+                    <div class="reveal"><i data-icon="flame"></i>Keep your daily streak going</div>
+                </div>
+                <div class="teacher reveal"><img src="/assets/img/marwa-160.png" alt="" width="54" height="54"><div><strong>Miss Marwa</strong><small>15+ years teaching science · 1,000+ students</small></div></div>
+            </div>
+        </aside>
+
+        <main class="auth-main">
+            <div class="auth-top">
+                <a class="site-brand" href="/index.html"><img src="/assets/img/logo-96.png" alt="" width="42" height="42"><div><strong>Science Academy</strong><span>with Miss Marwa</span></div></a>
+                <div class="row" style="gap:6px">
+                    <a class="icon-btn" href="/index.html" aria-label="Back to home" title="Back to home" data-icon="home"></a>
+                    <button class="icon-btn theme-btn" data-theme-toggle aria-label="Switch light / dark mode" title="Light / dark mode"><span data-icon="moon" data-icon-class="moon" style="display:contents"></span><span data-icon="sun" data-icon-class="sun" style="display:contents"></span></button>
+                </div>
+            </div>
+
+            <div class="auth-card">
+                <h1 class="reveal">Sign in</h1>
+                <p class="sub reveal">Use the student code you got when you signed up.</p>
+
+                <div class="notice danger form-error" id="formError" role="alert"><span data-icon="alert"></span><span id="formErrorText" dir="auto"></span></div>
+
+                <form id="loginForm" novalidate>
+                    <div class="field reveal" id="fCode">
+                        <label for="code">Student code</label>
+                        <div class="input"><span data-icon="idCard" style="display:contents"></span>
+                            <input id="code" name="code" autocomplete="username" autocapitalize="characters" spellcheck="false" placeholder="MM-123456" maxlength="20" inputmode="text">
+                        </div>
+                        <span class="msg" id="codeMsg"></span>
+                    </div>
+                    <div class="field reveal" id="fPass">
+                        <div class="row" style="justify-content:space-between">
+                            <label for="password">Password</label>
+                            <button type="button" class="link-btn" id="forgotBtn">Forgot password?</button>
+                        </div>
+                        <div class="input"><span data-icon="lock" style="display:contents"></span>
+                            <input id="password" name="password" type="password" class="has-eye" autocomplete="current-password" placeholder="Your password" maxlength="64">
+                            <button type="button" class="eye" id="eyeBtn" aria-label="Show password" data-icon="eye"></button>
+                        </div>
+                        <span class="msg" id="passMsg"></span>
+                    </div>
+                    <button class="btn btn-primary btn-lg btn-block btn-glow reveal" id="submitBtn" type="submit">Sign in<svg class="icon arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+                </form>
+
+                <p class="auth-foot reveal">New here? <a href="/signup.html">Create a free account</a></p>
+                <p class="auth-foot reveal" style="margin-top:8px;font-size:14px"><a href="#" id="waHelp" style="font-weight:600;color:var(--muted)" target="_blank" rel="noopener">Need help? Message us on WhatsApp</a></p>
+            </div>
+        </main>
+    </div>
+
+    <script src="/assets/site.js"></script>
+    <script>
+    (function () {
+        const $ = (id) => document.getElementById(id);
+        Site.init();
+        Site.particles($('sideCanvas'), { density: .8, light: true, lineAlpha: .22 });
+        $('waHelp').href = Site.waLink('Hello Miss Marwa, I need help signing in to Science Academy.');
+        $('forgotBtn').addEventListener('click', Site.forgotPassword);
+
+        const code = $('code'), pass = $('password'), btn = $('submitBtn');
+        const btnHtml = btn.innerHTML;
+
+        // Remember last code used on this device
+        try { const last = localStorage.getItem('last_code'); if (last) code.value = last; } catch (e) { }
+        const pre = new URLSearchParams(location.search).get('code');
+        if (pre) code.value = pre.toUpperCase();
+        (code.value ? pass : code).focus({ preventScroll: true });
+
+        // Show / hide password
+        $('eyeBtn').addEventListener('click', () => {
+            const show = pass.type === 'password';
+            pass.type = show ? 'text' : 'password';
+            $('eyeBtn').innerHTML = Site.icon(show ? 'eyeOff' : 'eye');
+            $('eyeBtn').setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        });
+
+        // Normalise the code as the student types: Arabic digits → English, uppercase
+        code.addEventListener('input', () => {
+            const pos = code.selectionStart;
+            code.value = Site.normalizeDigits(code.value).toUpperCase().replace(/\s+/g, '');
+            try { code.setSelectionRange(pos, pos); } catch (e) { }
+            clearErr('fCode');
+        });
+        pass.addEventListener('input', () => clearErr('fPass'));
+
+        function normalizeCode(v) {
+            v = Site.normalizeDigits(v).toUpperCase().replace(/\s+/g, '');
+            if (/^\d{4,}$/.test(v)) v = 'MM-' + v;         // typed only the numbers
+            if (/^MM\d+$/.test(v)) v = 'MM-' + v.slice(2);  // forgot the dash
+            return v;
+        }
+        function setErr(fieldId, msg) { const f = $(fieldId); f.classList.add('err'); f.querySelector('.msg').textContent = msg; }
+        function clearErr(fieldId) { $(fieldId).classList.remove('err'); $('formError').classList.remove('show'); }
+        function formError(msg) {
+            const box = $('formError');
+            box.classList.remove('show'); void box.offsetWidth;
+            $('formErrorText').textContent = msg; box.classList.add('show');
+        }
+
+        $('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = normalizeCode(code.value);
+            const password = pass.value;
+            code.value = id;
+            let ok = true;
+            if (!id) { setErr('fCode', 'Enter your student code'); ok = false; }
+            if (!password) { setErr('fPass', 'Enter your password'); ok = false; }
+            if (!ok) return;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Signing in…';
+            try {
+                const res = await fetch('/api/auth?action=login', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId: id, password })
+                });
+                let data = {};
+                try { data = await res.json(); } catch (err) { }
+                if (!res.ok || !data.success || !data.student) {
+                    formError(res.status === 401 || res.status === 404
+                        ? 'Wrong student code or password. Please check and try again.'
+                        : (data.error || 'Something went wrong. Please try again.'));
+                    btn.disabled = false; btn.innerHTML = btnHtml;
+                    return;
+                }
+                Site.saveSession(data.student);
+                try { localStorage.setItem('last_code', data.student.id); } catch (err) { }
+                btn.innerHTML = `${Site.icon('checkCircle')}Welcome back!`;
+                setTimeout(() => location.replace(Site.homeUrl(data.student)), 350);
+            } catch (err) {
+                formError('No internet connection. Check your connection and try again.');
+                btn.disabled = false; btn.innerHTML = btnHtml;
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

@@ -1,10 +1,18 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
-
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Science Academy | Miss Marwa</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Science Academy · Learn science with Miss Marwa</title>
+    <meta name="description" content="Science Academy with Miss Marwa — video lessons by unit, timed online exams with instant results and progress tracking for Prep 1, Prep 2, Prep 3 and Sec 1 students in Egypt.">
+    <meta property="og:title" content="Science Academy · Learn science with Miss Marwa">
+    <meta property="og:description" content="15+ years of teaching science. Lessons, online exams and progress tracking for Prep 1 to Sec 1.">
+    <meta property="og:image" content="/assets/img/logo-384.webp">
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="apple-touch-icon" href="/assets/img/logo-192.png">
+    <link rel="manifest" href="/manifest.json">
 
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-QSM0JZ79ZR"></script>
     <script>
@@ -14,1654 +22,436 @@
         gtag('config', 'G-QSM0JZ79ZR');
     </script>
 
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <!-- OneSignal Web Push -->
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="preload" as="image" href="/assets/img/logo-192.png">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
     <script>
-        window.OneSignalDeferred = window.OneSignalDeferred || [];
-        OneSignalDeferred.push(async function (OneSignal) {
-            await OneSignal.init({
-                appId: "a5d058a6-b45e-46a5-aa86-014309b7c7d2",
-                notifyButton: { enable: false }
-            });
-        });
+        // Opened from the installed app while already signed in → go straight to the dashboard
+        try {
+            var s = JSON.parse(localStorage.getItem('student_session') || 'null');
+            if (s && s.id && matchMedia('(display-mode: standalone)').matches) location.replace(s.grade === 'all' ? '/home.html?grade=prep1' : '/home.html');
+        } catch (e) { }
     </script>
-
-    <style>
-        :root {
-            --primary-blue: #2563eb;
-            --glowing-cyan: #00E5FF;
-            --bg-deep: #020617;
-            --text-light: #f8fafc;
-            --card-glass: rgba(15, 23, 42, 0.65);
-            --border-glass: rgba(0, 229, 255, 0.2);
-            --error-red: #ef4444;
-            --accent-red: #f43f5e;
-            /* لون أحمر جديد لكسر الأزرق */
-            --admin-gold: #fbbf24;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: 'Cairo', sans-serif;
-            background-color: var(--bg-deep);
-            color: var(--text-light);
-            overflow-x: hidden;
-            min-height: 100vh;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* --- Background Animation --- */
-        .bg-orbs {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: -1;
-            overflow: hidden;
-            background: radial-gradient(circle at 50% 50%, #0a0f24 0%, #020617 100%);
-        }
-
-        .orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(90px);
-            opacity: 0.45;
-            animation: floatOrbs 20s infinite alternate ease-in-out;
-        }
-
-        .orb-1 {
-            width: 450px;
-            height: 450px;
-            background: #00E5FF;
-            top: -10%;
-            left: -10%;
-            animation-delay: 0s;
-        }
-
-        .orb-2 {
-            width: 500px;
-            height: 500px;
-            background: #2563eb;
-            bottom: -20%;
-            right: -10%;
-            animation-delay: -5s;
-        }
-
-        .orb-3 {
-            width: 350px;
-            height: 350px;
-            background: var(--accent-red);
-            top: 40%;
-            left: 50%;
-            animation-delay: -10s;
-            opacity: 0.15;
-        }
-
-        @keyframes floatOrbs {
-            0% {
-                transform: translate(0, 0) scale(1);
-            }
-
-            50% {
-                transform: translate(80px, 40px) scale(1.15);
-            }
-
-            100% {
-                transform: translate(-40px, 80px) scale(0.95);
-            }
-        }
-
-        /* --- Preloader --- */
-        .preloader {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 9999;
-            display: flex;
-            pointer-events: none;
-        }
-
-        .preloader .half {
-            width: 100%;
-            height: 50vh;
-            background: #000;
-            position: absolute;
-            left: 0;
-            transition: transform 1.2s cubic-bezier(0.77, 0, 0.175, 1);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .preloader .top-half {
-            top: 0;
-            align-items: flex-end;
-            transform-origin: top;
-        }
-
-        .preloader .bottom-half {
-            bottom: 0;
-            align-items: flex-start;
-            transform-origin: bottom;
-        }
-
-        .loader-icon {
-            font-size: 5rem;
-            color: var(--glowing-cyan);
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            animation: atomSpin 3s linear infinite, glowPulse 1s infinite alternate;
-            z-index: 10000;
-            transition: opacity 0.5s ease;
-        }
-
-        body.loaded .preloader .top-half {
-            transform: translateY(-100%);
-        }
-
-        body.loaded .preloader .bottom-half {
-            transform: translateY(100%);
-        }
-
-        body.loaded .loader-icon {
-            opacity: 0;
-        }
-
-        /* --- Header Navigation --- */
-        .dashboard {
-            background: rgba(2, 6, 23, 0.65);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            padding: 16px 5%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            position: sticky;
-            top: 0;
-            z-index: 200;
-        }
-
-        .social-icons {
-            display: flex;
-            gap: 18px;
-            direction: ltr;
-        }
-
-        .social-icons a {
-            color: #fff;
-            font-size: 1.4rem;
-            text-decoration: none;
-            transition: 0.3s;
-        }
-
-        .social-icons a:hover {
-            transform: translateY(-3px) scale(1.15);
-            color: var(--glowing-cyan);
-            filter: drop-shadow(0 0 10px var(--glowing-cyan));
-        }
-
-        .auth-actions {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            position: relative;
-        }
-
-        .auth-btn {
-            border: 1px solid var(--border-glass);
-            padding: 8px 20px;
-            border-radius: 50px;
-            font-family: 'Cairo', sans-serif;
-            font-weight: 700;
-            font-size: 0.95rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-        }
-
-        .auth-btn.primary {
-            background: linear-gradient(135deg, var(--glowing-cyan), var(--primary-blue));
-            color: #020617;
-            border: none;
-        }
-
-        .auth-btn.secondary {
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
-        }
-
-        .auth-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 0 20px rgba(0, 229, 255, 0.35);
-        }
-
-        /* --- Account Menu & Popup --- */
-        .account-btn {
-            background: rgba(15, 23, 42, 0.85);
-            border: 1px solid var(--border-glass);
-            color: #fff;
-            padding: 7px 16px;
-            border-radius: 50px;
-            font-family: 'Cairo', sans-serif;
-            font-weight: 700;
-            font-size: 0.95rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transition: all 0.3s ease;
-        }
-
-        .account-btn:hover,
-        .account-btn.active {
-            border-color: var(--glowing-cyan);
-            box-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
-        }
-
-        .account-avatar {
-            width: 32px;
-            height: 32px;
-            background: linear-gradient(135deg, var(--glowing-cyan), var(--primary-blue));
-            color: #020617;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.9rem;
-            font-weight: 900;
-        }
-
-        .account-avatar.admin-avatar {
-            background: linear-gradient(135deg, var(--admin-gold), #f59e0b);
-            color: #020617;
-        }
-
-        .account-popup {
-            position: absolute;
-            top: 55px;
-            left: 0;
-            width: 320px;
-            background: rgba(15, 23, 42, 0.96);
-            border: 1px solid var(--border-glass);
-            border-radius: 20px;
-            padding: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7), 0 0 25px rgba(0, 229, 255, 0.15);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            z-index: 300;
-            display: none;
-            flex-direction: column;
-            gap: 14px;
-            animation: popupFade 0.25s ease;
-            text-align: right;
-        }
-
-        .account-popup.show {
-            display: flex;
-        }
-
-        .popup-user-info h3 {
-            font-size: 1.15rem;
-            font-weight: 800;
-            color: #fff;
-        }
-
-        .popup-user-info p {
-            font-size: 0.85rem;
-            color: #94a3b8;
-            margin-top: 2px;
-        }
-
-        .popup-id-card {
-            background: rgba(0, 229, 255, 0.08);
-            border: 1px dashed var(--glowing-cyan);
-            border-radius: 12px;
-            padding: 10px 14px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .popup-id-card span {
-            font-size: 0.78rem;
-            color: #94a3b8;
-            display: block;
-        }
-
-        .popup-id-card strong {
-            font-size: 1.15rem;
-            color: var(--glowing-cyan);
-            letter-spacing: 0.5px;
-        }
-
-        .popup-copy-btn {
-            background: rgba(0, 229, 255, 0.15);
-            border: none;
-            color: var(--glowing-cyan);
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-family: 'Cairo', sans-serif;
-            font-weight: 700;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-
-        .popup-copy-btn:hover {
-            background: var(--glowing-cyan);
-            color: #020617;
-        }
-
-        .admin-grades-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-top: 4px;
-        }
-
-        .admin-grade-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-glass);
-            color: #fff;
-            padding: 8px 10px;
-            border-radius: 10px;
-            font-family: 'Cairo', sans-serif;
-            font-size: 0.85rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: 0.3s;
-            text-align: center;
-            text-decoration: none;
-            display: block;
-        }
-
-        .admin-grade-btn:hover {
-            background: var(--primary-blue);
-            border-color: var(--glowing-cyan);
-            box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
-        }
-
-        .popup-action-btn {
-            width: 100%;
-            padding: 10px;
-            border-radius: 10px;
-            font-family: 'Cairo', sans-serif;
-            font-weight: 700;
-            font-size: 0.95rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            border: none;
-            transition: 0.3s;
-        }
-
-        .popup-action-btn.classroom {
-            background: linear-gradient(135deg, var(--glowing-cyan), var(--primary-blue));
-            color: #020617;
-        }
-
-        .popup-action-btn.classroom:hover {
-            box-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
-            transform: translateY(-1px);
-        }
-
-        .popup-action-btn.logout {
-            background: rgba(239, 68, 68, 0.15);
-            color: #f87171;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
-        .popup-action-btn.logout:hover {
-            background: #ef4444;
-            color: #fff;
-        }
-
-        /* --- Homepage Hero Content & Portfolio Setup --- */
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 60px 20px;
-            text-align: center;
-            width: 100%;
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-
-        /* Top Animation Wrapper */
-        #introTopSequence {
-            transition: transform 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-top: 10vh;
-        }
-
-        #introTopSequence.moved-up {
-            transform: translateY(-80px) scale(0.95);
-            margin-top: 0;
-        }
-
-        .hero-logo i {
-            font-size: 4.5rem;
-            background: linear-gradient(135deg, #fff, var(--glowing-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 20px;
-            animation: atomSpin 25s linear infinite;
-        }
-
-        .hero h1 {
-            font-size: 3.5rem;
-            margin-bottom: 12px;
-            font-weight: 900;
-            letter-spacing: 1px;
-            background: linear-gradient(to right, #ffffff, var(--glowing-cyan), #2563eb);
-            background-size: 200% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: shineText 5s linear infinite;
-        }
-
-        .hero p {
-            font-size: 1.25rem;
-            color: #94a3b8;
-            max-width: 620px;
-            margin: 0 auto 20px;
-            line-height: 1.6;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            direction: ltr;
-            transition: opacity 0.8s ease, transform 0.8s ease;
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .hero p.fade-out {
-            opacity: 0;
-            transform: translateY(20px);
-            pointer-events: none;
-        }
-
-        /* Portfolio Hidden Section */
-        #portfolioSection {
-            width: 100%;
-            display: none;
-            opacity: 0;
-            transform: translateY(40px);
-            transition: all 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        #portfolioSection.visible {
-            display: block;
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        /* تعديل مسار الصورة وظهورها */
-        .teacher-img-wrapper {
-            margin: 0 auto 30px;
-            width: 220px;
-            height: 220px;
-            border-radius: 50%;
-            border: 4px solid var(--glowing-cyan);
-            box-shadow: 0 0 30px rgba(0, 229, 255, 0.3);
-            overflow: hidden;
-            transform: scale(0.5);
-            opacity: 0;
-            transition: all 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-            background-color: rgba(2, 6, 23, 0.8);
-            /* لون خلفية عشان لو الصورة شفافة */
-        }
-
-        #portfolioSection.visible .teacher-img-wrapper {
-            transform: scale(1);
-            opacity: 1;
-        }
-
-        .teacher-img-wrapper img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .stats-container {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            margin-bottom: 40px;
-            flex-wrap: wrap;
-        }
-
-        .stat-box {
-            background: var(--card-glass);
-            border: 1px solid var(--border-glass);
-            padding: 20px 40px;
-            border-radius: 20px;
-            backdrop-filter: blur(10px);
-            min-width: 200px;
-            text-align: center;
-        }
-
-        .stat-box h2 {
-            font-size: 3rem;
-            color: var(--glowing-cyan);
-            margin-bottom: 5px;
-            font-weight: 900;
-            direction: ltr;
-        }
-
-        .stat-box p {
-            font-size: 1.1rem;
-            color: #cbd5e1;
-            font-weight: 700;
-            letter-spacing: 1px;
-        }
-
-        /* English CV Layout with RED Accents */
-        .cv-container {
-            background: rgba(15, 23, 42, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 24px;
-            padding: 40px;
-            text-align: left;
-            margin-bottom: 40px;
-            line-height: 1.8;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(10px);
-        }
-
-        .cv-section-title {
-            color: var(--accent-red);
-            /* إضافة اللون الأحمر للعناوين */
-            font-size: 1.4rem;
-            font-weight: 800;
-            margin-bottom: 15px;
-            border-bottom: 2px solid rgba(244, 63, 94, 0.3);
-            /* خط سفلي أحمر خفيف */
-            padding-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            display: inline-block;
-        }
-
-        .cv-text {
-            color: #f8fafc;
-            font-size: 1.05rem;
-            margin-bottom: 30px;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        }
-
-        .cv-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-
-        @media (min-width: 768px) {
-            .cv-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-
-        .cv-list {
-            list-style: none;
-            padding-left: 0;
-            color: #cbd5e1;
-        }
-
-        .cv-list li {
-            margin-bottom: 10px;
-            position: relative;
-            padding-left: 20px;
-            font-size: 0.95rem;
-        }
-
-        .cv-list li::before {
-            content: '•';
-            color: var(--glowing-cyan);
-            position: absolute;
-            left: 0;
-            top: 0;
-            font-size: 1.2rem;
-            line-height: 1.5;
-        }
-
-        .job-title {
-            color: #fff;
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-
-        .job-meta {
-            color: var(--primary-blue);
-            font-size: 0.9rem;
-            font-weight: 600;
-            margin-bottom: 10px;
-        }
-
-        .cta-wrapper {
-            margin-top: 20px;
-            margin-bottom: 50px;
-        }
-
-        /* --- Auth Modal --- */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(2, 6, 23, 0.88);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            z-index: 1000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.35s ease;
-        }
-
-        .modal-overlay.active {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .auth-box {
-            background: rgba(15, 23, 42, 0.95);
-            border: 1px solid var(--border-glass);
-            border-radius: 28px;
-            padding: 35px 30px;
-            width: 100%;
-            max-width: 480px;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 229, 255, 0.1);
-            position: relative;
-            transform: scale(0.92) translateY(20px);
-            transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            direction: rtl;
-        }
-
-        .modal-overlay.active .auth-box {
-            transform: scale(1) translateY(0);
-        }
-
-        .close-btn {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: none;
-            border: none;
-            color: #64748b;
-            font-size: 1.4rem;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-
-        .close-btn:hover {
-            color: var(--error-red);
-            transform: rotate(90deg);
-        }
-
-        .auth-tabs {
-            display: flex;
-            border-radius: 14px;
-            background: rgba(2, 6, 23, 0.6);
-            padding: 4px;
-            margin-bottom: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .tab-btn {
-            flex: 1;
-            padding: 10px 0;
-            background: transparent;
-            border: none;
-            color: #94a3b8;
-            font-size: 1rem;
-            font-weight: 700;
-            font-family: 'Cairo', sans-serif;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: 0.3s ease;
-        }
-
-        .tab-btn.active {
-            background: var(--primary-blue);
-            color: #fff;
-            box-shadow: 0 2px 10px rgba(37, 99, 235, 0.4);
-        }
-
-        .form-panel {
-            display: none;
-        }
-
-        .form-panel.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
-        }
-
-        .form-row {
-            display: flex;
-            gap: 12px;
-        }
-
-        .form-group {
-            margin-bottom: 16px;
-            flex: 1;
-            text-align: right;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: #cbd5e1;
-        }
-
-        .input-wrapper {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-
-        .input-wrapper i {
-            position: absolute;
-            right: 14px;
-            color: #64748b;
-            font-size: 1rem;
-            pointer-events: none;
-            transition: 0.3s;
-        }
-
-        .input-wrapper input,
-        .input-wrapper select {
-            width: 100%;
-            padding: 11px 42px 11px 14px;
-            background: rgba(2, 6, 23, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            color: #fff;
-            font-size: 0.95rem;
-            font-family: 'Cairo', sans-serif;
-            outline: none;
-            transition: all 0.3s ease;
-        }
-
-        .input-wrapper select {
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-        }
-
-        .input-wrapper select option {
-            background-color: var(--bg-deep);
-            color: var(--text-light);
-        }
-
-        .input-wrapper input.input-error {
-            border-color: var(--error-red) !important;
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.3) !important;
-        }
-
-        .input-wrapper input:focus,
-        .input-wrapper select:focus {
-            border-color: var(--glowing-cyan);
-            box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
-            background: rgba(2, 6, 23, 0.9);
-        }
-
-        .submit-btn {
-            width: 100%;
-            padding: 13px;
-            margin-top: 10px;
-            background: linear-gradient(135deg, var(--glowing-cyan), var(--primary-blue));
-            border: none;
-            border-radius: 12px;
-            color: #020617;
-            font-size: 1.05rem;
-            font-weight: 800;
-            font-family: 'Cairo', sans-serif;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .submit-btn:hover {
-            box-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
-            transform: translateY(-2px);
-        }
-
-        .status-msg {
-            font-size: 0.92rem;
-            margin-top: 14px;
-            padding: 12px 14px;
-            border-radius: 12px;
-            text-align: center;
-            display: none;
-            animation: shake 0.35s ease;
-        }
-
-        .status-msg.error {
-            color: #fca5a5;
-            background: rgba(239, 68, 68, 0.15);
-            border: 1px solid rgba(239, 68, 68, 0.4);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            direction: ltr;
-        }
-
-        .footer {
-            padding: 20px;
-            text-align: center;
-            font-size: 0.85rem;
-            color: #64748b;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .footer a {
-            color: #94a3b8;
-            text-decoration: none;
-            margin: 0 10px;
-            transition: 0.3s;
-        }
-
-        .footer a:hover {
-            color: var(--glowing-cyan);
-        }
-
-        @keyframes atomSpin {
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-
-        @keyframes glowPulse {
-            0% {
-                filter: drop-shadow(0 0 10px var(--glowing-cyan));
-            }
-
-            100% {
-                filter: drop-shadow(0 0 30px var(--glowing-cyan));
-                transform: translate(-50%, -50%) scale(1.1);
-            }
-        }
-
-        @keyframes shineText {
-            to {
-                background-position: 200% center;
-            }
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(8px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes popupFade {
-            from {
-                opacity: 0;
-                transform: translateY(-8px) scale(0.95);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
-
-        @keyframes shake {
-
-            0%,
-            100% {
-                transform: translateX(0);
-            }
-
-            20%,
-            60% {
-                transform: translateX(-6px);
-            }
-
-            40%,
-            80% {
-                transform: translateX(6px);
-            }
-        }
-
-        @media (max-width: 768px) {
-            .hero h1 {
-                font-size: 2.3rem;
-            }
-
-            .form-row {
-                flex-direction: column;
-                gap: 0;
-            }
-
-            .account-popup {
-                left: auto;
-                right: 0;
-                width: 280px;
-            }
-
-            .cv-container {
-                padding: 20px;
-            }
-        }
-
-        /* --- PWA Install Button --- */
-        .install-app-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: #fff;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-family: 'Cairo', sans-serif;
-            font-weight: 700;
-            font-size: 0.9rem;
-            cursor: pointer;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
-            direction: rtl; /* Because it's inside an LTR social-icons div */
-            margin-left: 10px;
-        }
-
-        .install-app-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
-            transform: translateY(-2px);
-        }
-    </style>
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
 </head>
+<body class="site">
+    <div class="scroll-progress" aria-hidden="true"></div>
 
-<body>
-
-    <div class="bg-orbs">
-        <div class="orb orb-1"></div>
-        <div class="orb orb-2"></div>
-        <div class="orb orb-3"></div>
+    <!-- Intro: the logo with its orbits, once per visit -->
+    <div class="intro hidden" id="intro" aria-hidden="true">
+        <div class="intro-stage">
+            <svg viewBox="0 0 220 220">
+                <g class="spin-slow"><ellipse class="orbit" cx="110" cy="110" rx="104" ry="40" transform="rotate(-30 110 110)"/><circle class="e" cx="214" cy="110" r="5" transform="rotate(-30 110 110)"/></g>
+                <g class="spin-rev"><ellipse class="orbit o2" cx="110" cy="110" rx="104" ry="40" transform="rotate(30 110 110)"/><circle class="e e2" cx="6" cy="110" r="5" transform="rotate(30 110 110)"/></g>
+                <g class="spin-slow"><ellipse class="orbit o3" cx="110" cy="110" rx="104" ry="40" transform="rotate(90 110 110)"/><circle class="e e3" cx="110" cy="6" r="4" transform="rotate(0 110 110)"/></g>
+            </svg>
+            <img src="/assets/img/logo-192.png" alt="" width="112" height="112">
+            <div class="intro-word">Science Academy<span>with Miss Marwa</span></div>
+        </div>
     </div>
 
-    <div class="preloader" id="preloader">
-        <div class="half top-half"></div>
-        <i class="fas fa-atom loader-icon"></i>
-        <div class="half bottom-half"></div>
-    </div>
-
-    <header class="dashboard">
-        <div class="social-icons" style="align-items: center;">
-            <a href="https://www.facebook.com/profile.php?id=61588022231167" target="_blank" title="Facebook"><i
-                    class="fab fa-facebook-f"></i></a>
-            <a href="https://wa.me/201144488717" target="_blank" title="WhatsApp"><i class="fab fa-whatsapp"></i></a>
-            
-            <button id="pwa-install-btn" class="install-app-btn">
-                <i class="fas fa-download"></i> حمل التطبيق
-            </button>
-        </div>
-
-        <div class="auth-actions" id="guestAuthActions">
-            <button class="auth-btn secondary" onclick="openModal('login')"><i
-                    class="fas fa-sign-in-alt"></i><span>تسجيل الدخول</span></button>
-            <button class="auth-btn primary" onclick="openModal('signup')"><i class="fas fa-user-plus"></i><span>حساب
-                    جديد</span></button>
-        </div>
-
-        <div class="auth-actions" id="studentAuthActions" style="display: none;">
-            <button class="account-btn" id="accountMenuBtn" onclick="toggleAccountPopup(event)">
-                <div class="account-avatar" id="headerAvatarLetter">M</div>
-                <span id="headerStudentName">الطالب</span>
-                <i class="fas fa-chevron-down" style="font-size: 0.8rem; color: #94a3b8;"></i>
-            </button>
-
-            <div class="account-popup" id="accountPopup">
-                <div class="popup-user-info">
-                    <h3 id="popupFullName">اسم الطالب</h3>
-                    <p id="popupGradeName">المرحلة الدراسية</p>
-                </div>
-                <div class="popup-id-card">
-                    <div><span>Student ID</span><strong id="popupStudentId">MM-000000</strong></div>
-                    <button class="popup-copy-btn" onclick="copyStudentIdFromPopup()"><i
-                            class="far fa-copy"></i><span>نسخ</span></button>
-                </div>
-                <button class="popup-action-btn classroom" id="studentClassroomBtn" onclick="enterClassroom()">
-                    <i class="fas fa-graduation-cap"></i><span>الانتقال لصفك الدراسي</span>
-                </button>
-                <div id="adminGradesContainer" style="display: none;">
-                    <span
-                        style="font-size: 0.8rem; color: var(--admin-gold); display: block; margin-bottom: 6px; font-weight: 700;">
-                        <i class="fas fa-unlock-keyhole"></i> التنقل المباشر لجميع المراحل:
-                    </span>
-                    <div class="admin-grades-grid">
-                        <a href="./prep1/prep1.html" class="admin-grade-btn">Prep 1</a>
-                        <a href="./prep2/prep2.html" class="admin-grade-btn">Prep 2</a>
-                        <a href="./prep3/prep3.html" class="admin-grade-btn">Prep 3</a>
-                        <a href="./sec1/Sec1.html" class="admin-grade-btn">Sec 1</a>
-                    </div>
-                </div>
-                <button class="popup-action-btn logout" onclick="logoutStudent()">
-                    <i class="fas fa-sign-out-alt"></i><span>تسجيل الخروج</span>
-                </button>
+    <!-- Header -->
+    <header class="site-header">
+        <div class="wrap bar">
+            <a class="site-brand" href="#top" aria-label="Science Academy home">
+                <img src="/assets/img/logo-96.png" alt="" width="42" height="42">
+                <div><strong>Science Academy</strong><span>with Miss Marwa</span></div>
+            </a>
+            <nav class="site-nav" aria-label="Sections">
+                <a href="#grades">Grades</a>
+                <a href="#features">Features</a>
+                <a href="#how">How it works</a>
+                <a href="#teacher">Miss Marwa</a>
+                <a href="#faq">FAQ</a>
+            </nav>
+            <div class="site-actions" id="headerActions">
+                <button class="icon-btn theme-btn" data-theme-toggle aria-label="Switch light / dark mode" title="Light / dark mode"><span data-icon="moon" data-icon-class="moon" style="display:contents"></span><span data-icon="sun" data-icon-class="sun" style="display:contents"></span></button>
             </div>
+            <button class="icon-btn menu-btn" aria-label="Menu" aria-expanded="false" data-icon="menu"></button>
         </div>
     </header>
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="#grades">Grades</a>
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#teacher">Miss Marwa</a>
+        <a href="#parents">For parents</a>
+        <a href="#faq">FAQ</a>
+        <div id="menuAuth"></div>
+    </div>
 
-    <!-- Main Content -->
-    <main class="main-content">
-
-        <!-- Intro Sequence (Animates Up) -->
-        <div id="introTopSequence">
-            <div class="hero-logo"><i class="fas fa-atom"></i></div>
-            <div class="hero">
-                <h1>Science With Miss Marwa</h1>
-                <!-- This paragraph will fade out and hide -->
-                <p id="heroSubtitle">Premium Education & Interactive Science Learning. Step into the future of science.
-                </p>
+    <main id="top">
+        <!-- ============ HERO ============ -->
+        <section class="hero">
+            <div class="hero-bg" aria-hidden="true">
+                <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+                <div class="grid-bg"></div>
+                <canvas id="heroCanvas"></canvas>
             </div>
-        </div>
-
-        <!-- Hidden Portfolio Section that appears after animation -->
-        <div id="portfolioSection">
-            <!-- مسار الصورة متعدل عشان يقرأ من فولدر images -->
-            <div class="teacher-img-wrapper">
-                <img src="./images/Logo.png" alt="Miss Marwa">
-            </div>
-
-            <!-- Stats Table / Counters -->
-            <div class="stats-container">
-                <div class="stat-box">
-                    <h2 class="counter" data-target="1000">+0</h2>
-                    <p>Students</p>
-                </div>
-                <div class="stat-box">
-                    <h2 class="counter" data-target="12">+0</h2>
-                    <p>Years Experience</p>
-                </div>
-            </div>
-
-            <!-- English CV Section with Red Accents -->
-            <div class="cv-container" dir="ltr">
-                <h2 class="cv-section-title">Professional Summary</h2>
-                <p class="cv-text">
-                    Dedicated Science teacher with 12 years of experience teaching Biology, Chemistry, and General
-                    Science to students from Grade 5 (Primary) through Grade 1 (Secondary). Background includes
-                    classroom teaching, private tutoring, and building an independent online teaching platform with
-                    self-produced instructional videos. Holds a Bachelor of Science from Benha University (Microbiology
-                    & Chemistry). Known for simplifying complex scientific concepts and adapting teaching style to
-                    different age groups and learning environments.
-                </p>
-
-                <div class="cv-grid">
-                    <div>
-                        <h2 class="cv-section-title">Core Skills</h2>
-                        <ul class="cv-list">
-                            <li>Curriculum planning and lesson design for Science, Biology, and Chemistry across
-                                multiple grade levels</li>
-                            <li>Differentiated instruction for students from Primary through Secondary stage</li>
-                            <li>Classroom management and student engagement</li>
-                            <li>One-on-one private tutoring tailored to individual student needs</li>
-                            <li>Online and blended learning delivery through a personal educational platform</li>
-                            <li>Educational video production and instructional content creation for e-learning</li>
-                            <li>Strong subject-matter foundation in Biology and Chemistry (laboratory & applied science
-                                background)</li>
-                            <li>Exam preparation and continuous student assessment (formative & summative)</li>
-                            <li>Bilingual communication — Arabic & English</li>
-                            <li>Time management across multiple concurrent teaching commitments</li>
-                            <li>Patience, adaptability, and a strong rapport with students and parents</li>
-                        </ul>
-                    </div>
-
-                    <div>
-                        <h2 class="cv-section-title">Work Experience</h2>
-                        <div style="margin-bottom: 20px;">
-                            <div class="job-title">Science / Biology / Chemistry Teacher</div>
-                            <div class="job-meta">Private Tutoring · Personal Online Platform — Egypt | 12 Years</div>
-                            <ul class="cv-list">
-                                <li>Taught Science, Biology, and Chemistry to students from Grade 5 Primary through
-                                    Grade 1 Secondary</li>
-                                <li>Designed and delivered lesson plans aligned with the national curriculum for each
-                                    academic stage</li>
-                                <li>Provided private/individual lessons, adapting explanations to each student's level
-                                    and pace</li>
-                                <li>Prepared students for term and final exams, tracking progress and addressing
-                                    knowledge gaps</li>
-                                <li>Communicated regularly with parents on student performance and areas for improvement
-                                </li>
-                            </ul>
-                        </div>
-                        <div>
-                            <div class="job-title">Online Science Educator</div>
-                            <div class="job-meta">Personal Educational Website & Platform | Self-Directed</div>
-                            <ul class="cv-list">
-                                <li>Built and maintained a personal website to deliver online Science, Biology, and
-                                    Chemistry lessons</li>
-                                <li>Recorded and published instructional videos covering curriculum topics for remote
-                                    learners</li>
-                                <li>Managed the full lesson-to-content pipeline independently, from planning to
-                                    publishing</li>
-                            </ul>
-                        </div>
+            <div class="wrap hero-grid">
+                <div>
+                    <div class="eyebrow reveal"><b><span class="pulse"></span>Now open</b>Prep 1 · Prep 2 · Prep 3 · Sec 1</div>
+                    <h1 id="heroTitle" aria-label="Master science with Miss Marwa.">
+                        <span class="line"><span class="w">Master</span> <span class="w">science</span></span>
+                        <span class="line"><span class="w">with</span> <span class="w grad-text shine">Miss Marwa.</span></span>
+                    </h1>
+                    <p class="lead reveal">Video lessons organised by unit, timed online exams with instant results, and progress you can actually see — built by a teacher with <b>15+ years</b> of experience.</p>
+                    <div class="hero-cta reveal" id="heroCta"></div>
+                    <div class="hero-points reveal">
+                        <span data-icon="checkCircle">Center &amp; private classes</span>
+                        <span data-icon="checkCircle">Works on any phone</span>
+                        <span data-icon="checkCircle">Light &amp; dark mode</span>
                     </div>
                 </div>
-            </div>
 
-            <!-- CTA Button at the bottom -->
-            <div class="cta-wrapper">
-                <button class="auth-btn primary" id="heroCtaBtn" style="padding: 14px 40px; font-size: 1.2rem;"
-                    onclick="handleHeroCta()">
-                    <span id="heroCtaText">Join Our Academy Now</span>
-                    <i class="fas fa-arrow-right" style="margin-left: 10px; margin-right: 0;"></i>
-                </button>
+                <div class="stage reveal" id="stage" aria-hidden="true">
+                    <div class="orb-ring"></div><div class="orb-ring r2"></div>
+                    <div class="phone" id="phone">
+                        <div class="screen">
+                            <div class="s-top"><img src="/assets/img/logo-96.png" alt=""><b>Science Academy</b><span class="s-streak" data-icon="flame">5</span></div>
+                            <div class="s-hi">Hi, Ahmed 👋</div>
+                            <div class="s-card">
+                                <div class="s-label">Next exam <span class="s-pill" id="mockTimer">2d 04:12:33</span></div>
+                                <div class="s-title">Unit 1 — Chemical reactions</div>
+                                <div class="s-btn" data-icon="play">Start exam</div>
+                            </div>
+                            <div class="s-row">
+                                <div class="s-card"><div class="s-label">Result</div>
+                                    <div class="s-ring"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--surface-3)" stroke-width="4"/><circle id="mockRing" cx="18" cy="18" r="15.5" fill="none" stroke="var(--success)" stroke-width="4" stroke-linecap="round" stroke-dasharray="97.4" stroke-dashoffset="97.4" style="transition:stroke-dashoffset 1.6s cubic-bezier(.22,1,.36,1) .6s"/></svg><b>18/20</b></div></div>
+                                <div class="s-card"><div class="s-label">Streak</div>
+                                    <div style="font-size:22px;font-weight:850;color:var(--accent);margin-top:6px">5 <span style="font-size:11px;color:var(--muted);font-weight:600">days</span></div>
+                                    <div class="s-dots"><i></i><i></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+                            </div>
+                            <div class="s-card"><div class="s-label">New for you</div>
+                                <div class="s-list" style="margin-top:8px">
+                                    <div class="s-item"><i data-icon="play"></i><span>Lesson 2 — Displacement</span><em>NEW</em></div>
+                                    <div class="s-item"><i data-icon="file"></i><span>Unit 1 summary</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="float f1" data-depth="1.2"><div class="bob"><div style="display:flex;align-items:center;gap:12px"><img src="/assets/img/marwa-160.png" alt="" width="46" height="46"><div><strong>Miss Marwa</strong><small>15+ years teaching</small></div></div></div></div>
+                    <div class="float f2" data-depth="1.8"><div class="bob d2"><div style="display:flex;align-items:center;gap:12px"><span class="fi" style="background:var(--success-soft);color:var(--success)" data-icon="checkCircle"></span><div><strong>Exam submitted</strong><small>18/20 · Excellent!</small></div></div></div></div>
+                    <div class="float f3" data-depth="1"><div class="bob d3"><div style="display:flex;align-items:center;gap:12px"><span class="fi" style="background:var(--accent-soft);color:var(--accent)" data-icon="flame"></span><div><strong>5-day streak</strong><small>Keep it going!</small></div></div></div></div>
+                </div>
             </div>
-        </div>
+        </section>
 
+        <!-- ============ STATS ============ -->
+        <section class="stats-band">
+            <div class="wrap">
+                <div class="stats-card reveal">
+                    <div class="stat-cell"><div class="num-big grad-text" data-count="15" data-suffix="+">0+</div><p>Years teaching science</p></div>
+                    <div class="stat-cell"><div class="num-big grad-text" data-count="1000" data-suffix="+">0+</div><p>Students taught</p></div>
+                    <div class="stat-cell"><div class="num-big grad-text" data-count="4">0</div><p>Grades · Prep 1 → Sec 1</p></div>
+                    <div class="stat-cell"><div class="num-big grad-text">24/7</div><p>Access to your lessons</p></div>
+                </div>
+            </div>
+        </section>
+
+        <div class="marquee" aria-hidden="true"><div class="marquee-track" id="marquee"></div></div>
+
+        <!-- ============ GRADES ============ -->
+        <section class="section" id="grades">
+            <div class="wrap">
+                <div class="sec-head reveal">
+                    <span class="sec-kicker">Choose your grade</span>
+                    <h2>One academy, <span class="grad-text">four grades.</span></h2>
+                    <p>Everything is organised by the Egyptian curriculum for your year — so you only see what you need.</p>
+                </div>
+                <div class="grades" id="gradeCards"></div>
+            </div>
+        </section>
+
+        <!-- ============ FEATURES ============ -->
+        <section class="section" id="features" style="padding-top:24px">
+            <div class="wrap">
+                <div class="sec-head reveal">
+                    <span class="sec-kicker">Everything in one place</span>
+                    <h2>Built to help you <span class="grad-text">actually improve.</span></h2>
+                    <p>Not just videos. A full study system that shows you what to do next.</p>
+                </div>
+                <div class="bento">
+                    <article class="tile spot wide reveal">
+                        <span class="ti" data-icon="book"></span>
+                        <h3>Lessons, organised by unit</h3>
+                        <p>Videos, summaries and past exams for every unit. See what you finished and what's new at a glance.</p>
+                        <div class="demo demo-list">
+                            <div><i data-icon="play"></i>Unit 1 · Lesson 1 — Matter<em>✓ Done</em></div>
+                            <div><i data-icon="play"></i>Unit 1 · Lesson 2 — Atoms<em style="color:var(--primary)">NEW</em></div>
+                            <div><i data-icon="file"></i>Unit 1 · Summary sheet</div>
+                        </div>
+                    </article>
+                    <article class="tile spot tall reveal">
+                        <span class="ti" style="background:var(--success-soft);color:var(--success)" data-icon="clipboard"></span>
+                        <h3>Online exams, instant results</h3>
+                        <p>Timed exams, one attempt, your score the second you submit — just like the real thing.</p>
+                        <div class="demo">
+                            <div class="demo-score">
+                                <div class="ring" data-pct="0.9"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42" fill="none" stroke-width="9"/><circle class="value" cx="50" cy="50" r="42" fill="none" style="stroke:var(--success)" stroke-width="9" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/></svg><div class="label"><strong class="num">18<span style="font-size:.55em;color:var(--faint)">/20</span></strong></div></div>
+                                <div><b>Excellent work!</b><br><span class="small muted">Top marks on Unit 1</span></div>
+                            </div>
+                            <div class="bar-chart" style="margin-top:22px"><i style="--h:45%"></i><i style="--h:60%"></i><i style="--h:55%"></i><i style="--h:72%"></i><i style="--h:80%"></i><i class="hi" style="--h:92%"></i></div>
+                            <p class="xs muted" style="margin-top:8px">Your scores, exam after exam</p>
+                        </div>
+                    </article>
+                    <article class="tile spot reveal">
+                        <span class="ti" style="background:var(--danger-soft);color:var(--danger)" data-icon="target"></span>
+                        <h3>Learn from every mistake</h3>
+                        <p>After each exam closes, review every question: your answer next to the correct one.</p>
+                    </article>
+                    <article class="tile spot reveal">
+                        <span class="ti" style="background:var(--accent-soft);color:var(--accent)" data-icon="flame"></span>
+                        <h3>Streaks &amp; badges</h3>
+                        <p>Study a little every day, build your streak and unlock badges along the way.</p>
+                    </article>
+                    <article class="tile spot reveal">
+                        <span class="ti" data-icon="bell"></span>
+                        <h3>Never miss an exam</h3>
+                        <p>Get a notification the moment a new lesson or exam is published for your grade.</p>
+                    </article>
+                    <article class="tile spot soon-tile wide reveal">
+                        <div class="row" style="gap:10px"><span class="ti" style="background:var(--accent-soft);color:var(--accent)" data-icon="sparkles"></span><span class="soon-tag">Coming soon</span></div>
+                        <h3>Ask Miss Marwa &amp; the AI Assistant</h3>
+                        <p>Send your questions with a photo and get answers from Miss Marwa — plus a smart study assistant that knows your grades and deadlines.</p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ HOW IT WORKS ============ -->
+        <section class="section" id="how">
+            <div class="wrap">
+                <div class="sec-head reveal">
+                    <span class="sec-kicker">How it works</span>
+                    <h2>Start in <span class="grad-text">three simple steps.</span></h2>
+                </div>
+                <div class="steps">
+                    <div class="steps-line" data-scroll-line><i></i></div>
+                    <div class="step reveal"><div class="sn"><b>1</b><span data-icon="user"></span></div><h3>Create your account</h3><p>Sign up in a minute and get your personal student code.</p></div>
+                    <div class="step reveal"><div class="sn"><b>2</b><span data-icon="book"></span></div><h3>Study &amp; take exams</h3><p>Watch lessons by unit and take timed exams online.</p></div>
+                    <div class="step reveal"><div class="sn"><b>3</b><span data-icon="chart"></span></div><h3>Watch yourself improve</h3><p>Follow your scores, streaks and badges week after week.</p></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ MEET MISS MARWA ============ -->
+        <section class="section" id="teacher">
+            <div class="wrap meet">
+                <div class="portrait reveal tilt">
+                    <div class="ring1"></div><div class="ring2"></div>
+                    <div class="pimg"><img src="/assets/img/marwa-480.webp" alt="Miss Marwa" width="480" height="480" loading="lazy"></div>
+                    <img class="badge-logo" src="/assets/img/logo-192.png" alt="Science Academy logo" width="86" height="86" loading="lazy">
+                    <div class="badge-years"><b class="grad-text" data-count="15" data-suffix="+">0+</b><span>years teaching</span></div>
+                </div>
+                <div>
+                    <span class="sec-kicker reveal">Meet your teacher</span>
+                    <h2 class="reveal">Hi, I'm <span class="grad-text">Miss Marwa.</span></h2>
+                    <p class="reveal">For more than 15 years I've taught Science, Biology and Chemistry — from primary school all the way to secondary. My goal is simple: make difficult ideas feel easy, and make sure no student is left behind.</p>
+                    <div class="creds reveal">
+                        <span data-icon="graduation">B.Sc. Microbiology &amp; Chemistry — Benha University</span>
+                        <span data-icon="award">15+ years teaching</span>
+                        <span data-icon="users">1,000+ students</span>
+                        <span data-icon="flask">Science · Biology · Chemistry</span>
+                    </div>
+                    <div class="classes-note reveal"><span data-icon="building"></span><div><strong>Center &amp; private classes available</strong><span>Contact us on WhatsApp for schedules, locations and fees.</span></div></div>
+                    <div class="row reveal" style="gap:10px;flex-wrap:wrap">
+                        <a class="btn btn-lg btn-wa magnetic" id="waClasses" target="_blank" rel="noopener" data-icon="whatsapp">Ask on WhatsApp</a>
+                        <a class="btn btn-lg btn-ghost" id="fbLink" target="_blank" rel="noopener" data-icon="facebook">Facebook page</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ PARENTS (Arabic) ============ -->
+        <section class="section" id="parents" style="padding-top:24px">
+            <div class="wrap">
+                <div class="parents reveal" dir="rtl" lang="ar">
+                    <span class="sec-kicker">لأولياء الأمور</span>
+                    <h2>تابع مستوى ابنك خطوة بخطوة</h2>
+                    <p class="lead-ar">نتائج امتحانات ابنك ومستواه في مكان واحد، وتقارير منتظمة بتوصلك على واتساب من مس مروة مباشرة.</p>
+                    <div class="parents-grid">
+                        <div class="p-item reveal"><span class="pi" data-icon="whatsapp"></span><div><strong>تقارير على واتساب</strong><span>تقرير بدرجات ابنك ومستواه بيوصلك على رقمك.</span></div></div>
+                        <div class="p-item reveal"><span class="pi" data-icon="bell"></span><div><strong>تنبيه لو فاته امتحان</strong><span>لو ابنك ماحلّش امتحان في ميعاده، هتعرف على طول.</span></div></div>
+                        <div class="p-item reveal"><span class="pi" data-icon="chart"></span><div><strong>درجات السنتر والأونلاين</strong><span>متابعة درجات امتحانات السنتر والامتحانات الأونلاين مع بعض.</span></div></div>
+                        <div class="p-item reveal"><span class="pi" data-icon="shield"></span><div><strong>تواصل مباشر</strong><span>أي استفسار عن المواعيد أو المصاريف تقدر تسأل عليه على واتساب.</span></div></div>
+                    </div>
+                    <div style="margin-top:26px"><a class="btn btn-lg btn-wa" id="waParents" target="_blank" rel="noopener" data-icon="whatsapp">تواصل مع مس مروة</a></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ FAQ ============ -->
+        <section class="section" id="faq" style="padding-top:32px">
+            <div class="wrap">
+                <div class="sec-head reveal">
+                    <span class="sec-kicker">FAQ</span>
+                    <h2>Questions? <span class="grad-text">Answers.</span></h2>
+                </div>
+                <div class="faq" id="faqList"></div>
+            </div>
+        </section>
+
+        <!-- ============ FINAL CTA ============ -->
+        <section class="section" style="padding-top:24px">
+            <div class="wrap">
+                <div class="final reveal">
+                    <canvas id="finalCanvas" aria-hidden="true"></canvas>
+                    <img src="/assets/img/logo-192.png" alt="" width="76" height="76" loading="lazy">
+                    <h2>Your science journey<br>starts today.</h2>
+                    <p>Join Science Academy and study with Miss Marwa — lessons, exams and progress, all in one place.</p>
+                    <div class="row" style="justify-content:center;gap:10px;flex-wrap:wrap" id="finalCta"></div>
+                </div>
+            </div>
+        </section>
     </main>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <span>© 2026 Science With Miss Marwa. All rights reserved.</span>
-        <span>•</span>
-        <a href="admin.html"><i class="fas fa-lock"></i> بوابة المعلم / الإدارة</a>
+    <footer class="site-footer">
+        <div class="wrap">
+            <div class="foot-grid">
+                <div>
+                    <a class="site-brand" href="#top"><img src="/assets/img/logo-96.png" alt="" width="42" height="42"><div><strong>Science Academy</strong><span>with Miss Marwa</span></div></a>
+                    <p class="muted small" style="max-width:320px;margin:14px 0 0">Lessons, online exams and progress tracking for Prep 1 to Sec 1 students — with 15+ years of teaching behind every lesson.</p>
+                </div>
+                <div><h4>Platform</h4><div class="links"><a href="#grades">Grades</a><a href="#features">Features</a><a href="#how">How it works</a><a href="#faq">FAQ</a></div></div>
+                <div><h4>Account</h4><div class="links"><a href="/login.html">Sign in</a><a href="/signup.html">Create account</a><a href="#" data-install>Install the app</a></div></div>
+                <div><h4>Contact</h4><div class="links"><a id="waFoot" target="_blank" rel="noopener" data-icon="whatsapp">WhatsApp</a><a id="fbFoot" target="_blank" rel="noopener" data-icon="facebook">Facebook</a></div></div>
+            </div>
+            <div class="foot-bottom">
+                <span>© 2026 Science Academy · Miss Marwa. All rights reserved.</span>
+                <a href="/admin.html" data-icon="lock">Teacher portal</a>
+            </div>
+        </div>
     </footer>
 
-    <!-- Auth Modal -->
-    <div class="modal-overlay" id="authModal">
-        <div class="auth-box">
-            <button class="close-btn" id="closeModalBtn">&times;</button>
+    <a class="wa-fab" id="waFab" target="_blank" rel="noopener" aria-label="Contact Miss Marwa on WhatsApp" data-icon="whatsapp"></a>
 
-            <div class="auth-tabs" id="modalTabs">
-                <button class="tab-btn active" id="tabLogin" onclick="switchTab('login')">تسجيل الدخول</button>
-                <button class="tab-btn" id="tabSignup" onclick="switchTab('signup')">إنشاء حساب</button>
-            </div>
-
-            <!-- Login Form -->
-            <form id="loginForm" class="form-panel active">
-                <div class="form-group">
-                    <label for="loginId">كود الطالب (Student ID)</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="loginId" placeholder="مثال: MM-294810" required autocomplete="username">
-                        <i class="fas fa-id-badge"></i>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="loginPassword">كلمة المرور</label>
-                    <div class="input-wrapper">
-                        <input type="password" id="loginPassword" placeholder="••••••••" required
-                            autocomplete="current-password">
-                        <i class="fas fa-lock"></i>
-                    </div>
-                </div>
-                <button type="submit" class="submit-btn" id="loginSubmitBtn"><span>دخول المنصة</span><i
-                        class="fas fa-arrow-left"></i></button>
-                <div class="status-msg error" id="loginStatus"></div>
-            </form>
-
-            <!-- Sign Up Form -->
-            <form id="signupForm" class="form-panel">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="firstName">الاسم الأول</label>
-                        <div class="input-wrapper"><input type="text" id="firstName" placeholder="الاسم الأول"
-                                required><i class="fas fa-user"></i></div>
-                    </div>
-                    <div class="form-group">
-                        <label for="lastName">اسم العائلة</label>
-                        <div class="input-wrapper"><input type="text" id="lastName" placeholder="اسم العائلة"
-                                required><i class="fas fa-user-group"></i></div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="signupGender">النوع (Gender)</label>
-                    <div class="input-wrapper">
-                        <select id="signupGender" required>
-                            <option value="" disabled selected>اختر النوع</option>
-                            <option value="male">ذكر</option>
-                            <option value="female">أنثى</option>
-                        </select>
-                        <i class="fas fa-venus-mars"></i>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="signupBranch">نظام الدراسة (خاص / سنتر)</label>
-                    <div class="input-wrapper">
-                        <select id="signupBranch" required>
-                            <option value="" disabled selected>اختر النظام</option>
-                            <option value="private">خاص (Private)</option>
-                            <option value="center">سنتر (Center)</option>
-                        </select>
-                        <i class="fas fa-building"></i>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="phone">رقم هاتف الطالب</label>
-                    <div class="input-wrapper"><input type="tel" id="phone" placeholder="01xxxxxxxxx" required><i
-                            class="fas fa-mobile-screen"></i></div>
-                </div>
-                <div class="form-group">
-                    <label for="parentPhone">رقم هاتف ولي الأمر</label>
-                    <div class="input-wrapper"><input type="tel" id="parentPhone" placeholder="01xxxxxxxxx" required><i
-                            class="fas fa-phone-volume"></i></div>
-                </div>
-
-                <div class="form-group">
-                    <label for="signupGrade">المرحلة الدراسية</label>
-                    <div class="input-wrapper">
-                        <select id="signupGrade" required>
-                            <option value="" disabled selected>اختر المرحلة الدراسية</option>
-                            <option value="prep1">Prep 1 (الصف الأول الإعدادي)</option>
-                            <option value="prep2">Prep 2 (الصف الثاني الإعدادي)</option>
-                            <option value="prep3">Prep 3 (الصف الثالث الإعدادي)</option>
-                            <option value="sec1">Secondary 1 (الصف الأول الثانوي)</option>
-                        </select>
-                        <i class="fas fa-graduation-cap"></i>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="signupPassword">كلمة المرور</label>
-                    <div class="input-wrapper"><input type="password" id="signupPassword" placeholder="••••••••"
-                            required minlength="4"><i class="fas fa-lock"></i></div>
-                </div>
-
-                <button type="submit" class="submit-btn" id="signupSubmitBtn"><span>إنشاء الحساب وتوليد الكود</span><i
-                        class="fas fa-arrow-left"></i></button>
-                <div class="status-msg error" id="signupStatus"></div>
-            </form>
-        </div>
-    </div>
-
-    <!-- iOS / Fallback PWA Install Modal -->
-    <div class="modal-overlay" id="ios-install-popup">
-        <div class="auth-box" style="text-align: center; max-width: 400px; padding: 40px 30px;">
-            <button class="close-btn" onclick="document.getElementById('ios-install-popup').classList.remove('active')">&times;</button>
-            <h2 style="font-size: 1.5rem; margin-bottom: 5px;">إضافة التطبيق</h2>
-            
-            <div style="text-align: center; direction: rtl; line-height: 1.8; margin-top: 15px;">
-                <p style="margin-bottom: 5px; font-size: 16px; color: #cbd5e1;">
-                    لتحميل التطبيق، اضغط على زر المشاركة الخاص بالآيفون في <strong>أسفل الشاشة</strong>
-                </p>
-                
-                <!-- Apple Share Icon SVG -->
-                <div style="margin: 10px 0; color: #00d2ff;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
-                        <polyline points="16 6 12 2 8 6"></polyline>
-                        <line x1="12" y1="2" x2="12" y2="15"></line>
-                    </svg>
-                </div>
-
-                <p style="margin-bottom: 5px; color: #cbd5e1;">
-                    ثم اسحب القائمة لأعلى واختر <br><strong>"إضافة للشاشة الرئيسية"</strong>
-                </p>
-                
-                <p style="color: #bbb; font-size: 14px; margin-bottom: 15px;">
-                    <span dir="ltr">(Add to Home Screen)</span> ➕
-                </p>
-
-                <!-- Pointing Down Emoji -->
-                <div style="font-size: 35px;">
-                    👇
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="./db.js"></script>
-
+    <script src="/assets/site.js"></script>
     <script>
-        window.addEventListener('load', () => {
-            setTimeout(() => document.body.classList.add('loaded'), 800);
-            renderAuthState();
-        });
+    (function () {
+        const { icon, esc, waLink, CONTACT } = Site;
+        const session = Site.getSession();
 
-        const gradeLabels = { 'prep1': 'الصف الأول الإعدادي (Prep 1)', 'prep2': 'الصف الثاني الإعدادي (Prep 2)', 'prep3': 'الصف الثالث الإعدادي (Prep 3)', 'sec1': 'الصف الأول الثانوي (Secondary 1)', 'all': 'المعلم / صلاحية شاملة لجميع المراحل (Admin)' };
-        const gradeRoutes = { 'prep1': './prep1/prep1.html', 'prep2': './prep2/prep2.html', 'prep3': './prep3/prep3.html', 'sec1': './sec1/Sec1.html' };
+        // ---------- Auth-aware buttons ----------
+        const first = session ? (session.firstName || 'Student') : '';
+        const dash = session ? Site.homeUrl(session) : '';
+        document.getElementById('headerActions').insertAdjacentHTML('beforeend', session
+            ? `<a class="btn btn-primary btn-sm" href="${dash}">${icon('home', 'sm')}Dashboard</a>`
+            : `<a class="btn btn-ghost btn-sm hide-sm" href="/login.html">Sign in</a><a class="btn btn-primary btn-sm" href="/signup.html">Get started</a>`);
+        document.getElementById('menuAuth').innerHTML = session
+            ? `<a class="btn btn-primary btn-block" href="${dash}">Go to my dashboard</a>`
+            : `<a class="btn btn-ghost btn-block" href="/login.html">Sign in</a><a class="btn btn-primary btn-block" href="/signup.html">Create free account</a>`;
+        document.getElementById('heroCta').innerHTML = session
+            ? `<a class="btn btn-primary btn-lg btn-glow magnetic" href="${dash}">Continue learning, <span dir="auto">${esc(first)}</span>${icon('arrowRight', 'arrow')}</a>
+               <a class="btn btn-ghost btn-lg" href="#features">See what's inside</a>`
+            : `<a class="btn btn-primary btn-lg btn-glow magnetic" href="/signup.html">Create free account${icon('arrowRight', 'arrow')}</a>
+               <a class="btn btn-ghost btn-lg" href="/login.html">I have an account</a>`;
+        document.getElementById('finalCta').innerHTML = session
+            ? `<a class="btn btn-lg btn-white magnetic" href="${dash}">Go to my dashboard${icon('arrowRight', 'arrow')}</a>`
+            : `<a class="btn btn-lg btn-white magnetic" href="/signup.html">Create free account${icon('arrowRight', 'arrow')}</a><a class="btn btn-lg btn-outline" href="/login.html">Sign in</a>`;
 
-        const modal = document.getElementById('authModal');
-        const loginForm = document.getElementById('loginForm');
-        const signupForm = document.getElementById('signupForm');
-        const modalTabs = document.getElementById('modalTabs');
-        const accountPopup = document.getElementById('accountPopup');
+        // ---------- Contact links ----------
+        const waGeneral = waLink('Hello Miss Marwa, I would like to ask about Science Academy classes.');
+        ['waFab', 'waFoot'].forEach(id => document.getElementById(id).href = waGeneral);
+        document.getElementById('waClasses').href = waLink('Hello Miss Marwa, I would like to know the schedules, locations and fees of the center / private classes.');
+        document.getElementById('waParents').href = waLink('السلام عليكم مس مروة، أنا ولي أمر وعايز أستفسر عن المواعيد والمصاريف.');
+        ['fbLink', 'fbFoot'].forEach(id => document.getElementById(id).href = CONTACT.facebook);
 
-        // لو db.js ماتحملش لأي سبب، منعملش "دخول وهمي" من المتصفح — نوضح المشكلة بس
-        const fallbackAuth = {
-            async login() { throw new Error('تعذر تحميل الموقع بالكامل، حدّث الصفحة وحاول تاني'); },
-            async signup() { throw new Error('تعذر تحميل الموقع بالكامل، حدّث الصفحة وحاول تاني'); }
-        };
+        // ---------- Grades ----------
+        const GRADES = [
+            ['prep1', '1', 'Prep 1', 'First Preparatory', 'الصف الأول الإعدادي'],
+            ['prep2', '2', 'Prep 2', 'Second Preparatory', 'الصف الثاني الإعدادي'],
+            ['prep3', '3', 'Prep 3', 'Third Preparatory', 'الصف الثالث الإعدادي'],
+            ['sec1', '1', 'Sec 1', 'First Secondary', 'الصف الأول الثانوي']
+        ];
+        document.getElementById('gradeCards').innerHTML = GRADES.map(([key, n, name, en, ar]) => `
+            <a class="grade-card spot tilt reveal ${key === 'sec1' ? 'sec' : ''}" href="${session ? dash : '/signup.html?grade=' + key}">
+                <span class="gnum">${n}</span>
+                <div><h3>${name}</h3><span class="ar">${en} · ${ar}</span></div>
+                <ul><li>${icon('check')}Video lessons by unit</li><li>${icon('check')}Summaries &amp; past exams</li><li>${icon('check')}Timed online exams</li></ul>
+                <span class="go">${session ? 'Open my dashboard' : 'Join ' + name}${icon('arrowRight', 'sm arrow')}</span>
+            </a>`).join('');
 
-        // تنظيف: نسخ قديمة كانت بتحفظ بيانات الطلاب وكلمات السر في المتصفح — ملهاش لازمة دلوقتي
-        try { localStorage.removeItem('mm_students_db'); } catch (e) { /* ignore */ }
+        // ---------- Marquee ----------
+        const tags = [['atom', 'Science'], ['dna', 'Biology'], ['flask', 'Chemistry'], ['microscope', 'Lab experiments'], ['play', 'Video lessons'], ['clipboard', 'Online exams'], ['file', 'Summaries'], ['chart', 'Progress tracking'], ['award', 'Badges'], ['graduation', 'Prep 1 → Sec 1']];
+        const chips = tags.map(([i, t]) => `<span>${icon(i)}${t}</span>`).join('');
+        document.getElementById('marquee').innerHTML = chips + chips;
 
-        const AuthProvider = (typeof DB !== 'undefined' && DB.login) ? DB : fallbackAuth;
+        // ---------- FAQ ----------
+        const FAQ = [
+            ['How do I sign in?', 'Create an account and you\'ll get a personal <b>student code</b> (like MM-123456). You sign in with that code and your password. Keep the code safe — a screenshot works great.'],
+            ['I forgot my password. What do I do?', `Send a WhatsApp message with your name and student code to <a class="link" href="${waLink('Hello Miss Marwa, I forgot my Science Academy password. My name: … My student code: MM-')}" target="_blank" rel="noopener">${CONTACT.whatsappDisplay}</a> and Miss Marwa will reset it for you.`],
+            ['Which grades are included?', 'Prep 1, Prep 2, Prep 3 and Sec 1. When you sign up you choose your grade, and you only see the lessons and exams for your year.'],
+            ['How do center and private classes work?', `Both are available. For schedules, locations and fees, contact Miss Marwa on <a class="link" href="${waGeneral}" target="_blank" rel="noopener">WhatsApp</a>.`],
+            ['Can parents follow their child\'s progress?', 'Yes. Miss Marwa sends progress reports to parents on WhatsApp, including exam results and alerts if an exam was missed.'],
+            ['Do I need to download anything?', 'No. It works in any browser on your phone or computer. You can also install it like an app — tap “Install the app” at the bottom of this page.']
+        ];
+        document.getElementById('faqList').innerHTML = FAQ.map(([q, a]) => `<details class="reveal"><summary>${q}<span class="plus">${icon('plus', 'sm')}</span></summary><div class="ans">${a}</div></details>`).join('');
 
-        function escapeHtml(v) {
-            return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        }
+        // ---------- Mock phone: live countdown + score ring ----------
+        let left = (2 * 24 * 3600) + 4 * 3600 + 12 * 60 + 33;
+        const tEl = document.getElementById('mockTimer');
+        const pad = (n) => String(n).padStart(2, '0');
+        setInterval(() => {
+            left = Math.max(0, left - 1);
+            const d = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60), s = left % 60;
+            tEl.textContent = `${d}d ${pad(h)}:${pad(m)}:${pad(s)}`;
+        }, 1000);
 
-        // --- Animations Logic ---
-        function runPortfolioAnimation() {
-            const subtitle = document.getElementById('heroSubtitle');
-            const topSeq = document.getElementById('introTopSequence');
-            const portfolio = document.getElementById('portfolioSection');
-
-            // 1. Fade out subtitle
-            setTimeout(() => {
-                subtitle.classList.add('fade-out');
-
-                // 2. Move logo up and show portfolio
-                setTimeout(() => {
-                    subtitle.style.display = 'none';
-                    topSeq.classList.add('moved-up');
-                    portfolio.classList.add('visible');
-
-                    // 3. Start Counters
-                    startCounters();
-                }, 800);
-            }, 1200); // Wait a bit after load
-        }
-
-        function startCounters() {
-            const counters = document.querySelectorAll('.counter');
-            const speed = 50; // The lower the slower
-
-            counters.forEach(counter => {
-                const updateCount = () => {
-                    const target = +counter.getAttribute('data-target');
-                    const count = +counter.innerText.replace('+', '');
-                    const inc = target / speed;
-
-                    if (count < target) {
-                        counter.innerText = '+' + Math.ceil(count + inc);
-                        setTimeout(updateCount, 40);
-                    } else {
-                        counter.innerText = '+' + target;
-                    }
-                };
-                updateCount();
+        // ---------- Parallax on the hero stage ----------
+        const stage = document.getElementById('stage');
+        const phone = document.getElementById('phone');
+        if (Site.finePointer && !Site.reduced) {
+            document.querySelector('.hero').addEventListener('pointermove', (e) => {
+                const x = e.clientX / innerWidth - .5, y = e.clientY / innerHeight - .5;
+                phone.style.transform = `rotateY(${x * 10}deg) rotateX(${-y * 8}deg)`;
+                stage.querySelectorAll('[data-depth]').forEach(el => {
+                    const k = Number(el.dataset.depth) * 14;
+                    el.style.transform = `translate(${x * k}px, ${y * k}px)`;
+                });
+            });
+            document.querySelector('.hero').addEventListener('pointerleave', () => {
+                phone.style.transform = '';
+                stage.querySelectorAll('[data-depth]').forEach(el => el.style.transform = '');
             });
         }
 
-        function renderAuthState() {
-            const currentSession = localStorage.getItem('student_session');
-            const guestAuthActions = document.getElementById('guestAuthActions');
-            const studentAuthActions = document.getElementById('studentAuthActions');
-            const headerAvatarLetter = document.getElementById('headerAvatarLetter');
-
-            if (currentSession) {
-                // User is Logged In
-                const session = JSON.parse(currentSession);
-                guestAuthActions.style.display = 'none';
-                studentAuthActions.style.display = 'flex';
-
-                document.getElementById('headerStudentName').textContent = session.firstName;
-                document.getElementById('popupFullName').textContent = `${session.firstName} ${session.lastName}`;
-                document.getElementById('popupGradeName').textContent = gradeLabels[session.grade] || session.grade;
-                document.getElementById('popupStudentId').textContent = session.id;
-
-                // بنحط تاج بالمرحلة الدراسية بتاعة الطالب في OneSignal، عشان الإشعارات
-                // تستهدف بس طلاب نفس المرحلة، مش كل الطلاب المشتركين
-                if (session.grade && typeof OneSignalDeferred !== 'undefined') {
-                    OneSignalDeferred.push(async function (OneSignal) {
-                        await OneSignal.User.addTag('grade', session.grade.toUpperCase());
-                    });
-                }
-
-                // "تسجيل حضور" خفيف عشان الـ streak يفضل محدّث
-                if (session.id && session.role !== 'admin') {
-                    fetch('/api/auth?action=checkin', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ studentId: session.id })
-                    }).catch(() => { /* مش مشكلة لو فشلت */ });
-                }
-
-
-                if (session.role === 'admin' || session.grade === 'all') {
-                    headerAvatarLetter.textContent = '★'; headerAvatarLetter.classList.add('admin-avatar');
-                    document.getElementById('adminGradesContainer').style.display = 'block';
-                    document.getElementById('studentClassroomBtn').style.display = 'none';
-                } else {
-                    headerAvatarLetter.textContent = session.firstName.charAt(0).toUpperCase();
-                    headerAvatarLetter.classList.remove('admin-avatar');
-                    document.getElementById('adminGradesContainer').style.display = 'none';
-                    document.getElementById('studentClassroomBtn').style.display = 'flex';
-                }
-
-                // If logged in, skip the portfolio animation and just show dashboard shortcuts
-                document.getElementById('heroSubtitle').style.display = 'none';
-                document.getElementById('introTopSequence').style.marginTop = '0';
-                document.getElementById('portfolioSection').style.display = 'none';
-
-                // Add a welcome message instead of the portfolio for logged-in users
-                const welcomeDiv = document.createElement('div');
-                welcomeDiv.style.textAlign = 'center';
-                welcomeDiv.style.marginTop = '40px';
-                welcomeDiv.innerHTML = `
-                    <h2 style="font-size: 2.5rem; color: var(--glowing-cyan); margin-bottom: 15px;">أهلاً بك يا ${escapeHtml(session.firstName)} 👋</h2>
-                    <p style="font-size: 1.2rem; color: #94a3b8; margin-bottom: 30px;">جاهزين نتعلم حاجة جديدة النهاردة؟ يلا بينا!</p>
-                    <button class="auth-btn primary" style="padding: 12px 30px; font-size: 1.1rem;" onclick="enterClassroom()">
-                        <i class="fas fa-graduation-cap"></i> الانتقال لصفك الدراسي
-                    </button>
-                `;
-                document.querySelector('.main-content').appendChild(welcomeDiv);
-
-            } else {
-                // User is NOT logged in (Guest View)
-                guestAuthActions.style.display = 'flex';
-                studentAuthActions.style.display = 'none';
-                accountPopup.classList.remove('show');
-
-                // Run the Portfolio Animation Flow
-                runPortfolioAnimation();
-            }
+        // ---------- Intro → headline ----------
+        const title = document.getElementById('heroTitle');
+        [...title.querySelectorAll('.w')].forEach((w, i) => w.style.setProperty('--wd', `${120 + i * 90}ms`));
+        function startPage() {
+            Site.init();
+            Site.particles(document.getElementById('heroCanvas'), { density: innerWidth < 700 ? .6 : 1 });
+            Site.particles(document.getElementById('finalCanvas'), { density: .7, light: true, lineAlpha: .22 });
+            requestAnimationFrame(() => {
+                title.classList.add('go');
+                setTimeout(() => { const r = document.getElementById('mockRing'); if (r) r.style.strokeDashoffset = (97.4 * .1).toFixed(1); }, 300);
+            });
         }
-
-        function toggleAccountPopup(e) { e.stopPropagation(); accountPopup.classList.toggle('show'); document.getElementById('accountMenuBtn').classList.toggle('active'); }
-        document.addEventListener('click', (e) => { if (!accountPopup.contains(e.target) && e.target !== document.getElementById('accountMenuBtn')) { accountPopup.classList.remove('show'); const btn = document.getElementById('accountMenuBtn'); if (btn) btn.classList.remove('active'); } });
-
-        function handleHeroCta() {
-            const session = localStorage.getItem('student_session');
-            if (session) { enterClassroom(); } else { openModal('signup'); }
-        }
-
-        function logoutStudent() {
-            if (confirm('هل أنت متأكد من تسجيل الخروج؟')) {
-                localStorage.removeItem('student_session');
-                if (typeof OneSignalDeferred !== 'undefined') {
-                    OneSignalDeferred.push(async function (OneSignal) {
-                        await OneSignal.User.removeTag('grade');
-                    });
-                }
-                window.location.reload(); // Reload to reset the portfolio animation
-            }
-        }
-
-        function clearErrors() {
-            document.getElementById('loginStatus').style.display = 'none'; document.getElementById('signupStatus').style.display = 'none';
-            document.getElementById('loginId').classList.remove('input-error'); document.getElementById('loginPassword').classList.remove('input-error');
-        }
-
-        function openModal(mode = 'login') {
-            modal.classList.add('active'); document.body.style.overflow = 'hidden';
-            modalTabs.style.display = 'flex'; clearErrors(); switchTab(mode);
-        }
-
-        function closeModal() { modal.classList.remove('active'); document.body.style.overflow = 'auto'; clearErrors(); }
-
-        function switchTab(mode) {
-            clearErrors();
-            if (mode === 'login') {
-                document.getElementById('tabLogin').classList.add('active'); document.getElementById('tabSignup').classList.remove('active');
-                loginForm.classList.add('active'); signupForm.classList.remove('active');
-            } else {
-                document.getElementById('tabSignup').classList.add('active'); document.getElementById('tabLogin').classList.remove('active');
-                signupForm.classList.add('active'); loginForm.classList.remove('active');
-            }
-        }
-
-        document.getElementById('closeModalBtn').onclick = closeModal; modal.onclick = (e) => { if (e.target === modal) closeModal(); };
-
-        // Login Handler
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const status = document.getElementById('loginStatus'); const submitBtn = document.getElementById('loginSubmitBtn');
-            const studentId = document.getElementById('loginId').value.trim(); const password = document.getElementById('loginPassword').value;
-            clearErrors(); submitBtn.disabled = true;
-            try {
-                const data = await AuthProvider.login(studentId, password);
-                localStorage.setItem('student_session', JSON.stringify(data.student));
-                closeModal(); window.location.reload();
-            } catch (err) {
-                status.innerHTML = `<i class="fas fa-circle-exclamation"></i> <span>${escapeHtml(err.message || 'كود الطالب أو كلمة المرور غير صحيحة')}</span>`;
-                status.style.display = 'flex'; document.getElementById('loginId').classList.add('input-error'); document.getElementById('loginPassword').classList.add('input-error');
-            } finally { submitBtn.disabled = false; }
-        });
-
-        // Signup Handler
-        signupForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const status = document.getElementById('signupStatus'); const submitBtn = document.getElementById('signupSubmitBtn');
-            const phone = document.getElementById('phone').value.trim(); const parentPhone = document.getElementById('parentPhone').value.trim();
-            const phoneRegex = /^01[0125][0-9]{8}$/;
-            if (!phoneRegex.test(phone) || !phoneRegex.test(parentPhone)) {
-                status.innerHTML = '<i class="fas fa-circle-exclamation"></i> <span>يرجى إدخال أرقام هواتف مصرية صحيحة (11 رقم تبدأ بـ 01)</span>';
-                status.style.display = 'flex'; return;
-            }
-            const payload = {
-                firstName: document.getElementById('firstName').value.trim(), lastName: document.getElementById('lastName').value.trim(),
-                gender: document.getElementById('signupGender').value, branch: document.getElementById('signupBranch').value,
-                phone: phone, parentPhone: parentPhone,
-                grade: document.getElementById('signupGrade').value, password: document.getElementById('signupPassword').value
+        const intro = document.getElementById('intro');
+        let seen = false;
+        try { seen = sessionStorage.getItem('introSeen') === '1'; } catch (e) { }
+        if (Site.reduced || seen) {
+            intro.remove();
+            startPage();
+        } else {
+            try { sessionStorage.setItem('introSeen', '1'); } catch (e) { }
+            intro.classList.remove('hidden');
+            document.documentElement.style.overflow = 'hidden';
+            let done = false;
+            const finish = () => {
+                if (done) return; done = true;
+                intro.classList.add('out');
+                document.documentElement.style.overflow = '';
+                startPage();
+                setTimeout(() => intro.remove(), 1000);
             };
-            submitBtn.disabled = true; status.style.display = 'none';
-            try {
-                const data = await AuthProvider.signup(payload);
-                localStorage.setItem('student_session', JSON.stringify(data.student));
-                alert(`تم إنشاء الحساب بنجاح!\nكود الدخول الخاص بك هو: ${data.studentId}\nاحتفظ به لتسجيل الدخول.`);
-                closeModal(); window.location.reload();
-            } catch (err) {
-                status.innerHTML = `<i class="fas fa-circle-exclamation"></i> <span>${escapeHtml(err.message)}</span>`; status.style.display = 'flex';
-            } finally { submitBtn.disabled = false; }
-        });
-
-        function copyStudentIdFromPopup() { const id = document.getElementById('popupStudentId').textContent; navigator.clipboard.writeText(id); alert('تم نسخ الكود: ' + id); }
-
-        function enterClassroom() {
-            const session = JSON.parse(localStorage.getItem('student_session'));
-            if (session && gradeRoutes[session.grade]) { window.location.href = gradeRoutes[session.grade]; }
+            intro.addEventListener('click', finish);
+            setTimeout(finish, 1750);
         }
-    </script>
-    
-    <!-- PWA Service Worker Registration -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/OneSignalSDKWorker.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                    })
-                    .catch(error => {
-                        console.log('ServiceWorker registration failed: ', error);
-                    });
-            });
-        }
-
-        // --- Custom PWA Install Prompt Logic ---
-        let deferredPrompt;
-        const pwaInstallBtn = document.getElementById('pwa-install-btn');
-        
-        // Hide button if already installed (standalone mode)
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-        if (isStandalone && pwaInstallBtn) {
-            pwaInstallBtn.style.display = 'none';
-        }
-
-        window.addEventListener('beforeinstallprompt', (e) => {
-            // Prevent Chrome 67 and earlier from automatically showing the prompt
-            e.preventDefault();
-            // Stash the event so it can be triggered later
-            deferredPrompt = e;
-        });
-
-        if (pwaInstallBtn) {
-            pwaInstallBtn.addEventListener('click', async () => {
-                if (deferredPrompt) {
-                    // Show the native install prompt
-                    deferredPrompt.prompt();
-                    // Wait for the user to respond to the prompt
-                    const { outcome } = await deferredPrompt.userChoice;
-                    console.log(`User response to the install prompt: ${outcome}`);
-                    // We've used the prompt, and can't use it again, throw it away
-                    deferredPrompt = null;
-                } else {
-                    // Securely detect if the device is iOS
-                    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-                    
-                    if (isIOS) {
-                        const iosModal = document.getElementById('ios-install-popup');
-                        if (iosModal) {
-                            iosModal.classList.add('active'); // This manipulates CSS visibility properly as per the modal's stylesheet
-                        }
-                    } else {
-                        alert('التطبيق مثبت بالفعل على جهازك.');
-                    }
-                }
-            });
-        }
-
-        window.addEventListener('appinstalled', (e) => {
-            // Hide the button once successfully installed
-            if (pwaInstallBtn) {
-                pwaInstallBtn.style.display = 'none';
-            }
-            console.log('PWA was installed successfully');
-        });
+    })();
     </script>
 </body>
 </html>

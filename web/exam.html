@@ -1,690 +1,441 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
-
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>الامتحان | Miss Marwa</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Exam · Science Academy</title>
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
     <style>
-        :root {
-            --primary-blue: #2563eb;
-            --glowing-cyan: #00E5FF;
-            --bg-deep: #020617;
-            --text-light: #f8fafc;
-            --card-glass: rgba(15, 23, 42, 0.65);
-            --border-glass: rgba(0, 229, 255, 0.2);
+        body { user-select: none; -webkit-user-select: none; }
+        .xbar {
+            position: sticky; top: 0; z-index: 40; background: var(--glass);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--border);
         }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            /* منع تحديد النص في كل الصفحة عشان يصعب نسخ أسئلة الامتحان */
-            user-select: none;
-            -webkit-user-select: none;
-            -ms-user-select: none;
-        }
-
-        body {
-            font-family: 'Cairo', sans-serif;
-            background-color: var(--bg-deep);
-            color: var(--text-light);
-            overflow-x: hidden;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-
-        .bg-orbs {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: -1;
-            overflow: hidden;
-            background: radial-gradient(circle at 50% 50%, #0a0f24 0%, #020617 100%);
-        }
-
-        .orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(80px);
-            opacity: 0.4;
-        }
-
-        .orb-1 {
-            width: 400px;
-            height: 400px;
-            background: #00E5FF;
-            top: -10%;
-            left: -10%;
-        }
-
-        .orb-2 {
-            width: 500px;
-            height: 500px;
-            background: #2563eb;
-            bottom: -20%;
-            right: -10%;
-        }
-
-        .top-nav {
-            padding: 18px 5%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-            background: rgba(2, 6, 23, 0.65);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            z-index: 100;
-        }
-
-        .brand-name {
-            font-weight: 900;
-            font-size: 1.3rem;
-            color: #fff;
-            letter-spacing: 1px;
-        }
-
-        .brand-name span {
-            color: var(--glowing-cyan);
-        }
-
-        .timer-badge {
-            display: none;
-            align-items: center;
-            gap: 8px;
-            background: rgba(0, 229, 255, 0.08);
-            border: 1px solid var(--border-glass);
-            padding: 8px 18px;
-            border-radius: 50px;
-            font-weight: 800;
-            font-size: 1.05rem;
-            color: var(--glowing-cyan);
-        }
-
-        .timer-badge.warning {
-            color: #f87171;
-            border-color: #f87171;
-            background: rgba(239, 68, 68, 0.1);
-        }
-
-        .main-content {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 30px 20px 80px;
-            width: 100%;
-        }
-
-        .header-section {
-            text-align: center;
-            margin-bottom: 30px;
-            width: 100%;
-            max-width: 720px;
-        }
-
-        .header-section h1 {
-            font-size: 2rem;
-            margin: 0 0 6px;
-            font-weight: 900;
-            background: linear-gradient(to right, #ffffff, var(--glowing-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .header-section p {
-            color: #94a3b8;
-            font-size: 0.95rem;
-        }
-
-        .exam-wrapper {
-            width: 100%;
-            max-width: 720px;
-        }
-
-        .question-card {
-            background: var(--card-glass);
-            backdrop-filter: blur(14px);
-            border: 1px solid var(--border-glass);
-            padding: 22px 24px;
-            border-radius: 18px;
-            margin-bottom: 16px;
-        }
-
-        .question-text {
-            font-weight: 700;
-            font-size: 1.1rem;
-            margin-bottom: 14px;
-            line-height: 1.6;
-        }
-
-        .options-group {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .option-label {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            padding: 12px 16px;
-            cursor: pointer;
-            transition: 0.2s ease;
-        }
-
-        .option-label:hover {
-            border-color: var(--glowing-cyan);
-            background: rgba(0, 229, 255, 0.06);
-        }
-
-        .option-label input[type="radio"] {
-            width: 18px;
-            height: 18px;
-            accent-color: var(--glowing-cyan);
-            flex-shrink: 0;
-        }
-
-        .option-label span {
-            font-size: 1rem;
-        }
-
-        .submit-exam-btn {
-            width: 100%;
-            padding: 16px;
-            border-radius: 14px;
-            border: none;
-            background: linear-gradient(135deg, var(--primary-blue), var(--glowing-cyan));
-            color: #fff;
-            font-weight: 800;
-            font-size: 1.1rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 10px;
-            transition: 0.2s ease;
-        }
-
-        .submit-exam-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(0, 229, 255, 0.3);
-        }
-
-        .submit-exam-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .status-card {
-            background: var(--card-glass);
-            backdrop-filter: blur(14px);
-            border: 1px solid var(--border-glass);
-            border-radius: 20px;
-            padding: 50px 30px;
-            text-align: center;
-            width: 100%;
-            max-width: 500px;
-        }
-
-        .status-card i {
-            font-size: 3rem;
-            color: var(--glowing-cyan);
-            margin-bottom: 16px;
-            display: block;
-        }
-
-        .status-card h2 {
-            font-size: 1.5rem;
-            margin-bottom: 10px;
-        }
-
-        .status-card p {
-            color: #94a3b8;
-            font-size: 1rem;
-            line-height: 1.7;
-        }
-
-        .back-btn-inline {
-            display: inline-block;
-            margin-top: 22px;
-            padding: 10px 26px;
-            border-radius: 50px;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: var(--text-light);
-            text-decoration: none;
-            font-weight: 700;
-        }
-
-        .back-btn-inline:hover {
-            border-color: var(--glowing-cyan);
-            color: var(--glowing-cyan);
-        }
-
-        @media (max-width: 768px) {
-            .header-section h1 {
-                font-size: 1.5rem;
-            }
-
-            .question-card {
-                padding: 18px;
-            }
-
-            .timer-badge {
-                font-size: 0.9rem;
-                padding: 6px 12px;
-            }
-        }
+        .xbar-in { max-width: 1120px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
+        .xbar img { width: 34px; height: 34px; flex-shrink: 0; }
+        [data-theme="dark"] .xbar img { background: #fff; border-radius: 50%; padding: 2px; }
+        .xbar .ttl { flex: 1; min-width: 0; }
+        .xbar .ttl strong { display: block; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .xbar .ttl span { font-size: 12px; color: var(--muted); }
+        .timer { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px; border-radius: 12px; background: var(--primary-soft); color: var(--primary); font-weight: 800; font-size: 15px; }
+        .timer.warn { background: var(--warning-soft); color: var(--warning); }
+        .timer.danger { background: var(--danger-soft); color: var(--danger); animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: .65; } }
+        .xwrap { max-width: 1120px; margin: 0 auto; padding: 16px 16px 120px; }
+        .xgrid { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
+        @media (min-width: 1024px) { .xgrid { grid-template-columns: minmax(0, 1fr) 320px; } .strip { display: none !important; } .xwrap { padding-bottom: 40px; } }
+        @media (max-width: 1023px) { .side { display: none; } }
+        .prog-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13.5px; }
+        .strip { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 12px 2px 6px; }
+        .strip::-webkit-scrollbar { display: none; }
+        .qn { width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; font-weight: 700; font-size: 13.5px; background: var(--surface); border: 1px solid var(--border); color: var(--text-2); position: relative; transition: transform .12s, background .15s; }
+        .qn.answered { background: var(--success-soft); border-color: var(--success-line); color: var(--success); }
+        .qn.flagged::after { content: ""; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
+        .qn.current { background: var(--primary); border-color: var(--primary); color: #fff; transform: scale(1.06); }
+        .qgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+        .qgrid .qn { width: auto; height: 42px; }
+        .qcard { padding: 22px; }
+        @media (min-width: 768px) { .qcard { padding: 28px; } }
+        .qhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+        .flag-btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 10px; background: var(--surface-2); color: var(--text-2); font-weight: 600; font-size: 13px; }
+        .flag-btn.on { background: var(--accent-soft); color: var(--accent); }
+        .flag-btn.on .icon { fill: currentColor; }
+        .qtext { font-size: 19px; line-height: 1.6; font-weight: 600; margin: 0 0 20px; white-space: pre-wrap; }
+        @media (min-width: 768px) { .qtext { font-size: 21px; } }
+        .opts { display: flex; flex-direction: column; gap: 10px; }
+        .opt { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; background: var(--surface-2); border: 2px solid transparent; cursor: pointer; text-align: left; width: 100%; transition: background .15s, border-color .15s, transform .1s; }
+        .opt:hover { background: var(--surface-3); }
+        .opt:active { transform: scale(.99); }
+        .opt .letter { width: 34px; height: 34px; border-radius: 50%; background: var(--surface); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-2); flex-shrink: 0; box-shadow: var(--shadow-sm); }
+        .opt .otext { flex: 1; font-size: 16px; font-weight: 500; }
+        .opt.sel { background: var(--primary-soft); border-color: var(--primary); }
+        .opt.sel .letter { background: var(--primary); color: #fff; }
+        .qnav { display: flex; gap: 10px; margin-top: 22px; }
+        .qnav .btn { flex: 1; }
+        .qnav .next { flex: 2; }
+        .kbd-hint { margin-top: 14px; font-size: 12px; color: var(--faint); display: none; }
+        @media (min-width: 1024px) { .kbd-hint { display: block; } }
+        .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin: 12px 0; }
+        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+        .sumgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+        .sum { padding: 12px; border-radius: 14px; background: var(--surface-2); text-align: center; }
+        .sum b { display: block; font-size: 22px; font-weight: 800; }
+        .sum span { font-size: 12px; color: var(--muted); font-weight: 600; }
+        .result { text-align: center; max-width: 520px; margin: 24px auto; padding: 32px 24px; }
+        .result .ring { margin: 0 auto 16px; }
+        .result h2 { margin: 0 0 6px; font-size: 22px; }
+        .result p { margin: 0 0 6px; color: var(--text-2); }
+        .result .btns { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+        .warn-banner { margin-bottom: 14px; }
     </style>
 </head>
-
 <body>
-
-    <div class="bg-orbs">
-        <div class="orb orb-1"></div>
-        <div class="orb orb-2"></div>
-    </div>
-
-    <nav class="top-nav">
-        <div class="brand-name">Miss <span>Marwa</span></div>
-        <div class="timer-badge" id="timerBadge">
-            <i class="fas fa-stopwatch"></i>
-            <span id="timerText">00:00</span>
-        </div>
-    </nav>
-
-    <main class="main-content">
-        <div class="header-section">
-            <h1 id="pageHeading">جاري التحميل...</h1>
-            <p id="pageSubheading">اختاري إجابة واحدة لكل سؤال ثم سلّمي الامتحان</p>
-        </div>
-
-        <div class="exam-wrapper" id="examContainer">
-            <div class="status-card">
-                <i class="fas fa-spinner fa-spin"></i>
-                <h2>لحظات من فضلك</h2>
-                <p>بنجهزلك الامتحان...</p>
+    <header class="xbar">
+        <div class="xbar-in">
+            <img src="/assets/img/logo-96.png" alt="Science Academy" width="34" height="34">
+            <div class="ttl"><strong id="xTitle" dir="auto">Loading exam…</strong><span>Science Academy · Miss Marwa</span></div>
+            <div class="timer hidden" id="timer">
+                <svg class="icon sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span class="num" id="timerText">00:00</span>
             </div>
         </div>
+    </header>
+    <main class="xwrap" id="root">
+        <div class="card" style="max-width:640px;margin:30px auto"><div class="skel" style="height:22px;width:50%;margin-bottom:18px"></div><div class="skel" style="height:56px;margin-bottom:10px"></div><div class="skel" style="height:56px;margin-bottom:10px"></div><div class="skel" style="height:56px"></div></div>
     </main>
 
+    <script src="/assets/student.js"></script>
     <script>
-        const params = new URLSearchParams(window.location.search);
-        const examId = params.get('id');
+    (function () {
+        if (!window.App) return;
+        const { session, esc, icon, url, ring, scoreTone } = App;
 
-        // نفس حارس تسجيل الدخول المستخدم في باقي الموقع
-        const sessionData = localStorage.getItem('student_session');
-        if (!sessionData) {
-            alert('يرجى تسجيل الدخول أولاً');
-            window.location.href = './index.html';
-        }
-        const student = JSON.parse(sessionData || '{}');
+        const examId = new URLSearchParams(location.search).get('id');
+        if (!examId) { location.replace(url('exams.html')); return; }
 
-        if (!examId) {
-            window.location.href = './index.html';
-        }
-
-        // أسئلة العلوم ممكن يبقى فيها علامات زي < و > (مثلاً: "a<b" أو "<H2O>")، ولو اتحطت
-        // في الصفحة زي ما هي المتصفح بيفهمها كود HTML والسؤال بيختفي أو يبوظ. فبنحولها لنص عادي.
-        function esc(v) {
-            return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        }
-
-        let examQuestions = [];
-        let leaveWarningEnabled = false;
-        let timerInterval = null;
-        let tabSwitchCount = 0;
-
-        // ==================== منع النسخ والغش ====================
-
-        // منع الزرار اليمين (القائمة اللي فيها "نسخ" و"فحص العنصر")
-        document.addEventListener('contextmenu', (e) => e.preventDefault());
-
-        // منع نسخ أي نص من الصفحة
-        document.addEventListener('copy', (e) => e.preventDefault());
-        document.addEventListener('cut', (e) => e.preventDefault());
-
-        // منع أشهر اختصارات لوحة المفاتيح للنسخ/الطباعة/أدوات المطور
-        document.addEventListener('keydown', (e) => {
-            const key = (e.key || '').toLowerCase();
-            const ctrlOrCmd = e.ctrlKey || e.metaKey;
-
-            // F12 وأدوات المطور
-            if (key === 'f12') { e.preventDefault(); return; }
-            if (ctrlOrCmd && e.shiftKey && ['i', 'j', 'c'].includes(key)) { e.preventDefault(); return; }
-
-            // نسخ / قص / لصق / طباعة / حفظ / عرض المصدر
-            if (ctrlOrCmd && ['c', 'x', 'v', 'p', 's', 'u'].includes(key)) { e.preventDefault(); return; }
-
-            // زرار PrintScreen (المتصفح ملوش سيطرة كاملة عليه، لكن بنحاول نحذف اللي انسخ فوراً)
-            if (key === 'printscreen') {
-                navigator.clipboard?.writeText('').catch(() => { });
-            }
-        });
-
-        // تحذير لو الطالب حاول يقفل الصفحة أو يرجع للخلف أثناء الامتحان
-        window.addEventListener('beforeunload', function (e) {
-            if (leaveWarningEnabled) {
-                e.preventDefault();
-                e.returnValue = '';
-            }
-        });
-
-        // اكتشاف تبديل التابات أثناء الامتحان: تحذير أول مرة، وتسليم تلقائي لو اتكررت
-        document.addEventListener('visibilitychange', () => {
-            if (!leaveWarningEnabled || !document.hidden) return;
-
-            tabSwitchCount++;
-            if (tabSwitchCount === 1) {
-                alert('تنبيه: الخروج من صفحة الامتحان غير مسموح به. لو تكرر الأمر، هيتم تسليم الامتحان تلقائياً بإجاباتك الحالية.');
-            } else if (tabSwitchCount >= 2) {
-                submitAnswers(true, 'تم رصد خروجك من صفحة الامتحان أكتر من مرة، فتم تسليمه تلقائياً بإجاباتك الحالية.');
-            }
-        });
-
-        // ==================== العداد التنازلي ====================
-
-        function formatTime(totalSeconds) {
-            const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
-            const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
-            return `${m}:${s}`;
-        }
-
-        function startTimer(minutes) {
-            let remainingSeconds = minutes * 60;
-            const badge = document.getElementById('timerBadge');
-            const text = document.getElementById('timerText');
-            badge.style.display = 'flex';
-            text.textContent = formatTime(remainingSeconds);
-
-            timerInterval = setInterval(() => {
-                remainingSeconds--;
-                text.textContent = formatTime(remainingSeconds);
-
-                if (remainingSeconds <= 60) {
-                    badge.classList.add('warning');
-                }
-
-                if (remainingSeconds <= 0) {
-                    clearInterval(timerInterval);
-                    timeIsUp = true;
-                    submitAnswers(true, 'خلص وقت الامتحان، فتم تسليمه تلقائياً بإجاباتك الحالية.');
-                }
-            }, 1000);
-        }
-
-        function stopTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-            document.getElementById('timerBadge').style.display = 'none';
-        }
-
-        // ==================== عرض الحالات المختلفة ====================
-
-        function renderMessage(title, text, icon) {
-            stopTimer();
-            document.getElementById('pageHeading').textContent = 'الامتحان';
-            document.getElementById('pageSubheading').textContent = '';
-            const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
-            document.getElementById('examContainer').innerHTML = `
-                <div class="status-card">
-                    <i class="fas ${icon}"></i>
-                    <h2>${esc(title)}</h2>
-                    <p>${esc(text)}</p>
-                    <a href="${backUrl}" class="back-btn-inline">رجوع لقائمة الامتحانات</a>
-                </div>
-            `;
-        }
-
-        function renderResultScreen(score, total, note, allowReview = false, reviewData = null) {
-            stopTimer();
-            document.getElementById('pageHeading').textContent = 'نتيجتك';
-            document.getElementById('pageSubheading').textContent = '';
-            const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
-
-            let reviewBtnHtml = '';
-            if (allowReview && reviewData) {
-                window.currentReviewData = reviewData;
-                reviewBtnHtml = `<button onclick="renderReviewScreen()" class="back-btn-inline" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border-color: #10b981; margin-top:0; border-width: 2px; padding: 12px 30px;"><i class="fas fa-eye"></i> راجع إجاباتك</button>`;
-            }
-
-            document.getElementById('examContainer').innerHTML = `
-                <div class="status-card">
-                    <i class="fas fa-circle-check" style="color:#4ade80;"></i>
-                    <h2>تم تسليم هذا الامتحان</h2>
-                    <p>درجتك: <strong style="color:#fff; font-size:1.2rem;">${score} / ${total}</strong></p>
-                    ${note ? `<p style="margin-top:10px; color:#f87171;">${note}</p>` : ''}
-                    <div style="display:flex; flex-direction:column; align-items:center; gap:15px; margin-top:25px;">
-                        ${reviewBtnHtml}
-                        <a href="${backUrl}" class="back-btn-inline" style="margin-top:0;">رجوع لقائمة الامتحانات</a>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderReviewScreen() {
-            const data = window.currentReviewData;
-            if (!data) return;
-            
-            document.getElementById('pageHeading').textContent = data.title || 'مراجعة الإجابات';
-            document.getElementById('pageSubheading').textContent = 'الإجابات الصحيحة مظللة باللون الأخضر، وإجاباتك الخاطئة باللون الأحمر.';
-            
-            let html = '<div id="examForm" style="pointer-events: none; opacity: 0.95;">'; // read-only
-            
-            data.questions.forEach((q, qi) => {
-                const studentAnswerIndex = (data.answers && data.answers.length > qi) ? data.answers[qi] : -1;
-                html += `<div class="question-card">
-                    <p class="question-text">${qi + 1}. ${esc(q.question)}</p>
-                    <div class="options-group">`;
-                
-                q.options.forEach((opt, oi) => {
-                    let styleStr = "";
-                    let isChecked = (studentAnswerIndex == oi) ? "checked" : "";
-                    
-                    if (studentAnswerIndex == q.correctIndex && oi == q.correctIndex) {
-                        // Student got it right, highlight this option in green
-                        styleStr = "background: rgba(34, 197, 94, 0.2); border-color: #22c55e; color: #fff;";
-                    } else if (studentAnswerIndex != q.correctIndex) {
-                        if (oi == studentAnswerIndex) {
-                            // Highlight student's incorrect choice in red
-                            styleStr = "background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fff;";
-                        } else if (oi == q.correctIndex) {
-                            // Highlight the actual correct option in green
-                            styleStr = "background: rgba(34, 197, 94, 0.2); border-color: #22c55e; color: #fff;";
-                        }
-                    }
-                    
-                    html += `<label class="option-label" style="${styleStr}">
-                        <input type="radio" disabled ${isChecked}>
-                        <span>${esc(opt)}</span>
-                    </label>`;
-                });
-                html += `</div></div>`;
-            });
-            
-            html += `</div>`; // Close the read-only pointer-events wrapper here!
-            
-            const backUrl = `./materials.html?grade=${encodeURIComponent(student.grade || '')}&cat=exams`;
-            html += `<a href="${backUrl}" class="back-btn-inline" style="display:flex; justify-content:center; align-items:center; margin: 30px auto 10px; max-width: 250px; gap:8px;"><i class="fas fa-arrow-right"></i> رجوع لقائمة الامتحانات</a>`;
-            
-            document.getElementById('examContainer').innerHTML = html;
-        }
-
-        function renderExamForm(title, questions) {
-            document.getElementById('pageHeading').textContent = title;
-            document.getElementById('pageSubheading').textContent = 'اختاري إجابة واحدة لكل سؤال ثم سلّمي الامتحان';
-
-            let html = '<form id="examForm">';
-            questions.forEach((q, qi) => {
-                html += `<div class="question-card">
-                    <p class="question-text">${qi + 1}. ${esc(q.question)}</p>
-                    <div class="options-group">`;
-                q.options.forEach((opt, oi) => {
-                    html += `<label class="option-label">
-                        <input type="radio" name="q${qi}" value="${oi}" required>
-                        <span>${esc(opt)}</span>
-                    </label>`;
-                });
-                html += `</div></div>`;
-            });
-            html += `<button type="submit" class="submit-exam-btn" id="submitExamBtn">
-                <i class="fas fa-paper-plane"></i> تسليم الامتحان
-            </button></form>`;
-
-            document.getElementById('examContainer').innerHTML = html;
-            document.getElementById('examForm').addEventListener('submit', (e) => {
-                e.preventDefault();
-
-                const answers = examQuestions.map((q, qi) => {
-                    const selected = document.querySelector(`input[name="q${qi}"]:checked`);
-                    return selected ? parseInt(selected.value, 10) : -1;
-                });
-
-                if (answers.includes(-1)) {
-                    alert('لازم تجاوبي على كل الأسئلة قبل التسليم');
-                    return;
-                }
-
-                submitAnswers(false);
-            });
-        }
-
-        // ==================== التسليم (يدوي أو تلقائي) ====================
-
-        // isAutoSubmit=true بتتسلم أي إجابات موجودة من غير ما تشترط إن كل الأسئلة اتجاوبت
-        // (بتستخدم لما الوقت يخلص أو لما نظام منع الغش يقفل الامتحان تلقائياً)
+        const root = document.getElementById('root');
+        let questions = [], answers = [], current = 0;
+        const flagged = new Set();
+        let inExam = false;            // true while the student is answering
         let isSubmitting = false;
         let timeIsUp = false;
+        let timerInterval = null;
+        let tabSwitchCount = 0;
+        let pendingWarning = false;
+        const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-        async function submitAnswers(isAutoSubmit, autoNote) {
-            // نمنع تسليمين في نفس الوقت (مثلاً الوقت خلص وفي نفس اللحظة الطالب داس تسليم)
-            if (isSubmitting) return;
-            isSubmitting = true;
-            const submitBtn = document.getElementById('submitExamBtn');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري التسليم...';
+        // ==================== Anti-cheat ====================
+        document.addEventListener('contextmenu', (e) => { if (inExam) e.preventDefault(); });
+        document.addEventListener('copy', (e) => { if (inExam) e.preventDefault(); });
+        document.addEventListener('cut', (e) => { if (inExam) e.preventDefault(); });
+        document.addEventListener('keydown', (e) => {
+            if (!inExam) return;
+            const key = (e.key || '').toLowerCase();
+            const ctrl = e.ctrlKey || e.metaKey;
+            if (key === 'f12') { e.preventDefault(); return; }
+            if (ctrl && e.shiftKey && ['i', 'j', 'c'].includes(key)) { e.preventDefault(); return; }
+            if (ctrl && ['c', 'x', 'v', 'p', 's', 'u'].includes(key)) { e.preventDefault(); return; }
+            if (key === 'printscreen') navigator.clipboard?.writeText('').catch(() => { });
+            if (document.querySelector('.overlay') || ctrl || e.altKey) return;
+            // Shortcuts: 1–6 pick an answer, arrows move between questions
+            if (/^[1-6]$/.test(key)) { const i = Number(key) - 1; if (questions[current] && i < questions[current].options.length) choose(i); }
+            if (key === 'arrowright') go(current + 1);
+            if (key === 'arrowleft') go(current - 1);
+        });
+        window.addEventListener('beforeunload', (e) => { if (inExam) { e.preventDefault(); e.returnValue = ''; } });
+        // Leaving the page: first time = warning, second time = automatic submission (same rule as before)
+        document.addEventListener('visibilitychange', () => {
+            if (!inExam) return;
+            if (document.hidden) {
+                tabSwitchCount++;
+                if (tabSwitchCount >= 2) {
+                    submitAnswers(true, 'You left the exam page more than once, so it was submitted automatically with your current answers.');
+                } else {
+                    pendingWarning = true;
+                }
+            } else if (pendingWarning) {
+                pendingWarning = false;
+                App.sheet({
+                    iconName: 'alert', tone: 'danger', title: 'Stay on the exam page',
+                    subtitle: 'Leaving the exam page is not allowed.',
+                    html: `<p class="muted" style="margin:0">This is your first warning. If you leave the page again, your exam will be submitted automatically with your current answers.</p>`,
+                    actions: [{ label: 'Back to my exam', cls: 'btn-primary' }]
+                });
+                showBanner();
+            }
+        });
+
+        // ==================== Timer ====================
+        const pad = (n) => String(Math.max(0, Math.floor(n))).padStart(2, '0');
+        function startTimer(minutes) {
+            const endAt = Date.now() + minutes * 60 * 1000;
+            const el = document.getElementById('timer'), t = document.getElementById('timerText');
+            el.classList.remove('hidden');
+            const tick = () => {
+                const left = Math.round((endAt - Date.now()) / 1000);
+                t.textContent = `${pad(left / 60)}:${pad(left % 60)}`;
+                el.classList.toggle('warn', left <= 300 && left > 60);
+                el.classList.toggle('danger', left <= 60);
+                if (left <= 0) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    timeIsUp = true;
+                    submitAnswers(true, "Time's up — your exam was submitted automatically with your current answers.");
+                }
+            };
+            tick();
+            timerInterval = setInterval(tick, 1000);
+        }
+        function stopTimer() {
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+            document.getElementById('timer').classList.add('hidden');
+        }
+
+        // ==================== Exam UI ====================
+        function renderExam() {
+            root.innerHTML = `
+                <div class="xgrid">
+                    <section>
+                        <div class="reveal">
+                            <div class="prog-row"><b id="qPos"></b><span class="muted num" id="qDone"></span></div>
+                            <div class="progress"><i id="qBar"></i></div>
+                            <div class="strip" id="strip"></div>
+                        </div>
+                        <div id="banner"></div>
+                        <article class="card qcard reveal" id="qcard"></article>
+                    </section>
+                    <aside class="side">
+                        <div class="card reveal">
+                            <div class="card-head"><h2 class="card-title">${icon('grid')}Questions</h2><span class="xs muted">Tap to jump</span></div>
+                            <div class="qgrid" id="sideGrid"></div>
+                            <div class="legend"><span><i style="background:var(--success-soft);border:1px solid var(--success-line)"></i>Answered</span><span><i style="background:var(--accent)"></i>Flagged</span><span><i style="background:var(--surface);border:1px solid var(--border)"></i>Not answered</span></div>
+                            <button class="btn btn-primary btn-block" id="sideSubmit">${icon('send')}Review &amp; submit</button>
+                            <p class="xs muted" style="margin:12px 0 0">Stay on this page until you submit. Leaving twice submits your exam automatically.</p>
+                        </div>
+                    </aside>
+                </div>`;
+            document.getElementById('sideSubmit').addEventListener('click', openSubmitSheet);
+            root.querySelector('.xgrid').addEventListener('click', (e) => {
+                const n = e.target.closest('[data-q]'); if (n) go(Number(n.dataset.q));
+            });
+            renderQuestion(false);
+            App.reveal(root);
+        }
+
+        function showBanner() {
+            const b = document.getElementById('banner');
+            if (b) b.innerHTML = `<div class="notice danger warn-banner">${icon('alert')}<div><b>Warning:</b> you left the exam page once. Leaving again will submit your exam automatically.</div></div>`;
+        }
+
+        function navHtml() {
+            return questions.map((_, i) => {
+                const cls = [answers[i] >= 0 ? 'answered' : '', flagged.has(i) ? 'flagged' : '', i === current ? 'current' : ''].join(' ');
+                return `<button class="qn num ${cls}" data-q="${i}" aria-label="Question ${i + 1}${answers[i] >= 0 ? ', answered' : ''}${flagged.has(i) ? ', flagged' : ''}">${i + 1}</button>`;
+            }).join('');
+        }
+
+        function renderQuestion(animate = true) {
+            const q = questions[current];
+            const answered = answers.filter(a => a >= 0).length;
+            document.getElementById('qPos').textContent = `Question ${current + 1} of ${questions.length}`;
+            document.getElementById('qDone').textContent = `${answered}/${questions.length} answered`;
+            document.getElementById('qBar').style.width = `${(answered / questions.length) * 100}%`;
+            document.getElementById('strip').innerHTML = navHtml();
+            document.getElementById('sideGrid').innerHTML = navHtml();
+            const cur = document.querySelector('#strip .current');
+            if (cur) {
+                const strip = document.getElementById('strip');
+                strip.scrollTo({ left: cur.offsetLeft - strip.clientWidth / 2 + cur.clientWidth / 2, behavior: animate ? 'smooth' : 'auto' });
             }
 
-            const answers = examQuestions.map((q, qi) => {
-                const selected = document.querySelector(`input[name="q${qi}"]:checked`);
-                return selected ? parseInt(selected.value, 10) : -1;
+            const last = current === questions.length - 1;
+            const card = document.getElementById('qcard');
+            card.innerHTML = `
+                <div class="qhead">
+                    <span class="chip primary">Question ${current + 1}</span>
+                    <button class="flag-btn ${flagged.has(current) ? 'on' : ''}" id="flagBtn" aria-pressed="${flagged.has(current)}">${icon('flag', 'sm')}${flagged.has(current) ? 'Flagged' : 'Flag for review'}</button>
+                </div>
+                <p class="qtext" dir="auto">${esc(q.question)}</p>
+                <div class="opts" role="radiogroup" aria-label="Answer options">
+                    ${(q.options || []).map((o, i) => `<button class="opt ${answers[current] === i ? 'sel' : ''}" role="radio" aria-checked="${answers[current] === i}" data-o="${i}">
+                        <span class="letter">${LETTERS[i] || i + 1}</span><span class="otext" dir="auto">${esc(o)}</span></button>`).join('')}
+                </div>
+                <div class="qnav">
+                    <button class="btn btn-ghost" id="prevBtn" ${current === 0 ? 'disabled' : ''}>${icon('arrowLeft')}Back</button>
+                    <button class="btn btn-primary next" id="nextBtn">${last ? `${icon('send')}Review &amp; submit` : `Next${icon('arrowRight')}`}</button>
+                </div>
+                <p class="kbd-hint">Tip: press 1–4 to choose an answer and ← → to move between questions.</p>`;
+            if (animate && card.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                card.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.22,.61,.36,1)' });
+            }
+            card.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => choose(Number(b.dataset.o))));
+            document.getElementById('flagBtn').addEventListener('click', () => {
+                if (flagged.has(current)) flagged.delete(current); else flagged.add(current);
+                renderQuestion(false);
             });
+            document.getElementById('prevBtn').addEventListener('click', () => go(current - 1));
+            document.getElementById('nextBtn').addEventListener('click', () => last ? openSubmitSheet() : go(current + 1));
+        }
 
-            // بنحاول التسليم لحد 3 مرات لو النت فصل لحظة. قبل كده لو التسليم التلقائي فشل
-            // مرة واحدة، الطالب كان بيتقال له "افتح الامتحان تاني" — وده مستحيل لأن الامتحان
-            // بيتقفل بعد أول فتح، فإجاباته كانت بتضيع خالص.
+        function choose(i) {
+            if (!inExam || isSubmitting) return;
+            answers[current] = i;
+            renderQuestion(false);
+        }
+        function go(i) {
+            if (!inExam || i < 0 || i >= questions.length || i === current) return;
+            current = i;
+            renderQuestion(true);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function openSubmitSheet() {
+            if (!inExam || isSubmitting) return;
+            const answered = answers.filter(a => a >= 0).length;
+            const unanswered = questions.length - answered;
+            const firstEmpty = answers.findIndex(a => a < 0);
+            const flaggedList = [...flagged].sort((a, b) => a - b);
+            const html = `
+                <div class="sumgrid">
+                    <div class="sum"><b class="num" style="color:var(--success)">${answered}</b><span>Answered</span></div>
+                    <div class="sum"><b class="num" style="color:var(--accent)">${flaggedList.length}</b><span>Flagged</span></div>
+                    <div class="sum" style="${unanswered ? 'background:var(--danger-soft)' : ''}"><b class="num" style="color:${unanswered ? 'var(--danger)' : 'var(--text)'}">${unanswered}</b><span>Not answered</span></div>
+                </div>
+                <div class="qgrid" id="sheetGrid" style="margin-bottom:14px">${navHtml()}</div>
+                ${unanswered
+                    ? `<div class="notice danger">${icon('alert')}<div>Answer every question before you submit. Tap a number above to jump to it.</div></div>`
+                    : flaggedList.length
+                        ? `<div class="notice warning">${icon('flag')}<div>You flagged question${flaggedList.length > 1 ? 's' : ''} ${flaggedList.map(i => i + 1).join(', ')}. Double-check before submitting if you're unsure.</div></div>`
+                        : `<div class="notice success">${icon('checkCircle')}<div>All questions answered. After you submit, you can't change your answers.</div></div>`}`;
+            const actions = unanswered
+                ? [{ label: `Go to question ${firstEmpty + 1}`, icon: 'arrowRight', onClick: (close) => { close(); go(firstEmpty); } },
+                   { label: 'Keep working', cls: 'btn-ghost' }]
+                : [{ label: 'Submit exam', icon: 'send', onClick: (close) => { close(); submitAnswers(false); } },
+                   { label: 'Keep reviewing', cls: 'btn-ghost' }];
+            const close = App.sheet({ iconName: 'send', title: 'Submit your exam?', subtitle: 'Quick check before you finish.', html, actions });
+            document.getElementById('sheetGrid')?.addEventListener('click', (e) => {
+                const n = e.target.closest('[data-q]'); if (n) { close(); go(Number(n.dataset.q)); }
+            });
+        }
+
+        // ==================== Submission (manual or automatic) ====================
+        async function submitAnswers(isAuto, autoNote) {
+            if (isSubmitting) return;
+            isSubmitting = true;
+            document.querySelectorAll('.overlay [data-close]').forEach(b => b.click());
+            document.querySelectorAll('#nextBtn, #sideSubmit').forEach(b => { b.disabled = true; });
+            // Only tell the student we're submitting if it takes more than a moment
+            const slowToast = setTimeout(() => App.toast('Submitting your answers…'), 900);
+
             let lastError = null;
+            // Retry up to 3 times if the connection drops for a moment
             for (let attempt = 1; attempt <= 3; attempt++) {
                 try {
                     const res = await fetch('/api/exams?action=submit', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ examId, studentId: student.id, answers })
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ examId, studentId: session.id, answers })
                     });
                     const data = await res.json().catch(() => ({}));
                     if (!res.ok) {
-                        // رفض حقيقي من السيرفر (مش مشكلة نت) — مفيش فايدة نعيد المحاولة
-                        lastError = new Error(data.error || 'فشل تسليم الامتحان');
-                        lastError.final = true;
+                        lastError = new Error(data.error || 'The exam could not be submitted.');
+                        lastError.final = true;   // a real refusal from the server — retrying won't help
                         break;
                     }
-                    leaveWarningEnabled = false;
                     isSubmitting = false;
-                    renderResultScreen(data.score, data.total, isAutoSubmit ? autoNote : null);
+                    clearTimeout(slowToast);
+                    renderResult(data.score, data.total, isAuto ? autoNote : null, false);
                     return;
                 } catch (err) {
                     lastError = err;
                     await new Promise(r => setTimeout(r, attempt * 1500));
                 }
             }
-
             isSubmitting = false;
+            clearTimeout(slowToast);
 
-            if (isAutoSubmit || timeIsUp || !document.getElementById('submitExamBtn')) {
-                // الامتحان وقف (الوقت خلص)، بس الإجابات لسه محفوظة في الصفحة — نديله زرار يعيد التسليم
-                // ونقفل الاختيارات عشان محدش يعدّل بعد الوقت (الإجابات المختارة بتتقري عادي)
+            if (isAuto || timeIsUp) {
+                // Time is up / auto-submit failed: answers stay on the page (locked) with a retry button
                 stopTimer();
-                document.querySelectorAll('#examForm input, #submitExamBtn').forEach(el => { el.disabled = true; });
-                document.getElementById('retrySubmitCard')?.remove();
-                leaveWarningEnabled = !lastError?.final;
-                document.getElementById('examContainer').insertAdjacentHTML('afterbegin', `
-                    <div class="status-card" id="retrySubmitCard" style="margin-bottom:20px;">
-                        <i class="fas fa-wifi"></i>
-                        <h2>التسليم ماوصلش</h2>
-                        <p>${esc(lastError?.message || 'مشكلة في الاتصال')}</p>
-                        <p>إجاباتك لسه موجودة. اتأكد من النت ودوس "إعادة التسليم" — متقفلش الصفحة.</p>
-                        <button class="submit-exam-btn" onclick="document.getElementById('retrySubmitCard').remove(); submitAnswers(true, ${JSON.stringify(autoNote || '').replace(/"/g, '&quot;')})">
-                            <i class="fas fa-rotate-right"></i> إعادة التسليم
-                        </button>
-                    </div>`);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                const keepWarning = !lastError?.final;
+                inExam = false;
+                root.innerHTML = `<div class="card result reveal">
+                    <div class="empty" style="padding:0"><div class="bubble" style="background:var(--danger-soft);color:var(--danger)">${icon('wifiOff')}</div></div>
+                    <h2>Your answers haven't reached us yet</h2>
+                    <p>${esc(lastError?.message || 'Connection problem.')}</p>
+                    <p class="small muted">Your answers are kept on this page. Check your internet and tap “Submit again”. Don't close this page.</p>
+                    <div class="btns"><button class="btn btn-primary" id="retryBtn">${icon('refresh')}Submit again</button></div>
+                </div>`;
+                App.reveal(root);
+                if (keepWarning) window.onbeforeunload = (e) => { e.preventDefault(); e.returnValue = ''; };
+                document.getElementById('retryBtn').addEventListener('click', () => submitAnswers(true, autoNote));
                 return;
             }
 
-            alert('حصل خطأ أثناء التسليم: ' + (lastError?.message || '') + '\nإجاباتك لسه موجودة، حاول تاني.');
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> تسليم الامتحان';
-            }
+            document.querySelectorAll('#nextBtn, #sideSubmit').forEach(b => { b.disabled = false; });
+            App.sheet({
+                iconName: 'wifiOff', tone: 'danger', title: "Couldn't submit",
+                subtitle: lastError?.message || 'Connection problem.',
+                html: `<p class="muted" style="margin:0">Your answers are still here. Check your internet and try again.</p>`,
+                actions: [{ label: 'Try again', icon: 'refresh', onClick: (close) => { close(); submitAnswers(false); } }, { label: 'Close', cls: 'btn-ghost' }]
+            });
         }
 
-        // ==================== بدء الامتحان ====================
+        // ==================== Result & status screens ====================
+        function renderResult(score, total, note, canReview) {
+            stopTimer();
+            inExam = false;
+            window.onbeforeunload = null;
+            const tone = scoreTone(score, total);
+            const title = tone === 'good' ? 'Excellent work!' : tone === 'bad' ? "Let's review this together" : 'Good job!';
+            const msg = tone === 'good' ? 'You really know this. Keep it up.' : tone === 'bad' ? 'Go back over the lesson and ask Miss Marwa about anything unclear.' : "You're on the right track — a little more practice and you'll ace it.";
+            root.innerHTML = `<div class="card result reveal">
+                ${ring(score, total, { size: 'lg', label: 'Score' })}
+                <h2>${title}</h2>
+                <p>${msg}</p>
+                ${note ? `<div class="notice warning" style="margin-top:14px;text-align:left">${icon('info')}<div>${esc(note)}</div></div>` : ''}
+                ${canReview ? '' : `<p class="xs muted" style="margin-top:14px">The full answer review opens once the exam closes for everyone.</p>`}
+                <div class="btns">
+                    ${canReview ? `<a class="btn btn-primary" href="${url('exam-results.html', { id: examId })}">${icon('eye')}Review answers</a>` : ''}
+                    <a class="btn ${canReview ? 'btn-ghost' : 'btn-primary'}" href="${url('exams.html')}">${icon('clipboard')}Back to exams</a>
+                    <a class="btn btn-ghost" href="${url('home.html')}">${icon('home')}Home</a>
+                </div>
+            </div>`;
+            App.reveal(root);
+        }
 
-        async function startExam() {
+        function renderStatus(ic, title, text, tone = '') {
+            stopTimer();
+            inExam = false;
+            const style = tone === 'danger' ? 'background:var(--danger-soft);color:var(--danger)' : tone === 'warning' ? 'background:var(--warning-soft);color:var(--warning)' : '';
+            root.innerHTML = `<div class="card result reveal">
+                <div class="empty" style="padding:0"><div class="bubble" style="${style}">${icon(ic)}</div></div>
+                <h2>${esc(title)}</h2><p>${esc(text)}</p>
+                <div class="btns"><a class="btn btn-primary" href="${url('exams.html')}">${icon('clipboard')}Back to exams</a></div>
+            </div>`;
+            App.reveal(root);
+        }
+
+        // ==================== Start ====================
+        async function start() {
+            let data;
             try {
                 const res = await fetch('/api/exams?action=start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ examId, studentId: student.id })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ examId, studentId: session.id })
                 });
-                const data = await res.json();
+                data = await res.json().catch(() => ({}));
+            } catch (e) {
+                renderStatus('wifiOff', 'No connection', "We couldn't reach the server. Check your internet and open the exam again.", 'danger');
+                return;
+            }
+            if (data.title) { document.getElementById('xTitle').textContent = data.title; document.title = `${data.title} · Science Academy`; }
 
-                if (data.status === 'started') {
-                    examQuestions = data.questions;
-                    renderExamForm(data.title, data.questions);
-                    leaveWarningEnabled = true;
-                    if (data.timeLimitMinutes) {
-                        startTimer(data.timeLimitMinutes);
-                    }
-                } else if (data.status === 'submitted') {
-                    renderResultScreen(data.score, data.total, null, false);
-                } else if (data.status === 'expired_taken') {
-                    renderResultScreen(data.score, data.total, 'انتهى وقت هذا الامتحان (متاح لك المراجعة الآن).', true, data);
-                } else if (data.status === 'active_taken') {
-                    renderMessage('تم أداء الامتحان', data.error || 'لقد قمت بأداء هذا الامتحان بالفعل. ستتمكن من مراجعة إجاباتك بعد انتهاء مدة الامتحان.', 'fa-circle-check');
-                } else if (data.status === 'expired_nottaken') {
-                    renderMessage('انتهى الوقت', data.error || 'انتهى وقت الامتحان ولم تقم بأدائه.', 'fa-clock');
-                } else if (data.status === 'expired') {
-                    renderMessage('انتهى الوقت', data.error || 'انتهى وقت هذا الامتحان.', 'fa-clock');
-                } else if (data.status === 'locked') {
-                    renderMessage('لا يمكنك الدخول', data.error || 'أنتِ دخلتِ هذا الامتحان قبل كده، ومينفعش تدخلي مرة تانية', 'fa-lock');
-                } else {
-                    renderMessage('حصل خطأ', data.error || 'حصل خطأ غير متوقع، حاولي تاني.', 'fa-triangle-exclamation');
-                }
-            } catch (err) {
-                renderMessage('حصل خطأ', 'تعذر الاتصال بالخادم، تأكدي من الإنترنت وحاولي تاني.', 'fa-triangle-exclamation');
+            if (data.status === 'started') {
+                questions = Array.isArray(data.questions) ? data.questions : [];
+                if (!questions.length) { renderStatus('alert', 'This exam has no questions', 'Please let Miss Marwa know.', 'warning'); return; }
+                answers = questions.map(() => -1);
+                inExam = true;
+                renderExam();
+                if (data.timeLimitMinutes) startTimer(data.timeLimitMinutes);
+            } else if (data.status === 'expired_taken') {
+                renderResult(data.score, data.total, null, true);
+            } else if (data.status === 'active_taken') {
+                renderStatus('checkCircle', 'Already submitted', "You've already taken this exam. You can review your answers once it closes for everyone.");
+            } else if (data.status === 'expired_nottaken' || data.status === 'expired') {
+                renderStatus('clock', 'This exam has closed', "The time for this exam is over and it wasn't taken.", 'warning');
+            } else if (data.status === 'locked') {
+                renderStatus('lock', "This exam can't be reopened", 'You opened this exam before. Ask Miss Marwa if you need it reopened.', 'danger');
+            } else {
+                renderStatus('alert', 'Something went wrong', data.error || 'Please try again in a moment.', 'danger');
             }
         }
-
-        window.addEventListener('DOMContentLoaded', startExam);
+        start();
+    })();
     </script>
-
 </body>
-
 </html>
