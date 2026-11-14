@@ -58,6 +58,9 @@ CREATE TABLE IF NOT EXISTS exam_submissions (
     submitted_at DATETIME,
     UNIQUE(exam_id, student_id)
 );
+-- Added automatically by functions/api/admin-auth.js (ensureAppSchema):
+--   shuffle_seed TEXT, leave_count INTEGER (times the student left the exam page; NULL = attempt from before this was recorded),
+--   auto_submitted TEXT ('' = by the student, 'left-page', 'time-up')
 
 -- ===== Staff portal (created automatically by functions/api/admin-auth.js on first use) =====
 -- staff: Miss Marwa (role 'teacher') + assistants (role 'assistant'). Passwords are PBKDF2 hashes.

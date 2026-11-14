@@ -106,8 +106,8 @@
                         ${rows.length ? `<div>${rows.map(r => {
                             const p = r.score / total * 100, lvl = A.levelOf(p);
                             return `<div class="res-row"><span class="rk">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}</span>
-                                <div style="min-width:0"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b><small class="muted">${esc(r.studentId)}${r.branch ? ' · ' + A.BRANCHES[r.branch] : ''} · ${esc(A.fmtDate(r.submittedAt, true))}</small></div>
-                                <span class="lvl ${lvl} small">${A.LEVEL_LABEL[lvl]}</span>
+                                <div style="min-width:0"><a class="name-link" href="/admin/student.html?id=${encodeURIComponent(r.studentId)}"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b></a><small class="muted">${esc(r.studentId)}${r.branch ? ' · ' + A.BRANCHES[r.branch] : ''} · ${esc(A.fmtDate(r.submittedAt, true))}</small></div>
+                                <span class="lvl ${lvl} small">${r.leaves > 0 || r.auto === 'left-page' ? `<span class="flag ${r.auto === 'left-page' || r.leaves >= 2 ? 'danger' : 'warn'}" title="${r.auto === 'left-page' ? 'Submitted automatically after leaving the page twice' : `Left the exam page ${r.leaves}×`}">${icon('alert', 'sm')}${r.auto === 'left-page' ? 'Auto-submitted' : `Left ${r.leaves}×`}</span>` : A.LEVEL_LABEL[lvl]}</span>
                                 <span class="score">${r.score}/${total}${canReset ? ` <button class="icon-btn" data-reset="${esc(r.studentId)}" title="Re-open for this student" aria-label="Re-open">${icon('refresh', 'sm')}</button>` : ''}</span></div>`;
                         }).join('')}</div>` : '<div class="empty-state" style="padding:24px"><p>Nobody has submitted yet.</p></div>'}
                     </div>
@@ -116,7 +116,7 @@
                             <div class="card-head"><h2 class="card-title">${icon('alert')}${ex.closed ? 'Didn\'t take it' : 'Haven\'t taken it yet'}</h2>
                                 ${notTaken.length && A.can('reports.send') ? `<button class="btn btn-wa btn-sm" id="sendAll">${icon('whatsapp', 'sm')}Message parents</button>` : ''}</div>
                             ${notTaken.length ? notTaken.map(r => `<div class="res-row" style="grid-template-columns:minmax(0,1fr) auto">
-                                <div style="min-width:0"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b>
+                                <div style="min-width:0"><a class="name-link" href="/admin/student.html?id=${encodeURIComponent(r.studentId)}"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b></a>
                                     <small class="muted">${r.reason === 'opened' ? '<span style="color:var(--warning)">Opened it, didn\'t submit</span>' : 'Didn\'t open it'}${r.branch ? ' · ' + A.BRANCHES[r.branch] : ' · no group'}</small></div>
                                 <div style="display:flex;gap:4px">
                                     ${canReset && r.reason === 'opened' ? `<button class="icon-btn" data-reset="${esc(r.studentId)}" title="Re-open for this student" aria-label="Re-open">${icon('refresh', 'sm')}</button>` : ''}

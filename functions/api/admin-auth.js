@@ -43,7 +43,7 @@ export const PERMISSIONS = {
     'exams.reset-attempt': BOTH, // always written to the audit log
     'offline.view': BOTH,
     'offline.create-exam': BOTH,
-    'offline.edit-exam': BOTH,
+    'offline.edit-exam': TEACHER,   // assistants enter marks/absences only
     'offline.save-grades': BOTH,
     'offline.delete-exam': TEACHER,
     'analytics.view': BOTH,
@@ -150,6 +150,9 @@ export async function ensureAppSchema(db) {
     if (ex && ex.length && !ex.includes('shuffle')) steps.push('ALTER TABLE exams ADD COLUMN shuffle INTEGER NOT NULL DEFAULT 1');
     const es = await cols('exam_submissions');
     if (es && es.length && !es.includes('shuffle_seed')) steps.push('ALTER TABLE exam_submissions ADD COLUMN shuffle_seed TEXT');
+    // Exam-integrity record. No default on purpose: NULL = an attempt from before this was recorded.
+    if (es && es.length && !es.includes('leave_count')) steps.push('ALTER TABLE exam_submissions ADD COLUMN leave_count INTEGER');     // times the student left the exam page
+    if (es && es.length && !es.includes('auto_submitted')) steps.push('ALTER TABLE exam_submissions ADD COLUMN auto_submitted TEXT');  // NULL/'' = by the student · 'left-page' · 'time-up'
     steps.push(`CREATE TABLE IF NOT EXISTS student_groups (
         id TEXT PRIMARY KEY, grade TEXT NOT NULL, branch TEXT NOT NULL, name TEXT NOT NULL,
         active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);

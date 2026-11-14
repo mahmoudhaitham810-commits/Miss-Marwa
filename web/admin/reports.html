@@ -86,7 +86,7 @@
                     <button class="btn btn-soft" id="allOnline">${icon('whatsapp', 'sm')}Online reports (${sendable.length})</button></div>` : ''}
                 <div class="card fade-up" style="--i:1;padding:6px 12px">
                     ${list.map(r => `<div class="rep-row">
-                        <div style="min-width:0"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b>
+                        <div style="min-width:0"><a class="name-link" href="/admin/student.html?id=${encodeURIComponent(r.studentId)}"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b></a>
                             <div class="nums"><span>${esc(r.studentId)}</span>${r.branch ? `<span class="pill ${r.branch}">${A.BRANCHES[r.branch]}</span>` : '<span class="pill legacy">No group</span>'}
                                 <span>Center <b class="lvl ${A.levelOf(r.centerPct) || ''}">${A.fmtPct(r.centerPct)}</b></span>
                                 <span>Online <b class="lvl ${A.levelOf(r.onlinePct) || ''}">${A.fmtPct(r.onlinePct)}</b></span>

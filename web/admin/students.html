@@ -104,7 +104,7 @@
             const stud = { studentId: s.student_id, firstName: s.first_name, lastName: s.last_name, gender: s.gender, branch: s.branch, grade: s.grade, parentPhone: s.parent_phone };
             const actions = [];
             if (s.parent_phone) actions.push({ label: 'WhatsApp the parent', icon: 'whatsapp', cls: 'btn-wa', href: ParentMessages.waLink(s.parent_phone, `السلام عليكم ولي أمر ${s.gender === 'female' ? 'الطالبة' : 'الطالب'} ${s.first_name} ${s.last_name} — مس مروة · Science Academy`), external: true });
-            actions.push({ label: 'Results & analytics', icon: 'chart', cls: 'btn-soft', href: `/admin/analytics.html?grade=${s.grade}&student=${encodeURIComponent(s.student_id)}` });
+            actions.push({ label: 'Results & exam alerts', icon: 'chart', cls: 'btn-soft', href: `/admin/student.html?id=${encodeURIComponent(s.student_id)}` });
             if (A.can('students.reset-password')) actions.push({ label: 'Reset password', icon: 'lock', cls: 'btn-ghost', onClick: (close) => { close(); setTimeout(() => resetPw(s), 240); } });
             if (A.can('students.delete')) actions.push({ label: 'Delete account', icon: 'trash', cls: 'btn-ghost danger-text', onClick: (close) => { close(); setTimeout(() => del(s), 240); } });
             Site.sheet({

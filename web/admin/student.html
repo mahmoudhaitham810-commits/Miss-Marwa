@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Student · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container" id="content">
+            <div class="skel" style="height:120px;border-radius:18px;margin-bottom:18px"></div>
+            <div class="skel" style="height:360px;border-radius:18px"></div>
+        </div>
+    </main>
+
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/admin/assets/messages.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'students', title: 'Student' });
+        const qs = new URLSearchParams(location.search);
+        const id = qs.get('id') || qs.get('student') || '';
+        if (!id) { location.replace('/admin/students.html'); return; }
+
+        let D;
+        try { D = await api(`/api/analytics?action=profile&studentId=${encodeURIComponent(id)}`); }
+        catch (err) {
+            $('content').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('user', 'lg')}</div><h3>Student not found</h3><p>${esc(err.message)}</p><a class="btn btn-soft" href="/admin/students.html">Back to students</a></div>`;
+            return;
+        }
+        const st = D.student, S = D.summary, I = D.integrity;
+        const name = `${st.firstName} ${st.lastName}`;
+        document.title = `${name} · Science Academy Staff`;
+        const pct = (v) => A.fmtPct(v);
+        const lvl = (v) => A.levelOf(v) || '';
+        const day = (d) => d ? new Date(String(d).length === 10 ? d + 'T12:00:00' : d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+        const STATUS = {
+            taken: null, absent: ['Absent', 'danger'], 'not-entered': ['Not entered', 'muted'],
+            missed: ['Missed', 'danger'], opened: ['Opened, not submitted', 'warn'], 'in-progress': ['In progress', 'muted'], 'not-yet': ['Not taken yet', 'muted']
+        };
+        const scoreCell = (r) => r.status === 'taken'
+            ? `<b class="num">${r.score}/${r.total}</b><span class="lvl ${lvl(r.pct)} small">${pct(r.pct)}</span>`
+            : `<span class="st-tag ${STATUS[r.status][1]}">${STATUS[r.status][0]}</span>`;
+        const back = document.referrer && new URL(document.referrer).origin === location.origin && !document.referrer.includes('student.html') ? document.referrer : '/admin/students.html';
+        const flagsTotal = D.online.reduce((a, o) => a + o.flags.filter(f => f.level !== 'info').length, 0);
+
+        $('content').innerHTML = `
+            <div class="page-head">
+                <div style="display:flex;gap:14px;align-items:center;min-width:0">
+                    <a class="icon-btn" href="${esc(back)}" aria-label="Back">${icon('arrowLeft')}</a>
+                    <span class="avatar" style="width:52px;height:52px;font-size:20px">${A.initials({ firstName: st.firstName })}</span>
+                    <div style="min-width:0"><h1 dir="auto" style="margin:0">${esc(name)}</h1>
+                        <p style="margin:2px 0 0">${esc(st.studentId)} · ${esc(A.GRADES[st.grade] || st.grade)} · ${st.branch ? `<span class="pill ${st.branch}">${A.BRANCHES[st.branch]}</span>` : '<span class="pill legacy">No group</span>'} · joined ${esc(day(st.createdAt))}</p></div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    ${st.parentPhone && A.can('reports.send') ? `<button class="btn btn-wa" id="centerRep">${icon('whatsapp', 'sm')}Center report</button><button class="btn btn-soft" id="onlineRep">${icon('whatsapp', 'sm')}Online report</button>` : ''}
+                </div>
+            </div>
+
+            <div class="kpis">
+                <div class="kpi fade-up" style="--i:0"><b class="num lvl ${lvl(S.centerPct)}">${pct(S.centerPct)}</b><span>Center average</span><small>${S.centerTaken} taken · ${S.centerAbsent} absent${S.centerRank ? ` · #${S.centerRank} in grade` : ''}</small></div>
+                <div class="kpi fade-up" style="--i:1"><b class="num lvl ${lvl(S.onlinePct)}">${pct(S.onlinePct)}</b><span>Online average</span><small>${S.onlineTaken} taken · ${S.onlineMissed} missed</small></div>
+                <div class="kpi fade-up" style="--i:2"><b class="num lvl ${lvl(S.combinedPct)}">${pct(S.combinedPct)}</b><span>Combined</span><small>${S.combinedRank ? `Rank #${S.combinedRank} of ${S.gradeSize}` : S.ranked ? '' : `Not ranked — took ${S.participation ?? 0}% of exams`}</small></div>
+                <div class="kpi fade-up" style="--i:3"><b class="num" style="color:${flagsTotal || I.gap ? 'var(--danger)' : 'var(--success)'}">${flagsTotal + (I.gap ? 1 : 0)}</b><span>Exam alerts</span><small>${flagsTotal || I.gap ? 'see Exam integrity below' : 'nothing suspicious'}</small></div>
+            </div>
+
+            <div class="card fade-up" style="--i:2;margin-bottom:18px" id="integrityCard">
+                <div class="card-head"><h2 class="card-title">${icon('shield')}Exam integrity</h2></div>
+                ${I.gap ? `<div class="notice danger" style="margin-bottom:10px">${icon('alert')}<div><b>Online is ${I.gap} points above center.</b> Online ${pct(S.onlinePct)} vs center ${pct(S.centerPct)} over ${S.onlineTaken} online and ${S.centerTaken} center exams — worth checking how the online exams are taken.</div></div>` : ''}
+                ${D.online.filter(o => o.flags.length).length ? D.online.filter(o => o.flags.length).map(o => `
+                    <div class="flag-row"><div style="min-width:0"><b dir="auto">${esc(o.name)}</b><div class="small muted">${esc(day(o.submittedAt || o.date))}${o.status === 'taken' ? ` · ${o.score}/${o.total}` : ''}</div></div>
+                        <div class="flags">${o.flags.map(f => `<span class="flag ${f.level}">${icon(f.level === 'info' ? 'clock' : 'alert', 'sm')}${esc(f.text)}</span>`).join('')}</div></div>`).join('')
+                    : `<p class="muted" style="margin:0">${icon('checkCircle', 'sm')} No alerts on ${D.online.filter(o => o.status === 'taken').length} online exam${D.online.filter(o => o.status === 'taken').length === 1 ? '' : 's'}: never left the exam page, nothing auto-submitted.</p>`}
+                <p class="small muted" style="margin:12px 0 0">Leaving the exam page is recorded the moment it happens (the 2nd time submits the exam automatically).${I.notRecorded ? ` ${I.notRecorded} older attempt${I.notRecorded > 1 ? 's were' : ' was'} taken before this was saved, so ${I.notRecorded > 1 ? 'they show' : 'it shows'} "not recorded".` : ''}</p>
+            </div>
+
+            <div class="grid-2c">
+                <div class="card fade-up" style="--i:3">
+                    <div class="card-head"><h2 class="card-title">${icon('edit')}Center exams</h2><span class="small muted">${D.center.length} exam${D.center.length === 1 ? '' : 's'}</span></div>
+                    ${D.center.length ? `<div class="hist-table">${D.center.slice().reverse().map(r => `
+                        <div class="hrow"><div style="min-width:0"><b dir="auto">${esc(r.name)}</b><div class="small muted">${esc(day(r.date))}</div></div><div class="hscore">${scoreCell(r)}</div></div>`).join('')}</div>`
+                        : '<p class="muted" style="margin:0">No center marks yet.</p>'}
+                </div>
+                <div class="card fade-up" style="--i:4">
+                    <div class="card-head"><h2 class="card-title">${icon('clipboard')}Online exams</h2><span class="small muted">${D.online.length} exam${D.online.length === 1 ? '' : 's'}</span></div>
+                    ${D.online.length ? `<div class="hist-table">${D.online.map(r => `
+                        <div class="hrow"><div style="min-width:0"><b dir="auto">${esc(r.name)}</b>
+                            <div class="small muted">${esc(day(r.submittedAt || r.date))}${r.minutes !== null ? ` · took ${r.minutes < 1 ? '<1' : Math.round(r.minutes)} min${r.timeLimit ? ` of ${r.timeLimit}` : ''}` : ''}${r.status === 'taken' || r.status === 'opened' ? (r.recorded ? ` · <span style="white-space:nowrap">left page: <b style="color:${r.leaves ? 'var(--danger)' : 'inherit'}">${r.leaves}×</b></span>` : ' · <span style="white-space:nowrap">left page: not recorded</span>') : ''}</div></div>
+                            <div class="hscore">${scoreCell(r)}${r.flags.some(f => f.level !== 'info') ? `<span class="flag-dot" title="${esc(r.flags.map(f => f.text).join(' · '))}">${icon('alert', 'sm')}</span>` : ''}</div></div>`).join('')}</div>`
+                        : '<p class="muted" style="margin:0">No online exams for this grade yet.</p>'}
+                </div>
+            </div>
+
+            <div class="card fade-up" style="--i:5;margin-top:18px">
+                <div class="card-head"><h2 class="card-title">${icon('user')}Contact</h2></div>
+                <div class="kv"><div><span>Student phone</span><b class="num">${esc(st.phone || '—')}</b></div><div><span>Parent phone</span><b class="num">${esc(st.parentPhone || '—')}</b></div></div>
+            </div>`;
+
+        $('centerRep')?.addEventListener('click', async () => {
+            try {
+                const d = await api(`/api/analytics?action=student&studentId=${encodeURIComponent(id)}`);
+                if (!d.center.history.some(h => h.status !== 'not-entered')) return Site.toast('No center marks yet', 'info');
+                A.preview(st, ParentMessages.fullCenter({ student: { ...d.student, grade: st.grade }, rows: d.center.history }), 'Center report');
+            } catch (err) { Site.toast(err.message, 'error'); }
+        });
+        $('onlineRep')?.addEventListener('click', async () => {
+            try {
+                const rep = await api(`/api/exams?action=student-report&studentId=${encodeURIComponent(id)}`);
+                if (!rep.exams.length) return Site.toast('No online exams counted yet', 'info');
+                A.preview(st, ParentMessages.onlineReport(rep), 'Online report');
+            } catch (err) { Site.toast(err.message, 'error'); }
+        });
+    })();
+    </script>
+</body>
+</html>

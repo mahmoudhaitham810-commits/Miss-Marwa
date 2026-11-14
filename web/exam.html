@@ -117,6 +117,7 @@
         let timeIsUp = false;
         let timerInterval = null;
         let tabSwitchCount = 0;
+        let autoReason = null; // 'left-page' | 'time-up' — saved with the submission for the staff portal
         let pendingWarning = false;
         const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -175,6 +176,9 @@
             if (!inExam) return;
             if (document.hidden) {
                 tabSwitchCount++;
+                // Record every time the student leaves the page — saved even if they never come back
+                try { fetch('/api/exams?action=leave', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examId }) }).catch(() => { }); } catch (e) { }
+                if (tabSwitchCount >= 2) autoReason = 'left-page';
                 if (tabSwitchCount >= 2) {
                     submitAnswers(true, 'You left the exam page more than once, so it was submitted automatically with your current answers.');
                 } else {
@@ -207,6 +211,7 @@
                     clearInterval(timerInterval);
                     timerInterval = null;
                     timeIsUp = true;
+                    autoReason = autoReason || 'time-up';
                     submitAnswers(true, "Time's up — your exam was submitted automatically with your current answers.");
                 }
             };
@@ -360,7 +365,7 @@
                 try {
                     const res = await fetch('/api/exams?action=submit', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ examId, studentId: session.id, answers })
+                        body: JSON.stringify({ examId, studentId: session.id, answers, leaves: tabSwitchCount, autoReason: isAuto ? autoReason : null })
                     });
                     const data = await res.json().catch(() => ({}));
                     if (res.status === 401 && data.code === 'STUDENT_SESSION_REQUIRED') {

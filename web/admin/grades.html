@@ -49,7 +49,8 @@
                             <h2 id="entryTitle" dir="auto"></h2>
                             <div class="muted small" id="entryMeta"></div>
                         </div>
-                        <button class="btn btn-ghost btn-sm" id="editExamBtn"><span data-icon="clipboard" style="display:contents"></span>Edit</button>
+                        <button class="btn btn-ghost btn-sm" id="editExamBtn"><span data-icon="edit" style="display:contents"></span>Edit</button>
+                        <button class="btn btn-ghost btn-sm danger-text" id="deleteExamBtn"><span data-icon="trash" style="display:contents"></span>Delete</button>
                         <button class="btn btn-soft btn-sm" id="voiceBtn" title="Say a name and a mark"></button>
                     </div>
                     <div class="progress-line">
@@ -247,21 +248,26 @@
                     catch (err) { Site.toast(err.message, 'error'); }
                 }
             });
-            if (A.can('offline.delete-exam')) actions.push({
-                label: 'Delete this exam', cls: 'btn-danger', onClick: (close) => {
-                    close();
-                    setTimeout(() => Site.sheet({
-                        iconName: 'alert', title: `Delete "${e.examName}"?`, subtitle: 'All its marks go too. A copy is kept in the activity log.',
-                        actions: [{ label: 'Delete', cls: 'btn-danger', onClick: async (c2) => {
-                            try { await api('/api/offline-exams?action=delete-exam', { body: { examId: e.id } }); c2(); Site.toast('Exam deleted', 'success'); closeEntry(); await load(); }
-                            catch (err) { Site.toast(err.message, 'error'); }
-                        } }, { label: 'Cancel', cls: 'btn-ghost' }]
-                    }), 260);
-                }
-            });
             actions.push({ label: 'Cancel', cls: 'btn-ghost' });
             Site.sheet({ iconName: 'clipboard', title: 'Edit exam', html: examForm(e), actions });
             A.segmented($('fBranch'), chosen, (v) => { chosen = v; });
+        });
+
+        // Teacher only: delete a center exam (all its marks are copied into the activity log first)
+        $('deleteExamBtn').addEventListener('click', () => {
+            const e = current; if (!e || !A.can('offline.delete-exam')) return;
+            const st = examStats(e);
+            Site.sheet({
+                iconName: 'alert', title: `Delete "${e.examName}"?`,
+                subtitle: `Every mark saved for this exam${e.branch ? '' : ' — Center and Private'} is removed with it (${st.entered} on this screen${st.absent ? `, ${st.absent} absent` : ''}). A full copy is kept in the activity log.`,
+                html: `<div class="field" style="margin:0"><label for="delConfirm">Type <b dir="auto">${esc(e.examName)}</b> to confirm</label><input class="fin" id="delConfirm" dir="auto" autocomplete="off"></div>`,
+                actions: [{ label: 'Delete exam and its marks', cls: 'btn-danger', onClick: async (close) => {
+                    if ($('delConfirm').value.trim() !== String(e.examName).trim()) return Site.toast('The name doesn\'t match', 'error');
+                    try { await api('/api/offline-exams?action=delete-exam', { body: { examId: e.id } }); close(); Site.toast('Exam deleted', 'success'); closeEntry(); await load(); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+            setTimeout(() => $('delConfirm')?.focus(), 250);
         });
 
         // ---------- Assign group to students with none ----------
@@ -298,7 +304,8 @@
             $('listView').hidden = true; $('entryView').hidden = false;
             $('entryTitle').textContent = current.examName;
             $('entryMeta').innerHTML = `${esc(A.GRADES[grade])} · ${current.legacy ? '<span class="pill legacy">Before split</span>' : `<span class="pill ${current.branch}">${A.BRANCHES[current.branch]}</span>`} · ${esc(fmtDate(current.examDate || current.createdAt))} · out of <b>${esc(current.totalMarks)}</b>`;
-            $('editExamBtn').hidden = !A.can('offline.edit-exam') && !A.can('offline.delete-exam');
+            $('editExamBtn').hidden = !A.can('offline.edit-exam');
+            $('deleteExamBtn').hidden = !A.can('offline.delete-exam');
             $('searchBox').value = '';
             renderEntry();
             window.scrollTo({ top: 0 });

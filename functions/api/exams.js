@@ -127,6 +127,7 @@ export async function onRequestGet(context) {
     const db = getDb(env);
 
     try {
+        if (db) await ensureAppSchema(db); // adds new columns once (cheap after the first call)
         // === تستخدمها لوحة الأدمن عشان تجيب كل الامتحانات ===
         if (action === 'list') {
             // ── حماية: أدمن بس ──
@@ -221,7 +222,8 @@ export async function onRequestGet(context) {
 
             const { results: subs } = await db.prepare(
                 `SELECT s.student_id as studentId, s.first_name as firstName, s.last_name as lastName, s.gender, s.branch,
-                        s.phone, s.parent_phone as parentPhone, sub.status, sub.score, sub.submitted_at as submittedAt
+                        s.phone, s.parent_phone as parentPhone, sub.status, sub.score, sub.submitted_at as submittedAt,
+                        sub.leave_count as leaves, sub.auto_submitted as auto
                  FROM exam_submissions sub
                  JOIN students s ON s.student_id = sub.student_id
                  WHERE sub.exam_id = ?
@@ -392,6 +394,7 @@ export async function onRequestPost(context) {
     const db = getDb(env);
 
     try {
+        if (db) await ensureAppSchema(db);
         const data = await request.json();
 
         // === الأدمن بتنشئ امتحان جديد ===
@@ -598,7 +601,7 @@ export async function onRequestPost(context) {
             const seed = exam.shuffle === 0 ? null : newSeed();
             try {
                 await db.prepare(
-                    "INSERT INTO exam_submissions (exam_id, student_id, status, shuffle_seed) VALUES (?, ?, 'started', ?)"
+                    "INSERT INTO exam_submissions (exam_id, student_id, status, shuffle_seed, leave_count, auto_submitted) VALUES (?, ?, 'started', ?, 0, '')"
                 ).bind(examId, studentId, seed).run();
             } catch (insertErr) {
                 return Response.json({ status: 'locked', error: 'لا يمكن بدء الامتحان الآن' }, { status: 403 });
@@ -623,6 +626,18 @@ export async function onRequestPost(context) {
                 timeLimitMinutes: exam.timeLimitMinutes || null,
                 questions: questionsForStudent
             });
+        }
+
+        // === The student left the exam page (sent the moment it happens, so it's kept even if they never return) ===
+        if (action === 'leave') {
+            const who = await requireStudent(request, env, db, data.studentId);
+            if (who.error) return who.error;
+            const examId = String(data.examId || '');
+            if (!examId) return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
+            await db.prepare(
+                "UPDATE exam_submissions SET leave_count = MIN(COALESCE(leave_count, 0) + 1, 50) WHERE exam_id = ? AND student_id = ? AND status = 'started'"
+            ).bind(examId, who.id).run();
+            return Response.json({ ok: true });
         }
 
         // === الطالب بيسلم إجاباته، والسيرفر هو اللي بيحسب الدرجة ===
@@ -672,14 +687,18 @@ export async function onRequestPost(context) {
 
             // Answers arrive in the student's own order → map back to the original order before marking/storing
             const original = toOriginalAnswers(answers, questions, submission.shuffle_seed);
+            const leaves = Math.max(0, Math.min(50, parseInt(data.leaves, 10) || 0));
+            const autoReason = ['left-page', 'time-up'].includes(data.autoReason) ? data.autoReason : '';
             let correctCount = 0;
             questions.forEach((q, i) => {
                 if (original[i] === q.correctIndex) correctCount++;
             });
 
             const upd = await db.prepare(
-                "UPDATE exam_submissions SET status = 'submitted', score = ?, answers = ?, submitted_at = CURRENT_TIMESTAMP WHERE exam_id = ? AND student_id = ? AND status = 'started'"
-            ).bind(correctCount, JSON.stringify(original), examId, studentId).run();
+                `UPDATE exam_submissions SET status = 'submitted', score = ?, answers = ?, submitted_at = CURRENT_TIMESTAMP,
+                    leave_count = MAX(COALESCE(leave_count, 0), ?), auto_submitted = ?
+                 WHERE exam_id = ? AND student_id = ? AND status = 'started'`
+            ).bind(correctCount, JSON.stringify(original), leaves, autoReason, examId, studentId).run();
             if (upd.meta && upd.meta.changes === 0) {
                 return Response.json({ error: 'الامتحان ده اتسلم قبل كده، مينفعش تسلمي مرتين' }, { status: 403 });
             }
