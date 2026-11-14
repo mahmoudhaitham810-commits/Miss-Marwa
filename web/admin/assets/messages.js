@@ -9,7 +9,15 @@
 
     const GRADE_AR = { prep1: 'الصف الأول الإعدادي', prep2: 'الصف الثاني الإعدادي', prep3: 'الصف الثالث الإعدادي', sec1: 'الصف الأول الثانوي' };
     const BRANCH_AR = { center: 'سنتر', private: 'خاص' };
-    const SIGN = 'مع تحيات مس مروة — Science Academy 💐';
+    // Every parent message starts with this line (no sign-off at the end)
+    const OPEN = 'السلام عليكم — تيم مس مروة 🌷';
+    // Right-to-left safety: English names / scores inside Arabic lines are fenced with left-to-right
+    // marks so WhatsApp never re-orders them, and each line starts with a right-to-left mark so
+    // lines that begin with an emoji or an English word still read right-to-left.
+    // (Left-to-right marks on both sides — supported by every WhatsApp version, unlike newer isolate characters.)
+    const LRM = '\u200E', RLM = '\u200F';
+    const iso = (v) => { const t = String(v ?? '').trim(); return /[\u0600-\u06FF]/.test(t) ? t : `${LRM}${t}${LRM}`; }; // Arabic text needs no fence
+    const rtl = (lines) => lines.map(l => (l ? RLM + l : l)).join('\n');
 
     // Boy / girl wording, from the student's gender
     function g(student) {
@@ -32,7 +40,7 @@
         };
     }
     const fullName = (s) => `${s.firstName || ''} ${s.lastName || ''}`.trim();
-    const pct = (v) => (v === null || v === undefined ? '—' : `${Math.round(v)}%`);
+    const pct = (v) => (v === null || v === undefined ? '—' : `\u200E${Math.round(v)}%\u200E`); // stays "68%" inside Arabic lines
     function levelAr(p) {
         if (p === null || p === undefined) return '';
         return p >= 85 ? 'ممتاز' : p >= 70 ? 'جيد' : p >= 50 ? 'متوسط' : 'يحتاج متابعة';
@@ -43,118 +51,114 @@
         if (isNaN(x)) return String(d);
         return x.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', timeZone: 'Africa/Cairo' });
     }
-    const greeting = (s) => `السلام عليكم ولي أمر ${g(s).student} ${fullName(s)}`;
+    const head = (s) => [OPEN, `ولي أمر ${g(s).student}: ${iso(fullName(s))}`];
+    const scoreLine = (score, total, p) => `${iso(`${score}/${total}`)} (${pct(p)}${p === null || p === undefined ? '' : ' — ' + levelAr(p)})`;
 
     // 1. Online results report (taken ✅, missed ❌ — missed counts as 0)
     function onlineReport(report) {
         const s = report.student, w = g(s);
-        const lines = [
-            `${greeting(s)} 🌟`,
-            `تقرير الامتحانات الأونلاين — ${GRADE_AR[s.grade] || s.grade || ''}${s.branch ? ' · ' + (BRANCH_AR[s.branch] || '') : ''}`,
-            ''
-        ];
+        const lines = [...head(s), `الصف: ${GRADE_AR[s.grade] || s.grade || ''}${s.branch ? ' — ' + (BRANCH_AR[s.branch] || '') : ''}`, '', 'تقرير الامتحانات الأونلاين:'];
         report.exams.forEach(e => {
-            lines.push(e.status === 'taken' ? `✅ ${e.title}: ${e.score}/${e.total}` : `❌ ${e.title}: ${w.didntTake}`);
+            lines.push(e.status === 'taken' ? `✅ ${iso(e.title)}: ${iso(`${e.score}/${e.total}`)}` : `❌ ${iso(e.title)}: ${w.didntTake}`);
         });
         lines.push('');
-        if (report.possible > 0) lines.push(`📊 الإجمالي: ${report.earned}/${report.possible} (${pct(report.percent)}) — ${levelAr(report.percent)}`);
-        lines.push(`📝 ${w.took} ${report.taken} من ${report.taken + report.missed} امتحانات`);
-        lines.push('', SIGN);
-        return lines.join('\n');
+        if (report.possible > 0) lines.push(`الإجمالي: ${scoreLine(report.earned, report.possible, report.percent)}`);
+        lines.push(`${w.took} ${report.taken} من ${report.taken + report.missed} امتحانات`);
+        return rtl(lines);
     }
 
     // 2. Missed online exam (only after it closed)
     function missedOnline({ student, examTitle, closedAt }) {
         const w = g(student);
-        return [
-            `${greeting(student)}،`,
-            `نحيطكم علماً أن ${student.firstName} ${w.didntTake} امتحان "${examTitle}" الأونلاين، والذي انتهى يوم ${dateAr(closedAt)}.`,
-            'برجاء المتابعة، ولو فيه عذر يسعدنا نعرفه على هذا الرقم.',
-            '',
-            SIGN
-        ].join('\n');
+        return rtl([
+            ...head(student),
+            `امتحان أونلاين: ${iso(examTitle)}`,
+            ...(closedAt ? [`انتهى يوم: ${dateAr(closedAt)}`] : []),
+            `${iso(student.firstName)} ${w.didntTake} الامتحان.`,
+            'برجاء المتابعة.'
+        ]);
     }
 
     // 3. Opened but didn't submit (only once the exam or its timer is over)
     function notSubmitted({ student, examTitle, reopened }) {
         const w = g(student);
         const lines = [
-            `${greeting(student)}،`,
-            `${student.firstName} ${w.opened} امتحان "${examTitle}" ولم يتم تسليم الإجابات، وده بيحصل غالباً لما ${w.student} يخرج من صفحة الامتحان.`
+            ...head(student),
+            `امتحان أونلاين: ${iso(examTitle)}`,
+            `${iso(student.firstName)} ${w.opened} الامتحان ولم يتم تسليم الإجابات، وده بيحصل غالباً لما ${w.student} يخرج من صفحة الامتحان.`
         ];
         if (reopened) lines.push('تم إعادة فتح الامتحان مرة واحدة — برجاء التأكيد على عدم الخروج من الصفحة حتى التسليم.');
-        lines.push('', SIGN);
-        return lines.join('\n');
+        lines.push('برجاء المتابعة.');
+        return rtl(lines);
     }
 
     // 4. Latest center mark (or absence)
     function latestCenter({ student, examName, date, score, total, absent, groupAvg }) {
         const w = g(student);
+        const lines = [...head(student), `امتحان: ${iso(examName)}`];
+        if (date) lines.push(`التاريخ: ${dateAr(date)}`);
         if (absent) {
-            return [`السلام عليكم 🌟`, `${student.firstName} ${w.was} ${w.absent} عن امتحان "${examName}"${date ? ' يوم ' + dateAr(date) : ''}.`, 'برجاء المتابعة.', '', SIGN].join('\n');
+            lines.push(`${iso(student.firstName)} ${w.was} ${w.absent} عن الامتحان.`, 'برجاء المتابعة.');
+            return rtl(lines);
         }
         const p = total > 0 ? (score / total) * 100 : null;
-        const lines = [
-            'السلام عليكم 🌟',
-            `درجة ${fullName(student)} في امتحان "${examName}"${date ? ' (' + dateAr(date) + ')' : ''}: ${score}/${total} — ${pct(p)} (${levelAr(p)})`
-        ];
+        lines.push(`الدرجة: ${scoreLine(score, total, p)}`);
         if (groupAvg !== null && groupAvg !== undefined) lines.push(`متوسط المجموعة: ${pct(groupAvg)}`);
-        lines.push('', SIGN);
-        return lines.join('\n');
+        return rtl(lines);
     }
 
     // 5. Full center report (absences counted as 0)
     function fullCenter({ student, rows }) {
         const w = g(student);
-        const lines = [`${greeting(student)} 🌟`, `تقرير امتحانات ${student.branch === 'private' ? 'الخاص' : 'السنتر'} — ${GRADE_AR[student.grade] || ''}`, ''];
+        const lines = [...head(student), `تقرير امتحانات ${student.branch === 'private' ? 'الخاص' : 'السنتر'} — ${GRADE_AR[student.grade] || ''}`, ''];
         let earned = 0, possible = 0, taken = 0, missed = 0;
         rows.forEach(r => {
             if (r.status === 'not-entered') return;
-            if (r.status === 'absent') { lines.push(`❌ ${r.name}: ${w.absent}`); missed++; possible += r.total; }
-            else { lines.push(`✅ ${r.name}: ${r.score}/${r.total}`); taken++; earned += r.score; possible += r.total; }
+            if (r.status === 'absent') { lines.push(`❌ ${iso(r.name)}: ${w.absent}`); missed++; possible += r.total; }
+            else { lines.push(`✅ ${iso(r.name)}: ${iso(`${r.score}/${r.total}`)}`); taken++; earned += r.score; possible += r.total; }
         });
         const p = possible > 0 ? (earned / possible) * 100 : null;
         lines.push('');
-        if (possible > 0) lines.push(`📊 الإجمالي: ${earned}/${possible} (${pct(p)}) — ${levelAr(p)}`);
-        lines.push(`📝 حضر ${taken} من ${taken + missed} امتحانات`);
-        lines.push('', SIGN);
-        return lines.join('\n');
+        if (possible > 0) lines.push(`الإجمالي: ${scoreLine(earned, possible, p)}`);
+        lines.push(`حضر ${taken} من ${taken + missed} امتحانات`);
+        return rtl(lines);
     }
 
     // 6. Online vs center gap (only with 3+ exams of each kind)
     function gap({ student, onlinePct, centerPct }) {
         const w = g(student);
-        return [
-            `${greeting(student)}،`,
-            `لاحظنا إن مستوى ${student.firstName} في الامتحانات الأونلاين (${pct(onlinePct)}) أعلى بفارق كبير من امتحانات السنتر (${pct(centerPct)}).`,
-            `نتمنى نتعاون مع حضرتك إن ${student.firstName} ${w.solves} الامتحانات الأونلاين ${w.herself} من غير مساعدة، عشان نعرف ${w.level} الحقيقي ${w.help}.`,
-            '',
-            SIGN
-        ].join('\n');
+        return rtl([
+            ...head(student),
+            `الامتحانات الأونلاين: ${pct(onlinePct)}`,
+            `امتحانات السنتر: ${pct(centerPct)}`,
+            `لاحظنا إن مستوى ${iso(student.firstName)} في الأونلاين أعلى بفارق كبير من السنتر.`,
+            `نتمنى نتعاون مع حضرتك إن ${iso(student.firstName)} ${w.solves} الامتحانات الأونلاين ${w.herself} من غير مساعدة، عشان نعرف ${w.level} الحقيقي ${w.help}.`
+        ]);
     }
 
     // 7. Congratulations (from the analytics movers cards)
     function congrats({ student, rank, before, groupLabel, grade, examName }) {
         const w = g(student);
         const place = rank === 1 ? w.first : `رقم ${rank}`;
-        return [
+        return rtl([
+            ...head(student),
             'ألف مبروك 🎉',
-            `${student.firstName} ${w.became} ${place} على ${groupLabel || 'المجموعة'} في ${GRADE_AR[grade] || ''}${examName ? ` بعد امتحان "${examName}"` : ''}${before ? ` (كان الترتيب #${before})` : ''}.`,
-            `فخورين ${w.proud} جداً — مس مروة 💐`
-        ].join('\n');
+            `${iso(student.firstName)} ${w.became} ${place} على ${groupLabel || 'المجموعة'} في ${GRADE_AR[grade] || ''}.`,
+            ...(examName ? [`بعد امتحان: ${iso(examName)}`] : []),
+            ...(before ? [`الترتيب قبلها: ${before}`] : []),
+            `فخورين ${w.proud} جداً 💐`
+        ]);
     }
 
-    // 8 — DRAFT (waiting for approval): the private report link, sent once per parent
+    // 8 — on hold (not sent yet): the private report link, sent once per parent
     function parentLink({ student, url }) {
-        const w = g(student);
-        return [
-            `السلام عليكم ولي أمر ${w.student} ${fullName(student)} 🌷`,
-            `ده رابط خاص بمتابعة ${student.firstName} على Science Academy:`,
-            url,
-            `من الرابط ده هتلاقوا كل درجات امتحانات السنتر والامتحانات الأونلاين أول بأول، وبيتحدث لوحده مع كل درجة جديدة.`,
-            `⚠️ الرابط خاص بيكم بس — يا ريت ما يتبعتش لحد تاني.`,
-            SIGN
-        ].join('\n');
+        return rtl([
+            ...head(student),
+            `ده رابط خاص بمتابعة ${iso(student.firstName)} على Science Academy:`,
+            iso(url),
+            'من الرابط ده هتلاقوا كل درجات امتحانات السنتر والامتحانات الأونلاين أول بأول، وبيتحدث لوحده مع كل درجة جديدة.',
+            '⚠️ الرابط خاص بيكم بس — يا ريت ما يتبعتش لحد تاني.'
+        ]);
     }
 
     // WhatsApp link for an Egyptian number (01xxxxxxxxx → 201xxxxxxxxx)

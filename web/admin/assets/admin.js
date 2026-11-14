@@ -51,6 +51,10 @@
         set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
     };
     let STAFF = null, PERMS = [];
+    // Features that are built but switched off for now. Parent report links: on hold (Nov 2026) —
+    // set to true to show the "Parent link" / "Report links" buttons again.
+    const FEATURES = { parentLinks: false };
+    const feature = (k) => FEATURES[k] === true || store.get('feature_' + k, '') === '1';
     const can = (p) => PERMS.includes(p);
 
     // ---------- API with in-place re-login (unsaved work stays on screen) ----------
@@ -434,7 +438,7 @@
 
     window.Admin = {
         boot, api, icon, esc, can, store, GRADES, BRANCHES, fmtPct, levelOf, LEVEL_LABEL, initials, segmented, normalizeDigits,
-        toMs, fmtDate, timeLeft, preview, queue, sender, waHref, waNumber, downloadCsv, gradeSelect, hydrate, enhanceSelect,
+        toMs, fmtDate, timeLeft, preview, queue, sender, waHref, waNumber, feature, downloadCsv, gradeSelect, hydrate, enhanceSelect,
         get staff() { return STAFF; }
     };
 })();

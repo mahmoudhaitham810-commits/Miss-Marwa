@@ -69,7 +69,7 @@
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     ${st.parentPhone && A.can('reports.send') ? `<button class="btn btn-wa" id="centerRep">${icon('whatsapp', 'sm')}Center report</button><button class="btn btn-soft" id="onlineRep">${icon('whatsapp', 'sm')}Online report</button>` : ''}
-                    ${A.can('reports.send') ? `<button class="btn btn-ghost" id="parentLink">${icon('link', 'sm')}Parent link</button>` : ''}
+                    ${A.can('reports.send') && A.feature('parentLinks') ? `<button class="btn btn-ghost" id="parentLink">${icon('link', 'sm')}Parent link</button>` : ''}
                 </div>
             </div>
 

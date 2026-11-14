@@ -58,7 +58,8 @@
                 rows = [...d.leaderboard, ...d.unranked].map(r => ({ ...r, grade }));
                 rows.sort((a, b) => String(a.firstName).localeCompare(String(b.firstName)) || String(a.lastName).localeCompare(String(b.lastName)));
             } catch (err) { $('content').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
-            try { links = (await api('/api/parent?action=status', { body: { studentIds: rows.map(r => r.studentId) } })).links || {}; } catch (e) { links = {}; }
+            links = {};
+            if (A.feature('parentLinks')) try { links = (await api('/api/parent?action=status', { body: { studentIds: rows.map(r => r.studentId) } })).links || {}; } catch (e) { links = {}; }
             render();
         }
         // The parent's private report link (made the first time it's needed)
@@ -97,18 +98,18 @@
                     <div style="flex:1;min-width:220px"><b>Send to everyone in this list</b><div class="small muted">One message at a time — you tap send in WhatsApp for each parent. Students with nothing to report are skipped.</div></div>
                     <button class="btn btn-wa" id="allCenter">${icon('whatsapp', 'sm')}Center reports (${sendable.length})</button>
                     <button class="btn btn-soft" id="allOnline">${icon('whatsapp', 'sm')}Online reports (${sendable.length})</button>
-                    <button class="btn btn-soft" id="allLinks" title="One private link per parent that always shows the latest marks">${icon('link', 'sm')}Report links (${sendable.filter(r => !(links[r.studentId] && links[r.studentId].views)).length} not opened)</button></div>` : ''}
+                    ${A.feature('parentLinks') ? `<button class="btn btn-soft" id="allLinks" title="One private link per parent that always shows the latest marks">${icon('link', 'sm')}Report links (${sendable.filter(r => !(links[r.studentId] && links[r.studentId].views)).length} not opened)</button>` : ''}</div>` : ''}
                 <div class="card fade-up" style="--i:1;padding:6px 12px">
                     ${list.map(r => `<div class="rep-row">
                         <div style="min-width:0"><a class="name-link" href="/admin/student.html?id=${encodeURIComponent(r.studentId)}"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b></a>
                             <div class="nums"><span>${esc(r.studentId)}</span>${r.branch ? `<span class="pill ${r.branch}">${A.BRANCHES[r.branch]}</span>` : '<span class="pill legacy">No group</span>'}
                                 <span>Center <b class="lvl ${A.levelOf(r.centerPct) || ''}">${A.fmtPct(r.centerPct)}</b></span>
                                 <span>Online <b class="lvl ${A.levelOf(r.onlinePct) || ''}">${A.fmtPct(r.onlinePct)}</b></span>
-                                ${r.missed ? `<span style="color:var(--danger)">${r.missed} missed</span>` : ''}${A.can('reports.send') ? linkChip(r) : ''}</div></div>
+                                ${r.missed ? `<span style="color:var(--danger)">${r.missed} missed</span>` : ''}${A.can('reports.send') && A.feature('parentLinks') ? linkChip(r) : ''}</div></div>
                         <div class="acts">${r.parentPhone && A.can('reports.send') ? `
                             <button class="btn btn-ghost btn-sm" data-c="${esc(r.studentId)}">${icon('whatsapp', 'sm')}Center</button>
-                            <button class="btn btn-ghost btn-sm" data-o="${esc(r.studentId)}">${icon('whatsapp', 'sm')}Online</button>
-                            <button class="btn btn-ghost btn-sm" data-l="${esc(r.studentId)}">${icon('link', 'sm')}Link</button>` : '<span class="small muted">No parent phone</span>'}</div>
+                            <button class="btn btn-ghost btn-sm" data-o="${esc(r.studentId)}">${icon('whatsapp', 'sm')}Online</button>${A.feature('parentLinks') ? `
+                            <button class="btn btn-ghost btn-sm" data-l="${esc(r.studentId)}">${icon('link', 'sm')}Link</button>` : ''}` : '<span class="small muted">No parent phone</span>'}</div>
                     </div>`).join('')}
                 </div>`;
             const skipEmpty = (fn) => async (r) => { const t = await fn(r); return t || ''; };
