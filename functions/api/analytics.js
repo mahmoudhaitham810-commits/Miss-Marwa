@@ -36,7 +36,7 @@ function levelOf(pct) {
 }
 
 // Load everything about one grade once
-async function loadGrade(db, grade) {
+export async function loadGrade(db, grade) {
     const { results: students } = await db.prepare(
         `SELECT student_id as studentId, first_name as firstName, last_name as lastName, gender, branch,
                 parent_phone as parentPhone, created_at as createdAt
@@ -111,7 +111,7 @@ function standing(student, exams, marks, kind, skipKeys) {
     return { earned, possible, taken, missed, applicable, pct: possible > 0 ? (earned / possible) * 100 : null, history };
 }
 
-function boardValue(student, data, board, skipKeys) {
+export function boardValue(student, data, board, skipKeys) {
     const c = standing(student, data.exams, data.marks, 'center', skipKeys);
     const o = standing(student, data.exams, data.marks, 'online', skipKeys);
     let pct, taken, applicable;

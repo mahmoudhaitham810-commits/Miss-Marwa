@@ -384,3 +384,10 @@ a.kpi:hover { transform: translateY(-2px); border-color: var(--primary-line); }
     body.staff .sidebar .brand { padding-bottom: 10px; }
     body.staff .side-nav a, body.staff .side-nav button { padding-top: 8px; padding-bottom: 8px; }
 }
+
+/* ---------- WhatsApp sender ---------- */
+.wa-bar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 12px; }
+.wa-mode button { padding: 6px 12px; font-size: 13px; }
+.wa-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+#waGo kbd, .btn kbd { margin-left: 6px; font: 600 11px/1 var(--font, inherit); padding: 3px 6px; border-radius: 6px; background: rgba(255, 255, 255, .22); }
+@media (hover: none) { #waGo kbd { display: none; } }

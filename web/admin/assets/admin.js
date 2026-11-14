@@ -30,6 +30,7 @@
         party: '<path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01M22 8h.01M15 2h.01M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/>',
         merge: '<path d="M8 6h10"/><path d="M6 12h9"/><path d="M11 18h7"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="18" r="1"/>'
     };
+    if (window.Site && Site.ICONS) Object.keys(EXTRA).forEach(k => { if (!Site.ICONS[k]) Site.ICONS[k] = EXTRA[k]; }); // sheets + toasts know the staff icons too
     function icon(name, cls = '') {
         if (EXTRA[name]) return `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${EXTRA[name]}</svg>`;
         return Site.icon(name, cls);
@@ -224,40 +225,115 @@
         return h >= 48 ? `${Math.floor(h / 24)} days left` : h >= 1 ? `${h}h ${m}m left` : `${m} min left`;
     }
     const PRE = (text) => `<pre dir="rtl" style="white-space:pre-wrap;font-family:var(--font-ar);background:var(--surface-2);padding:12px;border-radius:12px;margin:0;max-height:46vh;overflow:auto">${esc(text)}</pre>`;
-    // One WhatsApp message: preview it, then open WhatsApp
-    function preview(student, text, title) {
-        const href = window.ParentMessages ? ParentMessages.waLink(student.parentPhone, text) : null;
-        Site.sheet({
-            iconName: 'whatsapp', title, subtitle: student.parentPhone ? `Parent: ${student.parentPhone}` : 'No parent phone saved',
-            html: PRE(text),
-            actions: href ? [{ label: 'Open WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href, external: true }, { label: 'Close', cls: 'btn-ghost' }] : [{ label: 'Close', cls: 'btn-ghost' }]
-        });
+    // ---------- WhatsApp sender ----------
+    // Nothing is ever sent automatically: a person reads each message and presses Send in WhatsApp.
+    // That human step is what keeps Miss Marwa's number safe — WhatsApp bans automated/bulk senders.
+    const isPhone = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const WA_MODES = { app: 'WhatsApp app', web: 'WhatsApp Web', link: 'wa.me' };
+    const waMode = () => { const m = store.get('wa_mode', ''); return WA_MODES[m] ? m : (isPhone() ? 'link' : 'app'); };
+    function waNumber(phone) {
+        let n = String(phone || '').replace(/[٠-٩]/g, d => d.charCodeAt(0) - 0x0660).replace(/[۰-۹]/g, d => d.charCodeAt(0) - 0x06F0).replace(/\D/g, '');
+        if (n.startsWith('0020')) n = n.slice(4);
+        if (n.startsWith('20') && n.length === 12) n = n.slice(2);
+        if (n.startsWith('0')) n = n.slice(1);
+        return /^1\d{9}$/.test(n) ? '20' + n : null;
     }
-    // Many messages, one after another (each opened by a tap, so nothing is blocked)
-    function queue(list, makeText, { title = 'Send', key = '' } = {}) {
-        let sent = {};
-        try { sent = JSON.parse(sessionStorage.getItem('sent_' + key) || '{}'); } catch (e) { }
-        let i = Math.max(0, list.findIndex(s => !sent[s.studentId]));
+    function waHref(phone, text, mode = waMode()) {
+        const n = waNumber(phone); if (!n) return null;
+        const t = encodeURIComponent(text || '');
+        if (mode === 'app') return `whatsapp://send?phone=${n}&text=${t}`;          // opens WhatsApp Desktop / the phone app directly
+        if (mode === 'web') return `https://web.whatsapp.com/send?phone=${n}&text=${t}`; // re-uses one WhatsApp Web tab
+        return `https://wa.me/${n}?text=${t}`;
+    }
+    const waTarget = (mode) => mode === 'app' ? '' : 'target="wa_window"';
+    async function hashText(text) {
+        try {
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text).trim()));
+            return [...new Uint8Array(buf)].slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+        } catch (e) { let h = 0; for (const c of String(text)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h.toString(16).padStart(8, '0'); }
+    }
+    async function recentSent(ids) {
+        try { return (await api('/api/messages?action=recent', { body: { studentIds: ids } })).entries || []; } catch (e) { return []; }
+    }
+
+    // One sheet for one message or a whole list: Enter = open in WhatsApp + next, → skip, ← back, Esc stop
+    async function sender({ list, makeText, title = 'WhatsApp', kind = 'other' }) {
+        list = (list || []).filter(Boolean);
         if (!list.length) return Site.toast('Nobody to message', 'info');
-        const show = async () => {
-            const s = list[i];
-            if (!s) { Site.toast('All messages opened ✅', 'success'); return; }
-            let text;
-            try { text = await makeText(s); } catch (e) { Site.toast(e.message, 'error'); return; }
-            const href = s.parentPhone && text ? ParentMessages.waLink(s.parentPhone, text) : null;
-            Site.sheet({
-                iconName: 'whatsapp', title: `${title} · ${i + 1} of ${list.length}`,
-                subtitle: `${s.firstName} ${s.lastName}${s.parentPhone ? ' · ' + s.parentPhone : ' · no parent phone — skip'}${sent[s.studentId] ? ' · already opened' : ''}`,
-                html: text ? PRE(text) : '<p class="muted">Nothing to send for this student.</p>',
-                actions: [
-                    ...(href ? [{ label: 'Open WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href, external: true, onClick: () => { sent[s.studentId] = 1; try { sessionStorage.setItem('sent_' + key, JSON.stringify(sent)); } catch (e) { } } }] : []),
-                    { label: i + 1 < list.length ? 'Next student' : 'Finish', cls: 'btn-primary', onClick: (close) => { close(); i++; setTimeout(show, 240); } },
-                    { label: 'Stop', cls: 'btn-ghost' }
-                ]
-            });
+        const single = list.length === 1;
+        const log = {}; // studentId → [{hash, by, at}]
+        (await recentSent(list.map(s => s.studentId))).forEach(e => (log[e.studentId] ||= []).push(e));
+        let skipSent = store.get('wa_skip_sent', '1') === '1';
+        let i = 0, cur = null, opened = 0, skipped = 0;
+        const close = Site.sheet({ iconName: 'whatsapp', title, subtitle: '', html: '<div id="waBody"><div class="skel" style="height:220px;border-radius:14px"></div></div>' });
+        const overlay = [...document.querySelectorAll('.overlay')].pop();
+        const body = () => overlay.querySelector('#waBody');
+        const head = (t, sub) => { overlay.querySelector('.sheet-head h3').textContent = t; let p = overlay.querySelector('.sheet-head p'); if (!p) { p = document.createElement('p'); overlay.querySelector('.sheet-head h3').after(p); } p.textContent = sub; };
+
+        async function build(idx) {
+            const s = list[idx];
+            let text = '';
+            try { text = (await makeText(s)) || ''; } catch (e) { text = ''; Site.toast(e.message, 'error'); }
+            const hash = text ? await hashText(text) : '';
+            const prev = (log[s.studentId] || []).find(e => e.hash === hash);
+            return { s, text, hash, prev, href: text ? waHref(s.parentPhone, text) : null };
+        }
+        async function show(dir = 1) {
+            if (i >= list.length) return finish();
+            if (i < 0) i = 0;
+            body().innerHTML = '<div class="skel" style="height:220px;border-radius:14px"></div>';
+            cur = await build(i);
+            if (!single && dir > 0 && ((skipSent && cur.prev) || !cur.href)) { skipped++; i++; return show(1); } // nothing to do for this one
+            const { s, text, prev, href } = cur, mode = waMode();
+            head(single ? title : `${title} · ${i + 1} of ${list.length}`, `${s.firstName} ${s.lastName}${s.parentPhone ? ' · parent ' + s.parentPhone : ''}`);
+            body().innerHTML = `
+                ${prev ? `<div class="notice warning" style="margin-bottom:10px">${icon('info')}<div>This exact message was already opened by <b>${esc(prev.by || 'staff')}</b> on ${esc(fmtDate(prev.at, true))}.</div></div>` : ''}
+                ${!s.parentPhone || !waNumber(s.parentPhone) ? `<div class="notice danger" style="margin-bottom:10px">${icon('alert')}<div>No valid parent phone saved — ${single ? 'add one on the Students page' : 'skipped'}.</div></div>` : ''}
+                ${text ? PRE(text) : '<p class="muted">Nothing to send for this student.</p>'}
+                <div class="wa-bar">
+                    <div class="segmented wa-mode" role="tablist" aria-label="Open in">${Object.entries(WA_MODES).map(([k, v]) => `<button type="button" data-mode="${k}" class="${k === mode ? 'active' : ''}">${v}</button>`).join('')}</div>
+                    ${single ? '' : `<label class="check small"><input type="checkbox" id="waSkip" ${skipSent ? 'checked' : ''}> Skip parents who already got this exact message</label>`}
+                </div>
+                <div class="sheet-actions" style="padding:0;margin-top:12px">
+                    ${href ? `<a class="btn btn-wa btn-block" id="waGo" href="${esc(href)}" ${waTarget(mode)}>${icon('whatsapp')}${prev ? 'Open again in WhatsApp' : 'Open in WhatsApp'}${single ? '' : ' & next'} <kbd>Enter</kbd></a>` : ''}
+                    ${single ? `<button class="btn btn-ghost btn-block" data-close>Close</button>` : `
+                    <div class="wa-nav"><button class="btn btn-ghost" id="waBack" ${i === 0 ? 'disabled' : ''}>${icon('arrowLeft', 'sm')}Back</button>
+                        <button class="btn btn-ghost" id="waSkipBtn">Skip ${icon('arrowRight', 'sm')}</button>
+                        <button class="btn btn-ghost" data-close>Stop</button></div>`}
+                </div>
+                ${mode === 'app' && !isPhone() ? '<p class="small muted" style="margin:10px 0 0">Opens WhatsApp Desktop. The first time, your browser asks to allow it — tick "Always allow".</p>' : ''}`;
+            body().querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { store.set('wa_mode', b.dataset.mode); show(0); }));
+            body().querySelector('#waSkip')?.addEventListener('change', (e) => { skipSent = e.target.checked; store.set('wa_skip_sent', skipSent ? '1' : '0'); });
+            body().querySelector('#waBack')?.addEventListener('click', () => { i--; show(-1); });
+            body().querySelector('#waSkipBtn')?.addEventListener('click', () => { skipped++; i++; show(1); });
+            body().querySelector('#waGo')?.addEventListener('click', () => onOpened());
+        }
+        function onOpened() {
+            const c = cur; if (!c || !c.href) return;
+            opened++;
+            (log[c.s.studentId] ||= []).unshift({ hash: c.hash, by: STAFF && STAFF.name, at: new Date().toISOString() });
+            api('/api/messages?action=log', { body: { studentId: c.s.studentId, kind, hash: c.hash } }).catch(() => { });
+            if (single) setTimeout(close, 150);
+            else { i++; setTimeout(() => show(1), 350); }
+        }
+        function finish() {
+            document.removeEventListener('keydown', onKey, true);
+            close();
+            Site.toast(single ? 'Opened in WhatsApp' : `Done — ${opened} opened${skipped ? `, ${skipped} skipped` : ''} ✅`, 'success');
+        }
+        const onKey = (e) => {
+            if (!document.body.contains(overlay)) { document.removeEventListener('keydown', onKey, true); return; }
+            if (e.target.closest && e.target.closest('input, textarea')) return;
+            if (e.key === 'Enter') { const a = body().querySelector('#waGo'); if (a) { e.preventDefault(); a.click(); } }
+            else if (!single && e.key === 'ArrowRight') { e.preventDefault(); body().querySelector('#waSkipBtn')?.click(); }
+            else if (!single && e.key === 'ArrowLeft') { e.preventDefault(); body().querySelector('#waBack:not([disabled])')?.click(); }
         };
-        show();
+        document.addEventListener('keydown', onKey, true);
+        show(1);
     }
+    // Kept for the pages that call them
+    const preview = (student, text, title, kind) => sender({ list: [student], makeText: () => text, title, kind });
+    const queue = (list, makeText, { title = 'Send', kind = 'other' } = {}) => sender({ list, makeText, title, kind });
     function downloadCsv(name, rows) {
         const csv = '\uFEFF' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
         const a = document.createElement('a');
@@ -358,7 +434,7 @@
 
     window.Admin = {
         boot, api, icon, esc, can, store, GRADES, BRANCHES, fmtPct, levelOf, LEVEL_LABEL, initials, segmented, normalizeDigits,
-        toMs, fmtDate, timeLeft, preview, queue, downloadCsv, gradeSelect, hydrate, enhanceSelect,
+        toMs, fmtDate, timeLeft, preview, queue, sender, waHref, waNumber, downloadCsv, gradeSelect, hydrate, enhanceSelect,
         get staff() { return STAFF; }
     };
 })();

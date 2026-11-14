@@ -275,14 +275,8 @@
             if (s) openStudent(s.dataset.student);
         });
 
-        function preview(student, text, title) {
-            const href = ParentMessages.waLink(student.parentPhone, text);
-            Site.sheet({
-                iconName: 'whatsapp', title, subtitle: student.parentPhone ? `Parent: ${student.parentPhone}` : 'No parent phone saved',
-                html: `<pre dir="rtl" style="white-space:pre-wrap;font-family:var(--font-ar);background:var(--surface-2);padding:12px;border-radius:12px;margin:0;max-height:46vh;overflow:auto">${esc(text)}</pre>`,
-                actions: href ? [{ label: 'Open WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href, external: true }, { label: 'Close', cls: 'btn-ghost' }] : [{ label: 'Close', cls: 'btn-ghost' }]
-            });
-        }
+        const preview = (student, text, title) => A.preview(student, text, title,
+            /^Center/.test(title) ? 'center-report' : /^Online/.test(title) ? 'online-report' : /^Congratulate/.test(title) ? 'congrats' : /^Message/.test(title) ? 'gap' : 'other');
         function congrats(studentId, rank, before) {
             const r = byId()[studentId]; if (!r) return;
             const text = ParentMessages.congrats({ student: r, rank, before, groupLabel: GROUP_AR[branch], grade, examName: D.latestExam && D.latestExam.name });

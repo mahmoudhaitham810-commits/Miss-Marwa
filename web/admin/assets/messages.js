@@ -144,6 +144,19 @@
         ].join('\n');
     }
 
+    // 8 — DRAFT (waiting for approval): the private report link, sent once per parent
+    function parentLink({ student, url }) {
+        const w = g(student);
+        return [
+            `السلام عليكم ولي أمر ${w.student} ${fullName(student)} 🌷`,
+            `ده رابط خاص بمتابعة ${student.firstName} على Science Academy:`,
+            url,
+            `من الرابط ده هتلاقوا كل درجات امتحانات السنتر والامتحانات الأونلاين أول بأول، وبيتحدث لوحده مع كل درجة جديدة.`,
+            `⚠️ الرابط خاص بيكم بس — يا ريت ما يتبعتش لحد تاني.`,
+            SIGN
+        ].join('\n');
+    }
+
     // WhatsApp link for an Egyptian number (01xxxxxxxxx → 201xxxxxxxxx)
     function waLink(phone, text) {
         let n = String(phone || '').replace(/[٠-٩]/g, d => d.charCodeAt(0) - 0x0660).replace(/\D/g, '');
@@ -154,5 +167,5 @@
         return `https://wa.me/20${n}?text=${encodeURIComponent(text)}`;
     }
 
-    window.ParentMessages = { onlineReport, missedOnline, notSubmitted, latestCenter, fullCenter, gap, congrats, waLink, levelAr, GRADE_AR, BRANCH_AR };
+    window.ParentMessages = { onlineReport, missedOnline, notSubmitted, latestCenter, fullCenter, gap, congrats, parentLink, waLink, levelAr, GRADE_AR, BRANCH_AR };
 })();

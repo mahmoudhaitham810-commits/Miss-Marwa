@@ -131,9 +131,9 @@
             const message = (r) => r.reason === 'opened'
                 ? ParentMessages.notSubmitted({ student: stud(r), examTitle: ex.title })
                 : ParentMessages.missedOnline({ student: stud(r), examTitle: ex.title, closedAt: ex.expiresAt });
-            $('sendAll')?.addEventListener('click', () => A.queue(notTaken.filter(r => r.parentPhone), (r) => message(r), { title: ex.closed ? 'Missed exam' : 'Not taken yet', key: ex.id + branch }));
+            $('sendAll')?.addEventListener('click', () => A.queue(notTaken.filter(r => r.parentPhone), (r) => message(r), { title: ex.closed ? 'Missed exam' : 'Not taken yet', kind: 'online-missed' }));
             $('content').querySelectorAll('[data-msg]').forEach(btn => btn.addEventListener('click', () => {
-                const r = notTaken.find(x => x.studentId === btn.dataset.msg); if (r) A.preview(stud(r), message(r), r.reason === 'opened' ? 'Didn\'t submit' : 'Missed exam');
+                const r = notTaken.find(x => x.studentId === btn.dataset.msg); if (r) A.preview(stud(r), message(r), r.reason === 'opened' ? 'Didn\'t submit' : 'Missed exam', r.reason === 'opened' ? 'online-not-submitted' : 'online-missed');
             }));
             $('content').querySelectorAll('[data-reset]').forEach(btn => btn.addEventListener('click', () => {
                 const r = R.results.find(x => x.studentId === btn.dataset.reset); if (r) reopen(r);

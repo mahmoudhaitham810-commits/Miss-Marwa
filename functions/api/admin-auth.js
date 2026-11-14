@@ -159,6 +159,15 @@ export async function ensureAppSchema(db) {
     steps.push(`CREATE TABLE IF NOT EXISTS duplicate_dismissals (
         pair_key TEXT PRIMARY KEY, staff_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_students_grade_phone ON students(grade, phone)');
+    // WhatsApp messages staff opened for a parent (so nobody sends the same message twice)
+    steps.push(`CREATE TABLE IF NOT EXISTS message_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, kind TEXT NOT NULL, text_hash TEXT NOT NULL,
+        staff_id INTEGER, staff_name TEXT, sent_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_message_log_student ON message_log(student_id, sent_at)');
+    // One private, always-up-to-date report link per student for the parent (sent once on WhatsApp)
+    steps.push(`CREATE TABLE IF NOT EXISTS parent_links (
+        student_id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        views INTEGER NOT NULL DEFAULT 0, last_view_at TEXT)`);
     for (const q of steps) {
         try { await db.prepare(q).run(); } catch (e) { /* another request may have added it at the same moment */ }
     }
@@ -257,7 +266,7 @@ function sessionCookie(token, maxAgeSec) {
 }
 const CLEAR_COOKIE = `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0`;
 
-function clientIp(request) {
+export function clientIp(request) {
     return request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || '';
 }
 const publicStaff = (s) => ({ id: s.id, username: s.username, name: s.display_name, role: s.role });

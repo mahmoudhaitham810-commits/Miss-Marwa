@@ -50,7 +50,6 @@
                             <div class="muted small" id="entryMeta"></div>
                         </div>
                         <button class="btn btn-ghost btn-sm" id="editExamBtn"><span data-icon="edit" style="display:contents"></span>Edit</button>
-                        <button class="btn btn-ghost btn-sm danger-text" id="deleteExamBtn"><span data-icon="trash" style="display:contents"></span>Delete</button>
                         <button class="btn btn-soft btn-sm" id="voiceBtn" title="Say a name and a mark"></button>
                     </div>
                     <div class="progress-line">
@@ -194,14 +193,7 @@
         });
 
         // ---------- WhatsApp: one message preview ----------
-        function sendOne(student, text, title) {
-            const href = ParentMessages.waLink(student.parentPhone, text);
-            Site.sheet({
-                iconName: 'whatsapp', title: `${title} — ${student.firstName} ${student.lastName}`, subtitle: student.parentPhone ? `Parent: ${student.parentPhone}` : 'No parent phone saved',
-                html: `<pre dir="rtl" style="white-space:pre-wrap;font-family:var(--font-ar);background:var(--surface-2);padding:12px;border-radius:12px;margin:0;max-height:46vh;overflow:auto">${esc(text)}</pre>`,
-                actions: href ? [{ label: 'Open WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href, external: true }, { label: 'Close', cls: 'btn-ghost' }] : [{ label: 'Close', cls: 'btn-ghost' }]
-            });
-        }
+        const sendOne = (student, text, title) => A.preview(student, text, `${title} — ${student.firstName} ${student.lastName}`, title === 'Full report' ? 'center-report' : 'center-exam');
 
         // ---------- New / edit / delete exam ----------
         function examForm(e) {
@@ -248,14 +240,15 @@
                     catch (err) { Site.toast(err.message, 'error'); }
                 }
             });
+            if (A.can('offline.delete-exam')) actions.push({ label: 'Delete this exam…', icon: 'trash', cls: 'btn-ghost danger-text', onClick: (close) => { close(); setTimeout(() => confirmDelete(e), 260); } });
             actions.push({ label: 'Cancel', cls: 'btn-ghost' });
             Site.sheet({ iconName: 'clipboard', title: 'Edit exam', html: examForm(e), actions });
             A.segmented($('fBranch'), chosen, (v) => { chosen = v; });
         });
 
-        // Teacher only: delete a center exam (all its marks are copied into the activity log first)
-        $('deleteExamBtn').addEventListener('click', () => {
-            const e = current; if (!e || !A.can('offline.delete-exam')) return;
+        // Teacher only (inside Edit): delete a center exam — all its marks are copied into the activity log first
+        function confirmDelete(e) {
+            if (!e || !A.can('offline.delete-exam')) return;
             const st = examStats(e);
             Site.sheet({
                 iconName: 'alert', title: `Delete "${e.examName}"?`,
@@ -268,7 +261,7 @@
                 } }, { label: 'Cancel', cls: 'btn-ghost' }]
             });
             setTimeout(() => $('delConfirm')?.focus(), 250);
-        });
+        }
 
         // ---------- Assign group to students with none ----------
         async function assignSheet() {
@@ -305,7 +298,6 @@
             $('entryTitle').textContent = current.examName;
             $('entryMeta').innerHTML = `${esc(A.GRADES[grade])} · ${current.legacy ? '<span class="pill legacy">Before split</span>' : `<span class="pill ${current.branch}">${A.BRANCHES[current.branch]}</span>`} · ${esc(fmtDate(current.examDate || current.createdAt))} · out of <b>${esc(current.totalMarks)}</b>`;
             $('editExamBtn').hidden = !A.can('offline.edit-exam');
-            $('deleteExamBtn').hidden = !A.can('offline.delete-exam');
             $('searchBox').value = '';
             renderEntry();
             window.scrollTo({ top: 0 });
@@ -477,28 +469,11 @@
         // ---------- Send marks to parents, one after another ----------
         function sendQueue() {
             const e = current, st = examStats(e);
-            const sentKey = 'sent_center_' + e.id;
-            let sent = {};
-            try { sent = JSON.parse(sessionStorage.getItem(sentKey) || '{}'); } catch (x) { }
             const list = studentsFor(e).filter(s => has(marks[e.id][s.studentId]));
-            let i = Math.max(0, list.findIndex(s => !sent[s.studentId]));
-            function show() {
-                const s = list[i];
-                if (!s) { Site.toast('All messages opened ✅', 'success'); return; }
+            A.queue(list, (s) => {
                 const m = marks[e.id][s.studentId];
-                const text = ParentMessages.latestCenter({ student: s, examName: e.examName, date: e.examDate, score: m.score, total: e.totalMarks, absent: m.absent, groupAvg: st.avg });
-                const href = ParentMessages.waLink(s.parentPhone, text);
-                Site.sheet({
-                    iconName: 'whatsapp', title: `${i + 1} of ${list.length} · ${s.firstName} ${s.lastName}`, subtitle: s.parentPhone ? `Parent: ${s.parentPhone}${sent[s.studentId] ? ' · already opened' : ''}` : 'No parent phone saved — skip',
-                    html: `<pre dir="rtl" style="white-space:pre-wrap;font-family:var(--font-ar);background:var(--surface-2);padding:12px;border-radius:12px;margin:0">${esc(text)}</pre>`,
-                    actions: [
-                        ...(href ? [{ label: 'Open WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href, external: true, onClick: () => { sent[s.studentId] = 1; try { sessionStorage.setItem(sentKey, JSON.stringify(sent)); } catch (x) { } } }] : []),
-                        { label: i + 1 < list.length ? 'Next student' : 'Finish', cls: 'btn-primary', onClick: (close) => { close(); i++; setTimeout(show, 240); } },
-                        { label: 'Stop', cls: 'btn-ghost' }
-                    ]
-                });
-            }
-            show();
+                return ParentMessages.latestCenter({ student: s, examName: e.examName, date: e.examDate, score: m.score, total: e.totalMarks, absent: m.absent, groupAvg: st.avg });
+            }, { title: e.examName, kind: 'center-exam' });
         }
 
         // ---------- Honor board: the exact top 3 scores (ties included) ----------

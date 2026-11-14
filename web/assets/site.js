@@ -358,7 +358,7 @@
     }
 
     window.Site = {
-        CONTACT, waLink, esc, icon, hydrateIcons, getSession, saveSession, homeUrl,
+        CONTACT, ICONS, waLink, esc, icon, hydrateIcons, getSession, saveSession, homeUrl,
         setTheme, currentTheme, toast, sheet, reveal, particles, normalizeDigits, forgotPassword, install, init, reduced, finePointer
     };
 })();
