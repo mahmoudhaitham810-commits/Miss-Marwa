@@ -155,6 +155,11 @@
                     }
                 };
                 const hint = (st.similarNames && st.similarNames.length) ? `Settings with similar names found: ${st.similarNames.map(n => '<code>' + Site.esc(n) + '</code>').join(', ')} — is one of them misspelt?` : '';
+                if (!st.build) {
+                    // The page is new but the API answered like an old build: ask /api/version which Functions code is live
+                    try { const v = await (await fetch('/api/version?t=' + Date.now(), { cache: 'no-store' })).json(); st.build = 'page new, API old (version endpoint: ' + (v.functionsBuild || '?') + ')'; st.settingNames = v.settingNames; }
+                    catch (e) { st.build = 'page new, API OLD — this deployment is running Functions from an older commit'; }
+                }
                 const tech = `<br><span style="font-family:monospace;font-size:12px">server check: build ${Site.esc(st.build || 'old')} · secret ${Site.esc(st.secretState || '?')} · setup code ${Site.esc(st.setupState || '?')} · settings this deployment can see: ${(st.settingNames || []).map(Site.esc).join(', ') || 'none'}</span>`;
                 if (!st.configured) {
                     if (MSG.secret[st.secretState]) $('configMsg').innerHTML = MSG.secret[st.secretState];
