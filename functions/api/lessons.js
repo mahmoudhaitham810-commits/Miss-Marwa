@@ -1,4 +1,4 @@
-import { verifyAdminRequest } from './admin-auth.js';
+import { requireStaff, audit, auditStmt } from './admin-auth.js';
 
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
 // الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
@@ -109,11 +109,12 @@ export async function onRequestPost(context) {
 
         // === إضافة محتوى جديد (السلوك الأصلي، من غير أي action محدد) ===
         // ── حماية: لازم يكون أدمن عشان يضيف محتوى ──
-        const isAdmin = await verifyAdminRequest(request, env);
-        if (!isAdmin) {
-            return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
-        }
+        const auth = await requireStaff(request, env, 'lessons.create');
+        if (auth.error) return auth.error;
         const lesson = await request.json();
+        if (!lesson || !lesson.id || !lesson.title || !lesson.grade || !lesson.category || !lesson.url) {
+            return Response.json({ error: 'بيانات المحتوى ناقصة' }, { status: 400 });
+        }
 
         // إدخال الدرس الجديد في الداتا بيز
         await db.prepare(
@@ -121,6 +122,7 @@ export async function onRequestPost(context) {
         ).bind(
             lesson.id, lesson.title, lesson.grade, lesson.category, lesson.url, lesson.notes || '', lesson.createdAt || new Date().toISOString()
         ).run();
+        await audit(db, request, auth.staff, 'lessons.create', lesson.id, { title: lesson.title, grade: lesson.grade, category: lesson.category });
 
         // بمجرد ما المحتوى يتحفظ بنجاح، ابعتي إشعار لطلاب نفس المرحلة بس
         const label = CATEGORY_LABELS[(lesson.category || '').toLowerCase()] || '📚 محتوى جديد';
@@ -143,15 +145,18 @@ export async function onRequestDelete(context) {
     const id = url.searchParams.get('id');
 
     // ── حماية: لازم يكون أدمن عشان يمسح محتوى ──
-    const isAdmin = await verifyAdminRequest(request, env);
-    if (!isAdmin) {
-        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
-    }
+    const auth = await requireStaff(request, env, 'lessons.delete');
+    if (auth.error) return auth.error;
 
     try {
-        // حذف الدرس بناءً على الـ ID
+        // حذف الدرس بناءً على الـ ID (ونسخة كاملة منه بتتحفظ في سجل النشاط)
         if (id) {
-            await db.prepare("DELETE FROM lessons WHERE id = ?").bind(id).run();
+            const row = await db.prepare("SELECT * FROM lessons WHERE id = ?").bind(id).first();
+            if (!row) return Response.json({ error: 'المحتوى غير موجود' }, { status: 404 });
+            await db.batch([
+                db.prepare("DELETE FROM lessons WHERE id = ?").bind(id),
+                auditStmt(db, request, auth.staff, 'lessons.delete', id, { lesson: row })
+            ]);
             return Response.json({ success: true });
         }
         return Response.json({ error: 'ID is required' }, { status: 400 });

@@ -3,7 +3,13 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#020617">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="SA Staff">
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
     <title>لوحة تحكم المعلم | Science Academy</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -917,8 +923,22 @@
             .an-raw-data-container { flex-direction: column; }
         }
     </style>
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
+    <!-- PWA Manifest (staff app, separate from the student app) -->
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <style>
+        /* Role-based UI: the server blocks these actions anyway — this just hides what the assistant can't use */
+        body.role-assistant .btn-delete, body.role-assistant .teacher-only { display: none !important; }
+        .staff-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; padding: 10px 14px; border-radius: 16px; background: rgba(15, 23, 42, .75); border: 1px solid rgba(0, 229, 255, .2); }
+        .staff-bar .who { display: flex; align-items: center; gap: 10px; margin-inline-end: auto; }
+        .staff-bar .avatar { width: 38px; height: 38px; border-radius: 50%; background: #fff; object-fit: cover; }
+        .staff-bar .name { font-weight: 800; color: #fff; }
+        .role-chip { font-size: .75rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; }
+        .role-chip.teacher { background: rgba(249, 115, 22, .18); color: #fdba74; }
+        .role-chip.assistant { background: rgba(37, 99, 235, .2); color: #93c5fd; }
+        .staff-bar a, .staff-bar button { font-family: inherit; font-size: .9rem; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 12px; border: 1px solid rgba(148, 163, 184, .25); background: transparent; color: #e2e8f0; text-decoration: none; cursor: pointer; }
+        .staff-bar a:hover, .staff-bar button:hover { border-color: #00E5FF; }
+        .relogin-field { width: 100%; padding: 14px; margin: 8px 0; border-radius: 12px; border: 1px solid rgba(0, 229, 255, .3); background: rgba(2, 6, 23, .7); color: #fff; font-family: inherit; font-size: 1rem; }
+    </style>
 </head>
 
 <body>
@@ -927,17 +947,28 @@
     <div class="lock-screen" id="adminLockScreen">
         <div class="lock-box">
             <i class="fas fa-shield-halved" style="font-size: 3.5rem; color: var(--glowing-cyan);"></i>
-            <h2 style="margin-top: 15px;">لوحة تحكم المعلم</h2>
-            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 5px;">أدخل الرمز السري للوصول</p>
-            <input type="password" id="adminPinInput" placeholder="PIN Code" autofocus>
-            <button class="action-btn" style="width: 100%; justify-content: center;"
-                onclick="unlockAdmin()">دخول</button>
-            <div id="pinError" style="color: #ef4444; margin-top: 10px; display: none;">الرمز السري غير صحيح!</div>
+            <h2 style="margin-top: 15px;" id="lockTitle">جاري التحقق…</h2>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 5px;" id="lockSub"></p>
+            <div id="reloginForm" style="display:none;">
+                <input class="relogin-field" id="reloginUser" placeholder="Username" autocapitalize="none" autocomplete="username" dir="ltr">
+                <input class="relogin-field" id="reloginPass" type="password" placeholder="Password" autocomplete="current-password" dir="ltr">
+                <button class="action-btn" style="width: 100%; justify-content: center;" onclick="relogin()">دخول</button>
+            </div>
+            <div id="pinError" style="color: #ef4444; margin-top: 10px; display: none;"></div>
         </div>
     </div>
 
     <!-- Admin Panel -->
     <div id="adminPanel" style="display: none;">
+        <div class="staff-bar">
+            <div class="who">
+                <img class="avatar" src="/assets/img/marwa-160.png" alt="">
+                <div><div class="name" id="staffName" dir="auto"></div><span class="role-chip" id="staffRole"></span></div>
+            </div>
+            <a href="/home.html?staffPreview=1&grade=prep1" target="_blank" rel="noopener"><i class="fas fa-eye"></i> معاينة كطالب</a>
+            <a href="/admin/settings.html"><i class="fas fa-gear"></i> <span id="settingsLabel">الإعدادات</span></a>
+            <button onclick="staffLogout()"><i class="fas fa-right-from-bracket"></i> خروج</button>
+        </div>
         <div class="admin-header">
             <div>
                 <h1 style="font-size: 2.2rem;">لوحة إدارة المنصة</h1>
@@ -966,13 +997,13 @@
                     <i class="fas fa-rotate"></i>
                     <span>تحديث البيانات</span>
                 </button>
-                <button class="action-btn secondary" onclick="exportToCSV()">
+                <button class="action-btn secondary teacher-only" onclick="exportToCSV()">
                     <i class="fas fa-file-excel"></i>
                     <span>تصدير الطلاب CSV</span>
                 </button>
-                <a href="index.html" class="action-btn secondary">
-                    <i class="fas fa-arrow-right"></i>
-                    <span>الرئيسية</span>
+                <a href="/" class="action-btn secondary" target="_blank" rel="noopener">
+                    <i class="fas fa-arrow-up-right-from-square"></i>
+                    <span>الموقع</span>
                 </a>
             </div>
         </div>
@@ -1218,7 +1249,7 @@
                         <i class="fas fa-user-clock" style="color: #ef4444; margin-left: 8px;"></i>
                         الطلاب اللي لم يحضروا الامتحان (<span id="missedCount">0</span>)
                     </h3>
-                    <button class="action-btn secondary" onclick="exportMissedToCSV()">
+                    <button class="action-btn secondary teacher-only" onclick="exportMissedToCSV()">
                         <i class="fas fa-file-export"></i>
                         <span>تصدير Excel</span>
                     </button>
@@ -1694,7 +1725,7 @@ D) 120</pre>
     </div>
 
     <!-- Universal Cloud Database Adapter -->
-    <script src="./db.js"></script>
+    <script src="/db.js"></script>
 
     <script>
         let allStudents = [];
@@ -1708,75 +1739,86 @@ D) 120</pre>
             return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
-        // لو جلسة الأدمن خلصت (12 ساعة) وهي فاتحة الصفحة، كل الطلبات كانت بتفشل بصمت
-        // (جداول فاضية، "مفيش طلاب"). دلوقتي أول ما أي طلب يرجع 401 بنرجّع شاشة الرمز السري.
+        // ── جلسة الموظفين (مس مروة / المساعد) ──
+        // لو الجلسة خلصت وهي فاتحة الصفحة، بنطلب الدخول تاني فوق الصفحة نفسها
+        // (من غير ما نقفلها) عشان أي درجات اتكتبت ومااتحفظتش متضيعش.
+        let STAFF = null;
         const _origFetch = window.fetch.bind(window);
         window.fetch = async (...args) => {
             const res = await _origFetch(...args);
             const url = String(args[0] && args[0].url ? args[0].url : args[0]);
-            if (res.status === 401 && url.startsWith('/api/') && !url.startsWith('/api/admin-auth')) {
-                showSessionExpired();
+            if (url.startsWith('/api/') && !url.startsWith('/api/admin-auth')) {
+                if (res.status === 401) showSessionExpired();
+                if (res.status === 403) showSmartToast('الصلاحية دي لمس مروة بس 🔒', 'error');
             }
             return res;
         };
+        function applyStaff(staff) {
+            STAFF = staff;
+            document.body.classList.toggle('role-assistant', staff.role !== 'teacher');
+            document.body.classList.toggle('role-teacher', staff.role === 'teacher');
+            document.getElementById('staffName').textContent = staff.name;
+            document.querySelector('.staff-bar .avatar').src = staff.role === 'teacher' ? '/assets/img/marwa-160.png' : '/assets/img/logo-96.png';
+            const chip = document.getElementById('staffRole');
+            chip.textContent = staff.role === 'teacher' ? 'المعلمة — صلاحيات كاملة' : 'مساعد';
+            chip.className = 'role-chip ' + staff.role;
+            document.getElementById('settingsLabel').textContent = staff.role === 'teacher' ? 'الإعدادات والحسابات' : 'كلمة السر';
+        }
         function showSessionExpired() {
             const lock = document.getElementById('adminLockScreen');
             if (!lock || lock.style.display !== 'none') return;
-            document.getElementById('adminPanel').style.display = 'none';
             lock.style.display = '';
+            document.getElementById('lockTitle').textContent = 'انتهت الجلسة';
+            document.getElementById('lockSub').textContent = 'سجّلي دخول تاني — الشغل اللي مااتحفظش لسه موجود في الصفحة.';
+            document.getElementById('reloginForm').style.display = 'block';
+            if (STAFF) document.getElementById('reloginUser').value = STAFF.username;
+            document.getElementById('reloginPass').focus();
+        }
+        async function relogin() {
             const pinError = document.getElementById('pinError');
-            if (pinError) {
-                pinError.textContent = 'انتهت الجلسة — ادخلي الرمز السري تاني (الشغل اللي مااتحفظش لسه موجود في الصفحة).';
+            pinError.style.display = 'none';
+            try {
+                const res = await _origFetch('/api/admin-auth?action=login', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                    body: JSON.stringify({ username: document.getElementById('reloginUser').value.trim().toLowerCase(), password: document.getElementById('reloginPass').value })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'بيانات الدخول غير صحيحة');
+                if (STAFF && data.staff.id !== STAFF.id) { location.reload(); return; }
+                applyStaff(data.staff);
+                document.getElementById('reloginPass').value = '';
+                document.getElementById('adminLockScreen').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+            } catch (err) {
+                pinError.textContent = err.message;
                 pinError.style.display = 'block';
             }
+        }
+        document.getElementById('reloginPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') relogin(); });
+        async function staffLogout() {
+            if (!confirm('تسجيل الخروج من لوحة التحكم؟')) return;
+            await _origFetch('/api/admin-auth?action=logout', { method: 'POST', credentials: 'same-origin' }).catch(() => { });
+            // بيانات الطلاب المحفوظة مؤقتاً على الجهاز بتتمسح مع الخروج (مهم لو الجهاز مشترك)
+            ['mm_students_db', 'mm_lessons_db', 'honorBoardData'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
+            location.replace('/admin/login.html');
         }
 
         // ── التحقق من الجلسة عند فتح الصفحة ──
         (async function checkExistingSession() {
             try {
-                const res = await fetch('/api/admin-auth?action=check', { credentials: 'same-origin' });
+                const res = await _origFetch('/api/admin-auth?action=me', { credentials: 'same-origin' });
                 const data = await res.json();
-                if (data.authenticated) {
-                    document.getElementById('adminLockScreen').style.display = 'none';
-                    document.getElementById('adminPanel').style.display = 'block';
-                    loadData();
-                }
+                if (!data.authenticated) { location.replace('/admin/login.html'); return; }
+                applyStaff(data.staff);
+                document.getElementById('adminLockScreen').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+                loadData();
             } catch (e) {
-                // لو فشل — خلي شاشة القفل ظاهرة عادي
+                document.getElementById('lockTitle').textContent = 'مفيش اتصال بالسيرفر';
+                document.getElementById('lockSub').textContent = 'اتأكدي من النت وحدّثي الصفحة.';
             }
         })();
-
-        async function unlockAdmin() {
-            const input = document.getElementById('adminPinInput').value;
-            const pinError = document.getElementById('pinError');
-            pinError.style.display = 'none';
-
-            try {
-                const res = await fetch('/api/admin-auth?action=login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ password: input })
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    document.getElementById('adminLockScreen').style.display = 'none';
-                    document.getElementById('adminPanel').style.display = 'block';
-                    loadData();
-                } else {
-                    pinError.textContent = data.error || 'الرمز السري غير صحيح!';
-                    pinError.style.display = 'block';
-                }
-            } catch (err) {
-                pinError.textContent = 'خطأ في الاتصال بالسيرفر';
-                pinError.style.display = 'block';
-            }
-        }
-
-        document.getElementById('adminPinInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') unlockAdmin();
-        });
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register('/OneSignalSDKWorker.js').catch(() => { });
 
         // دالة تنظيف الذاكرة لسحب البيانات الطازجة من السيرفر
         function clearLocalCache() {
@@ -2423,15 +2465,16 @@ D) 120</pre>
 
         async function resetExamAttempt(studentId) {
             if (!currentResultsExamId) return;
-            if (!confirm(`متأكدة إنك عايزة تفتحي المحاولة تاني للطالب (${studentId})؟ لو كان سلّم قبل كده، درجته هتتمسح وهيقدر يدخل الامتحان من الأول.`)) return;
+            const reason = prompt(`إعادة فتح الامتحان للطالب (${studentId})\nلو كان سلّم قبل كده، درجته هتتمسح (بتتحفظ نسخة منها في سجل النشاط) وهيقدر يدخل من الأول.\n\nسبب إعادة الفتح (اختياري):`, '');
+            if (reason === null) return;
 
             try {
                 const res = await fetch('/api/exams?action=reset-attempt', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ examId: currentResultsExamId, studentId })
+                    body: JSON.stringify({ examId: currentResultsExamId, studentId, reason })
                 });
-                if (!res.ok) throw new Error('فشلت إعادة الفتح');
+                if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'فشلت إعادة الفتح'); }
                 await loadExamResults();
             } catch (err) {
                 alert('حصل خطأ: ' + err.message);
@@ -2714,7 +2757,7 @@ D) 120</pre>
                         <button class="btn-table btn-reset" style="padding:2px 8px; font-size:0.75rem; color:#f59e0b;" onclick="openEditOfflineExamModal(${ex.id}, '${escapedName}', ${ex.totalMarks})" title="تعديل الامتحان">
                             <i class="fas fa-pencil-alt"></i>
                         </button>
-                        <button class="btn-table btn-reset" style="padding:2px 8px; font-size:0.75rem; color:#ef4444;" onclick="deleteOfflineExam(${ex.id})" title="حذف الامتحان">
+                        <button class="btn-table btn-reset teacher-only" style="padding:2px 8px; font-size:0.75rem; color:#ef4444;" onclick="deleteOfflineExam(${ex.id})" title="حذف الامتحان">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -2837,7 +2880,7 @@ D) 120</pre>
             };
 
             localStorage.setItem('honorBoardData', JSON.stringify(boardData));
-            window.open('./honor-board.html', '_blank');
+            window.open('/honor-board.html', '_blank');
             closeHonorBoardModal();
         }
 

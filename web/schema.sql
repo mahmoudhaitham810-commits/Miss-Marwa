@@ -58,3 +58,37 @@ CREATE TABLE IF NOT EXISTS exam_submissions (
     submitted_at DATETIME,
     UNIQUE(exam_id, student_id)
 );
+
+-- ===== Staff portal (created automatically by functions/api/admin-auth.js on first use) =====
+-- staff: Miss Marwa (role 'teacher') + assistants (role 'assistant'). Passwords are PBKDF2 hashes.
+CREATE TABLE IF NOT EXISTS staff (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    display_name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    token_version INTEGER NOT NULL DEFAULT 1,
+    last_login_at TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+-- audit_log: every change made from the staff portal (who, what, when, and a copy of anything deleted)
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id INTEGER,
+    staff_name TEXT,
+    role TEXT,
+    action TEXT NOT NULL,
+    target TEXT,
+    details TEXT,
+    ip TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+-- auth_throttle: temporary lock after too many wrong passwords
+CREATE TABLE IF NOT EXISTS auth_throttle (
+    key TEXT PRIMARY KEY,
+    fails INTEGER NOT NULL DEFAULT 0,
+    first_fail_at INTEGER NOT NULL DEFAULT 0,
+    locked_until INTEGER NOT NULL DEFAULT 0
+);

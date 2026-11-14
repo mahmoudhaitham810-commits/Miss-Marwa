@@ -8,7 +8,8 @@
     <script>
         try {
             var s = JSON.parse(localStorage.getItem('student_session') || 'null');
-            if (s && s.id) location.replace(s.grade === 'all' || s.role === 'admin' ? '/home.html?grade=prep1' : '/home.html');
+            if (s && (s.role === 'admin' || s.grade === 'all' || String(s.id).toUpperCase() === 'MM-ADMIN')) localStorage.removeItem('student_session');
+            else if (s && s.id) location.replace('/home.html');
         } catch (e) { }
     </script>
     <title>Create account · Science Academy</title>

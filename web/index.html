@@ -32,7 +32,8 @@
         // Opened from the installed app while already signed in → go straight to the dashboard
         try {
             var s = JSON.parse(localStorage.getItem('student_session') || 'null');
-            if (s && s.id && matchMedia('(display-mode: standalone)').matches) location.replace(s.grade === 'all' ? '/home.html?grade=prep1' : '/home.html');
+            if (s && (s.role === 'admin' || s.grade === 'all' || String(s.id).toUpperCase() === 'MM-ADMIN')) localStorage.removeItem('student_session');
+            else if (s && s.id && matchMedia('(display-mode: standalone)').matches) location.replace('/home.html');
         } catch (e) { }
     </script>
 </head>
@@ -321,7 +322,6 @@
             </div>
             <div class="foot-bottom">
                 <span>© 2026 Science Academy · Miss Marwa. All rights reserved.</span>
-                <a href="/admin.html" data-icon="lock">Teacher portal</a>
             </div>
         </div>
     </footer>

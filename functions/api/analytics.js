@@ -1,4 +1,4 @@
-import { verifyAdminRequest } from './admin-auth.js';
+import { requireStaff } from './admin-auth.js';
 
 // ============================================================
 // Analytics API — Phase 5
@@ -20,10 +20,8 @@ export async function onRequestGet(context) {
     const { request, env } = context;
 
     // ── حماية: أدمن بس ──
-    const isAdmin = await verifyAdminRequest(request, env);
-    if (!isAdmin) {
-        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
-    }
+    const auth = await requireStaff(request, env, 'analytics.view');
+    if (auth.error) return auth.error;
 
     const url = new URL(request.url);
     const action = url.searchParams.get('action');

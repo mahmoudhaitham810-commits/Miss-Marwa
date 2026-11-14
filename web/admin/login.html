@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Staff sign in · Science Academy</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/manifest.webmanifest">
+    <meta name="apple-mobile-web-app-title" content="SA Staff">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <style>
+        .auth-side { background: radial-gradient(120% 120% at 0% 0%, #1E2B55 0%, #0B1220 60%, #0B1220 100%); }
+        .staff-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 14px; }
+        .staff-pill .icon { width: 14px; height: 14px; }
+        .roles { display: grid; gap: 10px; margin-top: 6px; }
+        .roles div { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 16px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .1); }
+        .roles b { display: block; color: #fff; }
+        .roles small { color: rgba(255, 255, 255, .7); }
+        .roles i { width: 36px; height: 36px; flex: none; border-radius: 11px; background: rgba(255, 255, 255, .12); display: grid; place-items: center; }
+        .portrait-mini { width: 74px; height: 74px; border-radius: 50%; background: #fff; padding: 3px; box-shadow: 0 0 0 4px rgba(106, 139, 255, .35); }
+        .state { display: none; }
+        .state.on { display: block; animation: paneIn .45s cubic-bezier(.22, 1, .36, 1); }
+        .config-box { padding: 18px; border-radius: 16px; background: var(--danger-soft); color: var(--danger); font-weight: 500; }
+        .config-box code { background: rgba(0, 0, 0, .08); padding: 2px 6px; border-radius: 6px; }
+        .hint { font-size: 13px; color: var(--muted); margin: -6px 0 16px; }
+    </style>
+</head>
+<body class="site">
+    <div class="auth">
+        <aside class="auth-side">
+            <canvas id="sideCanvas" aria-hidden="true"></canvas>
+            <div class="site-brand"><img src="/assets/img/logo-96.png" alt="" width="42" height="42"><div><strong>Science Academy</strong><span>Staff portal</span></div></div>
+            <div class="side-body">
+                <img class="portrait-mini reveal" src="/assets/img/marwa-160.png" alt="" width="74" height="74">
+                <h2 class="reveal" style="margin-top:18px">Teach. Track.<br>Celebrate progress.</h2>
+                <p class="reveal">Lessons, exams, center grades, reports and analytics — all in one place.</p>
+                <div class="roles">
+                    <div class="reveal"><i data-icon="award"></i><span><b>Miss Marwa</b><small>Full access, settings, activity log and AI Co-Pilot.</small></span></div>
+                    <div class="reveal"><i data-icon="users"></i><span><b>Assistant</b><small>Daily work: lessons, exams, grades and WhatsApp reports.</small></span></div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="auth-main">
+            <div class="auth-top">
+                <div class="site-brand"><img src="/assets/img/logo-96.png" alt="" width="42" height="42"><div><strong>Science Academy</strong><span>Staff portal</span></div></div>
+                <button class="icon-btn theme-btn" data-theme-toggle aria-label="Switch light / dark mode" title="Light / dark mode"><span data-icon="moon" data-icon-class="moon" style="display:contents"></span><span data-icon="sun" data-icon-class="sun" style="display:contents"></span></button>
+            </div>
+
+            <div class="auth-card">
+                <span class="staff-pill"><span data-icon="shield" style="display:contents"></span>Staff only</span>
+
+                <!-- Loading -->
+                <div class="state on" id="stLoading"><p class="muted"><span class="spinner"></span> Checking…</p></div>
+
+                <!-- Server not configured -->
+                <div class="state" id="stConfig">
+                    <h1>Almost ready</h1>
+                    <p class="sub">The staff portal needs one setting on Cloudflare before anyone can sign in.</p>
+                    <div class="config-box" dir="auto">Add a secret named <code>ADMIN_TOKEN_SECRET</code> in Cloudflare Pages → Settings → Variables and Secrets, then redeploy.</div>
+                </div>
+
+                <!-- First-time setup -->
+                <div class="state" id="stSetup">
+                    <h1>Create your account</h1>
+                    <p class="sub">First-time setup for Miss Marwa. After this, the old shared admin code stops working.</p>
+                    <div class="notice danger form-error" id="setupError" role="alert"><span data-icon="alert"></span><span class="txt" dir="auto"></span></div>
+                    <form id="setupForm" novalidate>
+                        <div class="field"><label for="sOld">Current admin code</label>
+                            <div class="input"><span data-icon="lock" style="display:contents"></span><input id="sOld" type="password" autocomplete="off" placeholder="The code you use today"></div></div>
+                        <div class="field"><label for="sName">Your name <small>· shown in the activity log</small></label>
+                            <div class="input"><span data-icon="user" style="display:contents"></span><input id="sName" value="Miss Marwa" maxlength="40" dir="auto"></div></div>
+                        <div class="field"><label for="sUser">Username</label>
+                            <div class="input"><span data-icon="idCard" style="display:contents"></span><input id="sUser" value="marwa" autocapitalize="none" spellcheck="false" maxlength="32" autocomplete="username"></div></div>
+                        <p class="hint">Small English letters or numbers (you can use . _ -)</p>
+                        <div class="field"><label for="sPass">New password</label>
+                            <div class="input"><span data-icon="lock" style="display:contents"></span><input id="sPass" type="password" autocomplete="new-password" placeholder="At least 8 characters" maxlength="128"></div></div>
+                        <div class="field"><label for="sPass2">Confirm new password</label>
+                            <div class="input"><span data-icon="lock" style="display:contents"></span><input id="sPass2" type="password" autocomplete="new-password" placeholder="Type it again" maxlength="128"></div></div>
+                        <button class="btn btn-primary btn-lg btn-block btn-glow" id="setupBtn" type="submit">Create account &amp; sign in</button>
+                    </form>
+                </div>
+
+                <!-- Sign in -->
+                <div class="state" id="stLogin">
+                    <h1>Staff sign in</h1>
+                    <p class="sub">For Miss Marwa and her assistants.</p>
+                    <div class="notice danger form-error" id="loginError" role="alert"><span data-icon="alert"></span><span class="txt" dir="auto"></span></div>
+                    <form id="loginForm" novalidate>
+                        <div class="field"><label for="lUser">Username</label>
+                            <div class="input"><span data-icon="user" style="display:contents"></span><input id="lUser" autocapitalize="none" spellcheck="false" maxlength="32" autocomplete="username" placeholder="Your username"></div></div>
+                        <div class="field"><label for="lPass">Password</label>
+                            <div class="input"><span data-icon="lock" style="display:contents"></span><input id="lPass" type="password" class="has-eye" autocomplete="current-password" maxlength="128" placeholder="Your password"><button type="button" class="eye" id="eyeBtn" aria-label="Show password" data-icon="eye"></button></div></div>
+                        <button class="btn btn-primary btn-lg btn-block btn-glow" id="loginBtn" type="submit">Sign in</button>
+                    </form>
+                    <p class="auth-foot" style="font-size:14px">Forgot your password? Miss Marwa can reset assistant passwords from Settings.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/assets/site.js"></script>
+    <script>
+    (function () {
+        const $ = (id) => document.getElementById(id);
+        Site.init();
+        Site.particles($('sideCanvas'), { density: .7, light: true, lineAlpha: .18 });
+
+        const next = (() => {
+            const n = new URLSearchParams(location.search).get('next') || '';
+            return /^\/admin\/[\w\-./?=&%]*$/.test(n) ? n : '/admin/';
+        })();
+        const show = (id) => document.querySelectorAll('.state').forEach(s => s.classList.toggle('on', s.id === id));
+        function err(boxId, msg) {
+            const b = $(boxId); b.classList.remove('show'); void b.offsetWidth;
+            b.querySelector('.txt').textContent = msg; b.classList.add('show');
+        }
+        async function post(action, body) {
+            const res = await fetch('/api/admin-auth?action=' + action, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body)
+            });
+            let data = {}; try { data = await res.json(); } catch (e) { }
+            return { ok: res.ok && data.success, data, status: res.status };
+        }
+        function busy(btn, on, label) {
+            if (on) { btn.dataset.html = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>${label}`; }
+            else { btn.disabled = false; btn.innerHTML = btn.dataset.html; }
+        }
+
+        (async function boot() {
+            try {
+                const me = await (await fetch('/api/admin-auth?action=me', { credentials: 'same-origin' })).json();
+                if (me.authenticated) return location.replace(next);
+                const st = await (await fetch('/api/admin-auth?action=status')).json();
+                if (!st.configured) return show('stConfig');
+                if (st.needsSetup) { show('stSetup'); $('sOld').focus(); return; }
+                show('stLogin');
+                try { const u = localStorage.getItem('staff_last_user'); if (u) { $('lUser').value = u; $('lPass').focus(); return; } } catch (e) { }
+                $('lUser').focus();
+            } catch (e) {
+                show('stLogin');
+                err('loginError', 'Could not reach the server. Check your connection and try again.');
+            }
+        })();
+
+        $('eyeBtn').addEventListener('click', () => {
+            const p = $('lPass'), showIt = p.type === 'password';
+            p.type = showIt ? 'text' : 'password';
+            $('eyeBtn').innerHTML = Site.icon(showIt ? 'eyeOff' : 'eye');
+        });
+
+        $('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = $('lUser').value.trim().toLowerCase(), password = $('lPass').value;
+            if (!username || !password) return err('loginError', 'Enter your username and password.');
+            busy($('loginBtn'), true, 'Signing in…');
+            try {
+                const r = await post('login', { username, password });
+                if (!r.ok) { busy($('loginBtn'), false); $('lPass').select(); return err('loginError', r.data.error || 'Sign in failed.'); }
+                try { localStorage.setItem('staff_last_user', username); } catch (e) { }
+                location.replace(next);
+            } catch (e2) { busy($('loginBtn'), false); err('loginError', 'No internet connection.'); }
+        });
+
+        $('setupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const body = {
+                setupPassword: $('sOld').value, displayName: $('sName').value.trim(),
+                username: $('sUser').value.trim().toLowerCase(), password: $('sPass').value
+            };
+            if (!body.setupPassword) return err('setupError', 'Enter the current admin code.');
+            if (!/^[a-z0-9._-]{3,32}$/.test(body.username)) return err('setupError', 'Username: 3–32 small English letters or numbers.');
+            if (body.password.length < 8) return err('setupError', 'Choose a password with at least 8 characters.');
+            if (body.password !== $('sPass2').value) return err('setupError', "Passwords don't match.");
+            busy($('setupBtn'), true, 'Creating…');
+            try {
+                const r = await post('setup', body);
+                if (!r.ok) { busy($('setupBtn'), false); return err('setupError', r.data.error || 'Setup failed.'); }
+                try { localStorage.setItem('staff_last_user', body.username); } catch (e) { }
+                location.replace('/admin/');
+            } catch (e2) { busy($('setupBtn'), false); err('setupError', 'No internet connection.'); }
+        });
+    })();
+    </script>
+</body>
+</html>

@@ -81,13 +81,10 @@ export async function onRequestPost(context) {
                 return Response.json({ error: 'يرجى إدخال الكود وكلمة المرور' }, { status: 400 });
             }
 
-            // التحقق من حساب الأدمن الخاص بالمس مروة
-            const adminPassword = env.ADMIN_PASSWORD || 'marwa2026';
-            if (studentId === 'MM-ADMIN' && password === adminPassword) {
-                return Response.json({
-                    success: true,
-                    student: { id: 'MM-ADMIN', firstName: 'Miss Marwa', lastName: '(Admin)', grade: 'all', role: 'admin' }
-                });
+            // حساب الأدمن القديم (MM-ADMIN) اتشال من صفحة دخول الطلاب نهائياً.
+            // مس مروة والمساعد بيدخلوا من بوابة المعلمين المنفصلة (/admin/) بحساباتهم.
+            if (studentId === 'MM-ADMIN') {
+                return Response.json({ error: 'كود الطالب أو كلمة المرور غير صحيحة' }, { status: 401 });
             }
 
             // البحث عن الطالب في الداتا بيز
@@ -195,9 +192,9 @@ export async function onRequestPost(context) {
         if (action === 'validate') {
             const { studentId } = await request.json();
 
-            // لو ده حساب الأدمن، خليه يكمل عادي
-            if (studentId.trim().toUpperCase() === 'MM-ADMIN') {
-                return Response.json({ valid: true });
+            // جلسة الأدمن القديمة (MM-ADMIN) مبقتش صالحة — بتتقفل وترجع لصفحة الدخول
+            if (!studentId || String(studentId).trim().toUpperCase() === 'MM-ADMIN') {
+                return Response.json({ valid: false });
             }
 
             // نسأل الداتا بيز: هل الطالب ده لسه موجود؟

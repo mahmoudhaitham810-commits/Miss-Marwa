@@ -1,4 +1,4 @@
-import { verifyAdminRequest } from './admin-auth.js';
+import { requireStaff } from './admin-auth.js';
 
 export async function onRequest(context) {
     const { request, env } = context;
@@ -6,12 +6,8 @@ export async function onRequest(context) {
     const action = url.searchParams.get('action');
 
     // ── حماية: لازم يكون أدمن ──
-    const isAdmin = await verifyAdminRequest(request, env);
-    if (!isAdmin) {
-        return new Response(JSON.stringify({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }), {
-            status: 401, headers: { 'Content-Type': 'application/json' }
-        });
-    }
+    const auth = await requireStaff(request, env, 'students.view');
+    if (auth.error) return auth.error;
 
     // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
     // السطر ده بيتأكد إننا بنمسك الاسم الصح مهما كان
@@ -32,6 +28,6 @@ export async function onRequest(context) {
 
         return new Response(JSON.stringify({ error: 'Invalid action' }), { status: 400 });
     } catch (err) {
-        return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+        return new Response(JSON.stringify({ error: 'حصل خطأ في السيرفر' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 }

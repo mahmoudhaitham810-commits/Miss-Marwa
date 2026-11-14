@@ -1,4 +1,4 @@
-import { verifyAdminRequest } from './admin-auth.js';
+import { requireStaff, audit, auditStmt } from './admin-auth.js';
 
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
 // الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
@@ -57,8 +57,8 @@ export async function onRequestGet(context) {
         // === تستخدمها لوحة الأدمن عشان تجيب كل الامتحانات ===
         if (action === 'list') {
             // ── حماية: أدمن بس ──
-            const isAdmin = await verifyAdminRequest(request, env);
-            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+            const auth = await requireStaff(request, env, 'exams.view');
+            if (auth.error) return auth.error;
 
             const { results } = await db.prepare(
                 "SELECT id, title, grade, questions, duration_days as durationDays, expires_at, created_at FROM exams ORDER BY created_at DESC"
@@ -120,8 +120,8 @@ export async function onRequestGet(context) {
         // === تستخدمها لوحة الأدمن عشان تجيب نتايج كل الطلاب في امتحان معين، مع إحصائية سريعة وقائمة الغياب ===
         if (action === 'results') {
             // ── حماية: أدمن بس ──
-            const isAdmin = await verifyAdminRequest(request, env);
-            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+            const auth = await requireStaff(request, env, 'exams.view');
+            if (auth.error) return auth.error;
 
             const examId = url.searchParams.get('examId');
             if (!examId) {
@@ -226,8 +226,8 @@ export async function onRequestGet(context) {
         // سلّمه والمعدل العام بتاعه، عشان الأدمن تشوف الصورة كاملة قبل ما تولّد تقرير ===
         if (action === 'grade-overview') {
             // ── حماية: أدمن بس ──
-            const isAdmin = await verifyAdminRequest(request, env);
-            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+            const auth = await requireStaff(request, env, 'exams.view');
+            if (auth.error) return auth.error;
 
             const grade = (url.searchParams.get('grade') || '').toLowerCase();
             if (!grade) {
@@ -286,8 +286,8 @@ export async function onRequestPost(context) {
         // === الأدمن بتنشئ امتحان جديد ===
         if (action === 'create') {
             // ── حماية: أدمن بس ──
-            const isAdmin = await verifyAdminRequest(request, env);
-            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+            const auth = await requireStaff(request, env, 'exams.create');
+            if (auth.error) return auth.error;
 
             if (!data.title || !data.grade) {
                 return Response.json({ error: 'عنوان الامتحان والمرحلة الدراسية مطلوبين' }, { status: 400 });
@@ -317,6 +317,7 @@ export async function onRequestPost(context) {
             ).bind(
                 examId, data.title, data.grade, JSON.stringify(data.questions), durationDays, timeLimitMinutes, expiresAt.toISOString()
             ).run();
+            await audit(db, request, auth.staff, 'exams.create', examId, { title: data.title, grade: data.grade, questions: data.questions.length, durationDays, timeLimitMinutes });
 
             // بمجرد ما الامتحان يتحفظ بنجاح، ابعتي إشعار لطلاب نفس المرحلة بس
             await sendPushNotification(env, {
@@ -331,17 +332,24 @@ export async function onRequestPost(context) {
         // === الأدمن بتمسح امتحان ===
         if (action === 'delete') {
             // ── حماية: أدمن بس ──
-            const isAdmin = await verifyAdminRequest(request, env);
-            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+            const auth = await requireStaff(request, env, 'exams.delete');
+            if (auth.error) return auth.error;
 
             const { examId } = data;
             if (!examId) {
                 return Response.json({ error: 'كود الامتحان مطلوب' }, { status: 400 });
             }
-            // batch = الأمرين يتنفذوا مع بعض أو ميتنفذوش خالص (مفيش نتايج يتيمة)
+            const exam = await db.prepare("SELECT * FROM exams WHERE id = ?").bind(examId).first();
+            if (!exam) return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
+            const { results: subs } = await db.prepare(
+                "SELECT student_id as s, status as st, score as sc, submitted_at as at FROM exam_submissions WHERE exam_id = ?"
+            ).bind(examId).all();
+            // batch = الحذف وسجل النشاط يتنفذوا مع بعض أو ميتنفذوش خالص.
+            // نسخة من الامتحان ودرجات الطلاب بتتحفظ في السجل عشان لو اتمسح بالغلط.
             await db.batch([
                 db.prepare("DELETE FROM exam_submissions WHERE exam_id = ?").bind(examId),
-                db.prepare("DELETE FROM exams WHERE id = ?").bind(examId)
+                db.prepare("DELETE FROM exams WHERE id = ?").bind(examId),
+                auditStmt(db, request, auth.staff, 'exams.delete', examId, { exam, submissions: subs })
             ]);
             return Response.json({ success: true });
         }
@@ -349,16 +357,28 @@ export async function onRequestPost(context) {
         // === الأدمن بتفتح المحاولة تاني لطالب معين (لو اتقفل عليه بالغلط أو النت قطع معاه) ===
         if (action === 'reset-attempt') {
             // ── حماية: أدمن بس ──
-            const isAdmin = await verifyAdminRequest(request, env);
-            if (!isAdmin) return Response.json({ error: 'غير مصرح' }, { status: 401 });
+            const auth = await requireStaff(request, env, 'exams.reset-attempt');
+            if (auth.error) return auth.error;
 
             const { examId, studentId } = data;
             if (!examId || !studentId) {
                 return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
             }
-            await db.prepare(
-                "DELETE FROM exam_submissions WHERE exam_id = ? AND student_id = ?"
-            ).bind(examId, studentId).run();
+            const exam = await db.prepare("SELECT id, title, expires_at FROM exams WHERE id = ?").bind(examId).first();
+            if (!exam) return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
+            // بعد ما الامتحان يقفل، الطالب مش هيقدر يدخله تاني — فإعادة الفتح كانت بتمسح درجته وخلاص.
+            if (new Date(exam.expires_at).getTime() <= Date.now()) {
+                return Response.json({ error: 'الامتحان ده انتهى — إعادة الفتح هتمسح درجة الطالب ومش هيقدر يدخل تاني.', code: 'EXAM_CLOSED' }, { status: 409 });
+            }
+            const previous = await db.prepare(
+                "SELECT status, score, answers, started_at, submitted_at FROM exam_submissions WHERE exam_id = ? AND student_id = ?"
+            ).bind(examId, studentId).first();
+            if (!previous) return Response.json({ success: true, nothingToReset: true });
+            const reason = typeof data.reason === 'string' ? data.reason.trim().slice(0, 300) : '';
+            await db.batch([
+                db.prepare("DELETE FROM exam_submissions WHERE exam_id = ? AND student_id = ?").bind(examId, studentId),
+                auditStmt(db, request, auth.staff, 'exams.reset-attempt', studentId, { examId, examTitle: exam.title, reason: reason || null, previous })
+            ]);
             return Response.json({ success: true });
         }
 

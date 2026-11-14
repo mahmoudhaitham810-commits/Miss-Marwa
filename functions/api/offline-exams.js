@@ -1,4 +1,4 @@
-import { verifyAdminRequest } from './admin-auth.js';
+import { requireStaff, audit, auditStmt } from './admin-auth.js';
 
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
 // الدالة دي بتتأكد إننا بنمسك الاسم الصح مهما كان
@@ -10,10 +10,8 @@ export async function onRequestGet(context) {
     const { request, env } = context;
 
     // ── حماية: أدمن بس ──
-    const isAdmin = await verifyAdminRequest(request, env);
-    if (!isAdmin) {
-        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
-    }
+    const auth = await requireStaff(request, env, 'offline.view');
+    if (auth.error) return auth.error;
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
     const db = getDb(env);
@@ -50,7 +48,7 @@ export async function onRequestGet(context) {
 
         return Response.json({ error: 'إجراء غير معروف' }, { status: 400 });
     } catch (err) {
-        return Response.json({ error: err.message }, { status: 500 });
+        return Response.json({ error: 'حصل خطأ في السيرفر' }, { status: 500 });
     }
 }
 
@@ -58,10 +56,11 @@ export async function onRequestPost(context) {
     const { request, env } = context;
 
     // ── حماية: أدمن بس ──
-    const isAdmin = await verifyAdminRequest(request, env);
-    if (!isAdmin) {
-        return Response.json({ error: 'غير مصرح — يرجى تسجيل الدخول كمسؤول' }, { status: 401 });
-    }
+    const PERM = { 'create-exam': 'offline.create-exam', 'update-exam': 'offline.edit-exam', 'delete-exam': 'offline.delete-exam', 'save-grades': 'offline.save-grades' };
+    const url0 = new URL(request.url);
+    const auth = await requireStaff(request, env, PERM[url0.searchParams.get('action')] || 'offline.view');
+    if (auth.error) return auth.error;
+    const staff = auth.staff;
 
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
@@ -80,6 +79,7 @@ export async function onRequestPost(context) {
             const result = await db.prepare(
                 "INSERT INTO offline_exams (exam_name, grade, total_marks) VALUES (?, ?, ?)"
             ).bind(data.examName, data.grade, totalMarks).run();
+            await audit(db, request, staff, 'offline.create-exam', result.meta.last_row_id, { examName: data.examName, grade: data.grade, totalMarks });
 
             return Response.json({ success: true, examId: result.meta.last_row_id });
         }
@@ -90,9 +90,17 @@ export async function onRequestPost(context) {
             if (!examId || !examName || parseFloat(totalMarks) <= 0) {
                 return Response.json({ error: 'بيانات غير صالحة' }, { status: 400 });
             }
-            await db.prepare(
-                "UPDATE offline_exams SET exam_name = ?, total_marks = ? WHERE id = ?"
-            ).bind(examName, parseFloat(totalMarks), examId).run();
+            const before = await db.prepare("SELECT exam_name, total_marks FROM offline_exams WHERE id = ?").bind(examId).first();
+            if (!before) return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
+            // لو الدرجة النهائية قلّت عن درجة طالب متسجلة، النسبة كانت بتطلع أكتر من 100%
+            const top = await db.prepare("SELECT MAX(score) as m FROM offline_grades WHERE exam_id = ?").bind(examId).first();
+            if (top && top.m !== null && parseFloat(totalMarks) < top.m) {
+                return Response.json({ error: `فيه طالب واخد ${top.m} في الامتحان ده — الدرجة النهائية مينفعش تقل عن كده.` }, { status: 400 });
+            }
+            await db.batch([
+                db.prepare("UPDATE offline_exams SET exam_name = ?, total_marks = ? WHERE id = ?").bind(examName, parseFloat(totalMarks), examId),
+                auditStmt(db, request, staff, 'offline.edit-exam', examId, { before, after: { exam_name: examName, total_marks: parseFloat(totalMarks) } })
+            ]);
             return Response.json({ success: true });
         }
 
@@ -100,9 +108,13 @@ export async function onRequestPost(context) {
             const { examId } = data;
             if (!examId) return Response.json({ error: 'معرف الامتحان مفقود' }, { status: 400 });
             
+            const exam = await db.prepare("SELECT * FROM offline_exams WHERE id = ?").bind(examId).first();
+            if (!exam) return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
+            const { results: grades } = await db.prepare("SELECT student_id as s, score as sc FROM offline_grades WHERE exam_id = ?").bind(examId).all();
             await db.batch([
                 db.prepare("DELETE FROM offline_grades WHERE exam_id = ?").bind(examId),
-                db.prepare("DELETE FROM offline_exams WHERE id = ?").bind(examId)
+                db.prepare("DELETE FROM offline_exams WHERE id = ?").bind(examId),
+                auditStmt(db, request, staff, 'offline.delete-exam', examId, { exam, grades })
             ]);
             return Response.json({ success: true });
         }
@@ -113,7 +125,7 @@ export async function onRequestPost(context) {
                 return Response.json({ error: 'بيانات ناقصة' }, { status: 400 });
             }
 
-            const exam = await db.prepare("SELECT total_marks FROM offline_exams WHERE id = ?").bind(examId).first();
+            const exam = await db.prepare("SELECT exam_name, total_marks FROM offline_exams WHERE id = ?").bind(examId).first();
             if (!exam) return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
             const maxMarks = exam.total_marks || 100;
 
@@ -135,6 +147,20 @@ export async function onRequestPost(context) {
                 ).bind(examId, g.studentId, score));
             }
 
+            // سجل النشاط: بنسجل الخانات اللي اتغيرت بس (القديم والجديد) عشان أي تعديل يبان مين عمله
+            const { results: oldRows } = await db.prepare("SELECT student_id, score FROM offline_grades WHERE exam_id = ?").bind(examId).all();
+            const oldMap = {};
+            oldRows.forEach(r => { oldMap[r.student_id] = r.score; });
+            const changes = [];
+            for (const g of grades) {
+                if (!g.studentId) continue;
+                const isEmpty = (g.score === '' || g.score === null || g.score === undefined);
+                const next = isEmpty ? null : Number(g.score);
+                const prev = oldMap[g.studentId] === undefined ? null : oldMap[g.studentId];
+                if (prev !== next) changes.push({ s: g.studentId, from: prev, to: next });
+            }
+            if (changes.length) statements.push(auditStmt(db, request, staff, 'offline.save-grades', examId, { examName: exam.exam_name, changes }));
+
             // batch = كل الدرجات تتحفظ مرة واحدة (أسرع بكتير، ومفيش حفظ نص العمود لو حصل خطأ)
             if (statements.length > 0) await db.batch(statements);
 
@@ -143,6 +169,6 @@ export async function onRequestPost(context) {
 
         return Response.json({ error: 'إجراء غير معروف' }, { status: 400 });
     } catch (err) {
-        return Response.json({ error: err.message }, { status: 500 });
+        return Response.json({ error: 'حصل خطأ في السيرفر' }, { status: 500 });
     }
 }
