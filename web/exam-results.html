@@ -269,6 +269,10 @@
             document.getElementById('dashboardLink').href = gradeRoutes[student.grade];
         }
 
+        function esc(v) {
+            return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
         function scoreClass(score, total) {
             if (score === null || score === undefined || total === 0) return 'score-neutral';
             const pct = (score / total) * 100;
@@ -299,7 +303,7 @@
                     <a href="./exam.html?id=${encodeURIComponent(r.examId)}" style="text-decoration: none; color: inherit; display: block;">
                         <div class="result-card" style="cursor: pointer; transition: transform 0.2s; border: 1px solid var(--border-glass);">
                             <div class="result-info">
-                                <span class="result-title">${r.title}</span>
+                                <span class="result-title">${esc(r.title)}</span>
                                 <span class="result-meta">${(r.grade || '').toUpperCase()}</span>
                             </div>
                             <div style="display:flex; align-items:center; gap: 15px;">
@@ -313,7 +317,7 @@
                 container.innerHTML = `
                     <div class="empty-placeholder">
                         <i class="fas fa-triangle-exclamation"></i>
-                        <p>حصل خطأ أثناء تحميل النتائج: ${err.message}</p>
+                        <p>حصل خطأ أثناء تحميل النتائج: ${esc(err.message)}</p>
                     </div>
                 `;
             }

@@ -10,34 +10,13 @@ const DB = {
                 return await res.json();
             }
             const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || 'Wrong ID/Password');
+            throw new Error(data.error || 'كود الطالب أو كلمة المرور غير صحيحة');
         } catch (err) {
-            // Local fallback
-            const cleanId = (studentId || '').trim().toUpperCase();
-            const cleanPass = (password || '').trim();
-            const localStudents = JSON.parse(localStorage.getItem('mm_students_db') || '[]');
-
-            // Default admin account
-            if (cleanId === 'MM-ADMIN' && cleanPass === 'marwa2026') {
-                return {
-                    success: true,
-                    student: { id: 'MM-ADMIN', firstName: 'Miss Marwa', lastName: '(Admin)', grade: 'all', role: 'admin', gender: 'female' }
-                };
-            }
-
-            const acc = localStudents.find(x => (x.studentId || x.student_id || '').trim().toUpperCase() === cleanId);
-            if (acc && acc.password === cleanPass) {
-                return {
-                    success: true,
-                    student: {
-                        id: acc.studentId || acc.student_id,
-                        firstName: acc.firstName || acc.first_name,
-                        lastName: acc.lastName || acc.last_name,
-                        grade: acc.grade,
-                        role: acc.role || (acc.grade === 'all' ? 'admin' : 'student'),
-                        gender: acc.gender
-                    }
-                };
+            // كان هنا "دخول احتياطي" من نسخة محفوظة في المتصفح، وكان بيسمح للطالب يدخل
+            // بالباسورد القديم حتى بعد ما الأدمن تغيره (والباسورد كان متخزن في المتصفح كنص عادي).
+            // دلوقتي الدخول من السيرفر بس.
+            if (err instanceof TypeError) {
+                throw new Error('تعذر الاتصال بالخادم، تأكد من الإنترنت وحاول تاني');
             }
             throw err;
         }
@@ -53,16 +32,7 @@ const DB = {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'فشل إنشاء الحساب');
 
-            // Cache locally
-            const local = JSON.parse(localStorage.getItem('mm_students_db') || '[]');
-            local.push({
-                studentId: data.studentId,
-                ...payload,
-                role: 'student',
-                createdAt: new Date().toLocaleDateString('ar-EG')
-            });
-            localStorage.setItem('mm_students_db', JSON.stringify(local));
-
+            // (مبقيناش نحفظ بيانات الطالب وكلمة السر في المتصفح — ملهاش لازمة وكانت خطر)
             return data;
         } catch (err) {
             // مهم جداً: لو التسجيل فشل فعلاً (مثلاً مشكلة في السيرفر أو الداتا بيز)،
@@ -84,14 +54,22 @@ const DB = {
                 res = await fetch(`/api/students?t=${timestamp}`);
             }
 
+            if (res.status === 401) {
+                // جلسة الأدمن خلصت: نقول كده صراحة بدل ما نعرض "مفيش طلاب"
+                throw new Error('SESSION_EXPIRED');
+            }
+
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data)) {
-                    localStorage.setItem('mm_students_db', JSON.stringify(data));
-                    return data;
+                    // من غير باسوردات الطلاب، حتى لو جت من السيرفر
+                    const safe = data.map(({ password, ...rest }) => rest);
+                    localStorage.setItem('mm_students_db', JSON.stringify(safe));
+                    return safe;
                 }
             }
         } catch (e) {
+            if (e.message === 'SESSION_EXPIRED') throw e;
             console.warn('API getStudents failed, using local storage cache:', e);
         }
         return JSON.parse(localStorage.getItem('mm_students_db') || '[]');
@@ -105,35 +83,31 @@ const DB = {
             localStorage.setItem('mm_students_db', JSON.stringify(local));
         }
 
-        try {
-            const res = await fetch('/api/students?action=reset-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ studentId, password })
-            });
-            if (res.ok) return await res.json();
-        } catch (e) {
-            console.warn('API resetPassword failed:', e);
-        }
-        return { success: true };
+        // قبل كده لو السيرفر رفض (جلسة منتهية مثلاً) كانت الدالة بترجع "نجح" برضو،
+        // والأدمن تفتكر الباسورد اتغير وهو متغيرش. دلوقتي أي فشل بيظهر كرسالة خطأ.
+        const res = await fetch('/api/students?action=reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ studentId, password })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'فشل تغيير كلمة المرور');
+        return data;
     },
 
     async deleteStudent(studentId) {
+        const res = await fetch('/api/students?action=delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ studentId })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'فشل حذف الطالب');
+
         let local = JSON.parse(localStorage.getItem('mm_students_db') || '[]');
         local = local.filter(s => (s.studentId || s.student_id) !== studentId);
         localStorage.setItem('mm_students_db', JSON.stringify(local));
-
-        try {
-            const res = await fetch('/api/students?action=delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ studentId })
-            });
-            if (res.ok) return await res.json();
-        } catch (e) {
-            console.warn('API deleteStudent failed:', e);
-        }
-        return { success: true };
+        return data;
     },
 
     async getLessons(grade = 'ALL', category = 'ALL') {
@@ -185,42 +159,37 @@ const DB = {
             notes: (lesson.notes || '').trim()
         };
 
-        const allLessons = JSON.parse(localStorage.getItem('mm_lessons_db') || '[]');
-        allLessons.unshift(localLesson);
-        localStorage.setItem('mm_lessons_db', JSON.stringify(allLessons));
-
+        // قبل كده لو السيرفر رفض الحفظ (مثلاً جلسة الأدمن خلصت) كان المحتوى بيتحفظ في متصفح
+        // الأدمن بس، ويظهر لها إنه "اتنشر" والطلاب عمرهم ما يشوفوه. دلوقتي أي فشل بيظهر.
+        let res;
         try {
-            const res = await fetch('/api/lessons', {
+            res = await fetch('/api/lessons', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(localLesson)
             });
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || 'Server error saving lesson');
-            }
-            return data;
-        } catch (err) {
-            if (err.message && err.message.includes('Server error')) {
-                throw err;
-            }
-            return { success: true, id: localLesson.id, localOnly: true };
+        } catch (netErr) {
+            throw new Error('تعذر الاتصال بالخادم، المحتوى ماتنشرش');
         }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'فشل حفظ المحتوى على الخادم');
+
+        const allLessons = JSON.parse(localStorage.getItem('mm_lessons_db') || '[]');
+        allLessons.unshift(localLesson);
+        localStorage.setItem('mm_lessons_db', JSON.stringify(allLessons));
+        return data;
     },
 
     async deleteLesson(id) {
+        const res = await fetch(`/api/lessons?id=${encodeURIComponent(id)}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'فشل حذف المحتوى');
+
         let allLessons = JSON.parse(localStorage.getItem('mm_lessons_db') || '[]');
         allLessons = allLessons.filter(l => l.id !== id);
         localStorage.setItem('mm_lessons_db', JSON.stringify(allLessons));
-
-        try {
-            const res = await fetch(`/api/lessons?id=${encodeURIComponent(id)}`, {
-                method: 'DELETE'
-            });
-            if (res.ok) return await res.json();
-        } catch (e) {
-            console.warn('API deleteLesson failed:', e);
-        }
-        return { success: true };
+        return data;
     }
 };

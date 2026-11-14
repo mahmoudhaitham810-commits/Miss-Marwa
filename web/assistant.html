@@ -531,7 +531,10 @@
         // Basic Markdown Parser
         function parseMarkdown(text) {
             if (!text) return '';
-            let html = text
+            // أول حاجة نحوّل أي علامات HTML في الرد لنص عادي (الرد جاي من الذكاء الاصطناعي،
+            // ولو فيه "a<b" أو كود، كان بيبوّظ الرسالة أو ممكن يتنفذ كـ HTML)
+            let html = String(text)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
                 .replace(/`(.*?)`/g, '<code>$1</code>')
@@ -548,9 +551,10 @@
 
         // Add Message to DOM
         function appendMessage(role, content, isHtml = false) {
-            if (welcomeScreen && welcomeScreen.parentNode) {
-                welcomeScreen.remove();
-            }
+            // بندور عليها كل مرة (مش متغير ثابت)، لأن "مسح المحادثة" بيعمل شاشة ترحيب جديدة،
+            // والقديمة كانت بتفضل ظاهرة فوق الرسايل الجديدة
+            const currentWelcome = document.getElementById('welcomeScreen');
+            if (currentWelcome) currentWelcome.remove();
 
             const wrapper = document.createElement('div');
             wrapper.className = `msg-wrapper msg-${role}`;
@@ -652,7 +656,7 @@
                 const data = await res.json();
                 
                 if (data && data.history && data.history.length > 0) {
-                    if (welcomeScreen && welcomeScreen.parentNode) welcomeScreen.remove();
+                    document.getElementById('welcomeScreen')?.remove();
                     data.history.forEach(msg => {
                         const displayRole = msg.role === 'model' ? 'assistant' : 'user';
                         appendMessage(displayRole, msg.content);

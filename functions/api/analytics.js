@@ -73,7 +73,7 @@ export async function onRequestGet(context) {
             // 3. Online exams + submissions for this grade
             //    Online exam "total" = JSON.parse(questions).length
             const { results: onlineSubs } = await db.prepare(
-                `SELECT sub.student_id as studentId, sub.score, e.questions
+                `SELECT sub.student_id as studentId, sub.exam_id as examId, sub.score, e.questions
                  FROM exam_submissions sub
                  JOIN exams e ON e.id = sub.exam_id
                  WHERE sub.status = 'submitted' AND e.grade = ?`
@@ -133,11 +133,9 @@ export async function onRequestGet(context) {
             return Response.json({
                 students: list,
                 totalOfflineExams: offlineExams.length,
-                totalOnlineExams: new Set(onlineSubs.map(r => {
-                    // Deduplicate by exam — we don't have exam_id in onlineSubs,
-                    // but since questions JSON is per-exam, count unique JSON strings
-                    return r.questions;
-                })).size
+                // عدد الامتحانات الأونلاين المختلفة (بالكود بتاعها، مش بنص الأسئلة —
+                // امتحانين بنفس الأسئلة كانوا بيتحسبوا امتحان واحد)
+                totalOnlineExams: new Set(onlineSubs.map(r => r.examId)).size
             });
         }
 

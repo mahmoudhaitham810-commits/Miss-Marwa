@@ -116,10 +116,13 @@ async function executeTool(call, studentCheck, db) {
         };
       }
       case "get_exam_deadlines": {
-        const exams = await db.prepare("SELECT id, title, expires_at FROM exams WHERE grade = ? AND expires_at > datetime('now') ORDER BY expires_at ASC").bind(grade).all();
+        // expires_at متخزن بصيغة ISO (فيها حرف T)، فمقارنته بـ datetime('now') كنص كانت بتغلط
+        // في نفس اليوم (امتحان خلص الصبح كان بيظهر لسه مفتوح). المقارنة بقت بالتاريخ الحقيقي هنا.
+        const exams = await db.prepare("SELECT id, title, expires_at FROM exams WHERE grade = ? ORDER BY expires_at ASC").bind(grade).all();
         const submissions = await db.prepare("SELECT exam_id FROM exam_submissions WHERE student_id = ?").bind(studentId).all();
         const subMap = new Set((submissions.results || []).map(s => s.exam_id));
-        const openExams = (exams.results || []).filter(e => !subMap.has(e.id));
+        const nowMs = Date.now();
+        const openExams = (exams.results || []).filter(e => !subMap.has(e.id) && new Date(e.expires_at).getTime() > nowMs);
         return { openExams };
       }
       case "get_new_content": {
@@ -127,7 +130,8 @@ async function executeTool(call, studentCheck, db) {
         return { newContent: lessons.results || [] };
       }
       case "get_my_grades_and_rank": {
-        const online = await db.prepare("SELECT sub.score, e.title, e.questions FROM exam_submissions sub JOIN exams e ON e.id = sub.exam_id WHERE sub.student_id = ? AND sub.status = 'submitted'").bind(studentId).all();
+        // بنجيب عدد الأسئلة بس (مش الأسئلة نفسها بإجاباتها الصح) عشان الإجابات متوصلش للمساعد
+        const online = await db.prepare("SELECT sub.score, e.title, json_array_length(e.questions) AS total FROM exam_submissions sub JOIN exams e ON e.id = sub.exam_id WHERE sub.student_id = ? AND sub.status = 'submitted'").bind(studentId).all();
         const offline = await db.prepare("SELECT og.score, oe.exam_name, oe.total_marks FROM offline_grades og JOIN offline_exams oe ON oe.id = og.exam_id WHERE og.student_id = ?").bind(studentId).all();
 
         // Rank calculation
@@ -154,8 +158,14 @@ async function executeTool(call, studentCheck, db) {
         return { onlineGrades: online.results || [], offlineGrades: offline.results || [], rank };
       }
       case "get_wrong_answers": {
-        const exam = await db.prepare("SELECT id, questions FROM exams WHERE grade = ? AND title LIKE ?").bind(grade, `%${args.exam_title}%`).first();
+        const exam = await db.prepare("SELECT id, questions, expires_at FROM exams WHERE grade = ? AND title LIKE ?").bind(grade, `%${args.exam_title}%`).first();
         if (!exam) return { error: "لم يتم العثور على الامتحان" };
+
+        // الإجابات الصح متتكشفش طول ما الامتحان لسه مفتوح، عشان الطالب ميقدرش يسلّم
+        // ويسأل المساعد عن الإجابات ويبعتها لزمايله اللي لسه محلّوش
+        if (new Date(exam.expires_at).getTime() > Date.now()) {
+          return { error: "الامتحان ده لسه مفتوح لباقي الطلاب، مراجعة الأخطاء والإجابات الصح هتكون متاحة بعد ما وقته يخلص." };
+        }
 
         const sub = await db.prepare("SELECT answers FROM exam_submissions WHERE student_id = ? AND exam_id = ? AND status = 'submitted'").bind(studentId, exam.id).first();
         if (!sub) return { error: "لم يتم العثور على إجابات لهذا الامتحان" };
@@ -219,7 +229,8 @@ async function callGemini(env, payload) {
 
   // Model name from env var — change in Cloudflare dashboard, no redeploy needed
   const model = env.GEMINI_MODEL || 'gemini-2.0-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
+  // المفتاح بيتبعت في الـ header مش في الرابط، عشان ميظهرش في أي log أو رسالة خطأ
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
@@ -227,7 +238,7 @@ async function callGemini(env, payload) {
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
       body: JSON.stringify(payload),
       signal: controller.signal
     });
@@ -467,8 +478,7 @@ function formatScriptedResponse(toolName, data, studentName) {
       if (onlineGrades.length > 0) {
         reply += '**امتحانات أونلاين:**\n';
         for (const g of onlineGrades) {
-          let total = 0;
-          try { total = JSON.parse(g.questions || '[]').length; } catch (e) { /* ignore */ }
+          const total = g.total || 0;
           reply += `• ${g.title}: ${g.score}/${total} 🎯\n`;
         }
         reply += '\n';
@@ -707,7 +717,9 @@ async function handleChat(studentId, message, studentCheck, db, env) {
       replyText = "النظام عليه ضغط حالياً ⏳ بس أنا لسه صاحي وممكن أساعدك في الحاجات دي فوراً:";
       fallbackSuggestions = FALLBACK_CHIPS;
     } else {
-      replyText = "حصل خطأ غير متوقع 😕 التفاصيل: " + errMsg.slice(0, 200);
+      // التفاصيل التقنية بتروح للـ log بس (فوق)، مش للطالب
+      replyText = "حصل خطأ غير متوقع 😕 جرّب تاني كمان شوية، أو اسألني عن الحاجات دي:";
+      fallbackSuggestions = FALLBACK_CHIPS;
     }
 
     // Save error response to history too (so it persists)
@@ -771,22 +783,11 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ error: "DB Error: " + dbErr.message }, { status: 500 });
     }
 
-    // Auto-registration fallback
+    // مهم: كان هنا "تسجيل تلقائي" بيعمل حساب طالب جديد بباسورد 0000 لأي كود مش موجود.
+    // ده كان بيسمح لأي حد يعمل حسابات وهمية (وبيعمل حساب طالب اسمه MM-ADMIN لو الأدمن فتح المساعد).
+    // دلوقتي لو الكود مش موجود بنرفض الطلب بس.
     if (!studentCheck) {
-      const fallbackName = body.firstName || 'طالب';
-      const fallbackGrade = body.grade || 'prep2';
-      try {
-        await db.prepare(
-          "INSERT OR IGNORE INTO students (student_id, first_name, last_name, grade, password, role, gender, branch, phone, parent_phone) VALUES (?, ?, '', ?, '0000', 'student', '', '', '', '')"
-        ).bind(studentId, fallbackName, fallbackGrade).run();
-        studentCheck = await db.prepare("SELECT * FROM students WHERE student_id = ?").bind(studentId).first();
-      } catch (insertErr) {
-        return Response.json({ error: "Student not found and auto-registration failed: " + insertErr.message }, { status: 400 });
-      }
-    }
-
-    if (!studentCheck) {
-      return Response.json({ error: "Student not found for ID: " + studentId }, { status: 400 });
+      return Response.json({ error: "الحساب غير موجود. سجّل دخول تاني من الصفحة الرئيسية." }, { status: 404 });
     }
 
     if (action === "chat") {

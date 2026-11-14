@@ -24,7 +24,11 @@ async function hmacSign(message, secret) {
 
 async function hmacVerify(message, signature, secret) {
     const expected = await hmacSign(message, secret);
-    return expected === signature;
+    // مقارنة بوقت ثابت (مش === العادية) عشان محدش يقدر يخمّن التوقيع حرف حرف من سرعة الرد
+    if (typeof signature !== 'string' || signature.length !== expected.length) return false;
+    let diff = 0;
+    for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+    return diff === 0;
 }
 
 // Create a signed token: base64(payload).signature
