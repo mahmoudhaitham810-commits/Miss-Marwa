@@ -107,6 +107,7 @@
         const image = m.image || (m.mediaKind === 'image' ? m.mediaId : null);
         const audio = m.audio || (m.mediaKind === 'audio' && m.mediaId ? { id: m.mediaId, seconds: m.seconds } : null);
         const media = (image ? `<a class="ask-img" href="${mediaUrl(image)}" target="_blank" rel="noopener"><img src="${mediaUrl(image)}" alt="Photo" loading="lazy"></a>` : '')
+            + (m.removed || []).map(k => `<div class="ask-removed">${k === 'image' ? '📷 Photo' : '🎤 Voice note'} removed to save space</div>`).join('')
             + (audio ? `<div class="ask-audio">${icon ? icon('mic', 'sm') : ''}<audio controls preload="none" src="${mediaUrl(audio.id)}"></audio>${audio.seconds ? `<span class="ask-dur">${mmss(audio.seconds)}</span>` : ''}</div>` : '');
         const who = m.sender === 'auto' ? 'Science Academy' : m.sender === 'staff' ? (m.staffName || 'Miss Marwa') : '';
         return `<div class="ask-row ${mine ? 'mine' : 'theirs'} ${m.sender}">

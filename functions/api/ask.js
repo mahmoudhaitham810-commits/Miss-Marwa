@@ -7,7 +7,7 @@
 // Storage: photos and voice notes are compressed in the browser (photo ≈ 100–250 KB,
 // voice ≈ 15 KB per 10 s) and kept in D1 (table ask_media) — nothing to set up in Cloudflare.
 // =============================================================
-import { requireStaff, requireStudent, ensureAppSchema } from './admin-auth.js';
+import { requireStaff, requireStudent, ensureAppSchema, auditStmt } from './admin-auth.js';
 
 function getDb(env) { return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function'); }
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
@@ -64,6 +64,44 @@ async function saveAttachments(db, studentId, att) {
     if (aud) return { media_id: aud, media_kind: 'audio', media_seconds: att.audio.seconds, audio_id: null, audio_seconds: null };
     return { media_id: null, media_kind: null, media_seconds: null, audio_id: null, audio_seconds: null };
 }
+// ---- Storage housekeeping ----
+// Photos / voice notes are the only heavy part. Removing one keeps the message (text, who, when)
+// and leaves a "removed" marker: media_kind stays, media_id becomes NULL (audio_seconds stays for a voice note).
+export const MEDIA_KEEP_DAYS = 30;
+async function dropMedia(db, mediaWhere, binds = []) {
+    // pick the files first (the WHERE may look at ask_messages, which the first UPDATE changes)
+    const { results } = await db.prepare(`SELECT id, size FROM ask_media WHERE ${mediaWhere}`).bind(...binds).all();
+    const rows = results || [];
+    for (let i = 0; i < rows.length; i += 90) {
+        const ids = rows.slice(i, i + 90).map(r => r.id), ph = ids.map(() => '?').join(',');
+        await db.batch([
+            db.prepare(`UPDATE ask_messages SET media_id = NULL WHERE media_id IN (${ph})`).bind(...ids),
+            db.prepare(`UPDATE ask_messages SET audio_id = NULL WHERE audio_id IN (${ph})`).bind(...ids),
+            db.prepare(`DELETE FROM ask_media WHERE id IN (${ph})`).bind(...ids)
+        ]);
+    }
+    return { files: rows.length, bytes: rows.reduce((t, r) => t + (r.size || 0), 0) };
+}
+// Runs at most once a day (lazily, when the inbox is opened or a question is sent).
+export async function purgeOldMedia(db, { force = false } = {}) {
+    await db.prepare(`INSERT OR IGNORE INTO app_kv ("key", value) VALUES ('ask_media_purge', '2000-01-01 00:00:00')`).run();
+    if (!force) {
+        const claim = await db.prepare(`UPDATE app_kv SET value = datetime('now'), updated_at = CURRENT_TIMESTAMP
+            WHERE "key" = 'ask_media_purge' AND value <= datetime('now', '-1 day')`).run();
+        if (!claim.meta || !claim.meta.changes) return null;      // already ran in the last 24 h
+    } else await db.prepare(`UPDATE app_kv SET value = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE "key" = 'ask_media_purge'`).run();
+    const cutoff = (await db.prepare(`SELECT datetime('now', ?) as c`).bind(`-${MEDIA_KEEP_DAYS} days`).first()).c;
+    const r = await dropMedia(db, 'created_at < ?', [cutoff]);
+    await db.prepare(`INSERT INTO app_kv ("key", value) VALUES ('ask_media_purge_last', ?)
+        ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(JSON.stringify({ ...r, at: new Date().toISOString() })).run();
+    return r;
+}
+function lazyPurge(context, db) {
+    const p = purgeOldMedia(db).catch(() => null);      // housekeeping must never break the request
+    if (context.waitUntil) context.waitUntil(p);
+    return p;
+}
+
 const hasAtt = (att) => !!(att.image || att.audio);
 const insertMsg = (db, qid, sender, staffName, text, c) => db.prepare(
     'INSERT INTO ask_messages (question_id, sender, staff_name, text, media_id, media_kind, media_seconds, audio_id, audio_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -100,6 +138,10 @@ const msgOut = (m) => {
     return {
         id: m.id, sender: m.sender, staffName: m.staff_name || null, text: m.text || '',
         image, audio,
+        removed: [
+            ...(m.media_kind && !m.media_id ? [m.media_kind] : []),
+            ...(m.media_kind === 'image' && m.audio_seconds != null && !m.audio_id ? ['audio'] : [])
+        ],
         mediaId: m.media_id || null, mediaKind: m.media_kind || null, seconds: m.media_seconds || null, // older clients
         at: m.created_at
     };
@@ -136,7 +178,7 @@ export async function onRequest(context) {
         }
 
         // ================= Staff =================
-        const STAFF_ACTIONS = ['counts', 'inbox', 'staff-thread', 'staff-reply', 'resolve', 'bank', 'bank-edit', 'engagement', 'storage'];
+        const STAFF_ACTIONS = ['counts', 'inbox', 'staff-thread', 'staff-reply', 'resolve', 'bank', 'bank-edit', 'bank-clear', 'engagement', 'storage'];
         if (STAFF_ACTIONS.includes(action)) {
             const auth = await requireStaff(request, env, 'inbox.reply');
             if (auth.error) return auth.error;
@@ -151,6 +193,7 @@ export async function onRequest(context) {
 
             // Queue: per grade, oldest waiting first (FIFO)
             if (action === 'inbox') {
+                await lazyPurge(context, db);
                 const grade = GRADES.includes(url.searchParams.get('grade')) ? url.searchParams.get('grade') : 'prep1';
                 const status = ['waiting', 'answered', 'all'].includes(url.searchParams.get('status')) ? url.searchParams.get('status') : 'waiting';
                 const where = status === 'waiting' ? "q.status = 'waiting'" : status === 'answered' ? "q.status IN ('answered','resolved')" : '1=1';
@@ -231,7 +274,7 @@ export async function onRequest(context) {
                 const cond = picks.map(([u, l]) => (l ? '(q.unit = ? AND q.lesson = ?)' : '(q.unit = ?)')).join(' OR ');
                 const binds = picks.flatMap(([u, l]) => (l ? [u, l] : [u]));
                 const { results } = await db.prepare(
-                    `SELECT q.id, q.unit, q.lesson, q.bank_text, q.bank_hidden, q.created_at, q.student_id, s.first_name, s.last_name
+                    `SELECT q.id, q.unit, q.lesson, q.bank_text, q.bank_hidden, q.exported_at, q.created_at, q.student_id, s.first_name, s.last_name
                      FROM ask_questions q LEFT JOIN students s ON s.student_id = q.student_id
                      WHERE q.grade = ? AND (${cond}) ORDER BY q.unit, q.lesson, q.id`
                 ).bind(grade, ...binds).all();
@@ -249,7 +292,7 @@ export async function onRequest(context) {
                 }
                 return json({
                     items: (results || []).map(r => ({
-                        id: r.id, unit: r.unit, lesson: r.lesson, hidden: !!r.bank_hidden, createdAt: r.created_at,
+                        id: r.id, unit: r.unit, lesson: r.lesson, hidden: !!r.bank_hidden, exportedAt: r.exported_at || null, createdAt: r.created_at,
                         original: firstText[r.id] || '', text: r.bank_text != null ? r.bank_text : (firstText[r.id] || ''), edited: r.bank_text != null,
                         images: images[r.id] || [], student: `${r.first_name || ''} ${r.last_name || ''}`.trim()
                     }))
@@ -261,7 +304,29 @@ export async function onRequest(context) {
                 if (!id) return bad('بيانات ناقصة');
                 if (data.text !== undefined) await db.prepare('UPDATE ask_questions SET bank_text = ? WHERE id = ?').bind(data.text === null ? null : cleanText(data.text), id).run();
                 if (data.hidden !== undefined) await db.prepare('UPDATE ask_questions SET bank_hidden = ? WHERE id = ?').bind(data.hidden ? 1 : 0, id).run();
+                if (data.exported === false) await db.prepare('UPDATE ask_questions SET exported_at = NULL WHERE id = ?').bind(id).run();
                 return json({ ok: true });
+            }
+
+            // After a PDF export: take those questions out of the bank and (optionally) drop their photos / voice notes.
+            // The chat text stays for the student and the team.
+            if (action === 'bank-clear') {
+                if (!isPost) return bad('POST only', 405);
+                const ids = [...new Set((Array.isArray(data.ids) ? data.ids : []).map(n => parseInt(n, 10)).filter(n => n > 0))].slice(0, 500);
+                if (!ids.length) return bad('مفيش أسئلة');
+                const mode = data.mode === 'bank' ? 'bank' : 'media';
+                let freed = { files: 0, bytes: 0 };
+                for (let i = 0; i < ids.length; i += 45) {            // D1: max 100 bound values per query (ids are bound twice below)
+                    const part = ids.slice(i, i + 45), ph = part.map(() => '?').join(',');
+                    if (mode === 'media') {
+                        const f = await dropMedia(db, `id IN (SELECT media_id FROM ask_messages WHERE question_id IN (${ph}) AND media_id IS NOT NULL
+                            UNION SELECT audio_id FROM ask_messages WHERE question_id IN (${ph}) AND audio_id IS NOT NULL)`, [...part, ...part]);
+                        freed = { files: freed.files + f.files, bytes: freed.bytes + f.bytes };
+                    }
+                    await db.prepare(`UPDATE ask_questions SET exported_at = CURRENT_TIMESTAMP WHERE id IN (${ph})`).bind(...part).run();
+                }
+                await auditStmt(db, request, staff, 'ask.bank-clear', null, { mode, questions: ids.length, ...freed }).run();
+                return json({ ok: true, mode, cleared: ids.length, ...freed });
             }
 
             // How many questions each student asked (engagement)
@@ -280,7 +345,9 @@ export async function onRequest(context) {
             // How much room the photos / voice notes take
             if (action === 'storage') {
                 const r = await db.prepare('SELECT COUNT(*) as files, COALESCE(SUM(size), 0) as bytes FROM ask_media').first();
-                return json({ files: r.files, bytes: r.bytes });
+                const last = await db.prepare(`SELECT value FROM app_kv WHERE "key" = 'ask_media_purge_last'`).first().catch(() => null);
+                let lastRun = null; try { lastRun = last ? JSON.parse(last.value) : null; } catch (e) { }
+                return json({ files: r.files, bytes: r.bytes, keepDays: MEDIA_KEEP_DAYS, lastCleanup: lastRun });
             }
         }
 
@@ -338,6 +405,7 @@ export async function onRequest(context) {
                     insertMsg(db, qid, 'student', null, text, cols),
                     db.prepare('INSERT INTO ask_messages (question_id, sender, text) VALUES (?, ?, ?)').bind(qid, 'auto', AUTO_REPLY)
                 ]);
+                lazyPurge(context, db);
                 return json({ ok: true, id: qid, messages: await messagesOf(db, qid) });
             }
 

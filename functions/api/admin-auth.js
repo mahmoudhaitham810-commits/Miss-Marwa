@@ -164,7 +164,7 @@ export async function ensureAppSchema(db) {
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, grade TEXT NOT NULL, unit INTEGER NOT NULL, lesson INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'waiting', waiting_since TEXT DEFAULT CURRENT_TIMESTAMP,
         student_unread INTEGER NOT NULL DEFAULT 0, staff_unread INTEGER NOT NULL DEFAULT 1,
-        bank_text TEXT, bank_hidden INTEGER NOT NULL DEFAULT 0, resolved_by TEXT,
+        bank_text TEXT, bank_hidden INTEGER NOT NULL DEFAULT 0, resolved_by TEXT, exported_at TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_grade ON ask_questions(grade, status, waiting_since)');
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_student ON ask_questions(student_id, updated_at)');
@@ -178,6 +178,13 @@ export async function ensureAppSchema(db) {
         if (am.length && !am.includes('audio_id')) steps.push('ALTER TABLE ask_messages ADD COLUMN audio_id INTEGER');
         if (am.length && !am.includes('audio_seconds')) steps.push('ALTER TABLE ask_messages ADD COLUMN audio_seconds REAL');
     }
+    {   // questions cleared from the bank after a PDF export (add-only)
+        let aq = [];
+        try { const r = await db.prepare('PRAGMA table_info(ask_questions)').all(); aq = (r.results || []).map(c => c.name); } catch (e) { }
+        if (aq.length && !aq.includes('exported_at')) steps.push('ALTER TABLE ask_questions ADD COLUMN exported_at TEXT');
+    }
+    // Small key/value store for housekeeping (e.g. when the 30-day media clean-up last ran)
+    steps.push(`CREATE TABLE IF NOT EXISTS app_kv ("key" TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push(`CREATE TABLE IF NOT EXISTS ask_media (
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
         data TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);

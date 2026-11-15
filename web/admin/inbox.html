@@ -36,6 +36,8 @@
         .bank-tg .ar { font-family: var(--font-ar, inherit); font-weight: 700; }
         .bank-tg.on { background: var(--warning-soft, #FFF4DB); border-color: transparent; color: var(--warning, #B26B00); }
         .nb-tag { font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 8px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+        .st-bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: 8px; }
+        .st-bar span { display: block; height: 100%; background: var(--primary); border-radius: inherit; }
         .bank-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 12px; }
         .bank-filter .chipb { padding: 5px 10px; font-size: 12.5px; }
         .bank-item .ex-note { font-size: 12px; font-weight: 700; color: var(--warning, #B26B00); }
@@ -136,6 +138,10 @@
                             <button class="btn btn-primary btn-block" id="printBtn" disabled><span data-icon="download" style="display:contents"></span><span id="printLbl">Generate PDF</span></button>
                             <p class="small muted" style="margin:8px 0 0">Opens the print window — choose <b>Save as PDF</b>. Student names are never printed.</p>
                         </div>
+                        <div class="card" id="storageCard">
+                            <div class="card-head"><h2 class="card-title"><span data-icon="layout" style="display:contents"></span>Storage</h2></div>
+                            <div id="storageBody"><div class="skel" style="height:60px;border-radius:12px"></div></div>
+                        </div>
                     </div>
                     <div class="card">
                         <div class="card-head"><h2 class="card-title"><span data-icon="clipboard" style="display:contents"></span>Questions <span class="pill" id="bankCount">0</span></h2><span class="small muted">Edit the wording · untick to leave out</span></div>
@@ -167,7 +173,7 @@
         function showView() {
             $('inboxView').hidden = view !== 'inbox'; $('bankView').hidden = view !== 'bank';
             history.replaceState(null, '', location.pathname + (view === 'bank' ? '?view=bank' : openId ? '?q=' + openId : ''));
-            if (view === 'bank') loadBank();
+            if (view === 'bank') { loadBank(); loadStorage(); }
         }
 
         // ================= Inbox =================
@@ -288,9 +294,11 @@
             renderPicks(); renderBank();
         }
         const inPick = (it) => picks.has(`${it.unit}-0`) || picks.has(`${it.unit}-${it.lesson}`);
+        // In the bank = not marked "not important" and not cleared after an earlier PDF export
+        const active = (i) => !i.hidden && !i.exportedAt;
         const nAll = (u, l) => bank.filter(i => i.unit === u && (!l || i.lesson === l)).length;
         function renderPicks() {
-            const n = (u, l) => bank.filter(i => !i.hidden && i.unit === u && (!l || i.lesson === l)).length;
+            const n = (u, l) => bank.filter(i => active(i) && i.unit === u && (!l || i.lesson === l)).length;
             $('picks').innerHTML = Array.from({ length: UNITS }, (_, ui) => {
                 const u = ui + 1, whole = picks.has(`${u}-0`);
                 return `<div class="pick-row"><button class="chipb u ${whole ? 'on' : ''}" data-p="${u}-0" ${n(u) || nAll(u) ? '' : 'disabled'}>Unit ${u}<small>${n(u)}</small></button>
@@ -307,26 +315,29 @@
             renderPicks(); renderBank();
         });
         $('clearPicks').addEventListener('click', () => { picks.clear(); renderPicks(); renderBank(); });
-        // Excluded ("Not important") questions stay out of the list unless "Show excluded" is on
+        // Excluded ("Not important") and already-exported questions stay out of the list unless "Show" is on
         function renderFilter(list) {
-            const ex = list.filter(i => i.hidden).length;
-            $('bankFilter').hidden = !picks.size || (!ex && !showExcluded);
-            $('bankFilter').innerHTML = `<span class="small muted">${ex} excluded as not important</span>
-                <button class="chipb ${showExcluded ? 'on' : ''}" id="exToggle">${showExcluded ? 'Hide excluded' : 'Show excluded'}</button>`;
+            const ex = list.filter(i => i.hidden && !i.exportedAt).length, xp = list.filter(i => i.exportedAt).length;
+            $('bankFilter').hidden = !picks.size || (!ex && !xp && !showExcluded);
+            const parts = [ex ? `${ex} excluded as not important` : '', xp ? `${xp} cleared after an earlier PDF` : ''].filter(Boolean);
+            $('bankFilter').innerHTML = `<span class="small muted">${parts.join(' · ') || 'Nothing left out'}</span>
+                <button class="chipb ${showExcluded ? 'on' : ''}" id="exToggle">${showExcluded ? 'Hide them' : 'Show them'}</button>`;
         }
         $('bankFilter').addEventListener('click', (e) => { if (e.target.closest('#exToggle')) { showExcluded = !showExcluded; renderBank(); } });
         function renderBank() {
             const list = bank.filter(inPick);
-            const on = list.filter(i => !i.hidden);
+            const on = list.filter(active);
             const shown = showExcluded ? list : on;
             renderBankCountOnly(); renderFilter(list);
-            if (!picks.size) { $('bankList').innerHTML = `<p class="muted" style="margin:0">${bank.length ? `${bank.filter(i => !i.hidden).length} question${bank.filter(i => !i.hidden).length === 1 ? '' : 's'} collected for ${esc(A.GRADES[bankGrade])}. Choose units or lessons on the left.` : 'No questions asked in this grade yet.'}</p>`; return; }
-            if (!shown.length) { $('bankList').innerHTML = `<p class="muted" style="margin:0">${list.length ? 'Every question here is marked not important.' : 'No questions for this selection.'}</p>`; return; }
-            $('bankList').innerHTML = shown.map(i => `<div class="bank-item ${i.hidden ? 'off' : ''}" data-id="${i.id}">
-                <input type="checkbox" ${i.hidden ? '' : 'checked'} data-inc aria-label="Include in the sheet">
+            const total = bank.filter(active).length;
+            if (!picks.size) { $('bankList').innerHTML = `<p class="muted" style="margin:0">${bank.length ? `${total} question${total === 1 ? '' : 's'} in the bank for ${esc(A.GRADES[bankGrade])}. Choose units or lessons on the left.` : 'No questions asked in this grade yet.'}</p>`; return; }
+            if (!shown.length) { $('bankList').innerHTML = `<p class="muted" style="margin:0">${list.length ? 'Nothing left in the bank for this selection — tap “Show them” to see what was left out.' : 'No questions for this selection.'}</p>`; return; }
+            $('bankList').innerHTML = shown.map(i => `<div class="bank-item ${active(i) ? '' : 'off'}" data-id="${i.id}">
+                <input type="checkbox" ${active(i) ? 'checked' : ''} ${i.exportedAt ? 'disabled' : ''} data-inc aria-label="Include in the sheet">
                 <div style="min-width:0">
                     <div class="small muted" style="margin-bottom:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="ul-tag">U${i.unit} · L${i.lesson}</span>asked by ${esc(i.student || '—')} · ${esc(A.fmtDate(i.createdAt))}
-                        ${i.hidden ? '<span class="ex-note">Not important — tick to restore</span>' : ''}
+                        ${i.exportedAt ? `<span class="ex-note">Cleared after a PDF on ${esc(A.fmtDate(i.exportedAt))}</span><button class="link small" data-unexport style="border:0;background:none;padding:0;cursor:pointer">Bring back</button>`
+                            : i.hidden ? '<span class="ex-note">Not important — tick to restore</span>' : ''}
                         ${i.edited ? `<button class="link small" data-reset style="border:0;background:none;padding:0;cursor:pointer">Use original wording</button>` : ''}</div>
                     <textarea dir="auto" data-text placeholder="${i.images.length ? '(photo question — add a line of text if you like)' : 'Question text'}">${esc(i.text)}</textarea>
                     ${i.images.length ? `<div class="imgs">${i.images.map(id => `<a href="${K.mediaUrl(id)}" target="_blank" rel="noopener"><img src="${K.mediaUrl(id)}" alt="Question photo" loading="lazy"></a>`).join('')}</div>` : ''}
@@ -348,20 +359,27 @@
             }
         });
         $('bankList').addEventListener('click', async (e) => {
+            const u = e.target.closest('[data-unexport]');
+            if (u) {
+                const it = bank.find(x => x.id === Number(u.closest('.bank-item').dataset.id));
+                try { await api('/api/ask?action=bank-edit', { body: { id: it.id, exported: false } }); } catch (err) { return toast(err.message, 'error'); }
+                it.exportedAt = null; renderPicks(); renderBank(); toast('Back in the bank', 'success');
+                return;
+            }
             const r = e.target.closest('[data-reset]'); if (!r) return;
             const it = bank.find(x => x.id === Number(r.closest('.bank-item').dataset.id));
             it.text = it.original; it.edited = false;
             await api('/api/ask?action=bank-edit', { body: { id: it.id, text: null } }); renderBank();
         });
         function renderBankCountOnly() {
-            const list = bank.filter(inPick), on = list.filter(i => !i.hidden);
+            const list = bank.filter(inPick), on = list.filter(active);
             $('bankCount').textContent = `${on.length}`; $('printBtn').disabled = !on.length;
             $('printLbl').textContent = on.length ? `Generate PDF · ${on.length} question${on.length === 1 ? '' : 's'}` : 'Generate PDF';
         }
 
         // Printable revision sheet → browser "Save as PDF"
         $('printBtn').addEventListener('click', async () => {
-            const list = bank.filter(i => inPick(i) && !i.hidden);
+            const list = bank.filter(i => inPick(i) && active(i));
             const lines = $('optLines').checked, photos = $('optPhotos').checked, tags = $('optTags').checked;
             $('printArea').innerHTML = `
                 <div class="ps-head"><img src="/assets/img/logo-192.png" alt=""><div><h1 dir="auto">${esc($('psTitle').value)}</h1><small>Science Academy · Miss Marwa</small></div></div>
@@ -374,7 +392,47 @@
             const imgs = [...$('printArea').querySelectorAll('img')];
             await Promise.all(imgs.map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
             window.print();
+            afterExport(list);
         });
+
+        // ---- Storage: after the PDF is saved, offer to clear what was exported ----
+        const fmtSize = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+        function afterExport(list) {
+            if (!list.length) return;
+            const withMedia = list.filter(i => i.images.length).length;
+            Site.sheet({
+                iconName: 'download', title: 'Saved your PDF?',
+                subtitle: 'Clear exported questions from bank',
+                html: `<p dir="rtl" lang="ar" style="margin:0 0 10px;font-weight:700;font-family:var(--font-ar, inherit)">مسح الأسئلة المُصدّرة لتوفير المساحة</p>
+                    <p style="margin:0 0 10px">Keep the database light: clear the <b>${list.length}</b> question${list.length === 1 ? '' : 's'} you just exported.</p>
+                    <ul class="small muted" style="margin:0;padding-inline-start:20px;line-height:1.8">
+                        <li>They leave the Question bank, so the next sheet only has new questions.</li>
+                        <li><b>Clear + free space</b> also deletes their photos and voice notes${withMedia ? ` (${withMedia} with photos)` : ''}.</li>
+                        <li>The written chat stays — students and the team can still read the Q&amp;A.</li>
+                    </ul>`,
+                actions: [
+                    { label: 'Clear + free space (photos & voice notes)', icon: 'trash', cls: 'btn-primary', onClick: (close) => clearExported(list, 'media', close) },
+                    { label: 'Only remove from the bank', cls: 'btn-soft', onClick: (close) => clearExported(list, 'bank', close) },
+                    { label: 'Keep everything for now', cls: 'btn-ghost' }
+                ]
+            });
+        }
+        async function clearExported(list, mode, close) {
+            let d; try { d = await api('/api/ask?action=bank-clear', { body: { ids: list.map(i => i.id), mode } }); } catch (e) { toast(e.message, 'error'); return; }
+            close();
+            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            list.forEach(i => { i.exportedAt = now; if (mode === 'media') i.images = []; });
+            renderPicks(); renderBank(); loadStorage();
+            toast(mode === 'media' ? `Cleared ${d.cleared} question${d.cleared === 1 ? '' : 's'} · freed ${fmtSize(d.bytes || 0)}` : `Removed ${d.cleared} question${d.cleared === 1 ? '' : 's'} from the bank`, 'success');
+        }
+        async function loadStorage() {
+            let d; try { d = await api('/api/ask?action=storage'); } catch (e) { return; }
+            const pct = Math.min(100, d.bytes / (500 * 1048576) * 100);
+            const last = d.lastCleanup && d.lastCleanup.at ? `Last automatic clean-up: ${A.fmtDate(d.lastCleanup.at)}${d.lastCleanup.files ? ` · removed ${d.lastCleanup.files} file${d.lastCleanup.files === 1 ? '' : 's'} (${fmtSize(d.lastCleanup.bytes)})` : ' · nothing to remove'}` : '';
+            $('storageBody').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><b style="font-size:20px">${fmtSize(d.bytes)}</b><span class="small muted">${d.files} photo${d.files === 1 ? '' : 's'} &amp; voice notes</span></div>
+                <div class="st-bar" title="${pct.toFixed(1)}% of the 500 MB free database"><span style="width:${Math.max(pct, d.bytes ? 1 : 0)}%"></span></div>
+                <p class="small muted" style="margin:8px 0 0">Photos and voice notes older than <b>${d.keepDays} days</b> are removed automatically (once a day) — the written questions and answers stay.${last ? '<br>' + esc(last) : ''}</p>`;
+        }
 
         gradeTabs();
         await loadList();
