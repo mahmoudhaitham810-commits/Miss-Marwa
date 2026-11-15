@@ -494,3 +494,53 @@ body.is-translated .translate-shield {
 /* ---------- No visible scrollbars anywhere (scrolling still works: wheel, trackpad, touch, keys) ---------- */
 html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar { display: none; width: 0; height: 0; background: transparent; }
+
+/* =========================================================
+   Ask Miss Marwa — chat (student portal + staff portal)
+   ========================================================= */
+.ask-thread { display: flex; flex-direction: column; gap: 10px; padding: 6px 2px; }
+.ask-row { display: flex; align-items: flex-end; gap: 8px; max-width: 100%; }
+.ask-row.mine { justify-content: flex-end; }
+.ask-av { width: 32px; height: 32px; border-radius: 50%; flex: none; object-fit: cover; background: #fff; border: 1px solid var(--border); }
+.ask-bubble { max-width: min(78%, 560px); padding: 9px 12px 6px; border-radius: 18px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); min-width: 0; }
+.ask-row.mine .ask-bubble { background: var(--primary); color: #fff; border-color: transparent; border-bottom-right-radius: 6px; }
+.ask-row.theirs .ask-bubble { border-bottom-left-radius: 6px; }
+.ask-row.auto .ask-bubble { background: var(--primary-soft); border-color: transparent; }
+.ask-who { font-size: 12.5px; font-weight: 700; color: var(--primary); margin-bottom: 3px; }
+.ask-row.mine .ask-who { color: rgba(255, 255, 255, .85); }
+.ask-team { font-weight: 500; color: var(--muted); }
+.ask-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; font-size: 15px; }
+.ask-time { font-size: 11px; color: var(--muted); text-align: end; margin-top: 3px; }
+.ask-row.mine .ask-time { color: rgba(255, 255, 255, .75); }
+.ask-img { display: block; margin: 2px -4px 6px; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+.ask-img img { display: block; width: 100%; max-height: 360px; object-fit: contain; }
+.ask-audio { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; }
+.ask-audio audio { height: 36px; max-width: 240px; min-width: 0; }
+.ask-row.mine .ask-audio .icon { color: #fff; }
+.ask-dur { font-size: 12px; opacity: .8; }
+
+.ask-composer { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+.ask-inputrow { display: flex; align-items: flex-end; gap: 6px; }
+.ask-inputrow textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; font-size: 15.5px; line-height: 1.5; padding: 9px 6px; max-height: 160px; }
+.ask-tool { flex: none; cursor: pointer; }
+.ask-send { flex: none; height: 42px; padding: 0 16px; border-radius: 14px; }
+.ask-send.loading { opacity: .6; pointer-events: none; }
+@media (max-width: 420px) { .ask-send span { display: none; } .ask-send { padding: 0 12px; } }
+.ask-attach { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 14px; background: var(--surface-2); }
+.ask-attach img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; }
+.ask-attach audio { height: 34px; flex: 1; min-width: 0; }
+.ask-attach .icon-btn { margin-inline-start: auto; }
+[hidden] { display: none !important; }
+.ask-recbar { display: flex; align-items: center; gap: 10px; padding: 6px 8px; flex-wrap: wrap; }
+.ask-recbar .btn:first-of-type { margin-inline-start: auto; }
+.ask-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--danger); animation: askPulse 1s ease-in-out infinite; }
+@keyframes askPulse { 50% { opacity: .3; transform: scale(.8); } }
+
+.unit-pills, .lesson-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.unit-pills button, .lesson-pills button { min-width: 92px; padding: 10px 14px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface); font-weight: 700; color: var(--text); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.unit-pills button:hover, .lesson-pills button:hover { border-color: var(--primary); transform: translateY(-1px); }
+.unit-pills button.on, .lesson-pills button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.unit-pills button small, .lesson-pills button small { display: block; font-weight: 500; font-size: 11.5px; opacity: .75; }
+.nav-badge { margin-inline-start: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11.5px; font-weight: 800; display: inline-grid; place-items: center; }
+.bottomnav .nav-badge { position: absolute; top: 4px; margin: 0; transform: translateX(14px); min-width: 18px; height: 18px; font-size: 10.5px; }
+.bottomnav a, .bottomnav button { position: relative; }

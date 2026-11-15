@@ -35,6 +35,8 @@ select.pick {
 .pill.legacy { background: var(--warning-soft); color: var(--warning); }
 .pill.success { background: var(--success-soft); color: var(--success); }
 .pill.danger { background: var(--danger-soft); color: var(--danger); }
+.pill.primary { background: var(--primary-soft); color: var(--primary); }
+.pill.muted { background: var(--surface-3); color: var(--text-2); }
 .lvl { font-weight: 700; }
 .lvl.excellent { color: var(--success); } .lvl.good { color: var(--primary); } .lvl.average { color: var(--warning); } .lvl.weak { color: var(--danger); }
 .empty-state { text-align: center; padding: 40px 16px; color: var(--muted); }

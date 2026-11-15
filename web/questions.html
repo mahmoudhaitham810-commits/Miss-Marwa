@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <title>Ask Miss Marwa · Science Academy</title>
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <style>
+        .page-head { margin-bottom: 16px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .page-head p { margin: 6px 0 0; color: var(--text-2); }
+        .hero-ask { display: flex; gap: 16px; align-items: center; padding: 18px; margin-bottom: 16px; }
+        .hero-ask img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex: none; background: #fff; }
+        .unit-group { margin-bottom: 14px; }
+        .unit-group > h2 { font-size: 15px; margin: 0 0 8px; color: var(--muted); font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .qitem { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--border); color: inherit; text-decoration: none; }
+        .qitem:first-of-type { border-top: 0; }
+        .qitem:hover { background: var(--surface-2); }
+        .qitem .tag { flex: none; font-size: 12px; font-weight: 800; padding: 5px 9px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); }
+        .qitem .body { flex: 1; min-width: 0; }
+        .qitem .body b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+        .qitem .meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+        .st { flex: none; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+        .st.waiting { background: var(--warning-soft); color: var(--warning); }
+        .st.answered, .st.resolved { background: var(--success-soft); color: var(--success); }
+        .st.new { background: var(--danger); color: #fff; }
+        .step-card { padding: 18px; margin-bottom: 14px; }
+        .step-card h2 { margin: 0 0 4px; font-size: 17px; }
+        .step-card p { margin: 0 0 12px; }
+        .chat-wrap { display: flex; flex-direction: column; min-height: calc(100dvh - 210px); }
+        .chat-head { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+        .chat-head h1 { margin: 0; font-size: 20px; }
+        .chat-scroll { flex: 1; padding: 6px 0 14px; }
+        .chat-foot { position: sticky; bottom: calc(var(--bottomnav-h, 0px) + 10px); padding-top: 8px; background: linear-gradient(to top, var(--canvas, var(--bg)) 70%, transparent); }
+        .resolved-note { text-align: center; font-size: 13px; color: var(--muted); margin: 6px 0 10px; }
+        .seg-filter { margin-bottom: 14px; }
+    </style>
+</head>
+<body>
+    <main class="main" id="main">
+        <div class="container" style="max-width:860px">
+            <!-- My questions -->
+            <section id="listView">
+                <div class="page-head reveal">
+                    <div><h1 class="h1">Ask Miss Marwa</h1><p class="small"><span class="ar">اسأل مس مروة</span> — your questions and the team's answers, by unit.</p></div>
+                    <a class="btn btn-primary" href="?new=1" data-go-new>${'+'} New question</a>
+                </div>
+                <div id="list"><div class="skel" style="height:220px;border-radius:20px"></div></div>
+            </section>
+
+            <!-- New question -->
+            <section id="newView" hidden>
+                <div class="chat-head"><a class="icon-btn" href="questions.html" data-back aria-label="Back"></a><h1>New question</h1></div>
+                <div class="card step-card reveal"><h2>1. Which unit?</h2><p class="small muted">So Miss Marwa knows exactly which part it's about.</p><div class="unit-pills" id="unitPills"></div></div>
+                <div class="card step-card reveal" id="lessonStep" hidden><h2>2. Which lesson?</h2><p class="small muted" id="lessonHint"></p><div class="lesson-pills" id="lessonPills"></div></div>
+                <div id="askStep" hidden>
+                    <h2 style="font-size:17px;margin:4px 0 10px">3. Your question</h2>
+                    <p class="small muted" style="margin:-4px 0 10px">Type it, add a photo of the question, or record a voice note.</p>
+                    <div id="newComposer"></div>
+                </div>
+            </section>
+
+            <!-- One question (chat) -->
+            <section id="threadView" hidden>
+                <div class="chat-wrap">
+                    <div class="chat-head"><a class="icon-btn" href="questions.html" data-back aria-label="Back"></a>
+                        <div style="min-width:0"><h1 id="threadTitle">Question</h1><div class="small muted" id="threadSub"></div></div></div>
+                    <div class="chat-scroll"><div class="ask-thread" id="thread"></div></div>
+                    <div class="chat-foot"><div id="resolvedNote" class="resolved-note" hidden></div><div id="replyComposer"></div></div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/student.js"></script>
+    <script src="/assets/ask.js"></script>
+    <script>
+    (function () {
+        if (!window.App) return;
+        const { esc, icon, api, url, toast, fmtDate, isAdmin } = App;
+        App.shell({ active: 'questions', title: 'Ask Miss Marwa' });
+        const $ = (id) => document.getElementById(id);
+        document.querySelectorAll('[data-back]').forEach(a => a.innerHTML = icon('arrowLeft'));
+        document.querySelector('[data-go-new]').innerHTML = `${icon('plus', 'sm')}New question`;
+        const K = AskKit;
+        let items = [], filter = 'all', unit = null, lesson = null, current = null, poll = null;
+
+        // ---------- views ----------
+        function show(view) {
+            ['listView', 'newView', 'threadView'].forEach(v => $(v).hidden = v !== view);
+            clearInterval(poll); poll = null;
+            window.scrollTo(0, 0);
+        }
+        function route() {
+            const qs = new URLSearchParams(location.search);
+            if (qs.get('q')) openThread(parseInt(qs.get('q'), 10));
+            else if (qs.get('new')) openNew();
+            else openList();
+        }
+        const go = (search) => { history.pushState(null, '', 'questions.html' + search); route(); };
+        window.addEventListener('popstate', route);
+        document.addEventListener('click', (e) => {
+            const a = e.target.closest('[data-back], [data-go-new], [data-q]');
+            if (!a) return;
+            e.preventDefault();
+            if (a.dataset.q) go('?q=' + a.dataset.q);
+            else if (a.hasAttribute('data-go-new')) go('?new=1');
+            else go('');
+        });
+
+        // ---------- list ----------
+        async function openList() {
+            show('listView');
+            try { const d = await api('/api/ask?action=mine'); items = d.items || []; } catch (e) { $('list').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
+            renderList();
+        }
+        function renderList() {
+            if (!items.length) {
+                $('list').innerHTML = `<div class="card hero-ask reveal"><img src="/assets/img/marwa-160.png" alt="">
+                    <div><strong style="font-size:17px">Stuck on something?</strong><p class="small muted" style="margin:4px 0 12px">Pick the unit and lesson, then ask — text, a photo of the question, or a voice note. Miss Marwa and the team reply right here.</p>
+                    <a class="btn btn-primary btn-sm" href="?new=1" data-go-new>${icon('plus', 'sm')}Ask your first question</a></div></div>`;
+                App.reveal(); return;
+            }
+            const counts = { all: items.length, waiting: items.filter(i => i.status === 'waiting').length, answered: items.filter(i => i.status !== 'waiting').length };
+            const list = items.filter(i => filter === 'all' || (filter === 'waiting' ? i.status === 'waiting' : i.status !== 'waiting'));
+            const groups = {};
+            list.forEach(i => { (groups[i.unit] ||= []).push(i); });
+            $('list').innerHTML = `
+                <div class="segmented seg-filter" id="seg">${[['all', 'All'], ['waiting', 'Waiting'], ['answered', 'Answered']].map(([k, l]) => `<button data-f="${k}" class="${filter === k ? 'active' : ''}">${l} <span class="muted">${counts[k]}</span></button>`).join('')}</div>
+                ${Object.keys(groups).sort((a, b) => a - b).map(u => `<div class="unit-group reveal"><h2>${icon('book', 'sm')}Unit ${u}</h2><div class="card" style="padding:0;overflow:hidden">
+                    ${groups[u].sort((a, b) => a.lesson - b.lesson || b.id - a.id).map(i => `<a class="qitem" href="?q=${i.id}" data-q="${i.id}">
+                        <span class="tag">L${i.lesson}</span>
+                        <span class="body"><b dir="auto">${i.text ? esc(i.text) : i.kind === 'image' ? '📷 Photo question' : i.kind === 'audio' ? '🎤 Voice question' : 'Question'}</b>
+                            <span class="meta">Lesson ${i.lesson} · ${esc(fmtDate(i.createdAt))}${i.replies ? ` · ${i.replies} repl${i.replies === 1 ? 'y' : 'ies'}` : ''}</span></span>
+                        ${i.unread ? '<span class="st new">New reply</span>' : `<span class="st ${i.status}">${i.status === 'waiting' ? 'Waiting' : 'Answered'}</span>`}
+                    </a>`).join('')}</div></div>`).join('') || '<p class="muted">Nothing here.</p>'}`;
+            $('seg').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; renderList(); } });
+            App.reveal();
+        }
+
+        // ---------- new question ----------
+        let newComposer = null;
+        function openNew() {
+            show('newView');
+            unit = null; lesson = null;
+            $('unitPills').innerHTML = Array.from({ length: K.UNITS }, (_, i) => `<button type="button" data-u="${i + 1}">Unit ${i + 1}</button>`).join('');
+            $('lessonStep').hidden = true; $('askStep').hidden = true;
+            if (!newComposer) newComposer = K.composer($('newComposer'), {
+                placeholder: 'Write your question… (you can also add a photo or a voice note)', sendLabel: 'Send', icon, toast,
+                onSend: async ({ text, media }) => {
+                    if (!unit || !lesson) throw new Error('Pick the unit and lesson first.');
+                    const d = await api('/api/ask?action=ask', { method: 'POST', body: { unit, lesson, text, media } });
+                    history.replaceState(null, '', 'questions.html?q=' + d.id);
+                    showThread(d.id, { unit, lesson, status: 'waiting' }, d.messages, true);
+                }
+            });
+            App.reveal();
+        }
+        $('unitPills').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-u]'); if (!b) return;
+            unit = Number(b.dataset.u); lesson = null;
+            $('unitPills').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+            $('lessonHint').textContent = `Unit ${unit}`;
+            $('lessonPills').innerHTML = Array.from({ length: K.LESSONS }, (_, i) => `<button type="button" data-l="${i + 1}">Lesson ${i + 1}</button>`).join('');
+            $('lessonStep').hidden = false; $('askStep').hidden = true;
+            $('lessonStep').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        $('lessonPills').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-l]'); if (!b) return;
+            lesson = Number(b.dataset.l);
+            $('lessonPills').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+            $('askStep').hidden = false;
+            $('askStep').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => newComposer.focus(), 350);
+        });
+
+        // ---------- one question ----------
+        let replyComposer = null;
+        async function openThread(id) {
+            show('threadView');
+            $('thread').innerHTML = '<div class="skel" style="height:200px;border-radius:18px"></div>';
+            try { const d = await api(`/api/ask?action=thread&id=${id}`); showThread(id, d.question, d.messages); if (App.refreshAskBadge) App.refreshAskBadge(); }
+            catch (e) { $('thread').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; }
+        }
+        function showThread(id, q, messages, justAsked) {
+            show('threadView');
+            current = { id, q, count: messages.length };
+            $('threadTitle').textContent = `Unit ${q.unit} · Lesson ${q.lesson}`;
+            $('threadSub').innerHTML = `<span class="st ${q.status}">${q.status === 'waiting' ? 'Waiting for an answer' : q.status === 'resolved' ? 'Answered ✓' : 'Answered'}</span>`;
+            renderThread(messages, justAsked);
+            $('resolvedNote').hidden = q.status !== 'resolved';
+            $('resolvedNote').textContent = 'Marked as answered. Still not clear? Write below and it goes back to Miss Marwa.';
+            if (!replyComposer) replyComposer = K.composer($('replyComposer'), {
+                placeholder: 'Write a follow-up…', sendLabel: 'Send', icon, toast,
+                onSend: async ({ text, media }) => {
+                    const d = await api('/api/ask?action=reply', { method: 'POST', body: { id: current.id, text, media } });
+                    current.q.status = 'waiting';
+                    $('threadSub').innerHTML = '<span class="st waiting">Waiting for an answer</span>';
+                    $('resolvedNote').hidden = true;
+                    renderThread(d.messages, true);
+                }
+            });
+            // check for replies while the page is open
+            poll = setInterval(async () => {
+                if (document.hidden || !current) return;
+                try {
+                    const d = await api(`/api/ask?action=thread&id=${current.id}`);
+                    if (d.messages.length !== current.count) { current.q = d.question; renderThread(d.messages, true); showThreadStatus(d.question); }
+                } catch (e) { }
+            }, 20000);
+        }
+        function showThreadStatus(q) { $('threadSub').innerHTML = `<span class="st ${q.status}">${q.status === 'waiting' ? 'Waiting for an answer' : 'Answered'}</span>`; }
+        function renderThread(messages, scroll) {
+            current.count = messages.length;
+            $('thread').innerHTML = messages.map(m => K.bubble(m, 'student', icon)).join('');
+            if (scroll) setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 60);
+        }
+
+        if (isAdmin) { $('list').innerHTML = '<div class="notice">Staff preview: questions are answered from the staff portal → Questions.</div>'; return; }
+        route();
+    })();
+    </script>
+</body>
+</html>

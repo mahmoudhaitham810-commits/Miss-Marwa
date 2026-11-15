@@ -159,6 +159,22 @@ export async function ensureAppSchema(db) {
     steps.push(`CREATE TABLE IF NOT EXISTS duplicate_dismissals (
         pair_key TEXT PRIMARY KEY, staff_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_students_grade_phone ON students(grade, phone)');
+    // Ask Miss Marwa: one row per question (a small chat thread), its messages, and the photos / voice notes
+    steps.push(`CREATE TABLE IF NOT EXISTS ask_questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, grade TEXT NOT NULL, unit INTEGER NOT NULL, lesson INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'waiting', waiting_since TEXT DEFAULT CURRENT_TIMESTAMP,
+        student_unread INTEGER NOT NULL DEFAULT 0, staff_unread INTEGER NOT NULL DEFAULT 1,
+        bank_text TEXT, bank_hidden INTEGER NOT NULL DEFAULT 0, resolved_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_grade ON ask_questions(grade, status, waiting_since)');
+    steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_student ON ask_questions(student_id, updated_at)');
+    steps.push(`CREATE TABLE IF NOT EXISTS ask_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, question_id INTEGER NOT NULL, sender TEXT NOT NULL, staff_name TEXT,
+        text TEXT, media_id INTEGER, media_kind TEXT, media_seconds REAL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_ask_m_q ON ask_messages(question_id, id)');
+    steps.push(`CREATE TABLE IF NOT EXISTS ask_media (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
+        data TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     // Devices each student is signed in on (max 2 — staff can reset them)
     steps.push(`CREATE TABLE IF NOT EXISTS student_devices (
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, device_id TEXT NOT NULL, label TEXT,

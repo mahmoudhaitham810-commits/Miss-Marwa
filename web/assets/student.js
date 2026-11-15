@@ -57,6 +57,10 @@
     const txt = (s) => `<span dir="auto">${esc(s)}</span>`;
 
     const ICONS = {
+        plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+        image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+        mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
+        inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/>',
         download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
         home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>',
         book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
@@ -357,6 +361,8 @@
                 OneSignal.Notifications.addEventListener('permissionChange', updateBell);
                 // Tag the device with the grade so new-content pushes only reach the right students
                 if (!isAdmin && session.grade) await OneSignal.User.addTag('grade', String(session.grade).toUpperCase());
+                // so a reply from Miss Marwa can be pushed to this student only
+                if (!isAdmin && session.id) await OneSignal.User.addTag('sid', String(session.id));
             } catch (e) { /* notifications are optional */ }
             updateBell();
         });
@@ -477,7 +483,7 @@
             { key: 'exams', label: 'Exams', icon: 'clipboard', href: url('exams.html') },
             { key: 'results', label: 'Results', icon: 'chart', href: url('exam-results.html') },
             { key: 'assistant', label: 'AI Assistant', icon: 'bot', soon: true },
-            { key: 'questions', label: 'Ask Miss Marwa', icon: 'help', soon: true }
+            { key: 'questions', label: 'Ask Miss Marwa', icon: 'help', href: url('questions.html') }
         ];
         const gradePicker = isAdmin
             ? `<select id="gradePick" class="chip primary" style="border:0;font:inherit;font-weight:600;cursor:pointer">${Object.keys(GRADES).map(g => `<option value="${g}" ${g === grade ? 'selected' : ''}>Preview: ${GRADES[g]}</option>`).join('')}</select>`
@@ -490,7 +496,7 @@
                 <div class="side-grade">${gradePicker}</div>
                 <nav class="side-nav">${navItems.map(n => n.soon
             ? `<button data-soon="${esc(n.label)}" class="${n.key === active ? 'active' : ''}">${icon(n.icon)}${n.label}<span class="soon-tag">Soon</span></button>`
-            : `<a href="${n.href}" class="${n.key === active ? 'active' : ''}" ${n.key === active ? 'aria-current="page"' : ''}>${icon(n.icon)}${n.label}</a>`).join('')}</nav>
+            : `<a href="${n.href}" class="${n.key === active ? 'active' : ''}" ${n.key === active ? 'aria-current="page"' : ''} ${n.key === 'questions' ? 'data-ask-link' : ''}>${icon(n.icon)}${n.label}</a>`).join('')}</nav>
             </div>
             <button class="side-install" data-install>${icon('download', 'sm')}<span>Install the app<small class="ar">حمّل التطبيق</small></span></button>
             <div class="side-user"><div class="avatar">${initial}</div>
@@ -513,7 +519,7 @@
 
         const bottom = `<nav class="bottomnav" aria-label="Main navigation">
             ${[navItems[0], navItems[1], navItems[2]].map(n => `<a href="${n.href}" class="${n.key === active ? 'active' : ''}">${icon(n.icon)}<span>${n.label}</span></a>`).join('')}
-            <button data-soon="Ask Miss Marwa">${icon('help')}<span>Questions</span></button>
+            <a href="${url('questions.html')}" class="${active === 'questions' ? 'active' : ''}" data-ask-link>${icon('help')}<span>Questions</span></a>
             <button data-profile class="${active === 'profile' ? 'active' : ''}">${icon('user')}<span>Profile</span></button>
         </nav>`;
 
@@ -521,6 +527,18 @@
         if (bottomNav) document.body.insertAdjacentHTML('beforeend', bottom);
         else document.body.classList.add('no-bottomnav');
         document.title = `${title ? title + ' · ' : ''}Science Academy`;
+
+        // Red badge on "Ask Miss Marwa" when the team replied
+        let askSeq = 0;
+        const askBadge = () => { const my = ++askSeq; return api('/api/ask?action=unread').then(d => {
+            if (my !== askSeq) return;
+            document.querySelectorAll('[data-ask-link] .nav-badge').forEach(b => b.remove());
+            if (!d || !d.unread) return;
+            document.querySelectorAll('[data-ask-link]').forEach(a => a.insertAdjacentHTML('beforeend', `<span class="nav-badge" aria-label="${d.unread} new replies">${d.unread}</span>`));
+            window.dispatchEvent(new CustomEvent('ask-unread', { detail: d.unread }));
+        }).catch(() => { }); };
+        window.App.refreshAskBadge = askBadge;
+        if (!isAdmin) askBadge();
 
         document.addEventListener('click', (e) => {
             const s = e.target.closest('[data-soon]');

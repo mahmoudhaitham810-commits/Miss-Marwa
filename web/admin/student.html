@@ -30,6 +30,7 @@
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
     <script src="/admin/assets/messages.js"></script>
+    <script src="/assets/ask.js"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -67,7 +68,7 @@
                     <a class="icon-btn" href="${esc(back)}" aria-label="Back">${icon('arrowLeft')}</a>
                     <span class="avatar" style="width:52px;height:52px;font-size:20px">${A.initials({ firstName: st.firstName })}</span>
                     <div style="min-width:0"><h1 dir="auto" style="margin:0">${esc(name)}</h1>
-                        <p style="margin:2px 0 0">${esc(st.studentId)} · ${esc(A.GRADES[st.grade] || st.grade)} · ${st.branch ? `<span class="pill ${st.branch}">${A.BRANCHES[st.branch]}</span>` : '<span class="pill legacy">No group</span>'} · joined ${esc(day(st.createdAt))}</p></div>
+                        <p style="margin:2px 0 0">${esc(st.studentId)} · ${esc(A.GRADES[st.grade] || st.grade)} · ${st.branch ? `<span class="pill ${st.branch}">${A.BRANCHES[st.branch]}</span>` : '<span class="pill legacy">No group</span>'} · joined ${esc(day(st.createdAt))} <span id="askChip"></span></p></div>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     ${st.parentPhone && A.can('reports.send') ? `<button class="btn btn-wa" id="centerRep">${icon('whatsapp', 'sm')}Center report</button><button class="btn btn-soft" id="onlineRep">${icon('whatsapp', 'sm')}Online report</button>` : ''}
@@ -126,6 +127,11 @@
             $('resetDevBtn')?.addEventListener('click', () => A.devicesSheet(st, loadDevices));
         }
         loadDevices();
+        // Engagement: questions asked on "Ask Miss Marwa"
+        if (A.can('inbox.reply')) api(`/api/ask?action=engagement&studentId=${encodeURIComponent(id)}`).then(e => {
+            const g = AskKit.engagement(e.count);
+            $('askChip').innerHTML = `· <a class="pill ${g.tone}" href="/admin/inbox.html" title="Questions asked on Ask Miss Marwa${e.recent30 ? ` — ${e.recent30} in the last 30 days` : ''}" style="text-decoration:none">${icon('help', 'sm')} ${g.label} · ${g.n} question${g.n === 1 ? '' : 's'}</a>`;
+        }).catch(() => { });
 
         // The parent's private, always-up-to-date report link
         $('parentLink')?.addEventListener('click', () => linkSheet());

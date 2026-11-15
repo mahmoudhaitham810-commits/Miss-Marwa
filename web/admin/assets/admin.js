@@ -12,6 +12,7 @@
         trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
         arrowUp: '<path d="m18 15-6-6-6 6"/>',
         chevronRight: '<path d="m9 18 6-6-6-6"/>',
+        image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
         link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
         video: '<path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
         arrowDown: '<path d="m6 9 6 6 6-6"/>',
@@ -110,7 +111,7 @@
             { key: 'reports', label: 'Parent reports', icon: 'whatsapp', href: '/admin/reports.html' },
             { key: 'duplicates', label: 'Duplicate accounts', icon: 'merge', href: '/admin/duplicates.html' },
             { key: 'datacheck', label: 'Data check', icon: 'shield', href: '/admin/data-check.html' },
-            { key: 'inbox', label: 'Questions · أسئلتي', icon: 'inbox', soon: true },
+            { key: 'inbox', label: 'Questions · أسئلتي', icon: 'inbox', href: '/admin/inbox.html' },
             teacher ? { key: 'copilot', label: 'AI Co-Pilot', icon: 'sparkles', soon: true } : null,
             { key: 'settings', label: teacher ? 'Settings' : 'My password', icon: 'settings', href: '/admin/settings.html' }
         ].filter(Boolean);
@@ -182,6 +183,11 @@
         shell({ active, title });
         hydrate(); // staff-only icons first (Site.init would fill them with blanks)
         Site.init();
+        // Red badge on Questions when students are waiting for an answer
+        if (can('inbox.reply')) api('/api/ask?action=counts').then(d => {
+            if (!d || !d.total) return;
+            document.querySelectorAll('a[href="/admin/inbox.html"]').forEach(el => el.insertAdjacentHTML('beforeend', `<span class="nav-badge" title="Waiting for an answer">${d.total}</span>`));
+        }).catch(() => { });
         // Native <select>s become portal-styled pickers (after the page has filled them in)
         setTimeout(() => {
             document.querySelectorAll('select.pick').forEach(enhanceSelect);

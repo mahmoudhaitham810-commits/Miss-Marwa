@@ -117,12 +117,12 @@
 
         // ---- Quick actions ----
         document.getElementById('actions').innerHTML = `
-            <button class="card action" data-soon="Ask Miss Marwa">
+            <a class="card action" href="${url('questions.html')}" style="text-decoration:none;color:inherit">
                 <span class="ic" style="background:var(--primary-soft);color:var(--primary)">${icon('help')}</span>
-                <strong>Ask Miss Marwa <span class="soon-tag">Soon</span></strong>
-                <p>Send your question with a photo and get an answer from Miss Marwa.</p>
+                <strong>Ask Miss Marwa <span class="ar" style="font-weight:600;color:var(--muted)">· اسأل مس مروة</span></strong>
+                <p>Stuck on a question? Send it as text, a photo or a voice note — Miss Marwa and the team will answer.</p>
                 <span class="go" style="color:var(--primary)">Ask a question ${icon('arrowRight', 'sm')}</span>
-            </button>
+            </a>
             <button class="card action" data-soon="The AI Assistant">
                 <span class="ic" style="background:var(--accent-soft);color:var(--accent)">${icon('bot')}</span>
                 <strong>AI Assistant <span class="soon-tag">Soon</span></strong>
