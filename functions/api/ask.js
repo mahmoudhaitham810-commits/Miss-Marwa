@@ -5,9 +5,11 @@
 // Every question is also a Question-bank item for revision sheets.
 //
 // Storage: photos and voice notes are compressed in the browser (photo ≈ 100–250 KB,
-// voice ≈ 15 KB per 10 s) and kept in D1 (table ask_media) — nothing to set up in Cloudflare.
+// voice ≈ 15 KB per 10 s) and stored through media-store.js: Cloudflare R2 (binding MEDIA) when connected,
+// otherwise D1. Older files (table ask_media) are moved into R2 in the background.
 // =============================================================
 import { requireStaff, requireStudent, ensureAppSchema, auditStmt } from './admin-auth.js';
+import { putMedia, mediaInfo, mediaResponse, deleteMedia, migrateToR2, mediaStats, registerLegacy } from './media-store.js';
 
 function getDb(env) { return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function'); }
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
@@ -57,9 +59,9 @@ function decodeAttachments(data) {
 }
 // Saves the files and returns the columns for ask_messages
 // (photo → media_id; voice → media_id when alone, audio_id when it comes with a photo).
-async function saveAttachments(db, studentId, att) {
-    const img = att.image ? await saveMedia(db, studentId, att.image) : null;
-    const aud = att.audio ? await saveMedia(db, studentId, att.audio) : null;
+async function saveAttachments(env, db, studentId, att) {
+    const img = att.image ? await saveMedia(env, db, studentId, att.image) : null;
+    const aud = att.audio ? await saveMedia(env, db, studentId, att.audio) : null;
     if (img) return { media_id: img, media_kind: 'image', media_seconds: null, audio_id: aud, audio_seconds: aud ? att.audio.seconds : null };
     if (aud) return { media_id: aud, media_kind: 'audio', media_seconds: att.audio.seconds, audio_id: null, audio_seconds: null };
     return { media_id: null, media_kind: null, media_seconds: null, audio_id: null, audio_seconds: null };
@@ -68,22 +70,23 @@ async function saveAttachments(db, studentId, att) {
 // Photos / voice notes are the only heavy part. Removing one keeps the message (text, who, when)
 // and leaves a "removed" marker: media_kind stays, media_id becomes NULL (audio_seconds stays for a voice note).
 export const MEDIA_KEEP_DAYS = 30;
-async function dropMedia(db, mediaWhere, binds = []) {
+// mediaWhere filters media_objects (Questions files only). Files go through the storage module (R2 / D1).
+async function dropMedia(env, db, mediaWhere, binds = []) {
+    await registerLegacy(db);
     // pick the files first (the WHERE may look at ask_messages, which the first UPDATE changes)
-    const { results } = await db.prepare(`SELECT id, size FROM ask_media WHERE ${mediaWhere}`).bind(...binds).all();
-    const rows = results || [];
-    for (let i = 0; i < rows.length; i += 90) {
-        const ids = rows.slice(i, i + 90).map(r => r.id), ph = ids.map(() => '?').join(',');
+    const { results } = await db.prepare(`SELECT id FROM media_objects WHERE kind = 'ask' AND (${mediaWhere})`).bind(...binds).all();
+    const ids = (results || []).map(r => r.id);
+    for (let i = 0; i < ids.length; i += 90) {
+        const part = ids.slice(i, i + 90), ph = part.map(() => '?').join(',');
         await db.batch([
-            db.prepare(`UPDATE ask_messages SET media_id = NULL WHERE media_id IN (${ph})`).bind(...ids),
-            db.prepare(`UPDATE ask_messages SET audio_id = NULL WHERE audio_id IN (${ph})`).bind(...ids),
-            db.prepare(`DELETE FROM ask_media WHERE id IN (${ph})`).bind(...ids)
+            db.prepare(`UPDATE ask_messages SET media_id = NULL WHERE media_id IN (${ph})`).bind(...part),
+            db.prepare(`UPDATE ask_messages SET audio_id = NULL WHERE audio_id IN (${ph})`).bind(...part)
         ]);
     }
-    return { files: rows.length, bytes: rows.reduce((t, r) => t + (r.size || 0), 0) };
+    return deleteMedia(env, db, ids);
 }
 // Runs at most once a day (lazily, when the inbox is opened or a question is sent).
-export async function purgeOldMedia(db, { force = false } = {}) {
+export async function purgeOldMedia(env, db, { force = false } = {}) {
     await db.prepare(`INSERT OR IGNORE INTO app_kv ("key", value) VALUES ('ask_media_purge', '2000-01-01 00:00:00')`).run();
     if (!force) {
         const claim = await db.prepare(`UPDATE app_kv SET value = datetime('now'), updated_at = CURRENT_TIMESTAMP
@@ -91,13 +94,17 @@ export async function purgeOldMedia(db, { force = false } = {}) {
         if (!claim.meta || !claim.meta.changes) return null;      // already ran in the last 24 h
     } else await db.prepare(`UPDATE app_kv SET value = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE "key" = 'ask_media_purge'`).run();
     const cutoff = (await db.prepare(`SELECT datetime('now', ?) as c`).bind(`-${MEDIA_KEEP_DAYS} days`).first()).c;
-    const r = await dropMedia(db, 'created_at < ?', [cutoff]);
+    const r = await dropMedia(env, db, 'created_at < ?', [cutoff]);
     await db.prepare(`INSERT INTO app_kv ("key", value) VALUES ('ask_media_purge_last', ?)
         ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(JSON.stringify({ ...r, at: new Date().toISOString() })).run();
     return r;
 }
 function lazyPurge(context, db) {
-    const p = purgeOldMedia(db).catch(() => null);      // housekeeping must never break the request
+    // housekeeping must never break the request: daily 30-day clean-up + moving old files from D1 into R2
+    const p = (async () => {
+        await purgeOldMedia(context.env, db).catch(() => null);
+        await migrateToR2(context.env, db, 8).catch(() => null);
+    })();
     if (context.waitUntil) context.waitUntil(p);
     return p;
 }
@@ -106,10 +113,8 @@ const hasAtt = (att) => !!(att.image || att.audio);
 const insertMsg = (db, qid, sender, staffName, text, c) => db.prepare(
     'INSERT INTO ask_messages (question_id, sender, staff_name, text, media_id, media_kind, media_seconds, audio_id, audio_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
 ).bind(qid, sender, staffName || null, text || null, c.media_id, c.media_kind, c.media_seconds, c.audio_id, c.audio_seconds);
-async function saveMedia(db, studentId, media) {
-    const r = await db.prepare('INSERT INTO ask_media (student_id, mime, size, data) VALUES (?, ?, ?, ?)')
-        .bind(studentId, media.mime, media.size, media.data).run();
-    return Number(r.meta && r.meta.last_row_id);
+async function saveMedia(env, db, studentId, media) {
+    return (await putMedia(env, db, { kind: 'ask', studentId, mime: media.mime, data: media.data })).id;
 }
 const cleanText = (t) => String(t || '').replace(/\r/g, '').trim().slice(0, MAX_TEXT);
 
@@ -166,15 +171,15 @@ export async function onRequest(context) {
         // ================= Photos & voice notes (owner student or staff) =================
         if (action === 'media') {
             const id = parseInt(url.searchParams.get('id'), 10);
-            const row = id ? await db.prepare('SELECT student_id, mime, data FROM ask_media WHERE id = ?').bind(id).first() : null;
-            if (!row) return new Response('Not found', { status: 404 });
+            const row = id ? await mediaInfo(db, id) : null;
+            if (!row || row.kind !== 'ask') return new Response('Not found', { status: 404 });
             const staff = await requireStaff(request, env, 'inbox.reply');
             if (staff.error) {
                 const who = await requireStudent(request, env, db, null);
                 if (who.error || who.id !== row.student_id) return new Response('Forbidden', { status: 403 });
             }
-            const bin = Uint8Array.from(atob(row.data), c => c.charCodeAt(0));
-            return new Response(bin, { headers: { 'Content-Type': row.mime, 'Cache-Control': 'private, max-age=604800, immutable', 'Content-Length': String(bin.length) } });
+            const res = await mediaResponse(env, db, row);
+            return res || new Response('Not found', { status: 404 });
         }
 
         // ================= Staff =================
@@ -245,7 +250,7 @@ export async function onRequest(context) {
                 const att = decodeAttachments(data);
                 if (att.error) return bad(att.error);
                 if (!text && !hasAtt(att)) return bad('اكتبي الرد أو سجّلي رسالة صوتية');
-                const cols = await saveAttachments(db, q.student_id, att);
+                const cols = await saveAttachments(env, db, q.student_id, att);
                 await db.batch([
                     insertMsg(db, id, 'staff', staff.name, text, cols),
                     db.prepare("UPDATE ask_questions SET status = 'answered', waiting_since = NULL, student_unread = student_unread + 1, staff_unread = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(id)
@@ -319,7 +324,7 @@ export async function onRequest(context) {
                 for (let i = 0; i < ids.length; i += 45) {            // D1: max 100 bound values per query (ids are bound twice below)
                     const part = ids.slice(i, i + 45), ph = part.map(() => '?').join(',');
                     if (mode === 'media') {
-                        const f = await dropMedia(db, `id IN (SELECT media_id FROM ask_messages WHERE question_id IN (${ph}) AND media_id IS NOT NULL
+                        const f = await dropMedia(env, db, `id IN (SELECT media_id FROM ask_messages WHERE question_id IN (${ph}) AND media_id IS NOT NULL
                             UNION SELECT audio_id FROM ask_messages WHERE question_id IN (${ph}) AND audio_id IS NOT NULL)`, [...part, ...part]);
                         freed = { files: freed.files + f.files, bytes: freed.bytes + f.bytes };
                     }
@@ -344,10 +349,10 @@ export async function onRequest(context) {
 
             // How much room the photos / voice notes take
             if (action === 'storage') {
-                const r = await db.prepare('SELECT COUNT(*) as files, COALESCE(SUM(size), 0) as bytes FROM ask_media').first();
+                const r = await mediaStats(env, db, 'ask');
                 const last = await db.prepare(`SELECT value FROM app_kv WHERE "key" = 'ask_media_purge_last'`).first().catch(() => null);
                 let lastRun = null; try { lastRun = last ? JSON.parse(last.value) : null; } catch (e) { }
-                return json({ files: r.files, bytes: r.bytes, keepDays: MEDIA_KEEP_DAYS, lastCleanup: lastRun });
+                return json({ files: r.files, bytes: r.bytes, backend: r.backend, inR2: r.inR2, inD1: r.inD1, filesInD1: r.filesInD1, keepDays: MEDIA_KEEP_DAYS, lastCleanup: lastRun });
             }
         }
 
@@ -398,9 +403,9 @@ export async function onRequest(context) {
                 const unit = intIn(data.unit, ASK_UNITS), lesson = intIn(data.lesson, ASK_LESSONS);
                 if (!unit || !lesson) return bad('اختار الوحدة والدرس الأول');
                 if (today && today.q >= MAX_QUESTIONS_PER_DAY) return bad(`أقصى عدد ${MAX_QUESTIONS_PER_DAY} سؤال في اليوم — كمّل بكرة`, 429, { code: 'DAILY_LIMIT' });
+                const cols = await saveAttachments(env, db, sid, att);      // files first: if saving fails, no empty question is left behind
                 const r = await db.prepare('INSERT INTO ask_questions (student_id, grade, unit, lesson) VALUES (?, ?, ?, ?)').bind(sid, who.grade, unit, lesson).run();
                 const qid = Number(r.meta && r.meta.last_row_id);
-                const cols = await saveAttachments(db, sid, att);
                 await db.batch([
                     insertMsg(db, qid, 'student', null, text, cols),
                     db.prepare('INSERT INTO ask_messages (question_id, sender, text) VALUES (?, ?, ?)').bind(qid, 'auto', AUTO_REPLY)
@@ -413,7 +418,7 @@ export async function onRequest(context) {
             const id = parseInt(data.id, 10);
             const q = id ? await db.prepare('SELECT id, status FROM ask_questions WHERE id = ? AND student_id = ?').bind(id, sid).first() : null;
             if (!q) return bad('السؤال غير موجود', 404);
-            const cols = await saveAttachments(db, sid, att);
+            const cols = await saveAttachments(env, db, sid, att);
             await db.batch([
                 insertMsg(db, id, 'student', null, text, cols),
                 db.prepare(`UPDATE ask_questions SET status = 'waiting', waiting_since = CASE WHEN status = 'waiting' AND waiting_since IS NOT NULL THEN waiting_since ELSE CURRENT_TIMESTAMP END,

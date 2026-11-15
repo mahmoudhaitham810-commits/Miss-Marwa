@@ -427,10 +427,16 @@
         }
         async function loadStorage() {
             let d; try { d = await api('/api/ask?action=storage'); } catch (e) { return; }
-            const pct = Math.min(100, d.bytes / (500 * 1048576) * 100);
+            const r2 = d.backend === 'r2';
+            const cap = r2 ? 10 * 1024 * 1048576 : 500 * 1048576, capLabel = r2 ? 'the 10 GB free Cloudflare R2 storage' : 'the 500 MB free database';
+            const pct = Math.min(100, d.bytes / cap * 100);
             const last = d.lastCleanup && d.lastCleanup.at ? `Last automatic clean-up: ${A.fmtDate(d.lastCleanup.at)}${d.lastCleanup.files ? ` · removed ${d.lastCleanup.files} file${d.lastCleanup.files === 1 ? '' : 's'} (${fmtSize(d.lastCleanup.bytes)})` : ' · nothing to remove'}` : '';
+            const where = r2
+                ? `<span class="pill success" id="stWhere">Cloudflare R2</span>${d.filesInD1 ? `<span class="small muted" id="stMoving">Moving ${d.filesInD1} older file${d.filesInD1 === 1 ? '' : 's'} from the database…</span>` : ''}`
+                : `<span class="pill legacy" id="stWhere">Database (R2 not connected)</span>`;
             $('storageBody').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><b style="font-size:20px">${fmtSize(d.bytes)}</b><span class="small muted">${d.files} photo${d.files === 1 ? '' : 's'} &amp; voice notes</span></div>
-                <div class="st-bar" title="${pct.toFixed(1)}% of the 500 MB free database"><span style="width:${Math.max(pct, d.bytes ? 1 : 0)}%"></span></div>
+                <div class="st-bar" title="${pct.toFixed(2)}% of ${capLabel}"><span style="width:${Math.max(pct, d.bytes ? 1 : 0)}%"></span></div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">${where}</div>
                 <p class="small muted" style="margin:8px 0 0">Photos and voice notes older than <b>${d.keepDays} days</b> are removed automatically (once a day) — the written questions and answers stay.${last ? '<br>' + esc(last) : ''}</p>`;
         }
 

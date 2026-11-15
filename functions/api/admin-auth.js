@@ -20,6 +20,8 @@
 // Every permission is checked on the SERVER — hiding a button is never the security.
 // ============================================================
 
+import { mediaSchemaSteps, registerLegacy } from './media-store.js';
+
 function getDb(env) {
     return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
 }
@@ -188,6 +190,8 @@ export async function ensureAppSchema(db) {
     steps.push(`CREATE TABLE IF NOT EXISTS ask_media (
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
         data TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    // Unified file registry (R2 primary, D1 fallback) — see media-store.js
+    steps.push(...mediaSchemaSteps());
     // Devices each student is signed in on (max 2 — staff can reset them)
     steps.push(`CREATE TABLE IF NOT EXISTS student_devices (
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, device_id TEXT NOT NULL, label TEXT,
@@ -204,6 +208,7 @@ export async function ensureAppSchema(db) {
     for (const q of steps) {
         try { await db.prepare(q).run(); } catch (e) { /* another request may have added it at the same moment */ }
     }
+    await registerLegacy(db);     // old Questions files keep their ids
     appSchemaReady = true;
 }
 
