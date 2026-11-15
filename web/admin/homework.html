@@ -851,6 +851,8 @@
                     <div class="ans">${i.question ? `<div class="muted" dir="auto">${esc(i.question)}</div>` : ''}
                         <div class="you" dir="auto"><b>Student</b>${esc(i.yourAnswer || '—')}${i.yourCorrection ? ' — ' + esc(i.yourCorrection) : ''}</div>
                         <div class="key" dir="auto"><b>Key</b>${esc(i.modelAnswer || '')}</div>
+                        ${i.circledText ? `<div class="muted small" dir="auto">Circled: “${esc(i.circledText)}”</div>` : ''}
+                        ${i.check ? `<div class="small" style="color:var(--warning);font-weight:700">⚠ ${esc(i.check)}</div>` : ''}
                         ${i.evidence ? `<div class="muted small" dir="auto">AI: “${esc(i.evidence)}”</div>` : ''}</div>
                     <div class="pts"><span class="vchip ${esc(i.verdict)}">${esc(i.verdict)}</span><input type="number" min="0" max="${i.points}" step="0.25" value="${i.earned}" data-pts="${k}" aria-label="Marks for ${esc(i.label)}"><small class="muted">of ${i.points}</small></div></div>`).join('')}</div></div>`;
             $('revReleaseLabel').textContent = r.released ? 'Save & keep released' : 'Confirm & release';

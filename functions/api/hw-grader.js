@@ -103,6 +103,30 @@ export function scoreOne(q, a) {
     return { verdict: 'pending', points: 0, needsAI: true };
 }
 
+/**
+ * A choose answer as read from the photo → one letter we can trust, or a reason for staff to look.
+ * The reader gives the circled letter(s) AND the printed words inside the circle; when the two
+ * disagree the words win (letters are what vision models guess, the words are what they see).
+ */
+export function reconcileMcq(q, a) {
+    if (!a || q.type !== 'mcq') return a;
+    const letters = (Array.isArray(a.circled) ? a.circled : a.circled ? [a.circled] : []).map(x => letterOf(String(x))).filter(Boolean);
+    const uniq = [...new Set(letters)];
+    const text = String(a.circled_text || a.circledText || '').trim();
+    const opts = Array.isArray(q.options) ? q.options : [];
+    let byText = '';
+    if (text && opts.length) {
+        const idx = opts.findIndex(o => close(text, o) || (norm(o).length >= 2 && norm(text) === norm(o)));
+        if (idx >= 0) byText = 'abcdef'[idx];
+    }
+    if (uniq.length > 1) return { ...a, answer: uniq.join('+'), legible: true, multi: true, check: 'Two or more choices circled' };
+    const letter = uniq[0] || letterOf(String(a.answer || '')) || '';
+    if (byText && letter && byText !== letter) return { ...a, answer: byText, legible: true, check: `Letter (${letter}) and circled words (${byText}) disagree — used the words` };
+    if (byText) return { ...a, answer: byText, legible: a.legible !== false };
+    if (letter) return { ...a, answer: letter };
+    return { ...a, answer: text || String(a.answer || '') };
+}
+
 // ---------------- loading ----------------
 export function keyOut(q) {
     let extra = {}; try { extra = JSON.parse(q.extra || '{}'); } catch (e) { }
@@ -172,7 +196,12 @@ export async function gradeStep(env, db, subId) {
             const better = !prev || (prev.legible === false && a.legible !== false) || (!String(prev.answer || '').trim() && String(a.answer || '').trim());
             if (better) byLabel[lab] = a;
         }
-        const results = key.map(q => ({ q, a: byLabel[q.label], ...scoreOne(q, byLabel[q.label]) }));
+        for (const q of key) if (byLabel[q.label]) byLabel[q.label] = reconcileMcq(q, byLabel[q.label]);
+        const results = key.map(q => {
+            const a = byLabel[q.label];
+            if (a && a.multi) return { q, a, verdict: 'wrong', points: 0, check: a.check };     // two circles never earn the mark
+            return { q, a, ...scoreOne(q, a), check: a && a.check };
+        });
         const aiItems = results.filter(r => r.needsAI && r.a && String(r.a.answer || r.a.correction || '').trim());
         let feedback = {};
         if (aiItems.length) {
@@ -207,12 +236,13 @@ export async function gradeStep(env, db, subId) {
                     else { points = r.q.points; verdict = 'correct'; }
                 }
             } else if (verdict === 'pending') { verdict = r.a ? 'wrong' : 'blank'; }
-            if (verdict === 'unreadable') review = true;
+            if (verdict === 'unreadable' || r.check) review = true;
+            if (r.a && r.a.multi && !fb) fb = 'You circled more than one choice — circle only one.';
             score += points;
             answerStmts.push(db.prepare(`INSERT INTO hw_answers (submission_id, question_id, transcript, verdict, points, ai_points, evidence, confidence, feedback)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(submission_id, question_id) DO UPDATE SET transcript = excluded.transcript, verdict = excluded.verdict,
                 points = excluded.points, ai_points = excluded.ai_points, evidence = excluded.evidence, confidence = excluded.confidence, feedback = excluded.feedback, override_points = NULL`)
-                .bind(subId, r.q.id, r.a ? JSON.stringify({ answer: r.a.answer ?? '', correction: r.a.correction ?? '' }) : null, verdict, points, points, evidence, r.a && r.a.legible === false ? 0 : 1, fb));
+                .bind(subId, r.q.id, r.a ? JSON.stringify({ answer: r.a.answer ?? '', correction: r.a.correction ?? '', ...(r.a.circled_text ? { circledText: String(r.a.circled_text).slice(0, 200) } : {}), ...(r.check ? { check: r.check } : {}) }) : null, verdict, points, points, evidence, r.a && r.a.legible === false ? 0 : 1, fb));
         }
         score = Math.round(score * 100) / 100;
         const unreadablePages = reads.filter(r => r.page_readable === false).length;
@@ -283,7 +313,8 @@ export async function resultOf(db, subId, { forStudent = false } = {}) {
             ...(showScore ? {
                 verdict, earned: pts, aiPoints: a ? a.ai_points : null, overridden: !!(a && a.override_points != null),
                 yourAnswer: t.answer ?? '', yourCorrection: t.correction ?? '', evidence: a ? a.evidence : null, feedback: a ? a.feedback : null,
-                modelAnswer: modelAnswerText(q), explanation: q.explanation || '', confidence: a ? a.confidence : null
+                modelAnswer: modelAnswerText(q), explanation: q.explanation || '', confidence: a ? a.confidence : null,
+                ...(forStudent ? {} : { check: t.check || null, circledText: t.circledText || null })
             } : {})
         };
     });

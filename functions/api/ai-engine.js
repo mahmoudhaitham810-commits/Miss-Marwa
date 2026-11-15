@@ -165,18 +165,24 @@ Write questions, answers and explanations in the language of the booklet (usuall
 }
 
 export function readPrompt({ key, pageNo, pages }) {
-    const list = key.map(q => `${q.label} (${q.type}${q.type === 'mcq' ? ', circled letter' : q.type === 'tf' ? ', ✓ or ✗' : q.type === 'short' ? ', word(s)' : ', sentences'})`).join('; ');
-    return `This image is page ${pageNo} of ${pages} of a student's solved homework (booklet pages and/or notebook pages, scanned with a phone).
-Find the STUDENT'S OWN answers (handwriting, circles, ticks, underlines) — ignore the printed text except to know which question is which.
+    const line = (q) => {
+        if (q.type === 'mcq') return `${q.label} (choose)${(q.options || []).length ? ': ' + q.options.map((o, k) => `(${'abcdef'[k]}) ${o}`).join('  ') : ''}`;
+        return `${q.label} (${q.type === 'tf' ? '✓ or ✗' : q.type === 'short' ? 'word(s) written in the blank' : 'sentences written by the student'})`;
+    };
+    return `This image is page ${pageNo} of ${pages} of a student's homework (printed booklet pages and/or notebook pages, photographed with a phone).
+Your ONLY job is to REPORT what the student marked or wrote by hand. You are NOT solving the questions.
+IMPORTANT: students often choose WRONG answers. Report exactly what THEY marked even when it is wrong — never what you think is correct. Grading happens later, by someone else.
+How to read a choose question: look for the hand-drawn circle / oval / tick around one printed choice. Read the printed text INSIDE that drawn circle and copy it into "circled_text", then give its letter in "circled". If two or more choices are circled, list every circled letter. A choice that is crossed out or scribbled over does not count — mention it in "note". If nothing is marked, use an empty list.
 ${SECTION_RULES}
-Expected questions: ${list}.
-For each expected question visible on THIS page give what the student answered:
-- mcq: the letter the student circled/ticked/wrote ("a"…"f"); if they wrote the answer as words, give the words.
-- tf: "true" for ✓ / true, "false" for ✗ / false; add the student's correction if written.
-- short / essay: copy exactly what the student wrote (do not fix mistakes).
+Questions to look for (the printed choices are listed so you can find them):
+${key.map(line).join('\n')}
+For each question visible on THIS page:
+- choose: "circled": ["b"], "circled_text": "the printed words inside the student's circle"
+- ✓/✗: "answer": "true" for ✓ or "false" for ✗; "correction": the student's correction if written
+- words / sentences: "answer": copy exactly what the student wrote (do not fix mistakes)
 Return ONLY JSON:
-{"answers":[{"label":"1.3","answer":"b","correction":"","legible":true}],"page_readable":true,"notes":""}
-Use "legible": false when you cannot read the student's answer. Leave out questions that are not on this page. Never invent answers.`;
+{"answers":[{"label":"1.1","circled":["b"],"circled_text":"Neutron","answer":"","correction":"","legible":true,"note":""}],"page_readable":true,"notes":""}
+Use "legible": false when you cannot see the student's mark clearly. Leave out questions that are not on this page. Never invent answers.`;
 }
 
 // Second, independent check: solve the extracted questions from their TEXT only (no picture),
