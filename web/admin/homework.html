@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <title>Homework · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        /* ---------- list ---------- */
+        .hw-card { gap: 12px; }
+        .hw-card .meta b { color: var(--text); }
+        .hw-prog { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+        .hw-prog .bar { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+        .hw-prog .bar span { display: block; height: 100%; background: var(--primary); border-radius: inherit; transition: width .5s; }
+        .hw-prog b { color: var(--text); font-variant-numeric: tabular-nums; }
+        .hw-due { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+        .hw-card .badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+        .pill.review { background: var(--danger-soft); color: var(--danger); }
+        .pill.draft { background: var(--surface-3); color: var(--text-2); }
+
+        /* ---------- editor ---------- */
+        .hw-grid { display: grid; gap: 18px; grid-template-columns: 1fr; align-items: start; }
+        @media (min-width: 1100px) { .hw-grid { grid-template-columns: minmax(0, 1fr) 340px; } .hw-side { position: sticky; top: 18px; } }
+        .chipb { padding: 7px 12px; border-radius: 11px; border: 1.5px solid var(--border); background: var(--surface); font: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; color: var(--text); }
+        .chipb.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .chipb:disabled { opacity: .45; cursor: default; }
+        .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+        .quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .quick button { padding: 4px 10px; border-radius: 9px; border: 1px dashed var(--border); background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+        .quick button:hover { color: var(--primary); border-color: var(--primary); }
+        .fin.sm { height: 42px; font-size: 14.5px; }
+
+        .hwq { border: 1px solid var(--border); border-radius: 16px; padding: 14px; background: var(--surface); display: grid; gap: 10px; }
+        .hwq + .hwq { margin-top: 12px; }
+        .hwq.bad { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+        .hwq-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .hwq-num { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; color: var(--muted); font-size: 13px; }
+        .hwq-num input { width: 54px; height: 38px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 800; text-align: center; font-size: 15px; }
+        .type-seg { display: flex; gap: 3px; padding: 3px; background: var(--surface-3); border-radius: 12px; }
+        .type-seg button { border: 0; background: transparent; color: var(--text-2); font: inherit; font-weight: 700; font-size: 13px; padding: 6px 10px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+        .type-seg button.on { background: var(--surface); color: var(--primary); box-shadow: var(--shadow-sm); }
+        .pts { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+        .pts input { width: 64px; height: 38px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 700; text-align: center; }
+        .hwq-tools { margin-inline-start: auto; display: flex; gap: 2px; }
+        .hwq-tools .icon-btn { width: 32px; height: 32px; border-radius: 9px; }
+        .hwq-head { row-gap: 8px; }
+        .sub { font-size: 12.5px; font-weight: 700; color: var(--muted); margin: 2px 0 -4px; }
+        .letters { display: flex; gap: 6px; flex-wrap: wrap; }
+        .letters button { width: 42px; height: 42px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 800; font-size: 16px; cursor: pointer; }
+        .letters button.on { background: var(--success); border-color: var(--success); color: #fff; }
+        .tf button { width: auto; padding: 0 16px; font-size: 14px; }
+        .alts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px; border: 1.5px solid var(--border); border-radius: 14px; background: var(--surface); min-height: 48px; }
+        .alts:focus-within { border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft); }
+        .alts .tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 10px; border-radius: 9px; background: var(--primary-soft); color: var(--primary); font-weight: 700; font-size: 13px; }
+        .alts .tag button { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 2px; font-size: 15px; line-height: 1; }
+        .alts input { flex: 1; min-width: 160px; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 14.5px; padding: 6px; }
+        .ideas { display: grid; gap: 8px; }
+        .idea { display: grid; grid-template-columns: 26px minmax(0, 1fr) 72px 34px; gap: 8px; align-items: center; }
+        .idea .dot { width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft, var(--primary-soft)); color: var(--accent, var(--primary)); display: grid; place-items: center; font-size: 12px; font-weight: 800; }
+        .idea input.ip { height: 40px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 700; text-align: center; }
+        .idea-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .idea-sum { font-size: 12.5px; font-weight: 700; margin-inline-start: auto; }
+        .idea-sum.ok { color: var(--success); } .idea-sum.no { color: var(--danger); }
+
+        .add-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+        .add-bar .lbl { font-size: 13px; font-weight: 700; color: var(--muted); margin-inline-end: 4px; }
+        .add-many { display: inline-flex; gap: 6px; align-items: center; margin-inline-start: auto; font-size: 13px; color: var(--muted); font-weight: 600; }
+        .add-many input { width: 56px; height: 38px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; text-align: center; font-weight: 700; }
+        .add-many select { height: 38px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; padding: 0 8px; }
+
+        .sum-big { display: flex; align-items: baseline; gap: 8px; }
+        .sum-big b { font-size: 34px; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+        .sum-big span { color: var(--muted); font-weight: 600; }
+        .sum-state { font-weight: 700; font-size: 13.5px; margin-top: 2px; }
+        .sum-state.ok { color: var(--success); } .sum-state.no { color: var(--warning); }
+        .typecount { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+        .issues { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+        .issues li { display: flex; gap: 8px; font-size: 13px; color: var(--text-2); }
+        .issues li::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--warning); margin-top: 7px; }
+        .side-actions { display: grid; gap: 8px; margin-top: 14px; }
+        .empty-key { text-align: center; padding: 26px 12px; color: var(--muted); border: 1.5px dashed var(--border); border-radius: 16px; }
+        .lock-note { margin-bottom: 14px; }
+        @media (max-width: 560px) {
+            .hwq-tools { margin-inline-start: 0; width: 100%; justify-content: flex-end; order: 5; }
+            .add-many { margin-inline-start: 0; }
+            .idea { grid-template-columns: 22px minmax(0, 1fr) 60px 30px; gap: 6px; }
+        }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <!-- ================= List ================= -->
+            <section id="listView">
+                <div class="page-head">
+                    <div><h1>Homework · الواجبات</h1><p id="countLine">Students scan their notebook pages and get marked against your answer key.</p></div>
+                    <button class="btn btn-primary" id="newBtn" hidden><span data-icon="plus" style="display:contents"></span>New homework</button>
+                </div>
+                <div class="toolbar sticky-bar">
+                    <select class="pick" id="gradePick" aria-label="Grade" data-ui="pills"></select>
+                    <div class="segmented" id="stateSeg" aria-label="Status">
+                        <button data-value="all">All</button><button data-value="published">Open</button><button data-value="draft">Drafts</button><button data-value="closed">Closed</button>
+                    </div>
+                </div>
+                <div id="list"></div>
+            </section>
+
+            <!-- ================= Editor ================= -->
+            <section id="editView" hidden>
+                <div class="page-head">
+                    <div style="display:flex;gap:12px;align-items:center">
+                        <button class="icon-btn" id="backBtn" aria-label="Back to homework" data-icon="arrowLeft"></button>
+                        <div><h1 id="edTitle">New homework</h1><p id="edSub">Details, then the answer key the grader marks against.</p></div>
+                    </div>
+                    <span class="pill" id="edState" hidden></span>
+                </div>
+                <div class="hw-grid">
+                    <div style="min-width:0">
+                        <div class="notice warning lock-note" id="lockNote" hidden></div>
+                        <div class="card">
+                            <div class="card-head"><h2 class="card-title"><span data-icon="clipboard" style="display:contents"></span>Details</h2></div>
+                            <div class="form-grid">
+                                <div class="field full"><label>Grade</label><div class="chips" id="fGrade"></div></div>
+                                <div class="field full"><label>Unit</label><div class="chips" id="fUnit"></div></div>
+                                <div class="field full"><label>Lesson</label><div class="chips" id="fLesson"></div></div>
+                                <div class="field full"><label for="fTitle">Title <small>— students see this</small></label><input class="fin" id="fTitle" dir="auto" maxlength="150" placeholder="Unit 1 · Lesson 1 homework"></div>
+                                <div class="field"><label for="fDeadline">Deadline</label><input class="fin" id="fDeadline" type="datetime-local">
+                                    <div class="quick" id="qDeadline"><button data-d="1">Tomorrow 9 pm</button><button data-d="3">In 3 days</button><button data-d="7">In a week</button></div></div>
+                                <div class="field"><label for="fCloses">Accept late work until <small>(optional)</small></label><input class="fin" id="fCloses" type="datetime-local">
+                                    <div class="quick" id="qCloses"><button data-c="1">+1 day</button><button data-c="2">+2 days</button><button data-c="7">+1 week</button><button data-c="0">Until I close it</button></div></div>
+                                <div class="field"><label for="fTotal">Total score</label><input class="fin" id="fTotal" type="number" min="0.5" step="0.5" inputmode="decimal" value="10"></div>
+                                <div class="field full"><label for="fInstr">Note for students <small>(optional)</small></label><textarea class="ta" id="fInstr" dir="auto" rows="2" maxlength="1000" placeholder="e.g. Solve page 34 in the book + questions 1–5 in your notebook."></textarea></div>
+                            </div>
+                        </div>
+                        <div class="card" style="margin-top:18px">
+                            <div class="card-head"><h2 class="card-title"><span data-icon="checkCircle" style="display:contents"></span>Answer key</h2><span class="small muted">Numbers must match the book / notebook</span></div>
+                            <div id="key"></div>
+                            <div class="add-bar" id="addBar">
+                                <span class="lbl">Add</span>
+                                <button class="btn btn-soft btn-sm" data-add="mcq">Choose / MCQ</button>
+                                <button class="btn btn-soft btn-sm" data-add="tf">True / False</button>
+                                <button class="btn btn-soft btn-sm" data-add="short">Short answer</button>
+                                <button class="btn btn-soft btn-sm" data-add="essay">Essay · مقالي</button>
+                                <span class="add-many"><span>or add</span><input id="manyN" type="number" min="2" max="30" value="5" inputmode="numeric" aria-label="How many"><select id="manyT" aria-label="Type"><option value="mcq">Choose</option><option value="tf">True / False</option><option value="short">Short</option><option value="essay">Essay</option></select><button class="btn btn-ghost btn-sm" id="manyBtn">Add</button></span>
+                            </div>
+                        </div>
+                    </div>
+                    <aside class="hw-side">
+                        <div class="card">
+                            <div class="card-head"><h2 class="card-title"><span data-icon="target" style="display:contents"></span>Summary</h2></div>
+                            <div class="sum-big"><b id="sumPts">0</b><span id="sumOf">/ 10 marks</span></div>
+                            <div class="sum-state" id="sumState"></div>
+                            <div class="typecount" id="typeCount"></div>
+                            <button class="btn btn-ghost btn-sm" id="evenBtn" hidden><span data-icon="refresh" style="display:contents"></span><span id="evenLabel">Share the total evenly</span></button>
+                            <ul class="issues" id="issues"></ul>
+                            <div class="side-actions">
+                                <button class="btn btn-primary btn-block" id="publishBtn"><span data-icon="send" style="display:contents"></span><span id="publishLabel">Publish</span></button>
+                                <button class="btn btn-soft btn-block" id="saveBtn"><span data-icon="check" style="display:contents"></span><span id="saveLabel">Save draft</span></button>
+                            </div>
+                            <p class="small muted" id="publishNote" style="margin:10px 0 0"></p>
+                        </div>
+                    </aside>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'homework', title: 'Homework · الواجبات' });
+        A.hydrate();
+        const qs = new URLSearchParams(location.search);
+        const UNITS = 6, LESSONS = 6;
+        const TYPE_LABEL = { mcq: 'Choose', tf: 'True / False', short: 'Short answer', essay: 'Essay' };
+        const SEG_LABEL = { mcq: 'Choose', tf: 'T / F', short: 'Short', essay: 'Essay' };
+        const DEFAULT_POINTS = { mcq: 1, tf: 1, short: 1, essay: 2 };
+        let grade = A.store.get('hw_grade', 'prep1'); if (!A.GRADES[grade]) grade = 'prep1';
+        let state = 'all', H = [], students = {};
+
+        A.gradeSelect($('gradePick'), grade, (v) => { grade = v; A.store.set('hw_grade', v); load(); });
+        A.segmented($('stateSeg'), state, (v) => { state = v; render(); });
+        if (A.can('homework.create')) { $('newBtn').hidden = false; $('newBtn').addEventListener('click', () => openEditor(null)); }
+
+        // ================= List =================
+        const deadlineMs = (h) => A.toMs(h.deadline);
+        function dueBadge(h) {
+            if (h.state === 'draft') return '<span class="pill draft">Draft</span>';
+            if (h.state === 'closed') return '<span class="pill">Closed</span>';
+            const left = deadlineMs(h) - Date.now();
+            if (left <= 0) return '<span class="pill legacy">Late work only</span>';
+            return `<span class="pill ${left < 864e5 ? 'legacy' : 'success'}">${esc(A.timeLeft(h.deadline))}</span>`;
+        }
+        async function load() {
+            $('list').innerHTML = '<div class="skel" style="height:220px;border-radius:18px"></div>';
+            let d; try { d = await api(`/api/homework?action=list&grade=${grade}`); } catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            H = d.items; students = d.students || {};
+            render();
+        }
+        function render() {
+            const list = H.filter(h => state === 'all' || h.state === state)
+                .sort((a, b) => {
+                    const rank = { published: 0, draft: 1, closed: 2 };
+                    if (rank[a.state] !== rank[b.state]) return rank[a.state] - rank[b.state];
+                    if (a.state === 'published') return deadlineMs(a) - deadlineMs(b);
+                    return b.id - a.id;
+                });
+            const n = (s) => H.filter(h => h.state === s).length;
+            $('countLine').innerHTML = `${esc(A.GRADES[grade])}: <b>${n('published')}</b> open · <b>${n('draft')}</b> draft${n('draft') === 1 ? '' : 's'} · <b>${n('closed')}</b> closed`;
+            if (!list.length) {
+                $('list').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('clipboard', 'lg')}</div><h3>No homework here</h3><p>${H.length ? 'Try another status.' : `Create the first homework for ${esc(A.GRADES[grade])}.`}</p>
+                    ${!H.length && A.can('homework.create') ? `<button class="btn btn-primary" data-new style="margin-top:8px">${icon('plus', 'sm')}New homework</button>` : ''}</div>`;
+                return;
+            }
+            $('list').innerHTML = `<div class="exam-cards">${list.map((h, i) => {
+                const total = h.students || 0, pct = total ? Math.min(100, Math.round(h.submitted / total * 100)) : 0;
+                const canEdit = A.can('homework.create') && !h.submitted;
+                return `<div class="exam-card hw-card fade-up" style="--i:${Math.min(i, 14)}" data-id="${h.id}">
+                    <div class="top"><div style="min-width:0"><h3 dir="auto">${esc(h.title)}</h3>
+                        <div class="meta">Unit ${h.unit} · Lesson ${h.lesson} · ${h.questions} question${h.questions === 1 ? '' : 's'} · ${h.totalScore} marks</div></div>
+                        <div class="badges">${dueBadge(h)}${h.needsReview ? `<span class="pill review">${h.needsReview} to review</span>` : ''}</div></div>
+                    ${h.state === 'draft' ? `<div class="hw-due">${icon('edit', 'sm')}Not visible to students yet${h.deadline ? ` · due ${esc(A.fmtDate(h.deadline, true))}` : ''}</div>`
+                        : `<div class="hw-prog"><div class="bar"><span style="width:${pct}%"></span></div><span><b>${h.submitted}</b> / ${total} submitted</span></div>
+                           <div class="hw-due">${icon('calendar', 'sm')}${deadlineMs(h) > Date.now() ? 'Due' : 'Was due'} ${esc(A.fmtDate(h.deadline, true))}${h.closesAt ? ` · late until ${esc(A.fmtDate(h.closesAt, true))}` : ''}</div>`}
+                    <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+                        ${h.state === 'draft' && A.can('homework.publish') ? `<button class="btn btn-primary btn-sm" data-act="publish">${icon('send', 'sm')}Publish</button>` : ''}
+                        ${canEdit ? `<button class="btn btn-soft btn-sm" data-act="edit">${icon('edit', 'sm')}${h.state === 'draft' ? 'Edit' : 'Edit key'}</button>` : ''}
+                        ${h.state === 'published' && A.can('homework.publish') ? `<button class="btn btn-ghost btn-sm" data-act="close">${icon('lock', 'sm')}Close</button>` : ''}
+                        ${h.state === 'closed' && A.can('homework.publish') ? `<button class="btn btn-ghost btn-sm" data-act="reopen">${icon('refresh', 'sm')}Reopen</button>` : ''}
+                        ${A.can('homework.create') ? `<button class="btn btn-ghost btn-sm" data-act="copy" title="New homework with the same answer key">${icon('copy2', 'sm')}Duplicate</button>` : ''}
+                        ${A.can('homework.delete') ? `<button class="btn btn-ghost btn-sm danger-text" data-act="del">${icon('trash', 'sm')}Delete</button>` : ''}
+                    </div></div>`;
+            }).join('')}</div>`;
+        }
+        $('list').addEventListener('click', async (ev) => {
+            if (ev.target.closest('[data-new]')) return openEditor(null);
+            const b = ev.target.closest('[data-act]'); if (!b) return;
+            const h = H.find(x => x.id === Number(b.closest('[data-id]').dataset.id)); if (!h) return;
+            const act = b.dataset.act;
+            if (act === 'edit' || act === 'copy') {
+                let d; try { d = await api(`/api/homework?action=get&id=${h.id}`); } catch (e) { return Site.toast(e.message, 'error'); }
+                return openEditor(d, act === 'copy');
+            }
+            if (act === 'publish') return confirmPublish(h);
+            if (act === 'close') return Site.sheet({ iconName: 'lock', title: 'Close this homework?', subtitle: `${h.title} — students can't submit (or submit late) any more. You can reopen it later.`,
+                actions: [{ label: 'Close homework', cls: 'btn-primary', onClick: (c) => simple('close', h, c, 'Closed') }, { label: 'Cancel', cls: 'btn-ghost' }] });
+            if (act === 'reopen') return Site.sheet({ iconName: 'refresh', title: 'Reopen for late work?', subtitle: `${h.title} — students who haven't submitted can submit again (marked "Late"). No new notification is sent.`,
+                actions: [{ label: 'Reopen', cls: 'btn-primary', onClick: (c) => simple('reopen', h, c, 'Reopened') }, { label: 'Cancel', cls: 'btn-ghost' }] });
+            if (act === 'del') return del(h);
+        });
+        async function simple(action, h, close, msg) {
+            try { await api(`/api/homework?action=${action}`, { body: { id: h.id } }); close(); Site.toast(msg, 'success'); load(); }
+            catch (e) { Site.toast(e.message, 'error'); }
+        }
+        function confirmPublish(h, after) {
+            const n = students[h.grade] || 0;
+            Site.sheet({
+                iconName: 'send', title: 'Publish this homework?',
+                subtitle: `${h.title} — ${n} ${A.GRADES[h.grade]} student${n === 1 ? '' : 's'} will see it and get a notification 🔔`,
+                actions: [{ label: 'Publish & notify', cls: 'btn-primary', onClick: async (close) => {
+                    try {
+                        const r = await api('/api/homework?action=publish', { body: { id: h.id } });
+                        close();
+                        Site.toast(r.already ? 'Already published' : `Published — ${A.GRADES[h.grade]} students notified 🔔`, 'success');
+                        if (after) after(); else load();
+                    } catch (e) { close(); showServerIssues(e); Site.toast(e.message, 'error'); }
+                } }, { label: 'Not yet', cls: 'btn-ghost' }]
+            });
+        }
+        function del(h) {
+            Site.sheet({
+                iconName: 'alert', title: 'Delete this homework?',
+                subtitle: `${h.title}${h.submitted ? ` — ${h.submitted} submission${h.submitted === 1 ? '' : 's'} will be deleted too` : ''}. A full copy of the answer key is kept in the activity log.`,
+                actions: [{ label: 'Delete homework', cls: 'btn-danger', onClick: async (close) => {
+                    try { await api('/api/homework?action=delete', { body: { id: h.id, confirm: 'DELETE' } }); close(); Site.toast('Homework deleted', 'success'); load(); }
+                    catch (e) { Site.toast(e.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+        }
+
+        // ================= Editor =================
+        let F = null, Q = [], editing = null, dirty = false, locked = false;
+        const pad = (n) => String(n).padStart(2, '0');
+        const toLocalInput = (v) => { const t = A.toMs(v); if (isNaN(t)) return ''; const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+        const fromLocalInput = (v) => { if (!v) return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d.toISOString(); };
+        const round2 = (n) => Math.round(n * 100) / 100;
+        const numv = (v) => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+
+        function chipRow(el, items, value, onPick) {
+            el.innerHTML = items.map(([v, l]) => `<button type="button" class="chipb ${String(v) === String(value) ? 'on' : ''}" data-v="${v}">${esc(l)}</button>`).join('');
+            el.onclick = (e) => { const b = e.target.closest('[data-v]'); if (!b || b.disabled) return; el.querySelectorAll('.chipb').forEach(x => x.classList.toggle('on', x === b)); onPick(b.dataset.v); };
+        }
+        function autoTitle() { return `Unit ${F.unit} · Lesson ${F.lesson} homework`; }
+        function renderDetails() {
+            chipRow($('fGrade'), Object.entries(A.GRADES), F.grade, (v) => { F.grade = v; touch(); });
+            $('fGrade').querySelectorAll('.chipb').forEach(b => { b.disabled = !!(editing && editing.status !== 'draft') && b.dataset.v !== F.grade; });
+            chipRow($('fUnit'), Array.from({ length: UNITS }, (_, i) => [i + 1, `Unit ${i + 1}`]), F.unit, (v) => { const auto = $('fTitle').value === autoTitle() || !$('fTitle').value; F.unit = Number(v); if (auto) $('fTitle').value = autoTitle(); touch(); });
+            chipRow($('fLesson'), Array.from({ length: LESSONS }, (_, i) => [i + 1, `Lesson ${i + 1}`]), F.lesson, (v) => { const auto = $('fTitle').value === autoTitle() || !$('fTitle').value; F.lesson = Number(v); if (auto) $('fTitle').value = autoTitle(); touch(); });
+        }
+        function defaultDeadline(days) {
+            const d = new Date(); d.setDate(d.getDate() + days); d.setHours(21, 0, 0, 0); return toLocalInput(d.toISOString());
+        }
+        $('qDeadline').addEventListener('click', (e) => { const b = e.target.closest('[data-d]'); if (!b) return; $('fDeadline').value = defaultDeadline(Number(b.dataset.d)); syncCloses(); touch(); });
+        $('qCloses').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-c]'); if (!b) return;
+            const n = Number(b.dataset.c), dl = $('fDeadline').value;
+            if (!n || !dl) { $('fCloses').value = ''; } else { const d = new Date(dl); d.setDate(d.getDate() + n); $('fCloses').value = toLocalInput(d.toISOString()); }
+            touch();
+        });
+        function syncCloses() { if ($('fCloses').value && $('fDeadline').value && new Date($('fCloses').value) < new Date($('fDeadline').value)) $('fCloses').value = ''; }
+        ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr'].forEach(id => $(id).addEventListener('input', () => touch()));
+
+        // ---------- questions ----------
+        function nextLabel() {
+            const nums = Q.map(q => parseInt(q.label, 10)).filter(n => !isNaN(n));
+            return String(nums.length ? Math.max(...nums) + 1 : Q.length + 1);
+        }
+        function newQ(type) {
+            const q = { label: nextLabel(), type, prompt: '', points: DEFAULT_POINTS[type], answer: '', answerText: '', correction: '', alternatives: [], modelAnswer: '', ideas: [] };
+            if (type === 'essay') q.ideas = [{ text: '', points: 1 }, { text: '', points: 1 }];
+            return q;
+        }
+        function setType(q, type) {
+            if (q.type === type) return;
+            q.type = type; q.answer = '';
+            if (type === 'essay' && !q.ideas.length) { q.ideas = [{ text: '', points: q.points || 2 }]; }
+        }
+        function shareIdeas(q) {
+            const n = q.ideas.length, p = numv(q.points); if (!n || !(p > 0)) return;
+            const unit = Number.isInteger(p * 2) ? 0.5 : 0.25, k = Math.round(p / unit), each = Math.floor(k / n), extra = k - each * n;
+            q.ideas.forEach((it, i) => { it.points = round2((each + (i < extra ? 1 : 0)) * unit); });
+        }
+        const ideaSum = (q) => round2(q.ideas.reduce((t, it) => t + numv(it.points), 0));
+
+        function qHTML(q, i) {
+            const head = `<div class="hwq-head">
+                <span class="hwq-num">Q<input data-f="label" value="${esc(q.label)}" maxlength="12" aria-label="Question number" ${locked ? 'disabled' : ''}></span>
+                <div class="type-seg" role="group" aria-label="Question type">${Object.entries(SEG_LABEL).map(([t, l]) => `<button type="button" data-type="${t}" title="${TYPE_LABEL[t]}" class="${q.type === t ? 'on' : ''}" ${locked ? 'disabled' : ''}>${l}</button>`).join('')}</div>
+                <label class="pts"><input data-f="points" type="number" min="0.25" step="0.25" inputmode="decimal" value="${q.points}" ${locked ? 'disabled' : ''}> marks</label>
+                <div class="hwq-tools">${locked ? '' : `
+                    <button class="icon-btn" data-q="up" aria-label="Move up" ${i ? '' : 'disabled'}>${icon('arrowUp', 'sm')}</button>
+                    <button class="icon-btn" data-q="down" aria-label="Move down" ${i < Q.length - 1 ? '' : 'disabled'}>${icon('arrowDown', 'sm')}</button>
+                    <button class="icon-btn" data-q="dup" aria-label="Duplicate question">${icon('copy2', 'sm')}</button>
+                    <button class="icon-btn danger-text" data-q="del" aria-label="Remove question">${icon('trash', 'sm')}</button>`}</div></div>
+                <input class="fin sm" data-f="prompt" dir="auto" maxlength="1000" value="${esc(q.prompt)}" placeholder="Question text (optional — helps the grader, e.g. “Give reason: …”)" ${locked ? 'disabled' : ''}>`;
+            let body = '';
+            if (q.type === 'mcq') body = `<div class="sub">Correct choice</div>
+                <div class="letters" data-letters>${['A', 'B', 'C', 'D', 'E', 'F'].map(l => `<button type="button" data-letter="${l}" class="${q.answer === l ? 'on' : ''}" ${locked ? 'disabled' : ''}>${l}</button>`).join('')}</div>
+                <input class="fin sm" data-f="answerText" dir="auto" maxlength="300" value="${esc(q.answerText)}" placeholder="Answer text (optional) — if students write the word instead of the letter" ${locked ? 'disabled' : ''}>`;
+            else if (q.type === 'tf') body = `<div class="sub">Correct answer</div>
+                <div class="letters tf">${[['true', '✓ True'], ['false', '✗ False']].map(([v, l]) => `<button type="button" data-tf="${v}" class="${q.answer === v ? 'on' : ''}" ${locked ? 'disabled' : ''}>${l}</button>`).join('')}</div>
+                ${q.answer === 'false' ? `<input class="fin sm" data-f="correction" dir="auto" maxlength="300" value="${esc(q.correction)}" placeholder="Correction (optional) — the right word / statement" ${locked ? 'disabled' : ''}>` : ''}`;
+            else if (q.type === 'short') body = `<div class="sub">Answer</div>
+                <input class="fin sm" data-f="answer" dir="auto" maxlength="300" value="${esc(q.answer)}" placeholder="e.g. Newton" ${locked ? 'disabled' : ''}>
+                <div class="sub">Also accept <span style="font-weight:600">— other wordings, press Enter after each</span></div>
+                <div class="alts" data-alts>${q.alternatives.map((a, k) => `<span class="tag" dir="auto">${esc(a)}${locked ? '' : `<button type="button" data-alt-del="${k}" aria-label="Remove">×</button>`}</span>`).join('')}
+                    ${locked ? '' : '<input data-alt-in dir="auto" maxlength="200" placeholder="e.g. N, نيوتن">'}</div>`;
+            else if (q.type === 'essay') {
+                const s = ideaSum(q), okSum = Math.abs(s - numv(q.points)) < 0.01;
+                body = `<div class="sub">Model answer</div>
+                <textarea class="ta" data-f="modelAnswer" dir="auto" rows="2" maxlength="2000" placeholder="The full answer, as in your notes" ${locked ? 'disabled' : ''}>${esc(q.modelAnswer)}</textarea>
+                <div class="sub">Key ideas · each idea the student mentions (in any words) earns its marks</div>
+                <div class="ideas">${q.ideas.map((it, k) => `<div class="idea" data-idea="${k}"><span class="dot">${k + 1}</span>
+                    <input class="fin sm" data-idea-f="text" dir="auto" maxlength="200" value="${esc(it.text)}" placeholder="e.g. Current decreases when resistance increases" ${locked ? 'disabled' : ''}>
+                    <input class="ip" data-idea-f="points" type="number" min="0.25" step="0.25" inputmode="decimal" value="${it.points}" aria-label="Marks for this idea" ${locked ? 'disabled' : ''}>
+                    ${locked ? '<span></span>' : `<button class="icon-btn" data-idea-del="${k}" aria-label="Remove idea" ${q.ideas.length > 1 ? '' : 'disabled'}>${icon('x', 'sm')}</button>`}</div>`).join('')}</div>
+                <div class="idea-foot">${locked ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-idea-add>${icon('plus', 'sm')}Add idea</button>
+                    <button type="button" class="btn btn-ghost btn-sm" data-idea-even>${icon('refresh', 'sm')}Share marks evenly</button>`}
+                    <span class="idea-sum ${okSum ? 'ok' : 'no'}" data-idea-sum>${okSum ? `✓ Ideas = ${s} marks` : `Ideas add up to ${s} of ${numv(q.points)}`}</span></div>`;
+            }
+            return `<div class="hwq" data-i="${i}">${head}${body}</div>`;
+        }
+        function renderKey(focus) {
+            $('key').innerHTML = Q.length ? Q.map(qHTML).join('') : `<div class="empty-key">${icon('clipboard', 'lg')}<p style="margin:8px 0 0">No questions yet — add them in the same order as the book / notebook.</p></div>`;
+            $('addBar').hidden = locked;
+            if (focus) { const el = $('key').querySelector(focus); if (el) { el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }
+            summary();
+        }
+        const qOf = (el) => Q[Number(el.closest('[data-i]').dataset.i)];
+        $('key').addEventListener('input', (e) => {
+            const t = e.target, q = t.closest('[data-i]') && qOf(t); if (!q) return;
+            if (t.dataset.f) {
+                q[t.dataset.f] = t.dataset.f === 'points' ? t.value : t.value;
+                if (t.dataset.f === 'points' && q.type === 'essay') refreshIdeaSum(t.closest('.hwq'), q);
+            } else if (t.dataset.ideaF) {
+                const it = q.ideas[Number(t.closest('[data-idea]').dataset.idea)];
+                it[t.dataset.ideaF] = t.value;
+                if (t.dataset.ideaF === 'points') refreshIdeaSum(t.closest('.hwq'), q);
+            }
+            touch();
+        });
+        function refreshIdeaSum(card, q) {
+            const s = ideaSum(q), okSum = Math.abs(s - numv(q.points)) < 0.01, el = card.querySelector('[data-idea-sum]');
+            if (el) { el.className = 'idea-sum ' + (okSum ? 'ok' : 'no'); el.textContent = okSum ? `✓ Ideas = ${s} marks` : `Ideas add up to ${s} of ${numv(q.points)}`; }
+        }
+        $('key').addEventListener('keydown', (e) => {
+            const t = e.target;
+            if (t.matches('[data-alt-in]') && (e.key === 'Enter' || e.key === ',')) {
+                e.preventDefault(); addAlt(t);
+            } else if (t.matches('[data-alt-in]') && e.key === 'Backspace' && !t.value) {
+                const q = qOf(t); if (q.alternatives.length) { q.alternatives.pop(); touch(); renderKey(`[data-i="${Q.indexOf(q)}"] [data-alt-in]`); }
+            }
+        });
+        $('key').addEventListener('focusout', (e) => { if (e.target.matches('[data-alt-in]') && e.target.value.trim()) addAlt(e.target, true); });
+        function addAlt(input, silent) {
+            const q = qOf(input), v = input.value.trim().replace(/,$/, '');
+            if (v && !q.alternatives.includes(v) && q.alternatives.length < 15) q.alternatives.push(v);
+            input.value = ''; touch();
+            renderKey(silent ? null : `[data-i="${Q.indexOf(q)}"] [data-alt-in]`);
+        }
+        $('key').addEventListener('click', (e) => {
+            const t = e.target.closest('button'); if (!t || t.disabled || locked) return;
+            const q = qOf(t), i = Q.indexOf(q);
+            if (t.dataset.type) { setType(q, t.dataset.type); touch(); return renderKey(); }
+            if (t.dataset.letter) { q.answer = t.dataset.letter; touch(); return renderKey(); }
+            if (t.dataset.tf) { q.answer = t.dataset.tf; touch(); return renderKey(t.dataset.tf === 'false' ? `[data-i="${i}"] [data-f="correction"]` : null); }
+            if (t.dataset.altDel !== undefined) { q.alternatives.splice(Number(t.dataset.altDel), 1); touch(); return renderKey(); }
+            if (t.hasAttribute('data-idea-add')) { q.ideas.push({ text: '', points: 1 }); touch(); return renderKey(`[data-i="${i}"] [data-idea="${q.ideas.length - 1}"] [data-idea-f="text"]`); }
+            if (t.dataset.ideaDel !== undefined) { q.ideas.splice(Number(t.dataset.ideaDel), 1); touch(); return renderKey(); }
+            if (t.hasAttribute('data-idea-even')) { shareIdeas(q); touch(); renderKey(); return Site.toast(`Shared ${numv(q.points)} marks across ${q.ideas.length} ideas`, 'success'); }
+            const act = t.dataset.q;
+            if (act === 'up' && i > 0) { [Q[i - 1], Q[i]] = [Q[i], Q[i - 1]]; touch(); renderKey(); }
+            else if (act === 'down' && i < Q.length - 1) { [Q[i + 1], Q[i]] = [Q[i], Q[i + 1]]; touch(); renderKey(); }
+            else if (act === 'dup') { const c = JSON.parse(JSON.stringify(q)); c.label = nextLabel(); Q.splice(i + 1, 0, c); touch(); renderKey(`[data-i="${i + 1}"] [data-f="label"]`); }
+            else if (act === 'del') { Q.splice(i, 1); touch(); renderKey(); }
+        });
+        $('addBar').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-add]'); if (!b) return;
+            Q.push(newQ(b.dataset.add)); touch();
+            renderKey(`[data-i="${Q.length - 1}"] [data-f="prompt"]`);
+        });
+        $('manyBtn').addEventListener('click', () => {
+            const n = Math.max(1, Math.min(30, parseInt($('manyN').value, 10) || 0)), t = $('manyT').value;
+            for (let k = 0; k < n; k++) Q.push(newQ(t));
+            touch(); renderKey(`[data-i="${Q.length - n}"] [data-f="prompt"]`);
+            Site.toast(`Added ${n} ${TYPE_LABEL[t]} question${n === 1 ? '' : 's'}`, 'success');
+        });
+        $('evenBtn').addEventListener('click', () => {
+            const total = numv($('fTotal').value); if (!(total > 0) || !Q.length) return;
+            const unit = Number.isInteger(total * 2 / Q.length) || total * 2 >= Q.length ? 0.5 : 0.25, k = Math.round(total / unit), each = Math.floor(k / Q.length), extra = k - each * Q.length;
+            Q.forEach((q, i) => { q.points = round2((each + (i < extra ? 1 : 0)) * unit); if (q.type === 'essay') shareIdeas(q); });
+            touch(); renderKey();
+            Site.toast(`Shared ${total} marks across ${Q.length} questions`, 'success');
+        });
+
+        // ---------- validation (mirrors the server) ----------
+        function issues(strict) {
+            const out = [];
+            if (!F.unit) out.push('Choose the unit');
+            if (!F.lesson) out.push('Choose the lesson');
+            const dl = $('fDeadline').value;
+            if (strict && !dl) out.push('Set the deadline');
+            else if (strict && dl && new Date(dl).getTime() <= Date.now()) out.push('The deadline has already passed');
+            if ($('fCloses').value && dl && new Date($('fCloses').value) < new Date(dl)) out.push('"Accept late work until" must be after the deadline');
+            const total = numv($('fTotal').value);
+            if (!(total > 0)) out.push('Set the total score');
+            if (strict && !Q.length) out.push('Add at least one question');
+            const seen = new Set();
+            Q.forEach((q, i) => {
+                const name = `Q${q.label || i + 1}`;
+                const lab = String(q.label || '').trim().toLowerCase();
+                if (!lab) out.push(`${name}: add the question number`); else if (seen.has(lab)) out.push(`${name}: number used twice`); seen.add(lab);
+                if (!(numv(q.points) > 0)) out.push(`${name}: marks must be more than 0`);
+                if (q.type === 'mcq' && !q.answer && strict) out.push(`${name}: pick the correct letter`);
+                if (q.type === 'tf' && !q.answer && strict) out.push(`${name}: choose True or False`);
+                if (q.type === 'short' && !String(q.answer).trim() && strict) out.push(`${name}: type the answer`);
+                if (q.type === 'essay') {
+                    const ideas = q.ideas.filter(it => String(it.text).trim());
+                    if (!ideas.length && strict) out.push(`${name}: add at least one key idea`);
+                    if (ideas.length && Math.abs(ideaSum({ ideas }) - numv(q.points)) > 0.01) out.push(`${name}: key ideas add up to ${ideaSum({ ideas })}, not ${numv(q.points)}`);
+                }
+            });
+            const sum = round2(Q.reduce((t, q) => t + numv(q.points), 0));
+            if (strict && Q.length && Math.abs(sum - total) > 0.01) out.push(`Questions add up to ${sum} marks, total is ${total}`);
+            return out;
+        }
+        function summary() {
+            const total = numv($('fTotal').value), sum = round2(Q.reduce((t, q) => t + numv(q.points), 0));
+            $('sumPts').textContent = sum; $('sumOf').textContent = `/ ${total || 0} marks`;
+            const diff = round2(total - sum);
+            $('sumState').className = 'sum-state ' + (Q.length && !diff ? 'ok' : 'no');
+            $('sumState').textContent = !Q.length ? 'Add the questions below' : !diff ? '✓ Points match the total' : diff > 0 ? `${diff} mark${diff === 1 ? '' : 's'} short of the total` : `${-diff} mark${diff === -1 ? '' : 's'} over the total`;
+            $('evenBtn').hidden = locked || !Q.length || !diff || !(total > 0);
+            $('evenLabel').textContent = `Share ${total} marks evenly`;
+            const counts = Object.keys(TYPE_LABEL).map(t => [t, Q.filter(q => q.type === t).length]).filter(([, n]) => n);
+            $('typeCount').innerHTML = counts.map(([t, n]) => `<span class="pill primary">${n} ${esc(TYPE_LABEL[t])}</span>`).join('');
+            const list = issues(true);
+            $('issues').innerHTML = list.slice(0, 6).map(x => `<li>${esc(x)}</li>`).join('') + (list.length > 6 ? `<li>…and ${list.length - 6} more</li>` : '');
+            const pub = !editing || editing.status === 'draft';
+            $('publishBtn').hidden = !pub || !A.can('homework.publish');
+            $('publishBtn').disabled = !!list.length;
+            $('saveBtn').disabled = locked || !!issues(false).length;
+            $('publishNote').textContent = pub ? `Publishing shows it to ${A.GRADES[F.grade]} students and sends them a notification 🔔` : 'Saved changes appear for students straight away (no new notification).';
+            $('key').querySelectorAll('.hwq').forEach((card) => {
+                const q = Q[Number(card.dataset.i)], name = `Q${q.label || Number(card.dataset.i) + 1}:`;
+                card.classList.toggle('bad', list.some(x => x.startsWith(name)) && card.dataset.touched === '1');
+            });
+        }
+        function touch() { dirty = true; summary(); }
+        $('key').addEventListener('focusout', (e) => { const c = e.target.closest('.hwq'); if (c) { c.dataset.touched = '1'; summary(); } });
+
+        function payload() {
+            return {
+                id: editing ? editing.id : undefined, grade: F.grade, unit: F.unit, lesson: F.lesson,
+                title: $('fTitle').value.trim(), instructions: $('fInstr').value.trim(),
+                deadline: fromLocalInput($('fDeadline').value), closesAt: fromLocalInput($('fCloses').value), totalScore: numv($('fTotal').value),
+                questions: Q.map(q => ({ ...q, points: numv(q.points), ideas: q.ideas.filter(it => String(it.text).trim()).map(it => ({ text: it.text, points: numv(it.points) })) }))
+            };
+        }
+        function showServerIssues(e) {
+            if (e && e.data && Array.isArray(e.data.errors)) $('issues').innerHTML = e.data.errors.map(x => `<li>${esc(x)}</li>`).join('');
+        }
+        async function save() {
+            const r = await api('/api/homework?action=save', { body: payload() });
+            dirty = false;
+            if (!editing) editing = { id: r.id, status: 'draft' };
+            history.replaceState({ editor: 1 }, '', `${location.pathname}?edit=${r.id}`);
+            return r;
+        }
+        $('saveBtn').addEventListener('click', async () => {
+            $('saveBtn').disabled = true;
+            try { await save(); Site.toast(editing.status === 'draft' ? 'Draft saved ✅' : 'Changes saved ✅', 'success'); setEditorState(); }
+            catch (e) { showServerIssues(e); Site.toast(e.message, 'error'); }
+            finally { summary(); }
+        });
+        $('publishBtn').addEventListener('click', async () => {
+            if (issues(true).length) return;
+            try { await save(); } catch (e) { showServerIssues(e); return Site.toast(e.message, 'error'); }
+            confirmPublish({ id: editing.id, grade: F.grade, title: $('fTitle').value.trim() || autoTitle() }, () => { closeEditor(); grade = F.grade; $('gradePick').value = grade; A.store.set('hw_grade', grade); load(); });
+        });
+
+        function setEditorState() {
+            const st = editing ? (editing.state || editing.status) : null;
+            $('edState').hidden = !st;
+            if (st) { $('edState').className = 'pill ' + (st === 'draft' ? 'draft' : st === 'closed' ? '' : 'success'); $('edState').textContent = st === 'draft' ? 'Draft' : st === 'closed' ? 'Closed' : 'Published'; }
+            $('saveLabel').textContent = !editing || editing.status === 'draft' ? 'Save draft' : 'Save changes';
+            $('publishLabel').textContent = 'Publish';
+        }
+        function openEditor(d, asCopy) {
+            const a = d && d.assignment, src = d ? d.questions : [];
+            editing = a && !asCopy ? a : null;
+            locked = !!(editing && editing.submitted);
+            F = { grade: a ? a.grade : grade, unit: a ? a.unit : 1, lesson: a ? a.lesson : 1 };
+            $('edTitle').textContent = editing ? (editing.status === 'draft' ? 'Edit draft' : 'Edit answer key') : asCopy ? 'New homework (copy)' : 'New homework';
+            $('edSub').textContent = editing && editing.status !== 'draft' ? 'Students already see this homework — fixes apply straight away.' : 'Details, then the answer key the grader marks against.';
+            $('fTitle').value = a ? (asCopy ? a.title + ' (copy)' : a.title) : '';
+            $('fDeadline').value = a && !asCopy ? toLocalInput(a.deadline) : defaultDeadline(3);
+            $('fCloses').value = a && !asCopy && a.closesAt ? toLocalInput(a.closesAt) : '';
+            if (!a || asCopy) { const d2 = new Date($('fDeadline').value); d2.setDate(d2.getDate() + 2); $('fCloses').value = toLocalInput(d2.toISOString()); }
+            $('fTotal').value = a ? a.totalScore : 10;
+            $('fInstr').value = a ? a.instructions || '' : '';
+            Q = (src || []).map(q => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, answer: q.answer || '', answerText: q.answerText || '', correction: q.correction || '', alternatives: q.alternatives || [], modelAnswer: q.modelAnswer || '', ideas: (q.ideas || []).map(it => ({ ...it })) }));
+            renderDetails();
+            if (!$('fTitle').value) $('fTitle').value = autoTitle();
+            $('lockNote').hidden = !locked;
+            $('lockNote').innerHTML = locked ? `${icon('lock', 'sm')}<div><b>${editing.submitted} student${editing.submitted === 1 ? ' has' : 's have'} already submitted</b> — the answer key is locked so everyone is marked the same way.</div>` : '';
+            ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr'].forEach(id => { $(id).disabled = locked; });
+            setEditorState(); renderKey(); dirty = false;
+            $('listView').hidden = true; $('editView').hidden = false; window.scrollTo(0, 0);
+            history.pushState({ editor: 1 }, '', location.pathname + (editing ? '?edit=' + editing.id : '?new=1'));
+        }
+        function closeEditor(push = true) {
+            $('editView').hidden = true; $('listView').hidden = false; editing = null; dirty = false;
+            if (push) history.pushState({}, '', location.pathname);
+        }
+        $('backBtn').addEventListener('click', () => {
+            if (dirty) Site.sheet({ iconName: 'alert', title: 'Leave without saving?', subtitle: 'Your changes to this homework will be lost.',
+                actions: [{ label: 'Save draft & leave', cls: 'btn-primary', onClick: async (c) => { try { await save(); c(); closeEditor(); load(); } catch (e) { c(); showServerIssues(e); Site.toast(e.message, 'error'); } } },
+                    { label: 'Leave without saving', cls: 'btn-danger', onClick: (c) => { c(); closeEditor(); load(); } }, { label: 'Keep editing', cls: 'btn-ghost' }] });
+            else { closeEditor(); load(); }
+        });
+        window.addEventListener('popstate', () => { if (!$('editView').hidden) { closeEditor(false); load(); } });
+        window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+        await load();
+        if (qs.get('new') === '1' && A.can('homework.create')) openEditor(null);
+        else if (qs.get('edit')) { try { const d = await api(`/api/homework?action=get&id=${encodeURIComponent(qs.get('edit'))}`); grade = d.assignment.grade; openEditor(d); } catch (e) { } }
+    })();
+    </script>
+</body>
+</html>

@@ -106,6 +106,7 @@
             { key: 'content', label: 'Lessons & files', icon: 'book', href: '/admin/content.html' },
             { key: 'exams', label: 'Online exams', icon: 'clipboard', href: '/admin/exams.html' },
             { key: 'results', label: 'Online results', icon: 'checkCircle', href: '/admin/results.html' },
+            { key: 'homework', label: 'Homework · الواجبات', icon: 'file', href: '/admin/homework.html' },
             { key: 'grades', short: 'Grades', label: 'Center grades', icon: 'edit', href: '/admin/grades.html' },
             { key: 'analytics', short: 'Analytics', label: 'Analytics', icon: 'trophy', href: '/admin/analytics.html' },
             { key: 'reports', label: 'Parent reports', icon: 'whatsapp', href: '/admin/reports.html' },

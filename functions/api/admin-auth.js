@@ -51,6 +51,11 @@ export const PERMISSIONS = {
     'analytics.view': BOTH,
     'reports.send': BOTH,
     'inbox.reply': BOTH,
+    'homework.view': BOTH,
+    'homework.create': BOTH,     // drafts + answer keys (locked once students submit)
+    'homework.publish': BOTH,    // publish (push to the grade), close, reopen
+    'homework.delete': TEACHER,  // full copy kept in the activity log
+    'homework.review': BOTH,     // check / override marks (Step 4)
     'copilot.use': TEACHER,
     'staff.manage': TEACHER,
     'audit.view': TEACHER,
@@ -190,6 +195,28 @@ export async function ensureAppSchema(db) {
     steps.push(`CREATE TABLE IF NOT EXISTS ask_media (
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
         data TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    // Homework · الواجبات — assignments, answer keys, submissions (see homework.js)
+    steps.push(`CREATE TABLE IF NOT EXISTS hw_assignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, grade TEXT NOT NULL, unit INTEGER, lesson INTEGER, title TEXT NOT NULL, instructions TEXT,
+        deadline TEXT, closes_at TEXT, total_score REAL NOT NULL DEFAULT 10, status TEXT NOT NULL DEFAULT 'draft',
+        created_by TEXT, updated_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        published_at TEXT, closed_at TEXT, push_sent_at TEXT)`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_hw_a_grade ON hw_assignments(grade, status)');
+    steps.push(`CREATE TABLE IF NOT EXISTS hw_questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_id INTEGER NOT NULL, ord INTEGER NOT NULL DEFAULT 0, label TEXT,
+        type TEXT NOT NULL, prompt TEXT, answer TEXT, extra TEXT, points REAL NOT NULL DEFAULT 1)`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_hw_q_a ON hw_questions(assignment_id, ord)');
+    steps.push(`CREATE TABLE IF NOT EXISTS hw_submissions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_id INTEGER NOT NULL, student_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'uploading', auto_score REAL, final_score REAL, overridden_by TEXT,
+        pages INTEGER NOT NULL DEFAULT 0, late INTEGER NOT NULL DEFAULT 0, reuploads INTEGER NOT NULL DEFAULT 0, receipt_code TEXT,
+        submitted_at TEXT, graded_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(assignment_id, student_id))`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_hw_s_student ON hw_submissions(student_id)');
+    steps.push(`CREATE TABLE IF NOT EXISTS hw_answers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, submission_id INTEGER NOT NULL, question_id INTEGER NOT NULL,
+        transcript TEXT, verdict TEXT, points REAL, ai_points REAL, evidence TEXT, confidence REAL, override_points REAL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(submission_id, question_id))`);
     // Unified file registry (R2 primary, D1 fallback) — see media-store.js
     steps.push(...mediaSchemaSteps());
     // Devices each student is signed in on (max 2 — staff can reset them)
