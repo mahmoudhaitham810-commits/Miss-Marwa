@@ -9,7 +9,10 @@
    ========================================================= */
 (function () {
     'use strict';
-    let deferred = null;
+    // The page <head> already stores the browser's install offer in window.__deferredInstallPrompt
+    // (it can fire before this file loads). This file only reads and clears it.
+    const getPrompt = () => window.__deferredInstallPrompt || null;
+    const clearPrompt = () => { window.__deferredInstallPrompt = null; };
     const root = document.documentElement;
     const ua = navigator.userAgent;
     const isIOS = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -23,10 +26,11 @@
 
     function update() {
         root.classList.toggle('pwa-installed', standalone());
-        root.classList.toggle('pwa-ready', !!deferred);
+        root.classList.toggle('pwa-ready', !!getPrompt());
     }
-    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; update(); });
-    window.addEventListener('appinstalled', () => { deferred = null; update(); notify(`${appName()} is installed — open it from your home screen or apps.`); });
+    // Same listener as in <head>, for any page that doesn't have the early one
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__deferredInstallPrompt = e; update(); });
+    window.addEventListener('appinstalled', () => { clearPrompt(); update(); notify(`${appName()} is installed — open it from your home screen or apps.`); });
     try { matchMedia('(display-mode: standalone)').addEventListener('change', update); } catch (e) { }
     update();
 
@@ -62,11 +66,16 @@
     // showHelp(title, html) lets each part of the site use its own sheet design
     async function install({ showHelp } = {}) {
         if (standalone()) { notify('You are already using the app 👍'); return 'installed'; }
-        if (deferred) {
-            const p = deferred; deferred = null; update();
-            p.prompt();
+        const p = getPrompt();
+        if (p) {
+            // Called straight from the click, so the browser shows its own one-click install dialog
+            try { p.prompt(); } catch (e) { clearPrompt(); update(); return showSteps(showHelp); }
+            clearPrompt(); update(); // an offer can be used once; the browser sends a new one if they say "not now"
             try { const { outcome } = await p.userChoice; return outcome; } catch (e) { return 'dismissed'; }
         }
+        return showSteps(showHelp);
+    }
+    function showSteps(showHelp) {
         const html = `<ol class="install-steps">${steps().map(s => `<li>${s}</li>`).join('')}</ol>`;
         if (showHelp) showHelp(`Install ${appName()}`, html);
         else alert(steps().map(s => s.replace(/<[^>]+>/g, '')).join('\n'));
@@ -82,7 +91,7 @@
 
     window.PWA = {
         install, steps, standalone, isIOS,
-        get ready() { return !!deferred; },
+        get ready() { return !!getPrompt(); },
         showHelp: null,                      // set by each part of the site to use its own sheet
         setNotify(fn) { notify = fn; }
     };

@@ -16,6 +16,7 @@
             go(); window.addEventListener('hashchange', go);
         })();
     </script>
+    <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
     <title>Today · Science Academy Staff</title>
     <link rel="icon" href="/admin/icon-192.png">
     <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">

@@ -12,6 +12,7 @@
             else if (s && s.id) location.replace('/home.html');
         } catch (e) { }
     </script>
+    <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
     <title>Create account · Science Academy</title>
     <meta name="description" content="Create your free Science Academy account and start learning with Miss Marwa.">
     <link rel="icon" href="/assets/img/logo-96.png">
