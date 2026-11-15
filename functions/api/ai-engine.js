@@ -181,16 +181,28 @@ Use "legible": false when you cannot read the student's answer. Leave out questi
 
 // Second, independent check: solve the extracted questions from their TEXT only (no picture),
 // without seeing the first answer. Disagreements are shown to staff.
+const SUPD = '⁰¹²³⁴⁵⁶⁷⁸⁹', SUBD = '₀₁₂₃₄₅₆₇₈₉';
+const digits = (t, set) => Number([...t].map(c => set.indexOf(c)).join(''));
+// "³₁H" → "³₁H [1 proton, 2 neutrons]" — text models are bad at reading super/subscripts, so do the counting for them
+export function annotateNuclides(text) {
+    return String(text || '').replace(new RegExp(`([${SUPD}]+)([${SUBD}]+)\\s?([A-Z][a-z]?)`, 'g'), (m, A, Z, el) => {
+        const mass = digits(A, SUPD), z = digits(Z, SUBD);
+        return mass >= z ? `${m} [${z} proton${z === 1 ? '' : 's'}, ${mass - z} neutron${mass - z === 1 ? '' : 's'}, mass number ${mass}]` : `${m} [atomic number ${z}, mass number ${mass}]`;
+    });
+}
+// Second, independent check: solve the extracted questions from their TEXT only (no picture),
+// without seeing the first answer. Disagreements are shown to staff.
 export function verifyPrompt(items) {
     return `You are an expert Egyptian preparatory science teacher. Solve each question below yourself, from the text only.
-Atom symbols are written mass number on top and atomic number at the bottom, e.g. ³₁H = 1 proton, 2 neutrons.
+Facts for this level: atom symbols are written mass number on top and atomic number at the bottom (counts are given in [brackets]). Electrons fill energy levels K=2, L=8, M=8, then N (e.g. potassium 19 = 2, 8, 8, 1 → outermost electron in the 4th level). Atoms of the same element always have the same number of protons (atomic number) and, when neutral, the same number of electrons; their mass numbers / neutrons can differ (isotopes).
+Think step by step for each question: write the short reasoning in "why" FIRST, then the answer.
 If a question depends on a figure/diagram/table you cannot see, set "needs_figure": true.
 If NONE of the choices is correct as written, answer "none".
 Questions:
 ${items.map(q => q.type === 'mcq'
-        ? `[${q.label}] ${q.prompt}\n${q.options.map((o, k) => `(${'abcdef'[k]}) ${o}`).join('   ')}`
-        : `[${q.label}] True or false: ${q.prompt}`).join('\n\n')}
-Return ONLY JSON: {"results":[{"label":"1.1","answer":"b","needs_figure":false,"why":"max 15 words"}]} — for true/false questions answer "true" or "false".`;
+        ? `[${q.label}] ${annotateNuclides(q.prompt)}\n${q.options.map((o, k) => `(${'abcdef'[k]}) ${annotateNuclides(o)}`).join('   ')}`
+        : `[${q.label}] True or false: ${annotateNuclides(q.prompt)}`).join('\n\n')}
+Return ONLY JSON: {"results":[{"label":"1.1","why":"max 25 words","answer":"b","needs_figure":false}]} — for true/false questions answer "true" or "false".`;
 }
 
 export function conceptPrompt(items) {

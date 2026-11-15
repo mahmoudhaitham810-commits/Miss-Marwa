@@ -178,6 +178,8 @@ export function normaliseSolved(parsed) {
             if (!answer) { notes.push('No answer letter'); cap = Math.min(cap, 0.3); }
             if (options.length && options.length !== 4) { notes.push(`Read ${options.length} choices, not 4 — check them`); cap = Math.min(cap, 0.5); }
             if (answer && options.length && 'ABCDEF'.indexOf(answer) >= options.length) { notes.push('Answer letter is not one of the choices'); cap = Math.min(cap, 0.2); }
+            const seen = new Set(options.map(o => o.toLowerCase().replace(/[\s.]/g, '')));
+            if (options.length > 1 && seen.size < options.length) { notes.push('Two choices are the same — the choices were misread'); cap = Math.min(cap, 0.3); }
             if (options.some(looksNuclide) && !options.every(o => !looksNuclide(o) || fullNuclide(o))) { notes.push('An atom symbol is missing a number — compare the choices with the book'); cap = Math.min(cap, 0.4); }
         }
         if (type === 'tf') answer = /^(true|t|✓|yes|صح)/i.test(answer) ? 'true' : /^(false|f|✗|x|no|خطأ|خطا)/i.test(answer) ? 'false' : '';
@@ -346,7 +348,7 @@ export async function onRequest(context) {
                 .map(q => ({ label: str(q.label, 12), type: q.type, prompt: str(q.prompt, 600), options: (q.options || []).map(o => str(o, 150)).slice(0, 6) }));
             if (!items.length) return json({ questions: qs, neurons: 0, checked: 0 });
             try {
-                const out = await runAI(env, db, { prompt: verifyPrompt(items), model: textModel(env), maxTokens: 1200 });
+                const out = await runAI(env, db, { prompt: verifyPrompt(items), model: textModel(env), maxTokens: 1800 });
                 return json({ questions: applyVerify(qs, parseJsonLoose(out.text)), neurons: out.neurons, ms: out.ms, checked: items.length, today: await usageToday(db) });
             } catch (e) {
                 if (e instanceof AiQuotaError) return bad("Today's free AI allowance is used up — it resets at 2:00 am (Cairo).", 429, { code: 'AI_QUOTA' });
