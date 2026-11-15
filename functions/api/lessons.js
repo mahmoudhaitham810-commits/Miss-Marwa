@@ -65,18 +65,18 @@ export async function onRequestGet(context) {
     const category = url.searchParams.get('category') || 'ALL';
 
     try {
-        let query = "SELECT * FROM lessons ORDER BY created_at DESC";
+        let query = "SELECT *, rowid AS _order FROM lessons ORDER BY rowid DESC";
         let params = [];
 
         // فلترة على حسب اختيارات الأدمن
         if (grade !== 'ALL' && category !== 'ALL') {
-            query = "SELECT * FROM lessons WHERE grade = ? AND category = ? ORDER BY created_at DESC";
+            query = "SELECT *, rowid AS _order FROM lessons WHERE grade = ? AND category = ? ORDER BY rowid DESC";
             params = [grade, category];
         } else if (grade !== 'ALL') {
-            query = "SELECT * FROM lessons WHERE grade = ? ORDER BY created_at DESC";
+            query = "SELECT *, rowid AS _order FROM lessons WHERE grade = ? ORDER BY rowid DESC";
             params = [grade];
         } else if (category !== 'ALL') {
-            query = "SELECT * FROM lessons WHERE category = ? ORDER BY created_at DESC";
+            query = "SELECT *, rowid AS _order FROM lessons WHERE category = ? ORDER BY rowid DESC";
             params = [category];
         }
 

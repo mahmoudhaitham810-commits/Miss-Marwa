@@ -329,16 +329,16 @@
     // The server decides who is signed in (HttpOnly cookie). If that session is gone — signed out,
     // password reset, account removed, or a sign-in from before sessions existed — sign in again.
     let ending = false;
-    function sessionEnded() {
+    function sessionEnded(reason = 'session') {
         if (ending) return; ending = true;
         const code = session && session.id ? session.id : '';
         try { localStorage.removeItem('student_session'); } catch (e) { }
-        location.replace('/login.html?reason=session' + (code ? '&code=' + encodeURIComponent(code) : ''));
+        location.replace(`/login.html?reason=${reason}` + (code ? '&code=' + encodeURIComponent(code) : ''));
     }
     function validate() {
         if (isAdmin) return;
         api('/api/auth?action=validate', { method: 'POST', body: { studentId: session.id } })
-            .then(d => { if (d && d.valid === false) sessionEnded(); })
+            .then(d => { if (d && d.valid === false) sessionEnded(d.code === 'DEVICE_LIMIT' ? 'devices' : 'session'); })
             .catch(() => { });
     }
 

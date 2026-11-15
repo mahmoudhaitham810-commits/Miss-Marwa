@@ -109,10 +109,23 @@
                 </div>
             </div>
 
+            <div class="card fade-up" style="--i:5;margin-top:18px" id="devicesCard"></div>
             <div class="card fade-up" style="--i:5;margin-top:18px">
                 <div class="card-head"><h2 class="card-title">${icon('user')}Contact</h2></div>
                 <div class="kv"><div><span>Student phone</span><b class="num">${esc(st.phone || '—')}</b></div><div><span>Parent phone</span><b class="num">${esc(st.parentPhone || '—')}</b></div></div>
             </div>`;
+
+        // Signed-in devices (max 2) + Reset devices
+        async function loadDevices() {
+            let d; try { d = await api(`/api/students?action=devices&studentId=${encodeURIComponent(id)}`); } catch (e) { return; }
+            $('devicesCard').innerHTML = `<div class="card-head"><h2 class="card-title">${icon('lock')}Devices <span class="pill ${d.devices.length >= d.max ? 'danger' : ''}">${d.devices.length} of ${d.max}</span></h2>
+                    ${A.can('students.reset-password') && d.devices.length ? `<button class="btn btn-ghost btn-sm danger-text" id="resetDevBtn">${icon('refresh', 'sm')}Reset devices · تصفير الأجهزة</button>` : ''}</div>
+                ${d.devices.length ? d.devices.map(x => `<div class="hrow"><div><b>${esc(x.label || 'Device')}</b><div class="small muted">first sign-in ${esc(A.fmtDate(x.firstSeen, true))}</div></div><span class="small muted">last seen ${esc(A.fmtDate(x.lastSeen, true))}</span></div>`).join('')
+                    : '<p class="muted" style="margin:0">Not signed in on any device yet.</p>'}
+                <p class="small muted" style="margin:10px 0 0">Each account works on 2 devices at most (e.g. a phone and a laptop). A 3rd device is refused until you reset.</p>`;
+            $('resetDevBtn')?.addEventListener('click', () => A.devicesSheet(st, loadDevices));
+        }
+        loadDevices();
 
         // The parent's private, always-up-to-date report link
         $('parentLink')?.addEventListener('click', () => linkSheet());

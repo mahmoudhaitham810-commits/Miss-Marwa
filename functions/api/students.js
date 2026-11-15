@@ -1,4 +1,4 @@
-import { requireStaff, auditStmt, ensureAppSchema, normalizeEgyptPhone, nameKey } from './admin-auth.js';
+import { requireStaff, auditStmt, ensureAppSchema, normalizeEgyptPhone, nameKey, maxDevices } from './admin-auth.js';
 
 // Students list for the staff portal. Passwords are never sent back to the browser.
 const STUDENT_COLUMNS = `student_id, first_name, last_name, gender, branch, phone, parent_phone, grade, role, created_at`;
@@ -68,7 +68,14 @@ export async function onRequestGet(context) {
             await ensureAppSchema(db);
             return Response.json({ pairs: await findDuplicates(db) });
         }
-        const { results } = await db.prepare(`SELECT ${STUDENT_COLUMNS} FROM students ORDER BY created_at DESC`).all();
+        await ensureAppSchema(db);
+        // The devices a student is signed in on (max 2)
+        if (action === 'devices') {
+            const studentId = new URL(context.request.url).searchParams.get('studentId') || '';
+            const { results } = await db.prepare('SELECT label, created_at as firstSeen, last_seen_at as lastSeen FROM student_devices WHERE student_id = ? ORDER BY id').bind(studentId).all();
+            return Response.json({ devices: results || [], max: maxDevices(context.env) });
+        }
+        const { results } = await db.prepare(`SELECT ${STUDENT_COLUMNS}, (SELECT COUNT(*) FROM student_devices d WHERE d.student_id = students.student_id) as devices FROM students ORDER BY created_at DESC`).all();
         return Response.json(results);
     } catch (err) {
         return Response.json({ error: 'حصل خطأ في السيرفر' }, { status: 500 });
@@ -101,6 +108,23 @@ export async function onRequestPost(context) {
             return Response.json({ success: true });
         }
 
+        // 1b. Reset devices (teacher + assistant, logged): frees both device slots and signs the student out everywhere
+        if (action === 'reset-devices') {
+            const auth = await requireStaff(request, env, 'students.reset-password');
+            if (auth.error) return auth.error;
+            const { studentId } = await request.json();
+            const exists = await db.prepare('SELECT student_id FROM students WHERE student_id = ?').bind(String(studentId || '')).first();
+            if (!exists) return Response.json({ error: 'الطالب غير موجود' }, { status: 404 });
+            await ensureAppSchema(db);
+            const { results: before } = await db.prepare('SELECT label, last_seen_at as lastSeen FROM student_devices WHERE student_id = ?').bind(studentId).all();
+            await db.batch([
+                db.prepare('DELETE FROM student_devices WHERE student_id = ?').bind(studentId),
+                db.prepare('UPDATE students SET session_version = COALESCE(session_version, 1) + 1 WHERE student_id = ?').bind(studentId),
+                auditStmt(db, request, auth.staff, 'students.reset-devices', studentId, { devices: before || [] })
+            ]);
+            return Response.json({ success: true, cleared: (before || []).length });
+        }
+
         // 2. Delete a student (teacher only). A full copy of the row is kept in the audit log.
         if (action === 'delete') {
             const auth = await requireStaff(request, env, 'students.delete');
@@ -109,8 +133,10 @@ export async function onRequestPost(context) {
             if (!studentId) return Response.json({ error: 'كود الطالب مطلوب' }, { status: 400 });
             const row = await db.prepare(`SELECT ${STUDENT_COLUMNS} FROM students WHERE student_id = ?`).bind(studentId).first();
             if (!row) return Response.json({ error: 'الطالب غير موجود' }, { status: 404 });
+            await ensureAppSchema(db);
             await db.batch([
                 db.prepare('DELETE FROM students WHERE student_id = ?').bind(studentId),
+                db.prepare('DELETE FROM student_devices WHERE student_id = ?').bind(studentId),
                 auditStmt(db, request, auth.staff, 'students.delete', studentId, { student: row })
             ]);
             return Response.json({ success: true });

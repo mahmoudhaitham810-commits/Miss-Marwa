@@ -253,6 +253,8 @@
         return `https://wa.me/${n}?text=${t}`;
     }
     const waTarget = (mode) => mode === 'app' ? '' : 'target="wa_window"';
+    // Open whatsapp://… in the installed app. The page itself stays where it is (the browser only hands the link over).
+    function openWhatsAppApp(href) { try { (window.__waOpen || ((h) => { window.location.href = h; }))(href); } catch (e) { } } // __waOpen: test hook
     async function hashText(text) {
         try {
             const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text).trim()));
@@ -313,7 +315,11 @@
             body().querySelector('#waSkip')?.addEventListener('change', (e) => { skipSent = e.target.checked; store.set('wa_skip_sent', skipSent ? '1' : '0'); });
             body().querySelector('#waBack')?.addEventListener('click', () => { i--; show(-1); });
             body().querySelector('#waSkipBtn')?.addEventListener('click', () => { skipped++; i++; show(1); });
-            body().querySelector('#waGo')?.addEventListener('click', () => onOpened());
+            body().querySelector('#waGo')?.addEventListener('click', (e) => {
+                // Desktop app: hand the whatsapp:// link straight to Windows / macOS — no new tab, no wa.me page
+                if (waMode() === 'app' && cur && cur.href && cur.href.startsWith('whatsapp:')) { e.preventDefault(); openWhatsAppApp(cur.href); }
+                onOpened();
+            });
         }
         function onOpened() {
             const c = cur; if (!c || !c.href) return;
@@ -338,6 +344,22 @@
         document.addEventListener('keydown', onKey, true);
         show(1);
     }
+    // ---------- Reset a student's devices (max 2 per account) ----------
+    async function devicesSheet(student, onDone) {
+        let d; try { d = await api(`/api/students?action=devices&studentId=${encodeURIComponent(student.studentId)}`); } catch (e) { return Site.toast(e.message, 'error'); }
+        Site.sheet({
+            iconName: 'refresh', title: `Reset devices · تصفير الأجهزة`,
+            subtitle: `${student.firstName} ${student.lastName} is signed in on ${d.devices.length} of ${d.max} devices. Resetting signs them out everywhere and frees both slots — they sign in again on the devices they use now.`,
+            html: d.devices.length ? `<div class="hist-table">${d.devices.map(x => `<div class="hrow"><b>${esc(x.label || 'Device')}</b><span class="small muted">last seen ${esc(fmtDate(x.lastSeen, true))}</span></div>`).join('')}</div>` : '<p class="muted" style="margin:0">No devices registered.</p>',
+            actions: [{ label: 'Reset devices', cls: 'btn-danger', onClick: async (close) => {
+                try {
+                    const r = await api('/api/students?action=reset-devices', { body: { studentId: student.studentId } });
+                    close(); Site.toast(`Devices reset (${r.cleared} cleared) ✅`, 'success'); onDone && onDone();
+                } catch (e) { Site.toast(e.message, 'error'); }
+            } }, { label: 'Cancel', cls: 'btn-ghost' }]
+        });
+    }
+
     // Kept for the pages that call them
     const preview = (student, text, title, kind) => sender({ list: [student], makeText: () => text, title, kind });
     const queue = (list, makeText, { title = 'Send', kind = 'other' } = {}) => sender({ list, makeText, title, kind });
@@ -441,7 +463,7 @@
 
     window.Admin = {
         boot, api, icon, esc, can, store, GRADES, BRANCHES, fmtPct, levelOf, LEVEL_LABEL, initials, segmented, normalizeDigits,
-        toMs, fmtDate, timeLeft, preview, queue, sender, waHref, waNumber, feature, downloadCsv, gradeSelect, hydrate, enhanceSelect,
+        toMs, fmtDate, timeLeft, preview, queue, sender, devicesSheet, waHref, waNumber, feature, downloadCsv, gradeSelect, hydrate, enhanceSelect,
         get staff() { return STAFF; }
     };
 })();

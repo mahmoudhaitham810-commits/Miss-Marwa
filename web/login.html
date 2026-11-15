@@ -102,6 +102,15 @@
         const qs = new URLSearchParams(location.search);
         const pre = qs.get('code');
         if (pre) code.value = pre.toUpperCase();
+        // Max 2 devices per account
+        const deviceLimit = (msg) => Site.sheet({
+            iconName: 'alert', title: 'Device limit reached',
+            subtitle: 'Your account is already signed in on 2 devices (for example a phone and a laptop).',
+            html: `<p dir="rtl" lang="ar" style="margin:0;font-weight:600;line-height:1.8">${Site.esc(msg || 'لقد وصلت للحد الأقصى للأجهزة المسموح بها (جهازين فقط). تواصل مع التيم لإعادة الضبط')}</p>
+                   <p class="small muted" style="margin:10px 0 0">Got a new phone? Message the team and they'll reset your devices.</p>`,
+            actions: [{ label: 'Message the team on WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href: 'https://wa.me/201003021917', external: true }, { label: 'OK', cls: 'btn-ghost' }]
+        });
+        if (qs.get('reason') === 'devices') setTimeout(() => deviceLimit(), 80);
         if (qs.get('reason') === 'session') {
             setTimeout(() => formError('For your security, please sign in again. · من فضلك سجّل دخول تاني.'), 50);
         }
@@ -157,6 +166,12 @@
                 });
                 let data = {};
                 try { data = await res.json(); } catch (err) { }
+                if (data.code === 'DEVICE_LIMIT') {
+                    formError('This account is already used on 2 devices. · الحساب مستخدم على جهازين بالفعل.');
+                    deviceLimit(data.error);
+                    btn.disabled = false; btn.innerHTML = btnHtml;
+                    return;
+                }
                 if (!res.ok || !data.success || !data.student) {
                     formError(res.status === 401 || res.status === 404
                         ? 'Wrong student code or password. Please check and try again.'

@@ -159,6 +159,10 @@ export async function ensureAppSchema(db) {
     steps.push(`CREATE TABLE IF NOT EXISTS duplicate_dismissals (
         pair_key TEXT PRIMARY KEY, staff_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_students_grade_phone ON students(grade, phone)');
+    // Devices each student is signed in on (max 2 — staff can reset them)
+    steps.push(`CREATE TABLE IF NOT EXISTS student_devices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, device_id TEXT NOT NULL, label TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP, last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(student_id, device_id))`);
     // WhatsApp messages staff opened for a parent (so nobody sends the same message twice)
     steps.push(`CREATE TABLE IF NOT EXISTS message_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, kind TEXT NOT NULL, text_hash TEXT NOT NULL,
@@ -283,10 +287,10 @@ function studentSecret(env) {
     const s = getTokenSecret(env);
     return s ? s + '|student-session' : null;
 }
-export async function studentCookieFor(env, studentId, version) {
+export async function studentCookieFor(env, studentId, version, deviceId) {
     const secret = studentSecret(env);
     if (!secret) return null;
-    const token = await createToken({ sid: studentId, v: version || 1, iat: Date.now(), exp: Date.now() + STUDENT_DAYS * 864e5 }, secret);
+    const token = await createToken({ sid: studentId, v: version || 1, d: deviceId || undefined, iat: Date.now(), exp: Date.now() + STUDENT_DAYS * 864e5 }, secret);
     return `${STUDENT_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${STUDENT_DAYS * 86400}`;
 }
 export const CLEAR_STUDENT_COOKIE = `${STUDENT_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
@@ -294,6 +298,56 @@ export function studentSessionsEnabled(env) { return !!studentSecret(env); }
 export function legacyStudentsAllowed(env) {
     return !studentSecret(env) || String(env.STUDENT_LEGACY_SESSIONS || '').toLowerCase() === 'allow';
 }
+// ---------- Max 2 devices per student ----------
+// Each browser keeps a random device id in its own long-lived HttpOnly cookie. Signing in registers
+// that device for the student; a 3rd device is refused until staff press "Reset devices".
+// Signing out does NOT free the slot (otherwise an account could be passed around).
+export const MAX_STUDENT_DEVICES = 2;
+// Optional Cloudflare setting STUDENT_MAX_DEVICES (e.g. 3) changes the limit without a code change
+export const maxDevices = (env) => { const n = parseInt(env && env.STUDENT_MAX_DEVICES, 10); return n >= 1 && n <= 20 ? n : MAX_STUDENT_DEVICES; };
+const DEVICE_COOKIE = 'sa_device';
+const DEVICE_RE = /^[A-Za-z0-9_-]{22,64}$/;
+export function deviceIdFrom(request) {
+    const v = parseCookies(request.headers.get('Cookie'))[DEVICE_COOKIE];
+    return v && DEVICE_RE.test(v) ? v : null;
+}
+export function newDeviceId() {
+    const b = crypto.getRandomValues(new Uint8Array(18));
+    return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+export const deviceCookie = (id) => `${DEVICE_COOKIE}=${id}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${2 * 365 * 86400}`;
+export function deviceLabel(request) {
+    const ua = request.headers.get('User-Agent') || '';
+    const os = /iPad/.test(ua) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? (/Mobile/.test(ua) ? 'Android phone' : 'Android tablet')
+        : /Windows/.test(ua) ? 'Windows PC' : /Macintosh/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'Chromebook' : /Linux/.test(ua) ? 'Linux PC' : 'Device';
+    const br = /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /Firefox|FxiOS/.test(ua) ? 'Firefox'
+        : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+    return br ? `${os} · ${br}` : os;
+}
+export const DEVICE_LIMIT_MESSAGE = 'لقد وصلت للحد الأقصى للأجهزة المسموح بها (جهازين فقط). تواصل مع التيم لإعادة الضبط';
+// → { ok: true } or { ok: false } when this would be a 3rd device
+export async function claimDevice(db, request, studentId, deviceId, env) {
+    const MAX = maxDevices(env);
+    await ensureAppSchema(db);
+    const known = await db.prepare('SELECT id FROM student_devices WHERE student_id = ? AND device_id = ?').bind(studentId, deviceId).first();
+    if (known) {
+        await db.prepare('UPDATE student_devices SET last_seen_at = CURRENT_TIMESTAMP, label = ? WHERE id = ?').bind(deviceLabel(request), known.id).run();
+        return { ok: true };
+    }
+    const n = await db.prepare('SELECT COUNT(*) as c FROM student_devices WHERE student_id = ?').bind(studentId).first();
+    if ((n && n.c) >= MAX) return { ok: false };
+    await db.prepare('INSERT OR IGNORE INTO student_devices (student_id, device_id, label) VALUES (?, ?, ?)').bind(studentId, deviceId, deviceLabel(request)).run();
+    // two sign-ins at the same moment can't sneak in a 3rd device
+    const after = await db.prepare('SELECT COUNT(*) as c FROM student_devices WHERE student_id = ?').bind(studentId).first();
+    if (after && after.c > MAX) {
+        await db.prepare('DELETE FROM student_devices WHERE student_id = ? AND device_id = ?').bind(studentId, deviceId).run();
+        return { ok: false };
+    }
+    return { ok: true };
+}
+
+// Why a student request was refused (so the sign-in page can explain a device limit)
+export const STUDENT_REFUSAL = new WeakMap();
 // → { id, grade, firstName, lastName, gender, branch } or null
 export async function verifyStudentRequest(request, env, db) {
     const secret = studentSecret(env);
@@ -306,7 +360,17 @@ export async function verifyStudentRequest(request, env, db) {
         'SELECT student_id, grade, first_name, last_name, gender, branch, session_version FROM students WHERE student_id = ?'
     ).bind(payload.sid).first();
     if (!row || (row.session_version || 1) !== payload.v) return null;
-    return { id: row.student_id, grade: String(row.grade || '').toLowerCase(), firstName: row.first_name, lastName: row.last_name, gender: row.gender, branch: row.branch };
+    if (payload.d) {
+        // This device must still be one of the student's devices ("Reset devices" signs it out)
+        const dev = await db.prepare('SELECT 1 as ok FROM student_devices WHERE student_id = ? AND device_id = ?').bind(row.student_id, payload.d).first();
+        if (!dev) return null;
+    } else {
+        // Signed in before the device limit existed: the next page load registers this device
+        // (auth?action=validate). If the student already has 2 devices, this one is a 3rd → refused.
+        const n = await db.prepare('SELECT COUNT(*) as c FROM student_devices WHERE student_id = ?').bind(row.student_id).first();
+        if (n && n.c >= maxDevices(env)) { STUDENT_REFUSAL.set(request, 'DEVICE_LIMIT'); return null; }
+    }
+    return { needsDevice: !payload.d, deviceId: payload.d || null, version: row.session_version || 1, id: row.student_id, grade: String(row.grade || '').toLowerCase(), firstName: row.first_name, lastName: row.last_name, gender: row.gender, branch: row.branch };
 }
 // Use in student APIs:
 //   const who = await requireStudent(request, env, db, claimedId);

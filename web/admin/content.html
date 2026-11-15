@@ -59,6 +59,9 @@
             $('list').innerHTML = '<div class="skel" style="height:260px;border-radius:18px"></div>';
             try { L = await api('/api/lessons'); } catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
             L.forEach(l => { l.grade = String(l.grade || '').toLowerCase(); l.category = String(l.category || '').toLowerCase(); });
+            // Newest upload first (server upload order; the ITEM-<time> id as a fallback)
+            const key = (i) => Number(i._order) || Number(String(i.id || '').replace(/\D/g, '').slice(0, 15)) || 0;
+            L.sort((a, b) => key(b) - key(a));
             render();
         }
         function render() {

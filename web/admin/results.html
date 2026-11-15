@@ -30,6 +30,8 @@
                 <div class="segmented" id="branchSeg" aria-label="Group">
                     <button data-value="all">All</button><button data-value="center">Center</button><button data-value="private">Private</button>
                 </div>
+                <div class="input" style="flex:1;min-width:200px"><span data-icon="search" style="display:contents"></span>
+                    <input id="q" placeholder="Search a student…" autocomplete="off" style="height:44px" aria-label="Search a student by name or code"></div>
             </div>
             <div id="content"></div>
         </div>
@@ -54,6 +56,7 @@
         A.gradeSelect($('gradePick'), grade, (v) => { grade = v; A.store.set('results_grade', v); examId = null; fillExams(); });
         A.segmented($('branchSeg'), branch, (v) => { branch = v; render(); });
         $('examPick').addEventListener('change', (e) => { examId = e.target.value; loadResults(); });
+        $('q').addEventListener('input', () => render());
 
         function fillExams() {
             const list = E.filter(e => e.grade === grade).sort((a, b) => A.toMs(b.expires_at) - A.toMs(a.expires_at));
@@ -90,6 +93,11 @@
             let rank = 0, prev = null;
             const rows = done.map((r, i) => { if (r.score !== prev) { rank = i + 1; prev = r.score; } return { ...r, rank }; });
             const canReset = !ex.closed && A.can('exams.reset-attempt');
+            // Live search (name or MM- code) — filters both lists; the numbers above stay for the whole group
+            const qv = A.normalizeDigits($('q').value).trim().toLowerCase();
+            const match = (r) => !qv || `${r.firstName} ${r.lastName} ${r.studentId}`.toLowerCase().includes(qv);
+            const rowsShown = rows.filter(match), notShown = notTaken.filter(match);
+            const noMatch = `<div class="empty-state" style="padding:24px"><p>No student matches "${esc($('q').value.trim())}".</p></div>`;
 
             $('content').innerHTML = `
                 <div class="banner ${ex.closed ? 'info' : ''} fade-up">${icon(ex.closed ? 'lock' : 'clock')}
@@ -105,7 +113,7 @@
                 <div class="grid-2c">
                     <div class="card fade-up" style="--i:2">
                         <div class="card-head"><h2 class="card-title">${icon('trophy')}Scores</h2><span class="small muted">highest first</span></div>
-                        ${rows.length ? `<div>${rows.map(r => {
+                        ${rows.length && !rowsShown.length ? noMatch : rowsShown.length ? `<div>${rowsShown.map(r => {
                             const p = r.score / total * 100, lvl = A.levelOf(p);
                             return `<div class="res-row"><span class="rk">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}</span>
                                 <div style="min-width:0"><a class="name-link" href="/admin/student.html?id=${encodeURIComponent(r.studentId)}"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b></a><small class="muted">${esc(r.studentId)}${r.branch ? ' · ' + A.BRANCHES[r.branch] : ''} · ${esc(A.fmtDate(r.submittedAt, true))}</small></div>
@@ -117,7 +125,7 @@
                         <div class="card fade-up" style="--i:3">
                             <div class="card-head"><h2 class="card-title">${icon('alert')}${ex.closed ? 'Didn\'t take it' : 'Haven\'t taken it yet'}</h2>
                                 ${notTaken.length && A.can('reports.send') ? `<button class="btn btn-wa btn-sm" id="sendAll">${icon('whatsapp', 'sm')}Message parents</button>` : ''}</div>
-                            ${notTaken.length ? notTaken.map(r => `<div class="res-row" style="grid-template-columns:minmax(0,1fr) auto">
+                            ${notTaken.length && !notShown.length ? noMatch : notShown.length ? notShown.map(r => `<div class="res-row" style="grid-template-columns:minmax(0,1fr) auto">
                                 <div style="min-width:0"><a class="name-link" href="/admin/student.html?id=${encodeURIComponent(r.studentId)}"><b dir="auto">${esc(r.firstName)} ${esc(r.lastName)}</b></a>
                                     <small class="muted">${r.reason === 'opened' ? '<span style="color:var(--warning)">Opened it, didn\'t submit</span>' : 'Didn\'t open it'}${r.branch ? ' · ' + A.BRANCHES[r.branch] : ' · no group'}</small></div>
                                 <div style="display:flex;gap:4px">

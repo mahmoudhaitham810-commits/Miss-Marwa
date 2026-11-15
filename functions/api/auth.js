@@ -1,4 +1,7 @@
-import { ensureAppSchema, ensureStaffSchema, normalizeEgyptPhone, studentCookieFor, CLEAR_STUDENT_COOKIE, verifyStudentRequest, requireStudent, legacyStudentsAllowed, throttleState, recordFail } from './admin-auth.js';
+import { ensureAppSchema, ensureStaffSchema, normalizeEgyptPhone, studentCookieFor, CLEAR_STUDENT_COOKIE, verifyStudentRequest, requireStudent, legacyStudentsAllowed, throttleState, recordFail,
+    deviceIdFrom, newDeviceId, deviceCookie, claimDevice, DEVICE_LIMIT_MESSAGE, STUDENT_REFUSAL } from './admin-auth.js';
+// Several Set-Cookie headers on one response
+const withCookies = (cookies) => { const h = new Headers(); cookies.filter(Boolean).forEach(c => h.append('Set-Cookie', c)); return { headers: h }; };
 
 // Student sign-in: 10 wrong passwords for one code (or 30 from one network) → 15 minutes pause
 const STUDENT_CODE_LOCK = { fails: 10, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 };
@@ -109,9 +112,15 @@ export async function onRequestPost(context) {
             const user = await stmt.first();
 
             if (user) {
-                const streakInfo = await updateStreakAndGetBadges(db, user);
                 await db.prepare('DELETE FROM auth_throttle WHERE key = ?').bind(codeKey).run();
-                const cookie = await studentCookieFor(env, user.student_id, user.session_version || 1);
+                // Max 2 devices per account — a 3rd device is refused until staff reset the devices
+                const deviceId = deviceIdFrom(request) || newDeviceId();
+                const claim = await claimDevice(db, request, user.student_id, deviceId, env);
+                if (!claim.ok) {
+                    return Response.json({ error: DEVICE_LIMIT_MESSAGE, code: 'DEVICE_LIMIT' }, { status: 403, ...withCookies([deviceCookie(deviceId)]) });
+                }
+                const streakInfo = await updateStreakAndGetBadges(db, user);
+                const cookie = await studentCookieFor(env, user.student_id, user.session_version || 1, deviceId);
                 return Response.json({
                     success: true,
                     student: {
@@ -124,7 +133,7 @@ export async function onRequestPost(context) {
                         longestStreak: streakInfo.longestStreak,
                         badges: streakInfo.badges
                     }
-                }, cookie ? { headers: { 'Set-Cookie': cookie } } : undefined);
+                }, withCookies([cookie, deviceCookie(deviceId)]));
             } else {
                 await recordFail(db, codeKey, STUDENT_CODE_LOCK);
                 await recordFail(db, ipKey, STUDENT_IP_LOCK);
@@ -212,7 +221,9 @@ export async function onRequestPost(context) {
                 return Response.json({ error: 'حصلت مشكلة أثناء إنشاء الكود، جرّب تاني' }, { status: 500 });
             }
 
-            const cookie = await studentCookieFor(env, studentId, 1);
+            const deviceId = deviceIdFrom(request) || newDeviceId();
+            await claimDevice(db, request, studentId, deviceId, env); // a brand-new account: this is device 1
+            const cookie = await studentCookieFor(env, studentId, 1, deviceId);
             return Response.json({
                 success: true,
                 studentId: studentId,
@@ -225,7 +236,7 @@ export async function onRequestPost(context) {
                     gender: data.gender,
                     branch: data.branch
                 }
-            }, cookie ? { headers: { 'Set-Cookie': cookie } } : undefined);
+            }, withCookies([cookie, deviceCookie(deviceId)]));
         }
 
         // 3. Is this browser still signed in? (the server-verified cookie decides — not the code in the request)
@@ -233,7 +244,21 @@ export async function onRequestPost(context) {
             const body = await request.json().catch(() => ({}));
             if (body.studentId && String(body.studentId).trim().toUpperCase() === 'MM-ADMIN') return Response.json({ valid: false });
             const st = await verifyStudentRequest(request, env, db);
-            if (st) return Response.json({ valid: true, student: { id: st.id, grade: st.grade, firstName: st.firstName, lastName: st.lastName } });
+            if (st) {
+                const student = { id: st.id, grade: st.grade, firstName: st.firstName, lastName: st.lastName };
+                const deviceId = st.deviceId || deviceIdFrom(request) || newDeviceId();
+                const claim = await claimDevice(db, request, st.id, deviceId, env); // also refreshes "last seen"
+                if (!claim.ok) {
+                    // signed in before the limit, and this would be a 3rd device
+                    return Response.json({ valid: false, code: 'DEVICE_LIMIT', error: DEVICE_LIMIT_MESSAGE }, withCookies([CLEAR_STUDENT_COOKIE, deviceCookie(deviceId)]));
+                }
+                // Old session without a device → re-issue it tied to this device
+                if (st.needsDevice) return Response.json({ valid: true, student }, withCookies([await studentCookieFor(env, st.id, st.version, deviceId), deviceCookie(deviceId)]));
+                return Response.json({ valid: true, student });
+            }
+            if (STUDENT_REFUSAL.get(request) === 'DEVICE_LIMIT') {
+                return Response.json({ valid: false, code: 'DEVICE_LIMIT', error: DEVICE_LIMIT_MESSAGE }, withCookies([CLEAR_STUDENT_COOKIE]));
+            }
             // Old sign-in (before sessions): only accepted while STUDENT_LEGACY_SESSIONS=allow
             if (legacyStudentsAllowed(env) && body.studentId) {
                 const user = await db.prepare("SELECT student_id FROM students WHERE student_id = ?").bind(String(body.studentId).trim()).first();
