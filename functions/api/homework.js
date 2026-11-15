@@ -14,7 +14,7 @@
 // =============================================================
 import { requireStaff, ensureAppSchema, auditStmt, can } from './admin-auth.js';
 import { r2, mediaInfo, mediaResponse, deleteMedia } from './media-store.js';
-import { runAI, parseJsonLoose, solvePrompt, aiReady, usageToday, quotaHitToday, visionModel, VISION_MODELS, DAILY_FREE_NEURONS, AiQuotaError, AiUnavailableError } from './ai-engine.js';
+import { runAI, parseJsonLoose, solvePrompt, verifyPrompt, textModel, aiReady, usageToday, quotaHitToday, visionModel, VISION_MODELS, DAILY_FREE_NEURONS, AiQuotaError, AiUnavailableError } from './ai-engine.js';
 import { gradeStep, processQueue, resultOf, weaknessReport, releaseMode, RELEASE_KEY, loadKey, purgeHomeworkMedia, pushToStudent } from './hw-grader.js';
 
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
@@ -148,18 +148,25 @@ function arDate(v) {
 
 // AI "solve" reply → answer-key builder questions (flagged aiCheck so staff review them).
 // The model is sometimes confidently wrong, so a few code checks lower its confidence and say why.
+// "ⓐ ¹³₆X", "@ ¹³₆X", "(a) …", "a) …" → "¹³₆X" (the circled letter is not part of the choice)
+const cleanOpt = (o) => String(o || '').replace(/^\s*(?:[ⓐⓑⓒⓓⓔⓕ@©®]|\(?[a-fA-F]\)|[a-fA-F][.\-–]\s)\s*/, '').replace(/\s{2,}/g, ' ').trim();
+// atom symbols: both numbers must be there (mass number on top, atomic number below)
+const SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹', SUB = '₀₁₂₃₄₅₆₇₈₉';
+const looksNuclide = (o) => new RegExp(`[${SUP}${SUB}]+\\s?[A-Z][a-z]?\\b`).test(o);
+const fullNuclide = (o) => new RegExp(`[${SUP}]+[${SUB}]+\\s?[A-Z][a-z]?|[${SUB}]+[${SUP}]+\\s?[A-Z][a-z]?`).test(o);
+const CONTRADICT = /\bnot (twice|double|half|equal|the same|correct|right)\b|\bnone of\b|\bdoes(?:n't| not) (match|fit|satisfy)\b|\bno (option|choice) (fits|matches)\b/i;
 const HEDGE = /\b(however|re-?evaluat|re-?check|misinterpret|actually|not sure|unsure|unclear|none of (the|these)|might be|maybe|i think|seems? to be|initial understanding)\b/i;
 const TOO_ADVANCED = /\b\d[spdf]\s?[¹²³⁴⁵⁶⁷⁸⁹⁰0-9]|\borbitals?\b|\bsub-?levels?\b|\bsubshells?\b/i;
 export function normaliseSolved(parsed) {
     const list = parsed && Array.isArray(parsed.questions) ? parsed.questions : Array.isArray(parsed) ? parsed : [];
     return list.slice(0, MAX_QUESTIONS).map((q, i) => {
         const t = String(q.type || '').toLowerCase();
-        const options = (Array.isArray(q.options) ? q.options : []).map(o => str(o, 200)).filter(Boolean).slice(0, 6);
+        const options = (Array.isArray(q.options) ? q.options : []).map(o => str(cleanOpt(o), 200)).filter(Boolean).slice(0, 6);
         let type = ['mcq', 'choose', 'choice'].includes(t) ? 'mcq' : ['tf', 'true_false', 'truefalse', 'true/false'].includes(t) ? 'tf' : ['essay', 'reason', 'explain'].includes(t) ? 'essay' : 'short';
         const notes = [];
         let cap = 1;
         let answer = String(q.answer ?? '').trim();
-        const answerText = str(q.answer_text || q.answerText, 300);
+        const answerText = str(cleanOpt(q.answer_text || q.answerText), 300);
         if (type === 'short' && options.length >= 2) {      // choices on the page ⇒ it is a choose question
             type = 'mcq'; notes.push('Has choices — changed to Choose'); cap = Math.min(cap, 0.4);
             const hit = options.findIndex(o => o.trim().toLowerCase() === answer.toLowerCase() || (answerText && o.trim().toLowerCase() === answerText.toLowerCase()));
@@ -171,11 +178,13 @@ export function normaliseSolved(parsed) {
             if (!answer) { notes.push('No answer letter'); cap = Math.min(cap, 0.3); }
             if (options.length && options.length !== 4) { notes.push(`Read ${options.length} choices, not 4 — check them`); cap = Math.min(cap, 0.5); }
             if (answer && options.length && 'ABCDEF'.indexOf(answer) >= options.length) { notes.push('Answer letter is not one of the choices'); cap = Math.min(cap, 0.2); }
+            if (options.some(looksNuclide) && !options.every(o => !looksNuclide(o) || fullNuclide(o))) { notes.push('An atom symbol is missing a number — compare the choices with the book'); cap = Math.min(cap, 0.4); }
         }
         if (type === 'tf') answer = /^(true|t|✓|yes|صح)/i.test(answer) ? 'true' : /^(false|f|✗|x|no|خطأ|خطا)/i.test(answer) ? 'false' : '';
         if (type === 'short' && answer && answer.replace(/[^\p{L}\p{N}]/gu, '').length <= 1 && !/^\d$/.test(answer)) { notes.push('Very short answer — check it'); cap = Math.min(cap, 0.5); }
         let explanation = str(q.explanation, 600);
-        if (explanation && HEDGE.test(explanation)) { notes.push('AI was unsure — write the explanation yourself'); explanation = ''; cap = Math.min(cap, 0.3); }
+        if (explanation && CONTRADICT.test(explanation)) { notes.push('The explanation argues against the answer — check it'); explanation = ''; cap = Math.min(cap, 0.25); }
+        else if (explanation && HEDGE.test(explanation)) { notes.push('AI was unsure — write the explanation yourself'); explanation = ''; cap = Math.min(cap, 0.3); }
         else if (explanation && TOO_ADVANCED.test(explanation)) { notes.push('Explanation too advanced (orbitals) — simplify it'); cap = Math.min(cap, 0.55); }
         const ideas = (Array.isArray(q.ideas) ? q.ideas : []).map(x => ({ text: str(typeof x === 'string' ? x : x && x.text, 200), points: 1 })).filter(x => x.text).slice(0, 6);
         const raw = Number(q.confidence);
@@ -189,6 +198,27 @@ export function normaliseSolved(parsed) {
             explanation, confidence: conf, aiNote: notes.join(' · '), aiCheck: true
         };
     });
+}
+
+// second check (text only) → lower confidence where it disagrees
+export function applyVerify(questions, parsed) {
+    const res = parsed && Array.isArray(parsed.results) ? parsed.results : [];
+    const by = new Map(res.map(r => [String(r.label || '').trim().toLowerCase(), r]));
+    return questions.map(q => {
+        const r = by.get(String(q.label).trim().toLowerCase());
+        if (!r || r.needs_figure === true || !['mcq', 'tf'].includes(q.type) || !q.answer) return { ...q, verified: r ? (r.needs_figure ? 'figure' : 'skipped') : 'skipped' };
+        let a = String(r.answer ?? '').trim().toLowerCase();
+        if (/^none/.test(a)) return addNote(q, 'Second check: none of the choices fits — check the choices', 0.25, 'none');
+        if (q.type === 'mcq') { const m = a.replace(/[()\[\].\s]/g, '').match(/^[a-f]$/); a = m ? m[0].toUpperCase() : ''; }
+        else a = /^(true|t|✓|yes)/.test(a) ? 'true' : /^(false|f|✗|x|no)/.test(a) ? 'false' : '';
+        if (!a) return { ...q, verified: 'skipped' };
+        if (a === q.answer) return { ...q, verified: 'agree' };
+        const shown = q.type === 'mcq' ? `(${a.toLowerCase()})` : a === 'true' ? '✓' : '✗';
+        return addNote(q, `Second check says ${shown}${r.why ? ' — ' + str(r.why, 120) : ''}`, 0.3, 'disagree');
+    });
+}
+function addNote(q, note, cap, verified) {
+    return { ...q, aiNote: [q.aiNote, note].filter(Boolean).join(' · '), confidence: Math.min(q.confidence ?? 1, cap), verified };
 }
 
 const rowOut = (a, extra = {}) => ({
@@ -230,7 +260,7 @@ export async function onRequest(context) {
         const data = isPost ? await request.json().catch(() => ({})) : {};
         const need = {
             list: 'homework.view', get: 'homework.view', save: 'homework.create', publish: 'homework.publish', close: 'homework.publish', reopen: 'homework.publish', unpublish: 'homework.publish', delete: 'homework.delete',
-            books: 'homework.create', book: 'homework.create', 'ai-solve-page': 'homework.create', 'ai-lab': 'homework.create', usage: 'homework.view',
+            books: 'homework.create', book: 'homework.create', 'ai-solve-page': 'homework.create', 'ai-lab': 'homework.create', 'ai-verify': 'homework.create', usage: 'homework.view',
             settings: 'homework.view', 'set-release': 'settings.manage',
             submissions: 'homework.view', submission: 'homework.view', review: 'homework.review', regrade: 'homework.review', 'grade-step': 'homework.review',
             report: 'homework.view', verify: 'homework.view', page: 'homework.view', counts: 'homework.view'
@@ -308,6 +338,20 @@ export async function onRequest(context) {
         // ================= Workers AI =================
         if (action === 'usage') {
             return json({ today: await usageToday(db), limit: DAILY_FREE_NEURONS, quotaHit: await quotaHitToday(db), ai: aiReady(env), model: visionModel(env), models: VISION_MODELS });
+        }
+        if (action === 'ai-verify') {
+            if (!aiReady(env)) return bad('Workers AI is not connected — add the AI binding in Cloudflare', 503, { code: 'AI_OFF' });
+            const qs = (Array.isArray(data.questions) ? data.questions : []).slice(0, MAX_QUESTIONS);
+            const items = qs.filter(q => (q.type === 'mcq' && Array.isArray(q.options) && q.options.length >= 2) || q.type === 'tf')
+                .map(q => ({ label: str(q.label, 12), type: q.type, prompt: str(q.prompt, 600), options: (q.options || []).map(o => str(o, 150)).slice(0, 6) }));
+            if (!items.length) return json({ questions: qs, neurons: 0, checked: 0 });
+            try {
+                const out = await runAI(env, db, { prompt: verifyPrompt(items), model: textModel(env), maxTokens: 1200 });
+                return json({ questions: applyVerify(qs, parseJsonLoose(out.text)), neurons: out.neurons, ms: out.ms, checked: items.length, today: await usageToday(db) });
+            } catch (e) {
+                if (e instanceof AiQuotaError) return bad("Today's free AI allowance is used up — it resets at 2:00 am (Cairo).", 429, { code: 'AI_QUOTA' });
+                return bad('Workers AI error: ' + (e.message || e), 502, { code: 'AI_ERROR' });
+            }
         }
         if (action === 'ai-solve-page' || action === 'ai-lab') {
             if (!aiReady(env)) return bad('Workers AI is not connected — add the AI binding in Cloudflare', 503, { code: 'AI_OFF' });

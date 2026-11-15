@@ -990,11 +990,20 @@
                     const img = SV.images ? (await HwKit.photoToJpeg(SV.images[n - 1])).dataUrl : (await HwKit.renderPage(SV.pdf, n)).dataUrl;
                     const r = await api('/api/homework?action=ai-solve-page', { body: { image: img, grade: F.grade, unit: F.unit, lesson: F.lesson, pageNo: n, continueFrom: cont } });
                     SV.neurons += r.neurons || 0;
-                    const qsx = r.questions || [];
+                    let qsx = r.questions || [];
+                    let vtxt = '';
+                    if (qsx.some(q => q.type === 'mcq' || q.type === 'tf')) {
+                        try {     // independent text-only second check; best effort
+                            const v = await api('/api/homework?action=ai-verify', { body: { questions: qsx } });
+                            qsx = v.questions || qsx; SV.neurons += v.neurons || 0;
+                            const dis = qsx.filter(q => q.verified === 'disagree' || q.verified === 'none').length;
+                            vtxt = dis ? ` · <span style="color:var(--warning);font-weight:700">second check disagrees on ${dis}</span>` : ' · second check agrees';
+                        } catch (e) { vtxt = ' · second check skipped'; }
+                    }
                     qsx.forEach(q => { q.page = n; });
                     SV.found.push(...qsx);
                     if (qsx.length) { const last = qsx[qsx.length - 1].label; const m = String(last).match(/^(\d+)\./); cont = { section: m ? m[1] : '', label: last }; }
-                    $('solveLog').lastElementChild.innerHTML = `${SV.images ? 'Photo' : 'Page'} ${n}: <b>${qsx.length}</b> question${qsx.length === 1 ? '' : 's'} solved <span class="muted">(${(r.ms / 1000).toFixed(1)} s · ~${Math.round(r.neurons || 0)} units)</span>${!qsx.length ? ' — nothing found on this page' : ''}`;
+                    $('solveLog').lastElementChild.innerHTML = `${SV.images ? 'Photo' : 'Page'} ${n}: <b>${qsx.length}</b> question${qsx.length === 1 ? '' : 's'} solved <span class="muted">(${(r.ms / 1000).toFixed(1)} s · ~${Math.round(r.neurons || 0)} units)</span>${vtxt}${!qsx.length ? ' — nothing found on this page' : ''}`;
                     th && th.classList.replace('work', 'done');
                 } catch (e) {
                     failed++; th && th.classList.replace('work', 'fail');

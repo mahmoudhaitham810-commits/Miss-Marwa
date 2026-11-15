@@ -179,6 +179,20 @@ Return ONLY JSON:
 Use "legible": false when you cannot read the student's answer. Leave out questions that are not on this page. Never invent answers.`;
 }
 
+// Second, independent check: solve the extracted questions from their TEXT only (no picture),
+// without seeing the first answer. Disagreements are shown to staff.
+export function verifyPrompt(items) {
+    return `You are an expert Egyptian preparatory science teacher. Solve each question below yourself, from the text only.
+Atom symbols are written mass number on top and atomic number at the bottom, e.g. ³₁H = 1 proton, 2 neutrons.
+If a question depends on a figure/diagram/table you cannot see, set "needs_figure": true.
+If NONE of the choices is correct as written, answer "none".
+Questions:
+${items.map(q => q.type === 'mcq'
+        ? `[${q.label}] ${q.prompt}\n${q.options.map((o, k) => `(${'abcdef'[k]}) ${o}`).join('   ')}`
+        : `[${q.label}] True or false: ${q.prompt}`).join('\n\n')}
+Return ONLY JSON: {"results":[{"label":"1.1","answer":"b","needs_figure":false,"why":"max 15 words"}]} — for true/false questions answer "true" or "false".`;
+}
+
 export function conceptPrompt(items) {
     return `You are marking a student's homework. For each item, decide which KEY IDEAS the student's answer expresses — in any words, any language (English/Arabic), spelling mistakes are fine; judge the meaning, not the wording. An idea counts only if the student really states it (not just repeats the question).
 Items:
