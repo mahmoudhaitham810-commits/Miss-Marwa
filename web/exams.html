@@ -1,11 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" translate="no" class="notranslate">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#F4F7FC">
     <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
     <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <!-- English exam: never let the browser auto-translate it -->
+    <meta name="google" content="notranslate">
+    <script src="/assets/no-translate.js"></script>
     <title>Exams · Science Academy</title>
     <link rel="icon" href="/assets/img/logo-96.png">
     <link rel="manifest" href="/manifest.json">
@@ -39,7 +42,7 @@
         .done-row .info strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     </style>
 </head>
-<body>
+<body class="notranslate" translate="no">
     <main class="main" id="main">
         <div class="container">
             <section class="page-head reveal">

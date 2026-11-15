@@ -475,3 +475,18 @@ body.no-bottomnav .toasts { bottom: 96px; }
 .side-install small { display: block; font-size: 11.5px; font-weight: 500; opacity: .8; }
 .topbar-install-icon { display: inline-grid; }
 @media (min-width: 1024px) { .topbar-install-icon { display: none; } }
+
+/* ---------- Exams: blocked while the browser is translating the page (see /assets/no-translate.js) ---------- */
+.translate-shield { display: none; }
+body.is-translated > *:not(.translate-shield) { visibility: hidden !important; }
+body.is-translated .translate-shield {
+    display: flex; position: fixed; inset: 0; z-index: 200; align-items: center; justify-content: center;
+    padding: 24px; background: var(--canvas, var(--bg)); overflow: auto;
+}
+.translate-shield .ts-box { max-width: 460px; width: 100%; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 26px 22px; box-shadow: var(--shadow-lg, 0 20px 50px -20px rgba(0,0,0,.35)); }
+.translate-shield .ts-ic { width: 60px; height: 60px; margin: 0 auto 12px; border-radius: 18px; display: grid; place-items: center; font-weight: 800; font-size: 20px; background: var(--danger-soft); color: var(--danger); }
+.translate-shield h2 { margin: 0 0 8px; font-size: 22px; }
+.translate-shield p { margin: 0 0 10px; color: var(--text-2); line-height: 1.6; }
+.translate-shield ol { text-align: start; margin: 0 0 12px; padding-inline-start: 22px; line-height: 1.8; color: var(--text); }
+.translate-shield .ts-ar { font-family: var(--font-ar, inherit); padding: 10px 12px; border-radius: 14px; background: var(--surface-2); color: var(--text); }
+.translate-shield .ts-small { font-size: 13px; color: var(--muted); margin: 0; }
