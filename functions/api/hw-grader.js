@@ -13,7 +13,7 @@
 // so the student sees real progress, and any unit can be resumed later
 // (daily free allowance used up → "queued", picked up after the reset).
 // =====================================================================
-import { runAI, parseJsonLoose, readPrompt, conceptPrompt, weaknessPrompt, AiQuotaError, AiUnavailableError, quotaHitToday, aiReady } from './ai-engine.js';
+import { runAI, parseJsonLoose, readPrompt, conceptPrompt, weaknessPrompt, assistPrompt, chatPrompt, writtenReadPrompt, AiQuotaError, AiUnavailableError, quotaHitToday, aiReady, textModel, visionModel } from './ai-engine.js';
 import { mediaInfo, mediaResponse } from './media-store.js';
 
 export const RELEASE_KEY = 'hw_release_mode';            // 'confirm' (staff confirm first) | 'instant'
@@ -173,6 +173,7 @@ export async function gradeStep(env, db, subId) {
     try {
         if (sub.status === 'queued') await db.prepare(`UPDATE hw_submissions SET status = 'grading', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(subId).run();
         const key = await loadKey(db, sub.assignment_id);
+        if (sub.mode === 'web') return await webStep(env, db, sub, key, pages);
         // ---- Step A: next unread page ----
         const next = pages.find(p => p.status !== 'read');
         if (next) {
@@ -275,53 +276,323 @@ async function setQueued(db, subId, why) {
 
 /** Background: continue queued / stalled submissions (called lazily from page loads). */
 export async function processQueue(env, db, maxUnits = 3, origin = '') {
-    if (!aiReady(env) || await quotaHitToday(db)) return { units: 0 };
-    const { results } = await db.prepare(`SELECT id FROM hw_submissions WHERE (status = 'queued' OR (status = 'grading' AND updated_at < datetime('now', '-3 minutes')))
-        AND (lock_until IS NULL OR lock_until < datetime('now')) ORDER BY submitted_at LIMIT 3`).all();
+    await autoSubmitExpired(env, db).catch(() => null);
     let units = 0;
-    for (const s of results || []) {
-        while (units < maxUnits) {
-            const r = await gradeStep(env, db, s.id);
-            units++;
-            if (r.done && r.released) {     // marked in the background → tell the student
-                const x = await db.prepare('SELECT s.student_id, s.assignment_id, a.title FROM hw_submissions s JOIN hw_assignments a ON a.id = s.assignment_id WHERE s.id = ?').bind(s.id).first();
-                if (x) await pushToStudent(env, origin, x.student_id, 'نتيجة الواجب جاهزة ✅', `${x.title} — افتح التطبيق وشوف درجتك`, '/homework.html?id=' + x.assignment_id);
+    if (aiReady(env) && !(await quotaHitToday(db))) {
+        const { results } = await db.prepare(`SELECT id FROM hw_submissions WHERE (status = 'queued' OR (status = 'grading' AND updated_at < datetime('now', '-3 minutes')))
+            AND (lock_until IS NULL OR lock_until < datetime('now')) ORDER BY submitted_at LIMIT 3`).all();
+        for (const s of results || []) {
+            while (units < maxUnits) {
+                const r = await gradeStep(env, db, s.id);
+                units++;
+                if (r.done && r.released) {     // marked in the background → tell the student
+                    const x = await db.prepare('SELECT s.student_id, s.assignment_id, a.title FROM hw_submissions s JOIN hw_assignments a ON a.id = s.assignment_id WHERE s.id = ?').bind(s.id).first();
+                    if (x) await pushToStudent(env, origin, x.student_id, 'نتيجة الواجب جاهزة ✅', `${x.title} — افتح التطبيق وشوف درجتك`, '/homework.html?id=' + x.assignment_id);
+                }
+                if (r.done || r.queued || r.busy || r.error) break;
             }
-            if (r.done || r.queued || r.busy || r.error) break;
+            if (units >= maxUnits) break;
         }
-        if (units >= maxUnits) break;
+        // AI Assistant walkthroughs waiting for the allowance / left mid-way
+        const { results: wait } = await db.prepare(`SELECT id FROM hw_submissions WHERE assist_status = 'queued' OR (assist_status = 'working' AND assist_lock < datetime('now')) ORDER BY updated_at LIMIT 2`).all();
+        for (const w of wait || []) { if (units >= maxUnits + 2) break; await ensureAssist(env, db, w.id).catch(() => null); units++; }
+    }
+    // ready but the student never saw it (left the page / generated in the background) → notify once
+    const { results: unseen } = await db.prepare(`SELECT s.id, s.student_id, s.assignment_id, a.title FROM hw_submissions s JOIN hw_assignments a ON a.id = s.assignment_id
+        WHERE s.assist_status = 'ready' AND s.updated_at < datetime('now', '-90 seconds') LIMIT 5`).all();
+    for (const x of unseen || []) {
+        const claim = await db.prepare(`UPDATE hw_submissions SET assist_status = 'notified' WHERE id = ? AND assist_status = 'ready'`).bind(x.id).run();
+        if (claim.meta && claim.meta.changes) await pushToStudent(env, origin, x.student_id, 'مساعدك الذكي جهّز شرح أخطائك 🤖', `${x.title} — افتح وشوف الشرح`, `/homework.html?id=${x.assignment_id}&tab=assistant`);
     }
     return { units };
+}
+/** Time window over (or homework closed with a saved draft) → submit what the student saved. */
+export async function autoSubmitExpired(env, db) {
+    const { results } = await db.prepare(`SELECT s.*, a.id AS a_id FROM hw_submissions s JOIN hw_assignments a ON a.id = s.assignment_id
+        WHERE s.status = 'uploading' AND s.mode = 'web' AND ((s.ends_at IS NOT NULL AND s.ends_at < datetime('now', '-2 minutes'))
+        OR (s.draft IS NOT NULL AND a.closes_at IS NOT NULL AND a.closes_at < datetime('now'))) LIMIT 5`).all();
+    for (const s of results || []) {
+        const a = await db.prepare('SELECT * FROM hw_assignments WHERE id = ?').bind(s.assignment_id).first();
+        let answers = {}; try { answers = JSON.parse(s.draft || '{}'); } catch (e) { }
+        const out = await submitWeb(env, db, s, a, answers, { auto: true });
+        if (out.deferred) await markWritten(env, db, s.id).catch(() => null);
+    }
+    return (results || []).length;
+}
+
+// =====================================================================
+// Website answering (answer_mode 'web')
+//   submit → code marks Choose / ✓✗ / Complete at once (0 AI units);
+//   written answers (and Complete answers code can't match) are "deferred":
+//   AI checks them in the background, then staff Accept / Edit before the
+//   student and parent see them.
+// =====================================================================
+const RCPT = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+export async function newReceipt(db) {
+    for (let k = 0; k < 6; k++) {
+        const b = crypto.getRandomValues(new Uint8Array(6));
+        const c = [...b].map(x => RCPT[x % RCPT.length]).join('');
+        if (!(await db.prepare('SELECT 1 FROM hw_submissions WHERE receipt_code = ?').bind(c).first())) return c;
+    }
+    return null;
+}
+const clip = (v, n) => String(v ?? '').replace(/\r/g, '').trim().slice(0, n);
+export const isWeb = (a) => (a && (a.answer_mode || 'photo')) === 'web';
+const nowMs = () => Date.now();
+const msOf = (v) => (v ? new Date(String(v).replace(' ', 'T') + (/[zZ]$/.test(String(v)) ? '' : 'Z')).getTime() : NaN);
+
+/** Answers map {label: {answer, correction}} from a student → marks + submission row. Returns the new status. */
+export async function submitWeb(env, db, sub, a, answers, { auto = false } = {}) {
+    const key = await loadKey(db, a.id);
+    const pages = await pagesOf(db, sub.id);
+    const photoLabels = new Set(pages.flatMap(p => String(p.labels || '').split(',').map(x => x.trim()).filter(Boolean)));
+    const stmts = [];
+    let objective = 0, provisional = 0, deferredN = 0;
+    for (const q of key) {
+        const raw = (answers && answers[q.label]) || {};
+        const ans = { answer: clip(raw.answer, q.type === 'essay' ? 3000 : 300), correction: clip(raw.correction, 300), legible: true };
+        const photo = photoLabels.has(q.label) && ['essay', 'short'].includes(q.type);
+        let r = q.type === 'essay' ? { verdict: 'pending', points: 0, needsAI: true } : scoreOne(q, ans);
+        let deferred = 0;
+        if (q.type === 'essay' && !ans.answer && !photo) r = { verdict: 'blank', points: 0 };
+        else if (r.needsAI || r.verdict === 'pending' || (photo && !ans.answer)) deferred = 1;
+        if (deferred) { deferredN++; provisional += r.points || 0; } else objective += r.points || 0;
+        stmts.push(db.prepare(`INSERT INTO hw_answers (submission_id, question_id, transcript, verdict, points, ai_points, confidence, deferred, feedback, evidence, override_points)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, NULL, NULL, NULL) ON CONFLICT(submission_id, question_id) DO UPDATE SET transcript = excluded.transcript, verdict = excluded.verdict,
+            points = excluded.points, ai_points = excluded.ai_points, deferred = excluded.deferred, feedback = NULL, evidence = NULL, override_points = NULL`)
+            .bind(sub.id, q.id, JSON.stringify({ answer: ans.answer, correction: ans.correction, typed: true, ...(photo ? { photo: true } : {}) }),
+                deferred ? 'pending' : r.verdict, r.points || 0, r.points || 0, deferred));
+    }
+    objective = Math.round(objective * 100) / 100;
+    const score = Math.round((objective + provisional) * 100) / 100;
+    const late = msOf(a.deadline) < nowMs() ? 1 : 0;
+    const code = sub.receipt_code || await newReceipt(db);
+    const status = deferredN ? 'grading' : 'graded';
+    stmts.push(db.prepare(`UPDATE hw_submissions SET status = ?, mode = 'web', objective_score = ?, auto_score = ?, final_score = ?, late = ?, receipt_code = ?,
+        written_status = ?, submitted_at = CURRENT_TIMESTAMP, graded_at = ${deferredN ? 'NULL' : 'CURRENT_TIMESTAMP'}, released_at = ${deferredN ? 'NULL' : 'CURRENT_TIMESTAMP'},
+        released_by = ${deferredN ? 'NULL' : "'auto'"}, draft = NULL, pages = ?, ai_error = NULL, tries = 0, assist = NULL, assist_status = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .bind(status, objective, score, score, late, code, deferredN ? 'queued' : 'none', pages.length, sub.id));
+    await db.batch(stmts);
+    return { status, objective, deferred: deferredN, late: !!late, receipt: code, auto };
+}
+
+/** Background: mark one website submission's written answers right after submitting (keeps going if the student leaves). */
+export async function markWritten(env, db, subId) {
+    for (let k = 0; k < 14; k++) {
+        const r = await gradeStep(env, db, subId);
+        if (r.done || r.queued || r.busy) return r;
+        if (r.retry) await new Promise(x => setTimeout(x, 1500));
+    }
+    return { pending: true };
+}
+
+/** One unit of background work for a website submission: read one photo, or check all written answers. */
+async function webStep(env, db, sub, key, pages) {
+    const total = pages.length;
+    const next = pages.find(p => p.status !== 'read');
+    if (next) {
+        const labels = String(next.labels || '').split(',').map(x => x.trim()).filter(Boolean);
+        const qs = key.filter(q => labels.includes(q.label));
+        const img = qs.length ? await pageDataUrl(env, db, next.media_id) : null;
+        let read = { answers: [], page_readable: false, notes: img ? '' : 'photo missing' };
+        if (img) {
+            const out = await runAI(env, db, { image: img, model: visionModel(env), prompt: writtenReadPrompt({ questions: qs }), maxTokens: 1500 });
+            const j = parseJsonLoose(out.text);
+            read = j && Array.isArray(j.answers) ? j : { answers: [], page_readable: false, notes: 'could not understand the reply' };
+        }
+        await db.prepare(`UPDATE hw_pages SET status = 'read', read_json = ? WHERE id = ?`).bind(JSON.stringify(read), next.id).run();
+        return { stage: 'reading', page: pages.filter(p => p.status === 'read').length + 1, pages: total };
+    }
+    // words read from photos, per label
+    const photoText = {}, photoBad = new Set();
+    for (const p of pages) {
+        let j = {}; try { j = JSON.parse(p.read_json || '{}'); } catch (e) { }
+        const labels = String(p.labels || '').split(',').map(x => x.trim()).filter(Boolean);
+        if (j.page_readable === false) labels.forEach(l => photoBad.add(l));
+        for (const x of j.answers || []) {
+            const l = String(x.label || '').trim(); if (!l) continue;
+            if (x.legible === false) { photoBad.add(l); continue; }
+            const t = clip(x.text ?? x.answer, 3000); if (t) photoText[l] = photoText[l] ? photoText[l] + '\n' + t : t;
+        }
+    }
+    const { results: rows } = await db.prepare('SELECT * FROM hw_answers WHERE submission_id = ? AND deferred = 1').bind(sub.id).all();
+    const byQ = Object.fromEntries(key.map(q => [q.id, q]));
+    const work = [];
+    for (const row of rows || []) {
+        const q = byQ[row.question_id]; if (!q) continue;
+        let t = {}; try { t = JSON.parse(row.transcript || '{}'); } catch (e) { }
+        const fromPhoto = photoText[q.label] || '';
+        const student = [t.answer, fromPhoto].filter(Boolean).join('\n').trim();
+        const ans = { answer: q.type === 'tf' ? t.answer : student, correction: q.type === 'tf' ? [t.correction, fromPhoto].filter(Boolean).join(' ') : t.correction, legible: true };
+        let r = q.type === 'essay' ? (student ? { verdict: 'pending', points: 0, needsAI: true } : { verdict: photoBad.has(q.label) ? 'unreadable' : 'blank', points: 0 }) : scoreOne(q, ans);
+        work.push({ row, q, t: { ...t, ...(fromPhoto ? { photoText: fromPhoto } : {}), ...(photoBad.has(q.label) ? { check: 'Photo hard to read — look at it' } : {}) }, ans, r, student });
+    }
+    const ai = work.filter(w => w.r.needsAI && String(w.q.type === 'tf' ? w.ans.correction : w.student).trim());
+    const feedback = {};
+    for (let i = 0; i < ai.length; i += 8) {
+        const part = ai.slice(i, i + 8).map(w => ({
+            label: w.q.label, question: w.q.prompt,
+            model: w.q.type === 'essay' ? w.q.modelAnswer : w.q.type === 'tf' ? `False. Correct statement uses "${w.q.correction}"` : [w.q.answer, ...(w.q.alternatives || [])].join(' / '),
+            ideas: w.q.type === 'essay' && (w.q.ideas || []).length ? w.q.ideas.map(x => x.text) : [w.q.type === 'tf' ? `the correction means "${w.q.correction}"` : `same meaning as "${w.q.answer}"`],
+            student: w.q.type === 'tf' ? w.ans.correction : w.student
+        }));
+        const out = await runAI(env, db, { prompt: conceptPrompt(part), model: textModel(env), maxTokens: 1500 });
+        const j = parseJsonLoose(out.text);
+        for (const x of (j && j.results) || []) feedback[String(x.label)] = x;
+    }
+    const stmts = [];
+    let written = 0;
+    for (const w of work) {
+        let { verdict, points } = w.r, evidence = null, fb = null;
+        const f = feedback[w.q.label];
+        if (w.r.needsAI && f) {
+            const found = new Set((f.ideas_found || []).map(Number).filter(n => n >= 1));
+            evidence = f.evidence ? clip(f.evidence, 300) : null; fb = f.feedback ? clip(f.feedback, 400) : null;
+            if (w.q.type === 'essay') {
+                const ideas = w.q.ideas || [];
+                points = Math.round(ideas.reduce((t, it, i) => t + (found.has(i + 1) ? Number(it.points) || 0 : 0), 0) * 100) / 100;
+                verdict = points >= w.q.points - 0.001 ? 'correct' : points > 0 ? 'partial' : 'wrong';
+            } else if (found.size) { points = w.q.points; verdict = 'correct'; }
+        } else if (verdict === 'pending') verdict = 'wrong';
+        written += points || 0;
+        stmts.push(db.prepare('UPDATE hw_answers SET transcript = ?, verdict = ?, points = ?, ai_points = ?, evidence = ?, feedback = ? WHERE id = ?')
+            .bind(JSON.stringify(w.t), verdict, points || 0, points || 0, evidence, fb, w.row.id));
+    }
+    const objective = Number(sub.objective_score) || 0;
+    const score = Math.round((objective + written) * 100) / 100;
+    stmts.push(db.prepare(`UPDATE hw_submissions SET status = 'pending', written_status = 'review', auto_score = ?, final_score = ?, graded_at = CURRENT_TIMESTAMP,
+        ai_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(score, score, sub.id));
+    await db.batch(stmts);
+    return { done: true, stage: 'done', status: 'pending', pages: total, released: false };
+}
+
+// ---------------- AI Assistant ----------------
+export const CHAT_LIMIT = 10;
+async function studentOf(db, studentId) {
+    return await db.prepare('SELECT first_name, last_name, gender FROM students WHERE student_id = ?').bind(studentId).first() || {};
+}
+function mistakesOf(r, key) {
+    const byLabel = Object.fromEntries(key.map(q => [q.label, q]));
+    return r.items.filter(i => i.verdict && i.verdict !== 'correct' && !i.pending).map(i => {
+        const q = byLabel[i.label] || {};
+        return { label: i.label, question: i.question, options: q.type === 'mcq' ? q.options || [] : [], student: [i.yourAnswer, i.yourCorrection].filter(Boolean).join(' — '),
+            right: i.modelAnswer, explanation: i.explanation, feedback: i.feedback, verdict: i.verdict };
+    });
+}
+// No AI available → still useful: the key's own explanations, in the same shape
+function plainAssist(name, female, mistakes) {
+    if (!mistakes.length) return { greeting: `برافو يا ${name || 'بطل'}! 🎉`, items: [], closing: `كل إجاباتك صح — ${female ? 'إنتِ' : 'إنت'} فاهم${female ? 'ة' : ''} الدرس كويس جدًا. كمّل كده 💪`, ai: false };
+    return { greeting: `يلا يا ${name || 'بطل'} نراجع الأسئلة دي سوا 👇`, ai: false,
+        items: mistakes.map(m => ({ label: m.label, text: `${m.student ? `إجابتك: ${m.student}` : 'السؤال ده كان فاضي'}\nالإجابة الصح: ${m.right}${m.explanation ? `\n💡 ${m.explanation}` : ''}` })),
+        closing: 'ولو لسه في حاجة مش واضحة اسألني تحت 👇' };
+}
+/** Minutes until the assistant can answer (daily reset at 00:00 UTC = 2:00 am Cairo, or the queue ahead). */
+export async function assistEta(db) {
+    if (await quotaHitToday(db)) {
+        const d = new Date(); const reset = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 5);
+        return { minutes: Math.max(5, Math.ceil((reset - d.getTime()) / 60000)), reason: 'limit' };
+    }
+    const r = await db.prepare(`SELECT COUNT(*) AS n FROM hw_submissions WHERE assist_status IN ('queued', 'working')`).first();
+    return { minutes: Math.max(1, Math.ceil(((r ? r.n : 0) + 1) * 25 / 60)), reason: 'busy' };
+}
+/** Build (or rebuild) the assistant's walkthrough. Returns { status: ready|queued|working, assist }. */
+export async function ensureAssist(env, db, subId, { force = false, silent = false } = {}) {
+    const sub = await db.prepare('SELECT * FROM hw_submissions WHERE id = ?').bind(subId).first();
+    if (!sub || sub.status === 'uploading') return { status: 'none' };
+    if (!force && ['ready', 'seen', 'notified'].includes(sub.assist_status) && sub.assist) return { status: 'ready', assist: JSON.parse(sub.assist) };
+    const r = await resultOf(db, subId, { forStudent: true });
+    const key = await loadKey(db, sub.assignment_id);
+    const st = await studentOf(db, sub.student_id);
+    const female = String(st.gender || '').toLowerCase() === 'female', name = st.first_name || '';
+    const mistakes = mistakesOf(r, key);
+    const save = async (assist, status) => {
+        await db.prepare(`UPDATE hw_submissions SET assist = ?, assist_status = ?, assist_lock = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(JSON.stringify(assist), status, subId).run();
+        return { status: 'ready', assist };
+    };
+    if (!mistakes.length) return save(plainAssist(name, female, []), silent ? 'notified' : 'ready');
+    if (!aiReady(env) || await quotaHitToday(db)) {
+        await db.prepare(`UPDATE hw_submissions SET assist_status = 'queued', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(subId).run();
+        return { status: 'queued' };
+    }
+    const got = await db.prepare(`UPDATE hw_submissions SET assist_status = 'working', assist_lock = datetime('now', '+120 seconds') WHERE id = ? AND (assist_lock IS NULL OR assist_lock < datetime('now'))`).bind(subId).run();
+    if (!got.meta || !got.meta.changes) return { status: 'working' };
+    try {
+        const out = await runAI(env, db, { prompt: assistPrompt({ name, female, title: r.title, items: mistakes.slice(0, 20) }), model: textModel(env), maxTokens: 2200, temperature: 0.4 });
+        const j = parseJsonLoose(out.text);
+        const items = j && Array.isArray(j.items) ? j.items.map(x => ({ label: clip(x.label, 12), text: clip(x.text, 1200) })).filter(x => x.text) : [];
+        const assist = items.length ? { greeting: clip(j.greeting, 300), items, closing: clip(j.closing, 300), ai: true } : plainAssist(name, female, mistakes);
+        return save(assist, silent ? 'notified' : 'ready');
+    } catch (e) {
+        if (e instanceof AiQuotaError || e instanceof AiUnavailableError) {
+            await db.prepare(`UPDATE hw_submissions SET assist_status = 'queued', assist_lock = NULL WHERE id = ?`).bind(subId).run();
+            return { status: 'queued' };
+        }
+        return save(plainAssist(name, female, mistakes), silent ? 'notified' : 'ready');   // AI hiccup → the key's explanations, never an empty tab
+    }
+}
+/** Follow-up question in the AI Assistant tab. */
+export async function assistChat(env, db, subId, question) {
+    const sub = await db.prepare('SELECT * FROM hw_submissions WHERE id = ?').bind(subId).first();
+    if (!sub || sub.status === 'uploading') return { error: 'Submit your homework first', status: 409 };
+    if ((sub.chat_used || 0) >= CHAT_LIMIT) return { error: `You used all ${CHAT_LIMIT} questions for this homework — ask Miss Marwa in "Ask Miss Marwa"`, status: 429, code: 'CHAT_LIMIT' };
+    const r = await resultOf(db, subId, { forStudent: true });
+    const key = await loadKey(db, sub.assignment_id);
+    const st = await studentOf(db, sub.student_id);
+    const { results: hist } = await db.prepare('SELECT role, text FROM hw_chat WHERE submission_id = ? ORDER BY id DESC LIMIT 8').bind(subId).all();
+    const out = await runAI(env, db, { prompt: chatPrompt({ name: st.first_name || '', female: String(st.gender || '').toLowerCase() === 'female', title: r.title, mistakes: mistakesOf(r, key).slice(0, 20), history: (hist || []).reverse(), question }), model: textModel(env), maxTokens: 600, temperature: 0.4 });
+    const reply = clip(String(out.text || '').replace(/^```[a-z]*\n?|```$/g, ''), 2000) || 'مش قادر أرد دلوقتي — جرّب تاني كمان شوية 🙏';
+    await db.batch([
+        db.prepare(`INSERT INTO hw_chat (submission_id, role, text) VALUES (?, 'user', ?)`).bind(subId, question),
+        db.prepare(`INSERT INTO hw_chat (submission_id, role, text) VALUES (?, 'assistant', ?)`).bind(subId, reply),
+        db.prepare('UPDATE hw_submissions SET chat_used = COALESCE(chat_used, 0) + 1 WHERE id = ?').bind(subId)
+    ]);
+    return { reply, left: CHAT_LIMIT - (sub.chat_used || 0) - 1 };
+}
+export async function chatOf(db, subId) {
+    const { results } = await db.prepare('SELECT role, text, created_at FROM hw_chat WHERE submission_id = ? ORDER BY id LIMIT 60').bind(subId).all();
+    return (results || []).map(x => ({ role: x.role, text: x.text, at: x.created_at }));
 }
 
 // ---------------- results for screens ----------------
 export async function resultOf(db, subId, { forStudent = false } = {}) {
-    const sub = await db.prepare(`SELECT s.*, a.title, a.unit, a.lesson, a.grade, a.total_score, a.deadline FROM hw_submissions s JOIN hw_assignments a ON a.id = s.assignment_id WHERE s.id = ?`).bind(subId).first();
+    const sub = await db.prepare(`SELECT s.*, a.title, a.unit, a.lesson, a.grade, a.total_score, a.deadline, a.answer_mode, a.allow_photo FROM hw_submissions s JOIN hw_assignments a ON a.id = s.assignment_id WHERE s.id = ?`).bind(subId).first();
     if (!sub) return null;
     const key = await loadKey(db, sub.assignment_id);
     const { results } = await db.prepare('SELECT * FROM hw_answers WHERE submission_id = ?').bind(subId).all();
     const byQ = {}; (results || []).forEach(a => { byQ[a.question_id] = a; });
     const released = !!sub.released_at;
+    const web = sub.mode === 'web';
+    const submitted = sub.status !== 'uploading';
     const showScore = !forStudent || released;
+    let pendingPoints = 0;
     const items = key.map(q => {
         const a = byQ[q.id];
         let t = {}; try { t = a && a.transcript ? JSON.parse(a.transcript) : {}; } catch (e) { }
         const pts = a ? (a.override_points != null ? a.override_points : a.points) : 0;
         const verdict = a ? (a.override_points != null ? (a.override_points >= q.points - 0.001 ? 'correct' : a.override_points > 0 ? 'partial' : 'wrong') : a.verdict) : 'blank';
+        const base = { questionId: q.id, label: q.label, type: q.type, question: q.prompt, points: q.points, options: q.type === 'mcq' ? q.options || [] : undefined, deferred: !!(a && a.deferred) };
+        // website answers: the marked-by-code part is visible at once; written answers wait for staff
+        if (forStudent && !released && web && submitted) {
+            if (a && a.deferred) { pendingPoints += Number(q.points) || 0; return { ...base, pending: true, yourAnswer: t.answer ?? '', yourCorrection: t.correction ?? '', photo: !!t.photo }; }
+            return { ...base, verdict, earned: pts, yourAnswer: t.answer ?? '', yourCorrection: t.correction ?? '', modelAnswer: modelAnswerText(q), explanation: q.explanation || '', feedback: a ? a.feedback : null };
+        }
         return {
-            questionId: q.id, label: q.label, type: q.type, question: q.prompt, points: q.points,
+            ...base,
             ...(showScore ? {
                 verdict, earned: pts, aiPoints: a ? a.ai_points : null, overridden: !!(a && a.override_points != null),
                 yourAnswer: t.answer ?? '', yourCorrection: t.correction ?? '', evidence: a ? a.evidence : null, feedback: a ? a.feedback : null,
-                modelAnswer: modelAnswerText(q), explanation: q.explanation || '', confidence: a ? a.confidence : null,
-                ...(forStudent ? {} : { check: t.check || null, circledText: t.circledText || null })
+                modelAnswer: modelAnswerText(q), explanation: q.explanation || '', confidence: a ? a.confidence : null, photoText: t.photoText || null, photo: !!t.photo,
+                ...(forStudent ? {} : { check: t.check || null, circledText: t.circledText || null, modelAnswerFull: q.type === 'essay' ? { ideas: q.ideas || [], modelAnswer: q.modelAnswer || '' } : undefined })
             } : {})
         };
     });
+    const soFar = forStudent && !released && web && submitted;
     return {
-        id: sub.id, assignmentId: sub.assignment_id, studentId: sub.student_id, status: sub.status, released,
+        id: sub.id, assignmentId: sub.assignment_id, studentId: sub.student_id, status: sub.status, released, mode: web ? 'web' : 'photo',
         title: sub.title, unit: sub.unit, lesson: sub.lesson, grade: sub.grade, total: sub.total_score,
-        score: showScore ? sub.final_score : null, autoScore: forStudent ? undefined : sub.auto_score,
+        score: showScore ? sub.final_score : soFar ? sub.objective_score : null, scoreSoFar: soFar || undefined, pendingPoints: soFar ? pendingPoints : undefined,
+        objectiveScore: web ? sub.objective_score : undefined, writtenStatus: sub.written_status || null,
+        autoScore: forStudent ? undefined : sub.auto_score,
         late: !!sub.late, pages: sub.pages, unreadable: !!sub.unreadable, reuploads: sub.reuploads, receipt: sub.receipt_code,
         submittedAt: sub.submitted_at, gradedAt: sub.graded_at, releasedAt: sub.released_at, deadline: sub.deadline, error: forStudent ? undefined : sub.ai_error,
         items
@@ -352,9 +623,10 @@ export async function weaknessReport(env, db, subId, { refresh = false } = {}) {
     try { diag = sub && sub.report && !refresh ? JSON.parse(sub.report) : null; } catch (e) { diag = null; }
     if (!diag && missed.length && aiReady(env) && !(await quotaHitToday(db))) {
         try {
-            const out = await runAI(env, db, { prompt: weaknessPrompt({ title: r.title, missed: missed.slice(0, 15).map(m => ({ label: m.label, question: m.question, right: m.modelAnswer, student: m.yourAnswer })) }), maxTokens: 600, temperature: 0.2 });
+            const strong = r.items.filter(i => i.verdict === 'correct').slice(0, 12).map(i => ({ label: i.label, question: String(i.question || '').slice(0, 120) }));
+            const out = await runAI(env, db, { prompt: weaknessPrompt({ title: r.title, strong, missed: missed.slice(0, 15).map(m => ({ label: m.label, question: m.question, right: m.modelAnswer, student: m.yourAnswer })) }), maxTokens: 700, temperature: 0.2 });
             const j = parseJsonLoose(out.text);
-            if (j && Array.isArray(j.focus)) diag = { focus: j.focus.map(x => String(x).slice(0, 160)).slice(0, 3), summary: String(j.summary || '').slice(0, 200), at: new Date().toISOString() };
+            if (j && Array.isArray(j.focus)) diag = { focus: j.focus.map(x => String(x).slice(0, 160)).slice(0, 3), strengths: (Array.isArray(j.strengths) ? j.strengths : []).map(x => String(x).slice(0, 160)).slice(0, 2), summary: String(j.summary || '').slice(0, 200), at: new Date().toISOString() };
         } catch (e) { diag = null; }
         if (diag) await db.prepare('UPDATE hw_submissions SET report = ? WHERE id = ?').bind(JSON.stringify(diag), subId).run();
     }
@@ -377,12 +649,17 @@ export async function weaknessReport(env, db, subId, { refresh = false } = {}) {
         });
         if (missed.length > 6) lines.push(`• و${iso(String(missed.length - 6))} أسئلة أخرى`);
     } else lines.push('', `🌟 كل الإجابات صحيحة — برافو ${iso(st.first_name || '')}!`);
+    if (diag && diag.strengths && diag.strengths.length) {
+        lines.push('', '💪 نقاط القوة:');
+        diag.strengths.forEach(x => lines.push(`• ${iso(x)}`));
+    }
     if (diag && diag.focus && diag.focus.length) {
         lines.push('', '🎯 نقاط محتاجة تركيز:');
         diag.focus.forEach(x => lines.push(`• ${iso(x)}`));
     }
+    if (diag && diag.summary) lines.push('', iso(diag.summary));
     lines.push('', 'برجاء المتابعة.');
-    return { text: rtl(lines), focus: diag ? diag.focus : [], summary: diag ? diag.summary : '', student: { id: st.student_id, name, phone: st.phone, parentPhone: st.parent_phone, gender: st.gender } };
+    return { text: rtl(lines), strengths: diag ? diag.strengths || [] : [], focus: diag ? diag.focus : [], summary: diag ? diag.summary : '', student: { id: st.student_id, name, phone: st.phone, parentPhone: st.parent_phone, gender: st.gender } };
 }
 
 // Not a page — shared module.

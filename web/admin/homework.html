@@ -37,6 +37,15 @@
         .chipb.on { background: var(--primary); border-color: var(--primary); color: #fff; }
         .chipb:disabled { opacity: .45; cursor: default; }
         .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+        .check-line { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 12px; cursor: pointer; font-weight: 500; }
+        .check-line input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--primary); flex: none; }
+        .check-line small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+        .check-line:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+        .rq.need { background: linear-gradient(90deg, var(--warning-soft, rgba(245,158,11,.10)), transparent 70%); border-radius: 10px; padding-inline: 8px; }
+        .rq .photo-txt { border-inline-start: 3px solid var(--primary); padding-inline-start: 8px; }
+        .rq textarea.fb { width: 100%; min-height: 56px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); padding: 8px 10px; font: inherit; font-size: 13px; resize: vertical; }
+        .rq .ideas { margin: 2px 0 0; padding-inline-start: 18px; color: var(--success); }
+        .rev-sec { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 2px; }
         .quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
         .quick button { padding: 4px 10px; border-radius: 9px; border: 1px dashed var(--border); background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
         .quick button:hover { color: var(--primary); border-color: var(--primary); }
@@ -201,6 +210,12 @@
                                 <div class="field"><label for="fCloses">Accept late work until <small>(optional)</small></label><input class="fin" id="fCloses" type="datetime-local">
                                     <div class="quick" id="qCloses"><button data-c="1">+1 day</button><button data-c="2">+2 days</button><button data-c="7">+1 week</button><button data-c="0">Until I close it</button></div></div>
                                 <div class="field"><label for="fTotal">Total score</label><input class="fin" id="fTotal" type="number" min="0.5" step="0.5" inputmode="decimal" value="10"></div>
+                                <div class="field full"><label>How students answer</label><div class="chips" id="fMode"></div>
+                                    <p class="small muted" style="margin:6px 0 0" id="fModeNote"></p></div>
+                                <div class="field" id="fDurWrap"><label for="fDur">Time limit <small>(optional — starts when the student opens it)</small></label><input class="fin" id="fDur" type="number" min="5" max="1440" step="5" inputmode="numeric" placeholder="No time limit">
+                                    <div class="quick" id="qDur"><button data-m="">No limit</button><button data-m="30">30 min</button><button data-m="60">1 hour</button><button data-m="120">2 hours</button></div></div>
+                                <div class="field" id="fPhotoWrap"><label>Written questions</label>
+                                    <label class="check-line"><input type="checkbox" id="fPhoto"><span><b>Allow photo upload for written questions</b><small>Students can photograph their notebook for Give-reason answers instead of typing (uses more AI units).</small></span></label></div>
                                 <div class="field full"><label for="fInstr">Note for students <small>(optional)</small></label><textarea class="ta" id="fInstr" dir="auto" rows="2" maxlength="1000" placeholder="e.g. Solve page 34 in the book + questions 1–5 in your notebook."></textarea></div>
                             </div>
                         </div>
@@ -452,10 +467,22 @@
             $('fGrade').querySelectorAll('.chipb').forEach(b => { b.disabled = !!(editing && editing.status !== 'draft') && b.dataset.v !== F.grade; });
             chipRow($('fUnit'), Array.from({ length: UNITS }, (_, i) => [i + 1, `Unit ${i + 1}`]), F.unit, (v) => { const auto = $('fTitle').value === autoTitle() || !$('fTitle').value; F.unit = Number(v); if (auto) $('fTitle').value = autoTitle(); touch(); });
             chipRow($('fLesson'), Array.from({ length: LESSONS }, (_, i) => [i + 1, `Lesson ${i + 1}`]), F.lesson, (v) => { const auto = $('fTitle').value === autoTitle() || !$('fTitle').value; F.lesson = Number(v); if (auto) $('fTitle').value = autoTitle(); touch(); });
+            chipRow($('fMode'), [['web', 'On the website (recommended)'], ['photo', 'Photos of the booklet']], F.mode, (v) => { F.mode = v; modeUI(); touch(); });
+            $('fMode').querySelectorAll('.chipb').forEach(b => { b.disabled = locked; });
+            modeUI();
+        }
+        function modeUI() {
+            const web = F.mode === 'web';
+            $('fDurWrap').hidden = $('fPhotoWrap').hidden = !web;
+            $('fModeNote').innerHTML = web
+                ? 'Students tap their Choose / ✓✗ answers and type Complete & written answers. <b>Choose, ✓✗ and Complete are marked instantly</b> (no AI units); written answers are checked by AI, then wait for you to <b>Accept / Edit</b>.'
+                : 'Students photograph their solved booklet and notebook pages; AI reads the pages. (Older way — reading circles on photos is less accurate.)';
         }
         function defaultDeadline(days) {
             const d = new Date(); d.setDate(d.getDate() + days); d.setHours(21, 0, 0, 0); return toLocalInput(d.toISOString());
         }
+        $('qDur').addEventListener('click', (e) => { const b = e.target.closest('[data-m]'); if (!b || locked) return; $('fDur').value = b.dataset.m; touch(); });
+        $('fPhoto').addEventListener('change', () => touch());
         $('qDeadline').addEventListener('click', (e) => { const b = e.target.closest('[data-d]'); if (!b) return; $('fDeadline').value = defaultDeadline(Number(b.dataset.d)); syncCloses(); touch(); });
         $('qCloses').addEventListener('click', (e) => {
             const b = e.target.closest('[data-c]'); if (!b) return;
@@ -464,7 +491,7 @@
             touch();
         });
         function syncCloses() { if ($('fCloses').value && $('fDeadline').value && new Date($('fCloses').value) < new Date($('fDeadline').value)) $('fCloses').value = ''; }
-        ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr'].forEach(id => $(id).addEventListener('input', () => touch()));
+        ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr', 'fDur'].forEach(id => $(id).addEventListener('input', () => touch()));
 
         // ---------- questions ----------
         const fromServer = (q) => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, answer: q.answer || '', answerText: q.answerText || '', correction: q.correction || '', alternatives: q.alternatives || [], modelAnswer: q.modelAnswer || '', ideas: (q.ideas || []).map(it => ({ ...it })), options: q.options || [], explanation: q.explanation || '', aiCheck: !!q.aiCheck, aiNote: q.aiNote || '', confidence: q.confidence ?? null });
@@ -621,6 +648,7 @@
             const out = [];
             if (!F.unit) out.push('Choose the unit');
             if (!F.lesson) out.push('Choose the lesson');
+            const dur = $('fDur').value; if (F.mode === 'web' && dur && !(Number(dur) >= 5 && Number(dur) <= 1440)) out.push('Time limit must be between 5 minutes and 24 hours');
             const dl = $('fDeadline').value;
             if (strict && !dl) out.push('Set the deadline');
             else if (strict && dl && new Date(dl).getTime() <= Date.now()) out.push('The deadline has already passed');
@@ -682,6 +710,7 @@
                 id: editing ? editing.id : undefined, grade: F.grade, unit: F.unit, lesson: F.lesson,
                 title: $('fTitle').value.trim(), instructions: $('fInstr').value.trim(),
                 deadline: fromLocalInput($('fDeadline').value), closesAt: fromLocalInput($('fCloses').value), totalScore: numv($('fTotal').value), source: SRC || undefined,
+                answerMode: F.mode, allowPhoto: F.mode === 'web' && $('fPhoto').checked, durationMin: F.mode === 'web' && $('fDur').value ? parseInt($('fDur').value, 10) : null,
                 questions: Q.map(q => ({ ...q, points: numv(q.points), ideas: q.ideas.filter(it => String(it.text).trim()).map(it => ({ text: it.text, points: numv(it.points) })) }))
             };
         }
@@ -719,7 +748,9 @@
             editing = a && !asCopy ? a : null;
             SRC = a && a.source ? a.source : null;
             locked = !!(editing && editing.submitted);
-            F = { grade: a ? a.grade : grade, unit: a ? a.unit : 1, lesson: a ? a.lesson : 1 };
+            F = { grade: a ? a.grade : grade, unit: a ? a.unit : 1, lesson: a ? a.lesson : 1, mode: a && a.answerMode === 'photo' ? 'photo' : 'web' };
+            locked = !!(a && !asCopy && a.submitted);
+            $('fPhoto').checked = !!(a && a.allowPhoto); $('fDur').value = a && a.durationMin ? a.durationMin : '';
             $('edTitle').textContent = editing ? (editing.status === 'draft' ? 'Edit draft' : 'Edit answer key') : asCopy ? 'New homework (copy)' : 'New homework';
             $('edSub').textContent = editing && editing.status !== 'draft' ? 'Students already see this homework — fixes apply straight away.' : 'Details, then the answer key the grader marks against.';
             $('fTitle').value = a ? (asCopy ? a.title + ' (copy)' : a.title) : '';
@@ -733,7 +764,7 @@
             if (!$('fTitle').value) $('fTitle').value = autoTitle();
             $('lockNote').hidden = !locked;
             $('lockNote').innerHTML = locked ? `${icon('lock', 'sm')}<div><b>${editing.submitted} student${editing.submitted === 1 ? ' has' : 's have'} already submitted</b> — the answer key is locked so everyone is marked the same way.</div>` : '';
-            ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr'].forEach(id => { $(id).disabled = locked; });
+            ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr', 'fDur', 'fPhoto'].forEach(id => { $(id).disabled = locked; });
             $('solveBtn').hidden = locked;
             setEditorState(); renderKey(); dirty = false;
             $('listView').hidden = true; $('editView').hidden = false; window.scrollTo(0, 0);
@@ -754,7 +785,7 @@
 
         // ================= Submissions & review =================
         let SUBS = null, subsTab = 'check', REV = null;
-        const STATUS = { pending: ['Waiting for you', 'legacy'], needs_review: ['Needs a look', 'review'], graded: ['Marked', 'success'], grading: ['AI marking…', 'primary'], queued: ['Queued (AI resets 2 am)', 'muted'] };
+        const STATUS = { written: ['Written answers to review', 'legacy'], pending: ['Waiting for you', 'legacy'], needs_review: ['Needs a look', 'review'], graded: ['Marked', 'success'], grading: ['AI marking…', 'primary'], queued: ['Queued (AI resets 2 am)', 'muted'] };
         const fullName = (x) => `${x.firstName || ''} ${x.lastName || ''}`.trim();
         async function openSubs(id, push = true) {
             $('listView').hidden = true; $('editView').hidden = true; $('subsView').hidden = false; window.scrollTo(0, 0);
@@ -787,9 +818,10 @@
             const want = { check: ['pending', 'needs_review'], graded: ['graded'], marking: ['grading', 'queued'] }[subsTab];
             const list = SUBS.submissions.filter(x => want.includes(x.status));
             $('subsList').innerHTML = list.length ? `<div class="subs">${list.map(x => {
-                const [lab, cls] = STATUS[x.status] || [x.status, 'muted'];
+                const [lab, cls] = STATUS[x.mode === 'web' && x.status === 'pending' ? 'written' : x.status] || [x.status, 'muted'];
+                const what = x.mode === 'web' ? `answered online${x.pages ? ` · ${x.pages} photo${x.pages === 1 ? '' : 's'}` : ''}` : `${x.pages} page${x.pages === 1 ? '' : 's'}`;
                 return `<button class="sub-row" data-sub="${x.id}"><span class="av">${esc(A.initials(fullName(x)))}</span>
-                    <div style="min-width:0"><b dir="auto">${esc(fullName(x))}</b><div class="meta">${esc(x.studentId)} · ${x.pages} page${x.pages === 1 ? '' : 's'} · ${esc(A.fmtDate(x.submittedAt, true))}${x.late ? ' · <span class="danger-text">Late</span>' : ''}${x.unreadable ? ' · unreadable page' : ''}</div></div>
+                    <div style="min-width:0"><b dir="auto">${esc(fullName(x))}</b><div class="meta">${esc(x.studentId)} · ${what} · ${esc(A.fmtDate(x.submittedAt, true))}${x.late ? ' · <span class="danger-text">Late</span>' : ''}${x.unreadable ? ' · unreadable page' : ''}</div></div>
                     <div class="right"><span class="pill ${cls}">${esc(lab)}</span>${x.score != null ? `<span class="score">${x.score} / ${SUBS.assignment.totalScore}</span>` : ''}</div></button>`;
             }).join('')}</div>` : `<div class="card empty-state"><div class="bubble">${icon('checkCircle', 'lg')}</div><h3>${subsTab === 'check' ? 'Nothing to check' : 'Nothing here'}</h3><p>${subsTab === 'check' ? 'New submissions appear here after the AI marks them.' : ''}</p></div>`;
         }
@@ -840,22 +872,30 @@
         }
         function revTotal() { return Math.round(REV.items.reduce((t, i) => t + (Number(i._new ?? i.earned) || 0), 0) * 100) / 100; }
         function renderReview() {
-            const r = REV, st = r.student, [lab, cls] = STATUS[r.status] || [r.status, 'muted'];
+            const r = REV, st = r.student, [lab, cls] = STATUS[r.mode === 'web' && r.status === 'pending' ? 'written' : r.status] || [r.status, 'muted'];
             $('revTitle').textContent = `${fullName(st)} · ${r.title}`;
             $('revSub').innerHTML = `${esc(st.id)} · receipt <b>${esc(r.receipt || '—')}</b> · submitted ${esc(A.fmtDate(r.submittedAt, true))}${r.late ? ' · <span class="danger-text">Late</span>' : ''} · <span class="pill ${cls}">${esc(lab)}</span>${r.error ? ` · <span class="danger-text">${esc(r.error)}</span>` : ''}`;
-            $('revBody').innerHTML = `<div class="rev">
-                <div class="pages">${r.pageList.map(p => `<div class="small muted" style="margin:0 0 4px">Page ${p.pageNo}${p.readable ? '' : ' — <b class="danger-text">AI could not read it</b>'}</div>${p.mediaId ? `<a href="/api/homework?action=page&media=${p.mediaId}" target="_blank" rel="noopener"><img src="/api/homework?action=page&media=${p.mediaId}" alt="Page ${p.pageNo}" loading="lazy"></a>` : '<div class="notice">Photo deleted (older than 60 days)</div>'}`).join('')}</div>
-                <div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px"><span class="rev-score" id="revScore">${revTotal()} / ${r.total}</span>
-                    <span class="small muted">AI gave ${r.autoScore ?? '—'} · change any mark below</span></div>
-                ${r.items.map((i, k) => `<div class="rq" data-k="${k}"><div class="lab">${esc(i.label)}<small>${esc(i.type)}</small></div>
+            const web = r.mode === 'web';
+            const row = (i) => { const k = r.items.indexOf(i); const need = web && i.deferred; return `<div class="rq ${need ? 'need' : ''}" data-k="${k}"><div class="lab">${esc(i.label)}<small>${esc(TYPE_LABEL[i.type] || i.type)}</small></div>
                     <div class="ans">${i.question ? `<div class="muted" dir="auto">${esc(i.question)}</div>` : ''}
-                        <div class="you" dir="auto"><b>Student</b>${esc(i.yourAnswer || '—')}${i.yourCorrection ? ' — ' + esc(i.yourCorrection) : ''}</div>
+                        <div class="you" dir="auto"><b>${web ? 'Typed' : 'Student'}</b>${esc(i.yourAnswer || '—')}${i.yourCorrection ? ' — ' + esc(i.yourCorrection) : ''}</div>
+                        ${i.photoText ? `<div class="you photo-txt" dir="auto"><b>From photo</b>${esc(i.photoText)}</div>` : ''}
                         <div class="key" dir="auto"><b>Key</b>${esc(i.modelAnswer || '')}</div>
+                        ${i.modelAnswerFull && i.modelAnswerFull.ideas.length ? `<ul class="ideas small">${i.modelAnswerFull.ideas.map(x => `<li dir="auto">${esc(x.text)} <span class="muted">(${x.points})</span></li>`).join('')}</ul>` : ''}
                         ${i.circledText ? `<div class="muted small" dir="auto">Circled: “${esc(i.circledText)}”</div>` : ''}
                         ${i.check ? `<div class="small" style="color:var(--warning);font-weight:700">⚠ ${esc(i.check)}</div>` : ''}
-                        ${i.evidence ? `<div class="muted small" dir="auto">AI: “${esc(i.evidence)}”</div>` : ''}</div>
-                    <div class="pts"><span class="vchip ${esc(i.verdict)}">${esc(i.verdict)}</span><input type="number" min="0" max="${i.points}" step="0.25" value="${i.earned}" data-pts="${k}" aria-label="Marks for ${esc(i.label)}"><small class="muted">of ${i.points}</small></div></div>`).join('')}</div></div>`;
-            $('revReleaseLabel').textContent = r.released ? 'Save & keep released' : 'Confirm & release';
+                        ${i.evidence ? `<div class="muted small" dir="auto">AI: “${esc(i.evidence)}”</div>` : ''}
+                        ${need ? `<label class="small muted" style="margin-top:4px">Note to the student <span style="font-weight:500">(AI wrote it — edit if you like)</span></label><textarea class="fb" dir="auto" maxlength="400" data-fb="${k}">${esc(i.feedback || '')}</textarea>` : ''}</div>
+                    <div class="pts"><span class="vchip ${esc(i.verdict)}">${esc(i.verdict)}</span><input type="number" min="0" max="${i.points}" step="0.25" value="${i.earned}" data-pts="${k}" aria-label="Marks for ${esc(i.label)}"><small class="muted">of ${i.points}</small></div></div>`; };
+            const needs = web ? r.items.filter(i => i.deferred) : [], auto = web ? r.items.filter(i => !i.deferred) : r.items;
+            const photos = r.pageList.map(p => `<div class="small muted" style="margin:0 0 4px">${web ? `Photo for ${esc((p.labels || []).join(', ') || '—')}` : `Page ${p.pageNo}`}${p.readable ? '' : ' — <b class="danger-text">AI could not read it</b>'}</div>${p.mediaId ? `<a href="/api/homework?action=page&media=${p.mediaId}" target="_blank" rel="noopener"><img src="/api/homework?action=page&media=${p.mediaId}" alt="Photo ${p.pageNo}" loading="lazy"></a>` : '<div class="notice">Photo deleted (older than 60 days)</div>'}`).join('');
+            $('revBody').innerHTML = `<div class="rev" ${web && !r.pageList.length ? 'style="grid-template-columns:1fr"' : ''}>
+                ${!web || r.pageList.length ? `<div class="pages">${photos}</div>` : ''}
+                <div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px"><span class="rev-score" id="revScore">${revTotal()} / ${r.total}</span>
+                    <span class="small muted">${web ? `Marked instantly: ${r.objectiveScore ?? '—'} · AI suggests ${r.autoScore ?? '—'} in total` : `AI gave ${r.autoScore ?? '—'} · change any mark below`}</span></div>
+                ${web ? `${needs.length ? `<div class="rev-sec">✍️ Written answers — check the AI's marks (${needs.length})</div>${needs.map(row).join('')}` : ''}
+                    <details ${needs.length ? '' : 'open'}><summary class="rev-sec" style="cursor:pointer">✅ Marked instantly by the website (${auto.length})</summary>${auto.map(row).join('')}</details>` : r.items.map(row).join('')}</div></div>`;
+            $('revReleaseLabel').textContent = r.released ? 'Save & keep released' : r.mode === 'web' ? 'Accept & release' : 'Confirm & release';
             $('revRegrade').hidden = !A.can('homework.review'); $('revSave').hidden = $('revRelease').hidden = !A.can('homework.review');
             $('revWaParent').disabled = !st.parentPhone; $('revWaStudent').disabled = !st.phone;
         }
@@ -866,18 +906,19 @@
             t.classList.toggle('changed', i._new !== null && Math.abs(i._new - i.earned) > 0.001);
             $('revScore').textContent = `${revTotal()} / ${REV.total}`;
         });
+        $('revBody').addEventListener('input', (e) => { const t = e.target.closest('[data-fb]'); if (t) REV.items[Number(t.dataset.fb)]._fb = t.value; });
         async function saveReview(release) {
-            const overrides = {};
-            REV.items.forEach(i => { if (i._new != null && Math.abs(i._new - i.earned) > 0.001) overrides[i.questionId] = i._new; });
+            const overrides = {}, feedbacks = {};
+            REV.items.forEach(i => { if (i._new != null && Math.abs(i._new - i.earned) > 0.001) overrides[i.questionId] = i._new; if (i._fb != null && i._fb !== (i.feedback || '')) feedbacks[i.questionId] = i._fb; });
             try {
-                const r = await api('/api/homework?action=review', { body: { id: REV.id, overrides, release } });
+                const r = await api('/api/homework?action=review', { body: { id: REV.id, overrides, feedbacks, release } });
                 Site.toast(release ? `Released — ${r.final} / ${REV.total} ✅ (student notified)` : `Saved — ${r.final} / ${REV.total}`, 'success');
                 closeReview(); openSubs(SUBS.assignment.id, false);
             } catch (e) { Site.toast(e.message, 'error'); }
         }
         $('revSave').addEventListener('click', () => saveReview(false));
         $('revRelease').addEventListener('click', () => saveReview(true));
-        $('revRegrade').addEventListener('click', () => Site.sheet({ iconName: 'refresh', title: 'Mark this submission again?', subtitle: 'The AI reads the pages again from scratch. Marks you changed are replaced.',
+        $('revRegrade').addEventListener('click', () => Site.sheet({ iconName: 'refresh', title: 'Mark this submission again?', subtitle: REV.mode === 'web' ? 'The AI checks the written answers again. Choose / ✓✗ / Complete marks stay as they are.' : 'The AI reads the pages again from scratch. Marks you changed are replaced.',
             actions: [{ label: 'Mark again', cls: 'btn-primary', onClick: async (c) => {
                 c();
                 try {

@@ -200,7 +200,8 @@ export async function ensureAppSchema(db) {
         id INTEGER PRIMARY KEY AUTOINCREMENT, grade TEXT NOT NULL, unit INTEGER, lesson INTEGER, title TEXT NOT NULL, instructions TEXT,
         deadline TEXT, closes_at TEXT, total_score REAL NOT NULL DEFAULT 10, status TEXT NOT NULL DEFAULT 'draft',
         created_by TEXT, updated_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        published_at TEXT, closed_at TEXT, push_sent_at TEXT, source TEXT, ai_drafted INTEGER)`);
+        published_at TEXT, closed_at TEXT, push_sent_at TEXT, source TEXT, ai_drafted INTEGER,
+        answer_mode TEXT DEFAULT 'web', allow_photo INTEGER NOT NULL DEFAULT 0, duration_min INTEGER)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_hw_a_grade ON hw_assignments(grade, status)');
     steps.push(`CREATE TABLE IF NOT EXISTS hw_questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_id INTEGER NOT NULL, ord INTEGER NOT NULL DEFAULT 0, label TEXT,
@@ -212,22 +213,31 @@ export async function ensureAppSchema(db) {
         pages INTEGER NOT NULL DEFAULT 0, late INTEGER NOT NULL DEFAULT 0, reuploads INTEGER NOT NULL DEFAULT 0, receipt_code TEXT,
         submitted_at TEXT, graded_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         lock_until TEXT, unreadable INTEGER NOT NULL DEFAULT 0, released_at TEXT, released_by TEXT, report TEXT, ai_error TEXT, tries INTEGER NOT NULL DEFAULT 0,
-        UNIQUE(assignment_id, student_id))`);
+        mode TEXT, started_at TEXT, ends_at TEXT, draft TEXT, objective_score REAL, written_status TEXT, assist TEXT, assist_status TEXT, assist_lock TEXT,
+        chat_used INTEGER NOT NULL DEFAULT 0, UNIQUE(assignment_id, student_id))`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_hw_s_student ON hw_submissions(student_id)');
     steps.push(`CREATE TABLE IF NOT EXISTS hw_answers (
         id INTEGER PRIMARY KEY AUTOINCREMENT, submission_id INTEGER NOT NULL, question_id INTEGER NOT NULL,
         transcript TEXT, verdict TEXT, points REAL, ai_points REAL, evidence TEXT, confidence REAL, override_points REAL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP, feedback TEXT, UNIQUE(submission_id, question_id))`);
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP, feedback TEXT, deferred INTEGER NOT NULL DEFAULT 0, UNIQUE(submission_id, question_id))`);
     steps.push(`CREATE TABLE IF NOT EXISTS hw_pages (
         id INTEGER PRIMARY KEY AUTOINCREMENT, submission_id INTEGER NOT NULL, page_no INTEGER NOT NULL, media_id INTEGER,
-        status TEXT NOT NULL DEFAULT 'new', read_json TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+        status TEXT NOT NULL DEFAULT 'new', read_json TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, labels TEXT)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_hw_pages_sub ON hw_pages(submission_id, page_no)');
+    // AI Assistant follow-up questions (one thread per homework submission)
+    steps.push(`CREATE TABLE IF NOT EXISTS hw_chat (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, submission_id INTEGER NOT NULL, role TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_hw_chat_sub ON hw_chat(submission_id, id)');
     {   // Step 3 columns (add-only; the Step 2 tables may already exist)
         const want = {
-            hw_assignments: [['source', 'TEXT'], ['ai_drafted', 'INTEGER']],
+            // answer_mode: homework created before website answering keeps the photo flow
+            hw_assignments: [['source', 'TEXT'], ['ai_drafted', 'INTEGER'], ['answer_mode', "TEXT DEFAULT 'photo'"], ['allow_photo', 'INTEGER NOT NULL DEFAULT 0'], ['duration_min', 'INTEGER']],
             hw_submissions: [['lock_until', 'TEXT'], ['unreadable', 'INTEGER NOT NULL DEFAULT 0'], ['released_at', 'TEXT'], ['released_by', 'TEXT'],
-                ['report', 'TEXT'], ['ai_error', 'TEXT'], ['tries', 'INTEGER NOT NULL DEFAULT 0']],
-            hw_answers: [['feedback', 'TEXT']]
+                ['report', 'TEXT'], ['ai_error', 'TEXT'], ['tries', 'INTEGER NOT NULL DEFAULT 0'],
+                ['mode', 'TEXT'], ['started_at', 'TEXT'], ['ends_at', 'TEXT'], ['draft', 'TEXT'], ['objective_score', 'REAL'], ['written_status', 'TEXT'],
+                ['assist', 'TEXT'], ['assist_status', 'TEXT'], ['assist_lock', 'TEXT'], ['chat_used', 'INTEGER NOT NULL DEFAULT 0']],
+            hw_answers: [['feedback', 'TEXT'], ['deferred', 'INTEGER NOT NULL DEFAULT 0']],
+            hw_pages: [['labels', 'TEXT']]
         };
         for (const [table, cols] of Object.entries(want)) {
             let have = [];

@@ -107,7 +107,77 @@
         .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 95; overflow: hidden; }
         .confetti i { position: absolute; top: -12px; width: 9px; height: 14px; border-radius: 3px; animation: fall linear forwards; }
         @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
-        @media (prefers-reduced-motion: reduce) { .robot .orb, .robot .core, .receipt::after, .receipt .pulse { animation: none; } }
+
+        /* ===== answer on the website ===== */
+        .sheet-bar { position: sticky; top: calc(var(--topbar-h, 60px) + 6px); z-index: 6; display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 14px; }
+        @media (min-width: 900px) { .sheet-bar { top: 12px; } }
+        .sheet-bar .prog { flex: 1; min-width: 0; }
+        .sheet-bar .prog b { font-size: 14px; }
+        .sheet-bar .prog .bar { margin: 6px 0 0; max-width: none; height: 6px; }
+        .sheet-bar .saved { font-size: 12px; color: var(--muted); font-weight: 600; }
+        .timer { font-weight: 800; font-variant-numeric: tabular-nums; padding: 6px 12px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+        .timer.warn { background: var(--accent-soft); color: var(--accent-strong, #B45309); } .timer.danger { background: var(--danger-soft); color: var(--danger); animation: blink 1s infinite; }
+        .sec-head { display: flex; align-items: center; gap: 10px; margin: 20px 0 10px; }
+        .sec-head .n { width: 30px; height: 30px; border-radius: 10px; background: var(--primary); color: #fff; font-weight: 800; display: grid; place-items: center; flex: none; }
+        .sec-head b { font-size: 16px; }
+        .qa { border-radius: 18px; border: 1.5px solid var(--border); background: var(--surface); padding: 14px; display: grid; gap: 10px; transition: border-color .2s; }
+        .qa + .qa { margin-top: 10px; }
+        .qa.done { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+        .qa .qh { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .qa .lab { font-weight: 800; background: var(--surface-3); border-radius: 8px; padding: 3px 9px; font-size: 13px; }
+        .qa .pts { font-size: 12.5px; color: var(--muted); font-weight: 700; }
+        .qa .prompt { font-size: 15.5px; line-height: 1.55; font-weight: 600; }
+        .opts { display: grid; gap: 8px; }
+        @media (min-width: 700px) { .opts.two { grid-template-columns: 1fr 1fr; } }
+        .opt { display: flex; gap: 10px; align-items: center; text-align: start; padding: 12px 14px; min-height: 50px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-size: 15px; cursor: pointer; transition: border-color .15s, background .15s, transform .1s; }
+        .opt:active { transform: scale(.98); }
+        .opt .L { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--surface); border: 1.5px solid var(--border); flex: none; text-transform: lowercase; }
+        .opt.on { border-color: var(--primary); background: var(--primary-soft); }
+        .opt.on .L { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .letters { display: flex; gap: 10px; flex-wrap: wrap; } .letters .opt { min-width: 64px; justify-content: center; }
+        .tfrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .tfrow .opt { justify-content: center; font-weight: 800; font-size: 17px; }
+        .tfrow .opt.on.t { border-color: var(--success); background: var(--success-soft); color: var(--success); }
+        .tfrow .opt.on.f { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+        .qa input.fin, .qa textarea.ta { width: 100%; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface-2); color: var(--text); padding: 12px 14px; font: inherit; font-size: 15px; }
+        .qa textarea.ta { min-height: 96px; resize: vertical; line-height: 1.55; }
+        .qa input.fin:focus, .qa textarea.ta:focus { outline: none; border-color: var(--primary); background: var(--surface); }
+        .qa .hint { font-size: 12.5px; color: var(--muted); }
+        .photos { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .photos .ph { position: relative; width: 84px; height: 84px; border-radius: 12px; overflow: hidden; border: 1.5px solid var(--border); }
+        .photos .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .photos .ph button { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 8px; border: 0; background: rgba(15, 23, 42, .75); color: #fff; display: grid; place-items: center; cursor: pointer; }
+        .start-card { text-align: center; padding: 26px 18px; }
+        .start-card .big-ic { width: 72px; height: 72px; border-radius: 22px; margin: 0 auto 12px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); }
+        .start-card .big-ic .icon { width: 36px; height: 36px; }
+        .pending-note { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 16px; background: var(--primary-soft); margin-top: 12px; }
+        .q.pending { border-inline-start: 5px solid var(--primary); }
+        /* AI Assistant */
+        .tabs2 { display: inline-flex; margin: 4px 0 14px; }
+        .tabs2 button { white-space: nowrap; }
+        .assist-teaser { display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 18px; margin: 14px 0; cursor: pointer; border: 0; width: 100%; text-align: start; color: var(--text); font: inherit;
+            background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 16%, var(--surface)), color-mix(in srgb, var(--accent, #F59E0B) 16%, var(--surface))); }
+        .assist-teaser .bot { width: 48px; height: 48px; border-radius: 16px; background: var(--primary); color: #fff; display: grid; place-items: center; flex: none; }
+        .assist-teaser b { display: block; } .assist-teaser p { margin: 2px 0 0; font-size: 13px; color: var(--text-2); }
+        .ai-wrap { display: grid; gap: 12px; }
+        .bubble-ai { display: flex; gap: 10px; align-items: flex-start; }
+        .bubble-ai .av { width: 38px; height: 38px; border-radius: 13px; background: var(--primary); color: #fff; display: grid; place-items: center; flex: none; }
+        .bubble-ai .tx { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; border-start-start-radius: 6px; padding: 12px 14px; font-size: 15px; line-height: 1.75; white-space: pre-wrap; box-shadow: var(--shadow-sm, none); min-width: 0; }
+        .bubble-ai .tx .lab { display: inline-block; font-weight: 800; font-size: 12px; background: var(--primary-soft); color: var(--primary); border-radius: 7px; padding: 1px 8px; margin-bottom: 4px; direction: ltr; }
+        .bubble-me { display: flex; justify-content: flex-end; }
+        .bubble-me .tx { background: var(--primary); color: #fff; border-radius: 18px; border-end-end-radius: 6px; padding: 10px 14px; max-width: 85%; white-space: pre-wrap; }
+        .think { text-align: center; padding: 22px 12px; }
+        .think .msg { margin-top: 12px; font-weight: 700; min-height: 1.6em; transition: opacity .3s; }
+        .dots span { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); margin: 0 3px; animation: bounce 1.2s infinite ease-in-out; }
+        .dots span:nth-child(2) { animation-delay: .15s; } .dots span:nth-child(3) { animation-delay: .3s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); opacity: .5; } 40% { transform: translateY(-8px); opacity: 1; } }
+        .chat-in { display: flex; gap: 8px; align-items: flex-end; position: sticky; bottom: calc(var(--bottomnav-h, 64px) + 10px); background: var(--bg); padding: 8px 0; }
+        @media (min-width: 900px) { .chat-in { bottom: 10px; } }
+        .chat-in textarea { flex: 1; min-height: 46px; max-height: 140px; border-radius: 16px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); padding: 11px 14px; font: inherit; font-size: 15px; resize: none; }
+        .chat-in button { width: 46px; height: 46px; border-radius: 14px; flex: none; }
+        .queued-card { text-align: center; padding: 24px 16px; }
+        .queued-card .big { font-size: 42px; }
+        @media (prefers-reduced-motion: reduce) { .dots span, .timer.danger { animation: none; } .robot .orb, .robot .core, .receipt::after, .receipt .pulse { animation: none; } }
     </style>
 </head>
 <body>
@@ -141,7 +211,7 @@
         // ================= list =================
         async function showList() {
             view.innerHTML = `<section class="page-head reveal"><h1 class="h1">Homework <span class="ar" style="font-weight:600;color:var(--muted);font-size:.7em">· الواجبات</span></h1>
-                <p class="small">Solve in your booklet & notebook, scan the pages, upload — and see your mark.</p></section><div id="hwList"><div class="skel" style="height:180px;border-radius:20px"></div></div>`;
+                <p class="small">Answer here and see your mark straight away — your AI Assistant explains every mistake 🤖</p></section><div id="hwList"><div class="skel" style="height:180px;border-radius:20px"></div></div>`;
             let d; try { d = await api('/api/hw-student?action=list'); } catch (e) { $('hwList').innerHTML = `<div class="card"><p class="muted">${esc(e.message)}</p></div>`; return; }
             MODE = d.mode;
             const due = d.items.filter(x => x.due).sort((a, b) => toMs(a.deadline) - toMs(b.deadline));
@@ -153,12 +223,13 @@
                 if (!s) right = late ? `<span class="chip danger">${icon('clock', 'sm')}Late — still accepted</span>` : `<span class="chip ${toMs(x.deadline) - Date.now() < 864e5 ? 'accent' : 'primary'}">${icon('clock', 'sm')}${esc(timeLeft(iso(x.deadline)))}</span>`;
                 else if (s.released) right = `<span class="score-pill num ${scoreTone(s.score, x.totalScore)}">${s.score}/${x.totalScore}</span>`;
                 else if (s.unreadable && s.reuploads < 1 && !late) right = `<span class="chip danger">${icon('alert', 'sm')}Upload again</span>`;
+                else if (x.answerMode === 'web' && ['grading', 'pending', 'queued', 'needs_review'].includes(s.status)) right = `<span class="chip">${icon('hourglass', 'sm')}Written part being checked</span>`;
                 else right = `<span class="chip">${icon('hourglass', 'sm')}${s.status === 'grading' || s.status === 'queued' ? 'Being marked' : 'Waiting for Miss Marwa'}</span>`;
                 return `<a class="card hw reveal ${!s && toMs(x.deadline) - Date.now() < 864e5 ? 'urgent' : ''}" href="${url('homework.html', { id: x.id })}" data-id="${x.id}">
                     <div class="top"><span class="xs muted">Unit ${x.unit} · Lesson ${x.lesson}</span>${right}</div>
                     <h3>${txt(x.title)}</h3>
                     <div class="meta">${s ? `${icon('checkCircle', 'sm')}Submitted ${esc(fmtDate(iso(s.submittedAt)))}${s.late ? ' · late' : ''}` : `${icon('calendar', 'sm')}Due ${esc(when(x.deadline))}`}</div>
-                    ${!s ? `<span class="btn btn-primary btn-block">${icon('download', 'sm')}Upload my homework</span>` : `<span class="link">${s.released ? 'See my answers' : 'Open'} ${icon('arrowRight', 'sm')}</span>`}</a>`;
+                    ${!s ? `<span class="btn btn-primary btn-block">${x.answerMode === 'web' ? `${icon('edit', 'sm')}Answer now` : `${icon('download', 'sm')}Upload my homework`}</span>` : `<span class="link">${s.released ? 'See my answers' : 'Open'} ${icon('arrowRight', 'sm')}</span>`}</a>`;
             };
             $('hwList').innerHTML = (due.length ? `<div class="hw-list">${due.map(card).join('')}</div>` : `<div class="card reveal"><div class="empty"><div class="bubble">${icon('checkCircle')}</div><h3>No homework due</h3><p>New homework shows up here (you'll get a notification).</p></div></div>`)
                 + (done.length ? `<div class="sec-title">Submitted</div><div class="hw-list">${done.map(card).join('')}</div>` : '')
@@ -176,7 +247,8 @@
             const a = H.assignment, s = H.submission;
             const head = `<section class="page-head reveal"><a class="link" href="${url('homework.html')}" data-back>${icon('arrowLeft', 'sm')}All homework</a>
                 <h1 class="h1" style="margin-top:8px">${txt(a.title)}</h1>
-                <p class="small">Unit ${a.unit} · Lesson ${a.lesson} · ${a.questions} question${a.questions === 1 ? '' : 's'} · ${a.totalScore} marks · due ${esc(when(a.deadline))}</p></section>`;
+                <p class="small">Unit ${a.unit} · Lesson ${a.lesson} · ${a.questions} question${a.questions === 1 ? '' : 's'} · ${a.totalScore} marks · due ${esc(when(a.deadline))}${a.durationMin ? ` · ⏱ ${a.durationMin} min` : ''}</p></section>`;
+            if (a.answerMode === 'web') return H.canUpload ? renderWebStart(head) : renderWebResult(head);
             if (H.canUpload) return renderUpload(head);
             if (s && ['grading', 'queued'].includes(s.status)) return runMarking(head, s.id);
             return renderResult(head);
@@ -313,6 +385,296 @@
             renderResult(view.querySelector('.page-head').outerHTML);
         }
 
+        // ================= answer on the website =================
+        const SEC_TITLE = { mcq: 'Choose the correct answer', tf: 'Put (✓) or (✗)', short: 'Complete', essay: 'Answer / give reasons' };
+        let ANS = {}, SAVE_T = null, TICK_T = null, SKEW = 0, SUB_ID = null, ENDS = null, PHOTOS = [], WARNED5 = false, SENDING = false;
+        const lsKey = () => `hw_ans_${session.id}_${H.assignment.id}`;
+        const lsGet = () => { try { return JSON.parse(localStorage.getItem(lsKey()) || 'null'); } catch (e) { return null; } };
+        const lsSet = (v) => { try { localStorage.setItem(lsKey(), JSON.stringify(v)); } catch (e) { } };
+        const lsDel = () => { try { localStorage.removeItem(lsKey()); } catch (e) { } };
+        const answered = (q) => { const x = ANS[q.label]; return !!(x && (String(x.answer || '').trim() || (q.type === 'essay' && PHOTOS.some(p => p.labels.includes(q.label))))); };
+
+        function renderWebStart(head) {
+            const a = H.assignment, s = H.submission;
+            SKEW = H.now ? toMs(H.now) - Date.now() : 0;
+            if (s && s.status === 'uploading') return openSheet(head);
+            if (!a.durationMin) return beginSheet(head);
+            view.innerHTML = head + `<div class="card start-card reveal"><div class="big-ic">${icon('clock')}</div>
+                <h2 style="margin:0 0 6px">${a.durationMin >= 60 ? `${Math.round(a.durationMin / 6) / 10} hour${a.durationMin === 60 ? '' : 's'}` : `${a.durationMin} minutes`} to answer</h2>
+                <p class="small muted" style="margin:0 auto;max-width:380px">The timer starts when you press <b>Start</b> and keeps running even if you close the page. Your answers save automatically.</p>
+                <p class="small" dir="rtl" style="margin:8px auto 0;max-width:380px">⏱️ الوقت بيبدأ أول ما تدوس Start — وإجاباتك بتتحفظ أوتوماتيك.</p>
+                ${H.late ? `<p class="small" style="color:var(--danger);font-weight:700">The deadline has passed — it will be marked “Late”.</p>` : ''}
+                <button class="btn btn-primary btn-lg" id="startBtn" style="margin-top:14px">${icon('play', 'sm')}Start</button></div>`;
+            reveal(view);
+            $('startBtn').addEventListener('click', () => beginSheet(head));
+        }
+        async function beginSheet(head) {
+            try { await api('/api/hw-student?action=start', { method: 'POST', body: { id: H.assignment.id } }); H = await api(`/api/hw-student?action=get&id=${H.assignment.id}`); SKEW = H.now ? toMs(H.now) - Date.now() : 0; openSheet(head); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+        function openSheet(head) {
+            const a = H.assignment, s = H.submission, paper = H.paper || [];
+            SUB_ID = s.id; ENDS = s.endsAt ? toMs(s.endsAt) : null; WARNED5 = false;
+            const local = lsGet();
+            ANS = Object.assign({}, H.draft || {}, local && local.sub === s.id ? local.answers : {});
+            PHOTOS = H.photos || [];
+            const sections = [];
+            paper.forEach(q => { const sec = String(q.label).split('.')[0]; let g = sections.find(x => x.sec === sec); if (!g) sections.push(g = { sec, type: q.type, qs: [] }); g.qs.push(q); });
+            view.innerHTML = head + `
+                ${a.instructions ? `<div class="card reveal" style="margin-bottom:14px"><b>Note from Miss Marwa</b><p dir="auto" style="margin:6px 0 0">${txt(a.instructions)}</p></div>` : ''}
+                <div class="sheet-bar reveal"><div class="prog"><b id="progTxt"></b> <span class="saved" id="savedTxt"></span><div class="bar"><span id="progBar"></span></div></div>${ENDS ? `<span class="timer" id="timer">${icon('clock', 'sm')}<span id="timerTxt">--:--</span></span>` : ''}</div>
+                <div id="sheet">${sections.map(g => `<div class="sec-head reveal"><span class="n">${esc(g.sec)}</span><b>${esc(SEC_TITLE[g.type] || 'Questions')}</b></div>${g.qs.map(qHTML).join('')}`).join('')}</div>
+                <div class="submit-bar"><button class="btn btn-primary btn-block btn-lg" id="sendBtn">${icon('send')}Submit answers${H.late ? ' (late)' : ''}</button></div>`;
+            reveal(view);
+            const sheetEl = $('sheet');
+            sheetEl.addEventListener('click', onSheetClick);
+            sheetEl.addEventListener('input', onSheetInput);
+            sheetEl.addEventListener('change', onSheetFile);
+            $('sendBtn').addEventListener('click', confirmSend);
+            progress();
+            clearInterval(TICK_T); if (ENDS) { tickTimer(); TICK_T = setInterval(tickTimer, 1000); }
+        }
+        function qHTML(q) {
+            const x = ANS[q.label] || {}, L = esc(q.label);
+            let body = '';
+            if (q.type === 'mcq') {
+                body = q.options && q.options.length
+                    ? `<div class="opts ${q.options.every(o => o.length < 28) ? 'two' : ''}">${q.options.map((o, k) => { const l = 'abcdef'[k]; return `<button type="button" class="opt ${x.answer === l ? 'on' : ''}" data-q="${L}" data-v="${l}" aria-pressed="${x.answer === l}"><span class="L">${l}</span><span dir="auto">${txt(o)}</span></button>`; }).join('')}</div>`
+                    : `<div class="hint">Choose the letter from your booklet</div><div class="letters">${'abcd'.split('').map(l => `<button type="button" class="opt ${x.answer === l ? 'on' : ''}" data-q="${L}" data-v="${l}"><span class="L">${l}</span></button>`).join('')}</div>`;
+            } else if (q.type === 'tf') {
+                body = `<div class="tfrow"><button type="button" class="opt t ${x.answer === 'true' ? 'on' : ''}" data-q="${L}" data-v="true">✓ True</button><button type="button" class="opt f ${x.answer === 'false' ? 'on' : ''}" data-q="${L}" data-v="false">✗ False</button></div>
+                    <div data-corr="${L}" ${x.answer === 'false' ? '' : 'hidden'}><input class="fin" dir="auto" maxlength="300" data-in="${L}" data-f="correction" value="${esc(x.correction || '')}" placeholder="Correct it — write the right word(s)"><div class="hint" style="margin-top:4px">صحّح الخطأ واكتب الكلمة الصح علشان تاخد الدرجة كاملة</div></div>`;
+            } else if (q.type === 'short') {
+                body = `<input class="fin" dir="auto" maxlength="300" data-in="${L}" data-f="answer" value="${esc(x.answer || '')}" placeholder="Type the missing word(s)" autocomplete="off">`;
+            } else {
+                const mine = PHOTOS.filter(p => p.labels.includes(q.label));
+                body = `<textarea class="ta" dir="auto" maxlength="3000" data-in="${L}" data-f="answer" placeholder="Type your answer… (English or Arabic)">${esc(x.answer || '')}</textarea>
+                    ${H.assignment.allowPhoto ? `<div class="photos" data-photos="${L}">${mine.map(p => `<div class="ph"><img src="/api/hw-student?action=media&media=${p.mediaId}" alt="Your photo for ${L}"><button type="button" data-delph="${p.id}" aria-label="Remove photo">${icon('x', 'sm')}</button></div>`).join('')}
+                        <label class="btn btn-ghost btn-sm">${icon('image', 'sm')}${mine.length ? 'Add another photo' : 'Or upload a photo of your answer'}<input type="file" accept="image/*" hidden data-photo="${L}"></label></div>` : ''}`;
+            }
+            return `<div class="qa reveal ${answered(q) ? 'done' : ''}" data-qa="${L}"><div class="qh"><span class="lab">${L}</span><span class="pts">${q.points} mark${q.points === 1 ? '' : 's'}</span></div>
+                ${q.prompt ? `<div class="prompt" dir="auto">${txt(q.prompt)}</div>` : `<div class="hint">Question ${L} in your booklet</div>`}${body}</div>`;
+        }
+        const qOf = (label) => (H.paper || []).find(q => q.label === label);
+        function onSheetClick(e) {
+            const b = e.target.closest('button[data-q]');
+            if (b) {
+                const label = b.dataset.q, v = b.dataset.v, q = qOf(label);
+                const cur = ANS[label] || {};
+                ANS[label] = { ...cur, answer: cur.answer === v && q.type === 'mcq' ? '' : v };
+                b.parentElement.querySelectorAll('button[data-q]').forEach(x => { const on = x.dataset.v === ANS[label].answer; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+                if (q.type === 'tf') { const c = view.querySelector(`[data-corr="${CSS.escape(label)}"]`); if (c) { c.hidden = ANS[label].answer !== 'false'; if (!c.hidden) c.querySelector('input').focus(); } }
+                if (navigator.vibrate) try { navigator.vibrate(8); } catch (x) { }
+                changed(label);
+                return;
+            }
+            const d = e.target.closest('[data-delph]');
+            if (d) delPhoto(Number(d.dataset.delph));
+        }
+        function onSheetInput(e) {
+            const t = e.target.closest('[data-in]'); if (!t) return;
+            const label = t.dataset.in;
+            ANS[label] = { ...(ANS[label] || {}), [t.dataset.f]: t.value };
+            changed(label);
+        }
+        function changed(label) {
+            const card = view.querySelector(`[data-qa="${CSS.escape(label)}"]`); const q = qOf(label);
+            if (card && q) card.classList.toggle('done', answered(q));
+            progress();
+            lsSet({ sub: SUB_ID, answers: ANS });
+            $('savedTxt').textContent = '· saving…';
+            clearTimeout(SAVE_T); SAVE_T = setTimeout(saveNow, 1200);
+        }
+        async function saveNow() {
+            clearTimeout(SAVE_T);
+            try { await api('/api/hw-student?action=save', { method: 'POST', body: { submissionId: SUB_ID, answers: ANS } }); const el = $('savedTxt'); if (el) el.textContent = '· saved ✓'; }
+            catch (e) { const el = $('savedTxt'); if (el) el.textContent = e.data && e.data.code === 'TIME_UP' ? '· time is up' : '· not saved (offline?)'; }
+        }
+        function progress() {
+            const paper = H.paper || [], n = paper.filter(answered).length;
+            const el = $('progTxt'); if (!el) return;
+            el.textContent = `${n} of ${paper.length} answered`;
+            $('progBar').style.width = `${paper.length ? n / paper.length * 100 : 0}%`;
+        }
+        function tickTimer() {
+            const left = ENDS - (Date.now() + SKEW);
+            const el = $('timerTxt'); if (!el) { clearInterval(TICK_T); return; }
+            const sec = Math.max(0, Math.floor(left / 1000)), h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), ss = sec % 60;
+            el.textContent = h ? `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+            $('timer').className = 'timer ' + (sec <= 60 ? 'danger' : sec <= 300 ? 'warn' : '');
+            if (sec <= 300 && !WARNED5) { WARNED5 = true; toast('5 minutes left ⏰ — check your answers and submit', 'info'); }
+            if (sec <= 0) { clearInterval(TICK_T); toast("Time's up — sending your answers", 'info'); send(true); }
+        }
+        async function onSheetFile(e) {
+            const inp = e.target.closest('input[data-photo]'); if (!inp || !inp.files[0]) return;
+            const label = inp.dataset.photo, f = inp.files[0]; inp.value = '';
+            const lab = inp.closest('label'); lab.classList.add('loading');
+            try {
+                const r = await HwKit.photoToJpeg(f);
+                const q = HwKit.checkQuality(r.canvas);
+                if (q.dark || q.blurry) toast(q.dark ? 'This photo looks dark — retake it in good light if you can' : 'This photo looks blurry — hold the phone still', 'info');
+                const up = await api('/api/hw-student?action=photo', { method: 'POST', body: { submissionId: SUB_ID, labels: [label], image: { mime: 'image/jpeg', data: HwKit.b64(r.dataUrl) } } });
+                PHOTOS.push({ id: up.id, mediaId: up.mediaId, labels: up.labels });
+                rerenderQ(label);
+            } catch (err) { toast(err.message, 'error'); lab.classList.remove('loading'); }
+        }
+        async function delPhoto(id) {
+            try { await api('/api/hw-student?action=photo-del', { method: 'POST', body: { submissionId: SUB_ID, photoId: id } }); const p = PHOTOS.find(x => x.id === id); PHOTOS = PHOTOS.filter(x => x.id !== id); if (p) p.labels.forEach(rerenderQ); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+        function rerenderQ(label) {
+            const card = view.querySelector(`[data-qa="${CSS.escape(label)}"]`), q = qOf(label); if (!card || !q) return;
+            const tmp = document.createElement('div'); tmp.innerHTML = qHTML(q); const n = tmp.firstElementChild; n.classList.add('in'); card.replaceWith(n); progress();
+        }
+        function confirmSend() {
+            const paper = H.paper || [], blank = paper.filter(q => !answered(q));
+            sheet({
+                iconName: blank.length ? 'alert' : 'send', tone: blank.length ? 'accent' : undefined,
+                title: blank.length ? `${blank.length} question${blank.length === 1 ? '' : 's'} not answered` : 'Submit your answers?',
+                subtitle: (blank.length ? `Unanswered: ${blank.slice(0, 8).map(q => q.label).join(', ')}${blank.length > 8 ? '…' : ''}. ` : '') + "You can't change your answers after submitting.",
+                actions: [{ label: blank.length ? 'Submit anyway' : 'Submit', cls: 'btn-primary', onClick: (c) => { c(); send(false); } }, { label: blank.length ? 'Go back and answer' : 'Not yet', cls: 'btn-ghost', onClick: (c) => { c(); if (blank[0]) { const el = view.querySelector(`[data-qa="${CSS.escape(blank[0].label)}"]`); el && el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } } }]
+            });
+        }
+        async function send(auto) {
+            if (SENDING) return; SENDING = true;
+            clearInterval(TICK_T); clearTimeout(SAVE_T);
+            const head = view.querySelector('.page-head').outerHTML;
+            view.innerHTML = head + `<div class="card marking reveal"><div class="robot"><span class="orb"></span><span class="core">${icon('checkCircle')}</span></div><h2 style="margin:0">Marking your answers…</h2><p class="small muted" style="margin:6px 0 0">Just a second ⚡</p></div>`;
+            reveal(view);
+            try {
+                const r = await api('/api/hw-student?action=submit', { method: 'POST', body: { submissionId: SUB_ID, answers: ANS } });
+                lsDel(); SENDING = false;
+                await new Promise(x => setTimeout(x, 650));
+                H = await api(`/api/hw-student?action=get&id=${H.assignment.id}`);
+                renderWebResult(head, true);
+                if (r.timeUp) toast('Time was up — the answers saved in time were submitted', 'info');
+            } catch (e) {
+                SENDING = false;
+                view.innerHTML = head + `<div class="card reveal in"><b>${icon('alert', 'sm')} ${esc(e.message)}</b><p class="small muted">Your answers are saved on this phone — try again.</p><button class="btn btn-primary" id="retry">${icon('refresh', 'sm')}Try again</button></div>`;
+                $('retry').addEventListener('click', () => send(auto));
+            }
+        }
+
+        // ---------- result (website) + AI Assistant ----------
+        const md = (t) => txt(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+        function renderWebResult(head, fresh = false) {
+            const s = H.submission, a = H.assignment, r = H.result;
+            clearInterval(clockTimer); clearInterval(TICK_T);
+            if (!s || s.status === 'uploading') {
+                view.innerHTML = head + `<div class="card reveal"><b>${icon('clock', 'sm')} ${esc(H.uploadWhy || 'This homework is closed.')}</b>${s ? '<p class="small muted" style="margin:6px 0 0">The answers you saved are being submitted for you — check back in a minute.</p>' : ''}</div>`;
+                reveal(view); if (s) api('/api/hw-student?action=list').catch(() => null); return;
+            }
+            const tab = params().get('tab') === 'assistant' ? 'assistant' : 'result';
+            view.innerHTML = head + `<div class="segmented tabs2 reveal" id="rTabs"><button data-t="result" class="${tab === 'result' ? 'active' : ''}">${icon('checkCircle', 'sm')}Result</button><button data-t="assistant" class="${tab === 'assistant' ? 'active' : ''}">${icon('bot', 'sm')}AI Assistant</button></div><div id="rBody"></div>`;
+            reveal(view);
+            $('rTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (!b) return; history.replaceState({}, '', url('homework.html', { id: a.id, ...(b.dataset.t === 'assistant' ? { tab: 'assistant' } : {}) })); $('rTabs').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b)); b.dataset.t === 'assistant' ? showAssistant() : showResultTab(false); });
+            if (tab === 'assistant') showAssistant(); else showResultTab(fresh);
+        }
+        function showResultTab(fresh) {
+            const s = H.submission, a = H.assignment, r = H.result;
+            clearInterval(clockTimer); stopThink();
+            const items = r.items || [], marked = items.filter(i => !i.pending), pend = items.filter(i => i.pending);
+            const wrong = marked.filter(i => i.verdict !== 'correct');
+            const score = r.score ?? 0, outOf = r.released ? a.totalScore : Math.round((a.totalScore - (r.pendingPoints || 0)) * 100) / 100;
+            const good = outOf ? score / outOf : 0;
+            const qCard = (i) => {
+                if (i.pending) return `<div class="q pending"><div class="qh"><b>⏳ Question ${esc(i.label)}</b><span class="pts">? / ${i.points}</span></div>${i.question ? `<div class="small muted" dir="auto">${txt(i.question)}</div>` : ''}
+                    <div class="row"><span>Your answer</span><span dir="auto">${i.yourAnswer ? txt(i.yourAnswer) : i.photo ? '📷 photo' : '<i class="muted">—</i>'}${i.yourCorrection ? ' — ' + txt(i.yourCorrection) : ''}</span></div><div class="why">✍️ Being checked — Miss Marwa will review it</div></div>`;
+                const mark = i.verdict === 'correct' ? '✅' : i.verdict === 'partial' ? '🟡' : '❌';
+                const optText = (l) => i.options && i.options.length && /^[a-f]$/.test(l) ? ` ${i.options['abcdef'.indexOf(l)] || ''}` : '';
+                return `<div class="q ${esc(i.verdict)}"><div class="qh"><b>${mark} Question ${esc(i.label)}</b><span class="pts">${i.earned} / ${i.points}</span></div>
+                    ${i.question ? `<div class="small muted" dir="auto">${txt(i.question)}</div>` : ''}
+                    <div class="row"><span>Your answer</span><span dir="auto">${i.yourAnswer ? (i.type === 'mcq' ? `(${esc(i.yourAnswer)})${txt(optText(i.yourAnswer))}` : i.type === 'tf' ? (i.yourAnswer === 'true' ? '✓ True' : '✗ False') : txt(i.yourAnswer)) : '<i class="muted">left blank</i>'}${i.yourCorrection ? ' — ' + txt(i.yourCorrection) : ''}</span></div>
+                    ${i.verdict !== 'correct' ? `<div class="row"><span>Right answer</span><span class="model" dir="auto">${txt(i.modelAnswer)}</span></div>` : ''}
+                    ${i.explanation || i.feedback ? `<div class="why" dir="auto">${i.explanation ? `💡 ${txt(i.explanation)}` : ''}${i.feedback && (i.verdict !== 'correct' || i.deferred) ? `${i.explanation ? '<br>' : ''}✍️ ${txt(i.feedback)}` : ''}</div>` : ''}</div>`;
+            };
+            $('rBody').innerHTML = `<div class="card reveal"><div class="res-head">${ring(score, outOf || a.totalScore, { label: r.released ? 'score' : 'so far' })}<div><h2>${good >= 0.85 ? 'Excellent work! 🌟' : good >= 0.5 ? 'Good effort 👏' : 'Keep going — you can do it 💪'}</h2>
+                    <p class="small muted" style="margin:0">${marked.filter(i => i.verdict === 'correct').length} of ${marked.length} ${pend.length ? 'marked questions' : 'questions'} right${s.late ? ' · submitted late' : ''}</p></div></div>
+                    ${pend.length ? `<div class="pending-note"><span>✍️</span><div><b>Your written answers (${r.pendingPoints} mark${r.pendingPoints === 1 ? '' : 's'}) are being checked</b><p class="small muted" style="margin:2px 0 0">Miss Marwa reviews them — you'll get a notification with your final score.</p><p class="small" dir="rtl" style="margin:4px 0 0">إجاباتك المكتوبة بتتراجع — هيوصلك إشعار بالدرجة النهائية.</p></div></div>` : ''}
+                    <div class="res-actions">${r.released ? `<button class="btn btn-soft" id="waSum">${icon('whatsapp', 'sm')}Send summary on WhatsApp</button>` : ''}<button class="btn btn-ghost" id="showReceipt">${icon('shield', 'sm')}Show receipt</button></div></div>
+                ${wrong.length ? `<button class="assist-teaser reveal" id="toAssist"><span class="bot">${icon('bot')}</span><span><b>مساعدك الذكي جاهز يشرحلك أخطاءك 🤖</b><p>Your AI Assistant explains every mistake — tap to open</p></span>${icon('chevronRight', 'sm')}</button>` : ''}
+                ${pend.length ? `<div class="sec-title">Being checked</div><div class="reveal">${pend.map(qCard).join('')}</div>` : ''}
+                <div class="sec-title">${wrong.length ? 'Questions to revise' : 'All your answers'}</div><div class="reveal">${(wrong.length ? wrong : marked).map(qCard).join('')}</div>
+                ${wrong.length && marked.length > wrong.length ? `<details class="reveal" style="margin-top:12px"><summary class="link" style="cursor:pointer">Show the ${marked.length - wrong.length} correct answers</summary><div style="margin-top:10px">${marked.filter(i => i.verdict === 'correct').map(qCard).join('')}</div></details>` : ''}
+                <div class="sec-title">Your receipt — show it at the door</div><div class="reveal">${receiptHTML()}</div>`;
+            reveal($('rBody')); animateRings($('rBody'));
+            tick(); clockTimer = setInterval(tick, 1000);
+            $('showReceipt').addEventListener('click', fullReceipt);
+            $('waSum') && $('waSum').addEventListener('click', waSummary);
+            $('toAssist') && $('toAssist').addEventListener('click', () => $('rTabs').querySelector('[data-t="assistant"]').click());
+            if (wrong.length && !['ready', 'seen', 'notified'].includes(s.assistStatus)) api('/api/hw-student?action=assist', { method: 'POST', body: { submissionId: s.id } }).catch(() => null);   // start the walkthrough now so it's ready
+            if (fresh && r.released && good >= 0.85) confetti();
+        }
+        let THINK_T = null, POLL_T = null;
+        const stopThink = () => { clearInterval(THINK_T); clearTimeout(POLL_T); };
+        const THINK = ['بيراجع إجاباتك… 🔍', 'بيدوّر على أسهل شرح ليك… 💡', 'بيجهز أمثلة من الدرس… 📚', 'ثواني ويكون جاهز… ✍️'];
+        function etaText(eta) {
+            if (!eta) return 'قريب جدًا';
+            if (eta.reason === 'limit') return eta.minutes >= 60 ? `حوالي ${Math.round(eta.minutes / 60)} ساعة (بعد الساعة 2 الصبح)` : `${eta.minutes} دقيقة`;
+            return eta.minutes <= 1 ? 'دقيقة' : `${eta.minutes} دقايق`;
+        }
+        async function showAssistant() {
+            stopThink(); clearInterval(clockTimer);
+            const s = H.submission, body = $('rBody');
+            body.innerHTML = `<div class="card think reveal"><div class="robot"><span class="orb"></span><span class="core">${icon('bot')}</span></div><b style="font-size:17px">مساعد مس مروة 🤖</b><div class="msg" id="thinkMsg" dir="rtl">${THINK[0]}</div><div class="dots" style="margin-top:10px"><span></span><span></span><span></span></div></div>`;
+            reveal(body);
+            let k = 0; THINK_T = setInterval(() => { const m = $('thinkMsg'); if (!m) return clearInterval(THINK_T); k = (k + 1) % THINK.length; m.style.opacity = 0; setTimeout(() => { m.textContent = THINK[k]; m.style.opacity = 1; }, 250); }, 2400);
+            const started = Date.now();
+            const poll = async (wait) => {
+                let r;
+                try { r = await api('/api/hw-student?action=assist', { method: 'POST', body: { submissionId: s.id, wait } }); }
+                catch (e) { r = { status: 'working' }; }
+                if (!$('thinkMsg')) return;            // tab changed
+                if (r.status === 'ready') { stopThink(); return renderAssist(r); }
+                if (r.status === 'queued' || Date.now() - started > 70000) { stopThink(); return renderQueued(r.eta); }
+                POLL_T = setTimeout(() => poll(false), 4000);
+            };
+            poll(true);
+        }
+        function renderQueued(eta) {
+            $('rBody').innerHTML = `<div class="card queued-card reveal"><div class="big">🤖💤</div>
+                <h2 style="margin:6px 0" dir="rtl">مساعدك الذكي عليه ضغط شوية</h2>
+                <p dir="rtl" style="margin:0 auto;max-width:420px">هيتم تصحيح أخطائك وإرسال رسالة لك في خلال <b>${esc(etaText(eta))}</b> 🔔</p>
+                <p class="small muted" style="margin:8px auto 0;max-width:420px">You can close this page — you'll get a notification when your AI Assistant is ready.</p>
+                <button class="btn btn-soft" style="margin-top:14px" id="aRetry">${icon('refresh', 'sm')}Check again</button></div>`;
+            reveal($('rBody'));
+            $('aRetry').addEventListener('click', showAssistant);
+        }
+        function renderAssist(r) {
+            const a = r.assist || {}, chat = r.chat || [];
+            const bubble = (html) => `<div class="bubble-ai"><span class="av">${icon('bot', 'sm')}</span><div class="tx" dir="auto">${html}</div></div>`;
+            $('rBody').innerHTML = `<div class="ai-wrap reveal" id="aiWrap">
+                ${a.greeting ? bubble(md(a.greeting)) : ''}
+                ${(a.items || []).map(x => bubble(`<span class="lab">${esc(x.label)}</span><br>${md(x.text)}`)).join('')}
+                ${a.closing ? bubble(md(a.closing)) : ''}
+                ${chat.map(m => m.role === 'user' ? `<div class="bubble-me"><div class="tx" dir="auto">${txt(m.text)}</div></div>` : bubble(md(m.text))).join('')}
+                <div id="chatEnd"></div></div>
+                <div class="chat-in reveal"><textarea id="chatBox" dir="auto" rows="1" maxlength="500" placeholder="اسألني أي سؤال… / Ask me" ${r.chatLeft === 0 ? 'disabled' : ''}></textarea><button class="btn btn-primary" id="chatSend" aria-label="Send" ${r.chatLeft === 0 ? 'disabled' : ''}>${icon('send', 'sm')}</button></div>
+                <p class="xs muted" style="margin:0" id="chatLeft">${r.chatLeft === 0 ? 'You used all your questions for this homework — ask Miss Marwa in “Ask Miss Marwa”.' : `${r.chatLeft ?? 10} question${r.chatLeft === 1 ? '' : 's'} left for this homework`}</p>
+                <a class="btn btn-ghost btn-block" style="margin-top:12px" href="${url('questions.html', { new: 1, unit: H.assignment.unit, lesson: H.assignment.lesson })}">${icon('help', 'sm')}Ask Miss Marwa</a>`;
+            reveal($('rBody'));
+            const box = $('chatBox');
+            box.addEventListener('input', () => { box.style.height = 'auto'; box.style.height = Math.min(140, box.scrollHeight) + 'px'; });
+            box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); askChat(); } });
+            $('chatSend').addEventListener('click', askChat);
+        }
+        async function askChat() {
+            const box = $('chatBox'), text = box.value.trim(); if (text.length < 2) return;
+            const end = $('chatEnd');
+            end.insertAdjacentHTML('beforebegin', `<div class="bubble-me"><div class="tx" dir="auto">${txt(text)}</div></div><div class="bubble-ai" id="typing"><span class="av">${icon('bot', 'sm')}</span><div class="tx"><span class="dots"><span></span><span></span><span></span></span></div></div>`);
+            box.value = ''; box.style.height = ''; box.disabled = true; $('chatSend').disabled = true;
+            $('typing').scrollIntoView({ block: 'center', behavior: 'smooth' });
+            try {
+                const r = await api('/api/hw-student?action=chat', { method: 'POST', body: { submissionId: H.submission.id, text } });
+                $('typing').outerHTML = `<div class="bubble-ai"><span class="av">${icon('bot', 'sm')}</span><div class="tx" dir="auto">${md(r.reply)}</div></div>`;
+                $('chatLeft').textContent = r.left ? `${r.left} question${r.left === 1 ? '' : 's'} left for this homework` : 'You used all your questions for this homework — ask Miss Marwa in “Ask Miss Marwa”.';
+                if (r.left) { box.disabled = false; $('chatSend').disabled = false; box.focus(); }
+            } catch (e) {
+                $('typing').outerHTML = `<div class="bubble-ai"><span class="av">${icon('bot', 'sm')}</span><div class="tx" dir="auto">${esc(e.message)}</div></div>`;
+                if (!(e.data && e.data.code === 'CHAT_LIMIT')) { box.disabled = false; $('chatSend').disabled = false; box.value = text; }
+            }
+        }
+
         // ================= result + receipt =================
         let clockTimer = null;
         function receiptHTML() {
@@ -392,7 +754,7 @@
         }
 
         function route() {
-            clearInterval(clockTimer);
+            clearInterval(clockTimer); clearInterval(TICK_T); if (typeof stopThink === 'function') stopThink();
             const id = params().get('id');
             if (id) showOne(id); else showList();
             window.scrollTo(0, 0);

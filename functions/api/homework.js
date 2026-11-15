@@ -15,7 +15,7 @@
 import { requireStaff, ensureAppSchema, auditStmt, can } from './admin-auth.js';
 import { r2, mediaInfo, mediaResponse, deleteMedia } from './media-store.js';
 import { runAI, parseJsonLoose, solvePrompt, verifyPrompt, textModel, aiReady, usageToday, quotaHitToday, visionModel, VISION_MODELS, DAILY_FREE_NEURONS, AiQuotaError, AiUnavailableError } from './ai-engine.js';
-import { gradeStep, processQueue, resultOf, weaknessReport, releaseMode, RELEASE_KEY, loadKey, purgeHomeworkMedia, pushToStudent } from './hw-grader.js';
+import { gradeStep, processQueue, resultOf, weaknessReport, releaseMode, RELEASE_KEY, loadKey, purgeHomeworkMedia, pushToStudent, ensureAssist } from './hw-grader.js';
 
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
 const TYPES = ['mcq', 'tf', 'short', 'essay'];
@@ -120,7 +120,11 @@ function cleanAssignment(d) {
     if (!(total > 0) || total > 1000) errors.push('Total score must be more than 0');
     let source = null;
     if (d.source && typeof d.source === 'object') source = JSON.stringify({ kind: d.source.kind === 'r2' ? 'r2' : 'upload', key: str(d.source.key, 300), name: str(d.source.name, 200), pages: (Array.isArray(d.source.pages) ? d.source.pages : []).map(Number).filter(n => n > 0).slice(0, 60) });
-    return { grade, unit, lesson, title, instructions: str(d.instructions, 1000), deadline, closesAt, total: total > 0 ? total : 0, source, errors };
+    const answerMode = d.answerMode === 'photo' ? 'photo' : 'web';
+    const dur = d.durationMin === null || d.durationMin === '' || d.durationMin === undefined ? null : parseInt(d.durationMin, 10);
+    if (dur !== null && !(dur >= 5 && dur <= 1440)) errors.push('Time limit must be between 5 minutes and 24 hours (or no limit)');
+    return { grade, unit, lesson, title, instructions: str(d.instructions, 1000), deadline, closesAt, total: total > 0 ? total : 0, source, errors,
+        answerMode, allowPhoto: answerMode === 'web' && !!d.allowPhoto ? 1 : 0, durationMin: answerMode === 'web' && dur >= 5 && dur <= 1440 ? dur : null };
 }
 
 // ---------- Push to the grade (OneSignal tag "grade", set by the student portal) ----------
@@ -227,7 +231,8 @@ const rowOut = (a, extra = {}) => ({
     id: a.id, grade: a.grade, unit: a.unit, lesson: a.lesson, title: a.title, instructions: a.instructions || '',
     deadline: a.deadline, closesAt: a.closes_at, totalScore: a.total_score, status: a.status, state: stateOf(a),
     createdBy: a.created_by, updatedBy: a.updated_by, createdAt: a.created_at, updatedAt: a.updated_at,
-    publishedAt: a.published_at, closedAt: a.closed_at, pushSentAt: a.push_sent_at, source: (() => { try { return a.source ? JSON.parse(a.source) : null; } catch (e) { return null; } })(), ...extra
+    publishedAt: a.published_at, closedAt: a.closed_at, pushSentAt: a.push_sent_at,
+    answerMode: (a.answer_mode || 'photo') === 'web' ? 'web' : 'photo', allowPhoto: !!a.allow_photo, durationMin: a.duration_min || null, source: (() => { try { return a.source ? JSON.parse(a.source) : null; } catch (e) { return null; } })(), ...extra
 });
 const qOut = (q) => {
     let extra = {}; try { extra = JSON.parse(q.extra || '{}'); } catch (e) { }
@@ -427,7 +432,8 @@ export async function onRequest(context) {
             return json({
                 assignment: rowOut(asg),
                 submissions: (results || []).filter(r => r.status !== 'uploading').map(r => ({ id: r.id, ...who(r), status: r.status, score: r.final_score, autoScore: r.auto_score, late: !!r.late, unreadable: !!r.unreadable,
-                    pages: r.pages, submittedAt: r.submitted_at, gradedAt: r.graded_at, releasedAt: r.released_at, releasedBy: r.released_by, receipt: r.receipt_code, error: r.ai_error })),
+                    pages: r.pages, submittedAt: r.submitted_at, gradedAt: r.graded_at, releasedAt: r.released_at, releasedBy: r.released_by, receipt: r.receipt_code, error: r.ai_error,
+                    mode: r.mode === 'web' ? 'web' : 'photo', objectiveScore: r.objective_score, writtenStatus: r.written_status || null })),
                 missing: (missing || []).map(who)
             });
         }
@@ -435,10 +441,10 @@ export async function onRequest(context) {
             const sid = parseInt(url.searchParams.get('id'), 10);
             const r = sid ? await resultOf(db, sid) : null;
             if (!r) return bad('Submission not found', 404);
-            const { results: pages } = await db.prepare('SELECT page_no, media_id, status, read_json FROM hw_pages WHERE submission_id = ? ORDER BY page_no').bind(sid).all();
+            const { results: pages } = await db.prepare('SELECT page_no, media_id, status, read_json, labels FROM hw_pages WHERE submission_id = ? ORDER BY page_no').bind(sid).all();
             const st = await db.prepare('SELECT first_name, last_name, gender, branch, phone, parent_phone FROM students WHERE student_id = ?').bind(r.studentId).first() || {};
             return json({ ...r, student: { id: r.studentId, firstName: st.first_name, lastName: st.last_name, gender: st.gender, branch: st.branch, phone: st.phone, parentPhone: st.parent_phone },
-                pageList: (pages || []).map(p => { let j = {}; try { j = JSON.parse(p.read_json || '{}'); } catch (e) { } return { pageNo: p.page_no, mediaId: p.media_id, status: p.status, readable: j.page_readable !== false, notes: j.notes || '' }; }) });
+                pageList: (pages || []).map(p => { let j = {}; try { j = JSON.parse(p.read_json || '{}'); } catch (e) { } return { pageNo: p.page_no, mediaId: p.media_id, status: p.status, readable: j.page_readable !== false, notes: j.notes || '', labels: String(p.labels || '').split(',').filter(Boolean) }; }) });
         }
         if (action === 'review') {     // staff override marks and/or release the result to the student
             const sid = parseInt(data.id, 10);
@@ -454,6 +460,10 @@ export async function onRequest(context) {
                 stmts.push(db.prepare(`INSERT INTO hw_answers (submission_id, question_id, verdict, points, ai_points, override_points) VALUES (?, ?, 'blank', 0, 0, ?)
                     ON CONFLICT(submission_id, question_id) DO UPDATE SET override_points = excluded.override_points`).bind(sid, q.id, val));
             }
+            for (const [qid, v] of Object.entries(data.feedbacks || {})) {      // staff edit the AI's note to the student
+                const q = byId[qid]; if (!q) continue;
+                stmts.push(db.prepare('UPDATE hw_answers SET feedback = ? WHERE submission_id = ? AND question_id = ?').bind(str(v, 400) || null, sid, q.id));
+            }
             if (stmts.length) await db.batch(stmts);
             const tot = await db.prepare('SELECT COALESCE(SUM(COALESCE(override_points, points)), 0) AS t FROM hw_answers WHERE submission_id = ?').bind(sid).first();
             const final = Math.round((tot ? tot.t : 0) * 100) / 100;
@@ -461,10 +471,15 @@ export async function onRequest(context) {
             await db.batch([
                 db.prepare(`UPDATE hw_submissions SET final_score = ?, ${release ? `status = 'graded', released_at = COALESCE(released_at, CURRENT_TIMESTAMP), released_by = ?,` : ''} updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
                     .bind(...(release ? [final, staff.name, sid] : [final, sid])),
-                auditStmt(db, request, staff, release ? 'homework.release' : 'homework.override', String(sid), { overrides: data.overrides || {}, final, title: sub.title, student: sub.student_id })
+                auditStmt(db, request, staff, release ? 'homework.release' : 'homework.override', String(sid), { overrides: data.overrides || {}, feedbacks: Object.keys(data.feedbacks || {}).length || undefined, final, title: sub.title, student: sub.student_id }),
+                ...(release ? [db.prepare(`UPDATE hw_submissions SET report = NULL, written_status = CASE WHEN mode = 'web' AND written_status IS NOT NULL AND written_status != 'none' THEN 'done' ELSE written_status END WHERE id = ?`).bind(sid)] : [])
             ]);
             if (release && !sub.released_at) {
-                const p = pushToStudent(env, url.origin, sub.student_id, 'نتيجة الواجب جاهزة ✅', `${sub.title} — افتح التطبيق وشوف درجتك`, '/homework.html?id=' + sub.assignment_id);
+                const web = sub.mode === 'web';
+                const p = (async () => {
+                    await pushToStudent(env, url.origin, sub.student_id, web ? 'تصحيح الأسئلة المقالية جاهز ✅' : 'نتيجة الواجب جاهزة ✅', web ? `${sub.title} — مس مروة راجعت إجاباتك، افتح وشوف درجتك النهائية` : `${sub.title} — افتح التطبيق وشوف درجتك`, '/homework.html?id=' + sub.assignment_id);
+                    if (web) await ensureAssist(env, db, sid, { force: true, silent: true }).catch(() => null);   // the assistant now also covers the written answers
+                })();
                 if (context.waitUntil) context.waitUntil(p);
             }
             return json({ ok: true, final, released: release || !!sub.released_at });
@@ -473,6 +488,15 @@ export async function onRequest(context) {
             const sid = parseInt(data.id, 10);
             const sub = sid ? await db.prepare('SELECT * FROM hw_submissions WHERE id = ?').bind(sid).first() : null;
             if (!sub) return bad('Submission not found', 404);
+            if (sub.mode === 'web') {      // only the written answers are marked again — code-marked answers never change
+                await db.batch([
+                    db.prepare(`UPDATE hw_pages SET status = 'new', read_json = NULL WHERE submission_id = ?`).bind(sid),
+                    db.prepare(`UPDATE hw_answers SET verdict = 'pending', override_points = NULL, feedback = NULL, evidence = NULL WHERE submission_id = ? AND deferred = 1`).bind(sid),
+                    db.prepare(`UPDATE hw_submissions SET status = 'grading', written_status = 'queued', released_at = NULL, released_by = NULL, report = NULL, ai_error = NULL, tries = 0, lock_until = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(sid),
+                    auditStmt(db, request, staff, 'homework.regrade', String(sid), { student: sub.student_id, previous: sub.final_score, written: true })
+                ]);
+                return json({ ok: true });
+            }
             await db.batch([
                 db.prepare(`UPDATE hw_pages SET status = 'new', read_json = NULL WHERE submission_id = ?`).bind(sid),
                 db.prepare(`DELETE FROM hw_answers WHERE submission_id = ?`).bind(sid),
@@ -514,14 +538,14 @@ export async function onRequest(context) {
                 if (a.status !== 'draft' && c.grade !== a.grade) return bad("The grade can't change after publishing", 409);
                 await db.batch([
                     db.prepare(`UPDATE hw_assignments SET grade = ?, unit = ?, lesson = ?, title = ?, instructions = ?, deadline = ?, closes_at = ?, total_score = ?,
-                        source = COALESCE(?, source), updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(c.grade, c.unit, c.lesson, c.title, c.instructions || null, c.deadline, c.closesAt, c.total, c.source, staff.name, a.id),
+                        source = COALESCE(?, source), answer_mode = ?, allow_photo = ?, duration_min = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(c.grade, c.unit, c.lesson, c.title, c.instructions || null, c.deadline, c.closesAt, c.total, c.source, c.answerMode, c.allowPhoto, c.durationMin, staff.name, a.id),
                     ...questionStmts(db, a.id, key.questions),
                     auditStmt(db, request, staff, 'homework.save', String(a.id), { title: c.title, grade: c.grade, questions: key.questions.length, status: a.status })
                 ]);
                 return json({ ok: true, id: a.id, sum: key.sum });
             }
-            const r = await db.prepare(`INSERT INTO hw_assignments (grade, unit, lesson, title, instructions, deadline, closes_at, total_score, status, created_by, updated_by, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`).bind(c.grade, c.unit, c.lesson, c.title, c.instructions || null, c.deadline, c.closesAt, c.total, staff.name, staff.name, c.source).run();
+            const r = await db.prepare(`INSERT INTO hw_assignments (grade, unit, lesson, title, instructions, deadline, closes_at, total_score, status, created_by, updated_by, source, answer_mode, allow_photo, duration_min)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)`).bind(c.grade, c.unit, c.lesson, c.title, c.instructions || null, c.deadline, c.closesAt, c.total, staff.name, staff.name, c.source, c.answerMode, c.allowPhoto, c.durationMin).run();
             const newId = Number(r.meta.last_row_id);
             await db.batch([...questionStmts(db, newId, key.questions), auditStmt(db, request, staff, 'homework.create', String(newId), { title: c.title, grade: c.grade })]);
             return json({ ok: true, id: newId, sum: key.sum, created: true });

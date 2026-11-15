@@ -7,7 +7,8 @@
 // =============================================================
 import { requireStudent, ensureAppSchema } from './admin-auth.js';
 import { putMedia, mediaInfo, mediaResponse, deleteMedia } from './media-store.js';
-import { gradeStep, processQueue, resultOf, weaknessReport, releaseMode, purgeHomeworkMedia } from './hw-grader.js';
+import { gradeStep, markWritten, processQueue, resultOf, weaknessReport, releaseMode, purgeHomeworkMedia, loadKey, submitWeb, isWeb, ensureAssist, assistEta, assistChat, chatOf, CHAT_LIMIT } from './hw-grader.js';
+import { AiQuotaError, AiUnavailableError } from './ai-engine.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const bad = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
@@ -20,20 +21,41 @@ function stateOf(a, now = Date.now()) {
     if (a.status === 'published' && a.closes_at && ms(a.closes_at) <= now) return 'closed';
     return a.status;
 }
+// {label: {answer, correction}} — trimmed, size-limited
+function cleanAnswers(v) {
+    const out = {};
+    if (!v || typeof v !== 'object') return out;
+    for (const [k, x] of Object.entries(v).slice(0, 80)) {
+        const label = String(k).trim().slice(0, 12); if (!label || !x || typeof x !== 'object') continue;
+        const answer = String(x.answer ?? '').replace(/\r/g, '').slice(0, 3000), correction = String(x.correction ?? '').replace(/\r/g, '').slice(0, 300);
+        if (answer.trim() || correction.trim()) out[label] = { answer, correction };
+    }
+    return out;
+}
 function receiptCode() {
     const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; const b = crypto.getRandomValues(new Uint8Array(6));
     return [...b].map(x => abc[x % abc.length]).join('');
 }
-const asgOut = (a) => ({ id: a.id, title: a.title, unit: a.unit, lesson: a.lesson, instructions: a.instructions || '', deadline: a.deadline, closesAt: a.closes_at, totalScore: a.total_score, state: stateOf(a) });
+const asgOut = (a) => ({ id: a.id, title: a.title, unit: a.unit, lesson: a.lesson, instructions: a.instructions || '', deadline: a.deadline, closesAt: a.closes_at, totalScore: a.total_score, state: stateOf(a),
+    answerMode: isWeb(a) ? 'web' : 'photo', allowPhoto: !!a.allow_photo, durationMin: a.duration_min || null });
+const GRACE_MS = 2 * 60 * 1000;
+// the question sheet a student sees — never the answers
+const paperOf = (key) => key.map(q => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, options: q.type === 'mcq' ? (q.options || []) : [] }));
 function subOut(s) {
     if (!s) return null;
     return { id: s.id, status: s.status, released: !!s.released_at, score: s.released_at ? s.final_score : null, late: !!s.late, pages: s.pages, unreadable: !!s.unreadable,
-        reuploads: s.reuploads, receipt: s.status === 'uploading' ? null : s.receipt_code, submittedAt: s.submitted_at, gradedAt: s.graded_at, releasedAt: s.released_at };
+        reuploads: s.reuploads, receipt: s.status === 'uploading' ? null : s.receipt_code, submittedAt: s.submitted_at, gradedAt: s.graded_at, releasedAt: s.released_at,
+        startedAt: s.started_at, endsAt: s.ends_at, assistStatus: s.assist_status || null, chatLeft: Math.max(0, CHAT_LIMIT - (s.chat_used || 0)) };
 }
 // can the student (re)upload right now?
 function canUpload(a, s, now = Date.now()) {
     const st = stateOf(a, now);
     if (st !== 'published') return { ok: false, why: 'This homework is closed' };
+    if (isWeb(a)) {
+        if (s && s.status !== 'uploading') return { ok: false, why: 'Already submitted' };
+        if (s && s.ends_at && ms(s.ends_at) + GRACE_MS < now) return { ok: false, why: 'Time is up' };
+        return { ok: true, late: ms(a.deadline) < now };
+    }
     if (!s || s.status === 'uploading') return { ok: true, late: ms(a.deadline) < now };
     if (s.unreadable && (s.reuploads || 0) < 1 && ms(a.deadline) > now && !s.released_at) return { ok: true, reupload: true, late: false };
     return { ok: false, why: 'Already submitted' };
@@ -78,9 +100,17 @@ export async function onRequest(context) {
         if (action === 'get') {
             const a = await loadA(aid); if (!a) return bad('Homework not found', 404);
             const s = await loadS(a.id);
-            const { results: qs } = await db.prepare('SELECT label, type FROM hw_questions WHERE assignment_id = ? ORDER BY ord').bind(a.id).all();
+            const key = await loadKey(db, a.id);
             const up = canUpload(a, s);
-            return json({ assignment: { ...asgOut(a), questions: (qs || []).length, labels: (qs || []).map(q => q.label) }, submission: subOut(s), canUpload: up.ok, uploadWhy: up.why || null, reupload: !!up.reupload, late: !!up.late,
+            const web = isWeb(a), answering = web && up.ok;
+            let draft = null, photos = [];
+            if (web && s && s.status === 'uploading') {
+                try { draft = s.draft ? JSON.parse(s.draft) : null; } catch (e) { draft = null; }
+                const { results: ph } = await db.prepare('SELECT id, media_id, labels FROM hw_pages WHERE submission_id = ? ORDER BY page_no').bind(s.id).all();
+                photos = (ph || []).map(p => ({ id: p.id, mediaId: p.media_id, labels: String(p.labels || '').split(',').filter(Boolean) }));
+            }
+            return json({ assignment: { ...asgOut(a), questions: key.length, labels: key.map(q => q.label), types: key.map(q => q.type) }, submission: subOut(s), canUpload: up.ok, uploadWhy: up.why || null, reupload: !!up.reupload, late: !!up.late,
+                paper: answering ? paperOf(key) : undefined, draft, photos, now: new Date().toISOString(),
                 result: s && s.status !== 'uploading' ? await resultOf(db, s.id, { forStudent: true }) : null, mode: await releaseMode(db) });
         }
 
@@ -96,6 +126,15 @@ export async function onRequest(context) {
             let s = await loadS(a.id);
             const up = canUpload(a, s);
             if (!up.ok) return bad(up.why, 409);
+            if (isWeb(a)) {          // website answering: start the clock once, never wipe saved answers
+                if (!s) {
+                    const ends = a.duration_min ? Math.min(Date.now() + a.duration_min * 60000, a.closes_at ? ms(a.closes_at) : Infinity) : null;
+                    await db.prepare(`INSERT OR IGNORE INTO hw_submissions (assignment_id, student_id, status, mode, started_at, ends_at) VALUES (?, ?, 'uploading', 'web', CURRENT_TIMESTAMP, ?)`)
+                        .bind(a.id, sid, ends ? new Date(ends).toISOString().slice(0, 19).replace('T', ' ') : null).run();
+                    s = await loadS(a.id);
+                }
+                return json({ submissionId: s.id, startedAt: s.started_at, endsAt: s.ends_at, late: !!up.late, now: new Date().toISOString() });
+            }
             if (up.reupload) {        // flagged unreadable → one fresh upload before the deadline
                 const { results: old } = await db.prepare('SELECT media_id FROM hw_pages WHERE submission_id = ?').bind(s.id).all();
                 await db.batch([
@@ -122,6 +161,7 @@ export async function onRequest(context) {
         const a = await loadA(s.assignment_id); if (!a) return bad('Homework not found', 404);
 
         if (action === 'page') {
+            if (isWeb(a)) return bad('Use the answer sheet for this homework', 400);
             if (s.status !== 'uploading') return bad('Already submitted', 409);
             const pageNo = parseInt(data.pageNo, 10);
             if (!(pageNo >= 1 && pageNo <= MAX_PAGES)) return bad(`At most ${MAX_PAGES} pages`, 400);
@@ -136,6 +176,79 @@ export async function onRequest(context) {
             if (old) { await db.prepare('UPDATE hw_pages SET media_id = ?, status = ?, read_json = NULL WHERE id = ?').bind(saved.id, 'new', old.id).run(); if (old.media_id) await deleteMedia(env, db, [old.media_id]); }
             else await db.prepare('INSERT INTO hw_pages (submission_id, page_no, media_id) VALUES (?, ?, ?)').bind(s.id, pageNo, saved.id).run();
             return json({ ok: true, pageNo, mediaId: saved.id, size: saved.size });
+        }
+
+        if (action === 'save') {                // website answers auto-save (draft)
+            if (!isWeb(a)) return bad('Not available for this homework', 400);
+            if (s.status !== 'uploading') return bad('Already submitted', 409);
+            if (s.ends_at && ms(s.ends_at) + GRACE_MS < Date.now()) return bad('Time is up', 409, { code: 'TIME_UP' });
+            const body = JSON.stringify(cleanAnswers(data.answers));
+            if (body.length > 60000) return bad('Your answers are too long', 413);
+            await db.prepare('UPDATE hw_submissions SET draft = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(body, s.id).run();
+            return json({ ok: true, savedAt: new Date().toISOString() });
+        }
+        if (action === 'photo') {               // a notebook photo for written question(s) — only when staff allowed it
+            if (!isWeb(a) || !a.allow_photo) return bad('Photos are not allowed for this homework', 400);
+            if (s.status !== 'uploading') return bad('Already submitted', 409);
+            const key = await loadKey(db, a.id);
+            const allowed = new Set(key.filter(q => ['essay', 'short'].includes(q.type)).map(q => q.label));
+            const labels = (Array.isArray(data.labels) ? data.labels : []).map(x => String(x).trim()).filter(x => allowed.has(x)).slice(0, 20);
+            if (!labels.length) return bad('Choose the question this photo answers', 400);
+            const n = await db.prepare('SELECT COUNT(*) AS n, COALESCE(MAX(page_no), 0) AS mx FROM hw_pages WHERE submission_id = ?').bind(s.id).first();
+            if (n.n >= 10) return bad('At most 10 photos', 400);
+            const m = data.image || {};
+            const mime = String(m.mime || '').split(';')[0].toLowerCase();
+            if (!IMG.includes(mime)) return bad('Photos must be JPEG / PNG', 400);
+            const b64 = String(m.data || '');
+            if (!b64 || Math.floor(b64.length * 3 / 4) > MAX_PAGE_BYTES) return bad('This photo is too large — retake it a little further away', 413);
+            const saved = await putMedia(env, db, { kind: 'hw', studentId: sid, ownerId: s.id, mime, data: b64 });
+            const r = await db.prepare('INSERT INTO hw_pages (submission_id, page_no, media_id, labels) VALUES (?, ?, ?, ?)').bind(s.id, n.mx + 1, saved.id, labels.join(',')).run();
+            return json({ ok: true, id: Number(r.meta.last_row_id), mediaId: saved.id, labels });
+        }
+        if (action === 'photo-del') {
+            if (s.status !== 'uploading') return bad('Already submitted', 409);
+            const p = await db.prepare('SELECT id, media_id FROM hw_pages WHERE id = ? AND submission_id = ?').bind(parseInt(data.photoId, 10) || 0, s.id).first();
+            if (!p) return bad('Photo not found', 404);
+            await db.prepare('DELETE FROM hw_pages WHERE id = ?').bind(p.id).run();
+            if (p.media_id) await deleteMedia(env, db, [p.media_id]);
+            return json({ ok: true });
+        }
+        if (action === 'submit' && isWeb(a)) {
+            if (s.status !== 'uploading') return bad('Already submitted', 409);
+            if (stateOf(a) !== 'published') return bad('This homework is closed', 409);
+            const timeUp = s.ends_at && ms(s.ends_at) + GRACE_MS < Date.now();
+            let answers = cleanAnswers(data.answers);
+            if (timeUp) { try { answers = JSON.parse(s.draft || '{}'); } catch (e) { answers = {}; } }   // too late → what was saved in time counts
+            const out = await submitWeb(env, db, s, a, answers, { auto: !!timeUp });
+            if (out.deferred && context.waitUntil) context.waitUntil(markWritten(env, db, s.id).catch(() => null));   // written answers → AI check in the background, then staff
+            return json({ ok: true, ...out, timeUp: !!timeUp, result: await resultOf(db, s.id, { forStudent: true }) });
+        }
+        if (action === 'assist') {             // AI Assistant walkthrough: starts it if needed; the page polls
+            if (s.status === 'uploading') return bad('Submit your homework first', 409);
+            const ready = async (assist) => {
+                await db.prepare(`UPDATE hw_submissions SET assist_status = 'seen' WHERE id = ? AND assist_status = 'ready'`).bind(s.id).run();
+                return json({ status: 'ready', assist, chat: await chatOf(db, s.id), chatLeft: Math.max(0, CHAT_LIMIT - (s.chat_used || 0)) });
+            };
+            if (['ready', 'seen', 'notified'].includes(s.assist_status) && s.assist) return ready(JSON.parse(s.assist));
+            const job = ensureAssist(env, db, s.id).catch(() => ({ status: 'queued' }));
+            if (context.waitUntil) context.waitUntil(job);       // keeps going if the student leaves the page
+            // the page is open → wait a little for a quick answer, then let it poll
+            const r = await Promise.race([job, new Promise(x => setTimeout(() => x({ status: 'working' }), data.wait ? 25000 : 1500))]);
+            if (r.status === 'ready') return ready(r.assist);
+            return json({ status: r.status === 'queued' ? 'queued' : 'working', eta: await assistEta(db) });
+        }
+        if (action === 'chat') {
+            const q = String(data.text || '').replace(/\r/g, '').trim().slice(0, 500);
+            if (q.length < 2) return bad('Type your question', 400);
+            try {
+                const r = await assistChat(env, db, s.id, q);
+                if (r.error) return bad(r.error, r.status || 400, { code: r.code });
+                return json(r);
+            } catch (e) {
+                if (e instanceof AiQuotaError) return bad('المساعد خلّص طاقته النهارده 😴 — جرّب تاني بعد الساعة 2 الصبح، أو اسأل مس مروة', 429, { code: 'AI_QUOTA' });
+                if (e instanceof AiUnavailableError) return bad('The AI Assistant is not available right now', 503);
+                return bad('مش قادر أرد دلوقتي — جرّب تاني كمان شوية 🙏', 502);
+            }
         }
 
         if (action === 'submit') {

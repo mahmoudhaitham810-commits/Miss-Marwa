@@ -221,12 +221,57 @@ Student wrote: "${String(it.student || '').slice(0, 800)}"`).join('\n\n')}
 Return ONLY JSON: {"results":[{"label":"…","ideas_found":[1,3],"evidence":"short quote from the student","feedback":"one short sentence for the student"}]}`;
 }
 
-export function weaknessPrompt({ title, missed, lang = 'ar' }) {
+export function weaknessPrompt({ title, missed, strong = [], lang = 'ar' }) {
     return `A student did homework "${title}". These are the questions they got wrong or partly wrong, with the right answers:
-${missed.map(m => `- ${m.label}: ${m.question || ''} | right answer: ${m.right} | student wrote: ${m.student || '(nothing)'}`).join('\n')}
-Diagnose the student's weak points: name 1–3 specific lesson concepts/skills they need to revise (not generic advice).
-Write in simple, warm ${lang === 'ar' ? 'Egyptian Arabic' : 'English'} for a parent and student.
-Return ONLY JSON: {"focus":["concept to revise — very short tip"],"summary":"one encouraging sentence"}`;
+${missed.map(m => `- ${m.label}: ${m.question || ''} | right answer: ${m.right} | student wrote: ${m.student || '(nothing)'}`).join('\n') || '(none)'}
+${strong.length ? `Questions they got fully right: ${strong.map(x => `${x.label} ${x.question || ''}`.trim()).join(' | ')}` : ''}
+Diagnose the student's weak points: name 1–3 specific lesson concepts/skills they need to revise (not generic advice). Also name 1–2 things they clearly did well.
+Write in simple, warm ${lang === 'ar' ? 'Egyptian Arabic' : 'English'} for a parent, keeping scientific terms in English.
+Return ONLY JSON: {"focus":["concept to revise — very short tip"],"strengths":["what they did well"],"summary":"one encouraging sentence"}`;
+}
+
+// ---------- AI Assistant (student) — Egyptian Arabic, science terms in English ----------
+const STYLE = `Write in warm, fun, encouraging Egyptian Arabic (عامية مصرية بسيطة) like a kind older sibling who loves science.
+Keep EVERY scientific term, unit, number, symbol and answer choice in ENGLISH exactly as given (e.g. "fourth energy level", "protons", "³₁H", "Each of neutron and proton") — never translate them.
+Use the given right answer and explanation as the truth. Never change the right answer and never invent facts.
+Short sentences. At most one emoji per paragraph.`;
+const genderNote = (female) => female ? 'The student is a girl — use feminine Arabic forms (إنتِ، اخترتِ، شاطرة).' : 'The student is a boy — use masculine Arabic forms (إنت، اخترت، شاطر).';
+
+export function assistPrompt({ name, female, title, items }) {
+    return `You are "مساعد مس مروة 🤖", the AI study helper of Miss Marwa's science classes (Egyptian preparatory stage).
+${STYLE}
+${genderNote(female)}
+The student ${name ? `"${name}" ` : ''}just finished the homework "${title}". Walk them through EACH mistake below:
+say what they answered, what the right answer is, and WHY (2–4 short sentences), then a tiny tip to remember it.
+Mistakes:
+${items.map(i => `[${i.label}] ${i.question || '(question in the booklet)'}${i.options && i.options.length ? `\nChoices: ${i.options.map((o, k) => `(${'abcdef'[k]}) ${o}`).join('  ')}` : ''}
+Student answered: ${i.student || '(left blank)'}
+Right answer: ${i.right}
+Explanation: ${i.explanation || '(none given — explain simply)'}${i.feedback ? `\nTeacher's note: ${i.feedback}` : ''}`).join('\n\n')}
+Return ONLY JSON: {"greeting":"one short warm opening line using their name","items":[{"label":"1.5","text":"…"}],"closing":"one short motivating line"}`;
+}
+
+export function chatPrompt({ name, female, title, mistakes, history, question }) {
+    return `You are "مساعد مس مروة 🤖", the AI study helper of Miss Marwa's science classes (Egyptian preparatory stage).
+${STYLE}
+${genderNote(female)}
+The student${name ? ` "${name}"` : ''} finished the homework "${title}" and is asking a follow-up question.
+Their mistakes in this homework (right answers are the truth):
+${mistakes.length ? mistakes.map(m => `[${m.label}] ${m.question || ''} — student: ${m.student || '(blank)'} — right: ${m.right}${m.explanation ? ` — why: ${m.explanation}` : ''}`).join('\n') : '(no mistakes — they got everything right)'}
+${history.length ? `Conversation so far:\n${history.map(h => `${h.role === 'user' ? 'Student' : 'You'}: ${h.text}`).join('\n')}` : ''}
+Student now asks: "${question}"
+Answer helpfully in at most 120 words. Only talk about science from this lesson / homework; if they ask about something else, gently bring them back. If you are not sure, tell them to ask Miss Marwa in "Ask Miss Marwa".
+Reply with the answer text only (no JSON).`;
+}
+
+// Handwritten notebook answers for the written questions only (photo option)
+export function writtenReadPrompt({ questions }) {
+    return `This photo shows a student's HANDWRITTEN answers in their notebook (it may also show part of the printed booklet).
+Copy EXACTLY what the student wrote for each question below — do not fix spelling, do not add anything, do not answer the questions yourself.
+Questions (the student may write the number like "3.1" or "3)" next to the answer):
+${questions.map(q => `[${q.label}] ${q.prompt || ''}`).join('\n')}
+Return ONLY JSON: {"answers":[{"label":"3.1","text":"the student's words","legible":true}],"page_readable":true}
+Use "legible": false when you cannot read the student's writing. Leave out questions you cannot find on this photo.`;
 }
 
 // Not a page — shared module. (Pages would otherwise expose it as /api/ai-engine.)
