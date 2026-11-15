@@ -980,7 +980,7 @@
             if (!$('thumbs').children.length || $('thumbs').children.length !== pages.length) await showThumbs();
             SV.running = true; SV.stop = false; SV.found = []; SV.neurons = 0; updateGo();
             $('solveProgress').hidden = false; $('solveLog').innerHTML = ''; $('solveBarIn').style.width = '2%';
-            let cont = null, failed = 0;
+            let cont = null, failed = 0; const checks = [];
             for (let k = 0; k < pages.length; k++) {
                 if (SV.stop) { logLine('Stopped.'); break; }
                 const n = pages[k], th = $('thumbs').querySelector(`[data-p="${n}"]`);
@@ -990,20 +990,22 @@
                     const img = SV.images ? (await HwKit.photoToJpeg(SV.images[n - 1])).dataUrl : (await HwKit.renderPage(SV.pdf, n)).dataUrl;
                     const r = await api('/api/homework?action=ai-solve-page', { body: { image: img, grade: F.grade, unit: F.unit, lesson: F.lesson, pageNo: n, continueFrom: cont } });
                     SV.neurons += r.neurons || 0;
-                    let qsx = r.questions || [];
-                    let vtxt = '';
-                    if (qsx.some(q => q.type === 'mcq' || q.type === 'tf')) {
-                        try {     // independent text-only second check; best effort
-                            const v = await api('/api/homework?action=ai-verify', { body: { questions: qsx } });
-                            qsx = v.questions || qsx; SV.neurons += v.neurons || 0;
-                            const dis = qsx.filter(q => q.verified === 'disagree' || q.verified === 'none').length;
-                            vtxt = dis ? ` · <span style="color:var(--warning);font-weight:700">second check disagrees on ${dis}</span>` : ' · second check agrees';
-                        } catch (e) { vtxt = ' · second check skipped'; }
-                    }
+                    const qsx = r.questions || [];
                     qsx.forEach(q => { q.page = n; });
                     SV.found.push(...qsx);
                     if (qsx.length) { const last = qsx[qsx.length - 1].label; const m = String(last).match(/^(\d+)\./); cont = { section: m ? m[1] : '', label: last }; }
-                    $('solveLog').lastElementChild.innerHTML = `${SV.images ? 'Photo' : 'Page'} ${n}: <b>${qsx.length}</b> question${qsx.length === 1 ? '' : 's'} solved <span class="muted">(${(r.ms / 1000).toFixed(1)} s · ~${Math.round(r.neurons || 0)} units)</span>${vtxt}${!qsx.length ? ' — nothing found on this page' : ''}`;
+                    const line = $('solveLog').lastElementChild;
+                    if (qsx.some(q => q.type === 'mcq' || q.type === 'tf')) {
+                        // independent text-only second check — runs while the next page is being read
+                        checks.push(api('/api/homework?action=ai-verify', { body: { questions: qsx } }).then(v => {
+                            SV.neurons += v.neurons || 0;
+                            const by = new Map((v.questions || []).map(q => [q.label, q]));
+                            SV.found = SV.found.map(q => q.page === n && by.has(q.label) ? { ...by.get(q.label), page: n } : q);
+                            const dis = (v.questions || []).filter(q => q.verified === 'disagree' || q.verified === 'none').length;
+                            line.insertAdjacentHTML('beforeend', dis ? ` · <span style="color:var(--warning);font-weight:700">second check disagrees on ${dis}</span>` : ' · second check agrees');
+                        }).catch(() => line.insertAdjacentHTML('beforeend', ' · second check skipped')));
+                    }
+                    $('solveLog').lastElementChild.innerHTML = `${SV.images ? 'Photo' : 'Page'} ${n}: <b>${qsx.length}</b> question${qsx.length === 1 ? '' : 's'} solved <span class="muted">(${(r.ms / 1000).toFixed(1)} s · ~${Math.round(r.neurons || 0)} units)</span>${!qsx.length ? ' — nothing found on this page' : ''}`;
                     th && th.classList.replace('work', 'done');
                 } catch (e) {
                     failed++; th && th.classList.replace('work', 'fail');
@@ -1012,6 +1014,7 @@
                 }
                 $('solveBarIn').style.width = `${Math.round((k + 1) / pages.length * 100)}%`;
             }
+            if (checks.length) { logLine('Finishing the second check…'); await Promise.all(checks); $('solveLog').lastElementChild.remove(); }
             SV.running = false; updateGo(); refreshUsage();
             const merged = mergeFound(SV.found);
             if (merged.length) {
