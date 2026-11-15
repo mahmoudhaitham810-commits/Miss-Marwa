@@ -66,6 +66,7 @@ export function cleanKey(input, { strict = false } = {}) {
         const out = { label, type, prompt, points: points > 0 ? points : 0, answer: '', extra: {} };
         out.extra.explanation = str(q.explanation, 600);
         if (q.aiCheck) { out.extra.aiCheck = true; if (strict) errors.push(`${name}: check the AI answer (tap "Looks right")`); }
+        if (q.aiCheck && q.aiNote) out.extra.aiNote = str(q.aiNote, 200);
         if (Number.isFinite(Number(q.confidence)) && q.confidence !== null && q.confidence !== '') out.extra.confidence = Math.round(Number(q.confidence) * 100) / 100;
         if (type === 'mcq') {
             const letter = str(q.answer, 1).toUpperCase();
@@ -145,24 +146,47 @@ function arDate(v) {
     catch (e) { return String(v); }
 }
 
-// AI "solve" reply → answer-key builder questions (flagged aiCheck so staff review them)
-function normaliseSolved(parsed) {
+// AI "solve" reply → answer-key builder questions (flagged aiCheck so staff review them).
+// The model is sometimes confidently wrong, so a few code checks lower its confidence and say why.
+const HEDGE = /\b(however|re-?evaluat|re-?check|misinterpret|actually|not sure|unsure|unclear|none of (the|these)|might be|maybe|i think|seems? to be|initial understanding)\b/i;
+const TOO_ADVANCED = /\b\d[spdf]\s?[¹²³⁴⁵⁶⁷⁸⁹⁰0-9]|\borbitals?\b|\bsub-?levels?\b|\bsubshells?\b/i;
+export function normaliseSolved(parsed) {
     const list = parsed && Array.isArray(parsed.questions) ? parsed.questions : Array.isArray(parsed) ? parsed : [];
     return list.slice(0, MAX_QUESTIONS).map((q, i) => {
         const t = String(q.type || '').toLowerCase();
-        const type = ['mcq', 'choose', 'choice'].includes(t) ? 'mcq' : ['tf', 'true_false', 'truefalse', 'true/false'].includes(t) ? 'tf' : ['essay', 'reason', 'explain'].includes(t) ? 'essay' : 'short';
+        const options = (Array.isArray(q.options) ? q.options : []).map(o => str(o, 200)).filter(Boolean).slice(0, 6);
+        let type = ['mcq', 'choose', 'choice'].includes(t) ? 'mcq' : ['tf', 'true_false', 'truefalse', 'true/false'].includes(t) ? 'tf' : ['essay', 'reason', 'explain'].includes(t) ? 'essay' : 'short';
+        const notes = [];
+        let cap = 1;
         let answer = String(q.answer ?? '').trim();
-        if (type === 'mcq') { const m = answer.toLowerCase().match(/[a-f]/); answer = m ? m[0].toUpperCase() : ''; }
+        const answerText = str(q.answer_text || q.answerText, 300);
+        if (type === 'short' && options.length >= 2) {      // choices on the page ⇒ it is a choose question
+            type = 'mcq'; notes.push('Has choices — changed to Choose'); cap = Math.min(cap, 0.4);
+            const hit = options.findIndex(o => o.trim().toLowerCase() === answer.toLowerCase() || (answerText && o.trim().toLowerCase() === answerText.toLowerCase()));
+            answer = hit >= 0 ? 'abcdef'[hit] : answer;
+        }
+        if (type === 'mcq') {
+            const m = answer.toLowerCase().replace(/[()\[\].\s]/g, '').match(/^[a-f]$/) || answer.toLowerCase().match(/\b([a-f])\b/);
+            answer = m ? (m[1] || m[0]).toUpperCase() : '';
+            if (!answer) { notes.push('No answer letter'); cap = Math.min(cap, 0.3); }
+            if (options.length && options.length !== 4) { notes.push(`Read ${options.length} choices, not 4 — check them`); cap = Math.min(cap, 0.5); }
+            if (answer && options.length && 'ABCDEF'.indexOf(answer) >= options.length) { notes.push('Answer letter is not one of the choices'); cap = Math.min(cap, 0.2); }
+        }
         if (type === 'tf') answer = /^(true|t|✓|yes|صح)/i.test(answer) ? 'true' : /^(false|f|✗|x|no|خطأ|خطا)/i.test(answer) ? 'false' : '';
+        if (type === 'short' && answer && answer.replace(/[^\p{L}\p{N}]/gu, '').length <= 1 && !/^\d$/.test(answer)) { notes.push('Very short answer — check it'); cap = Math.min(cap, 0.5); }
+        let explanation = str(q.explanation, 600);
+        if (explanation && HEDGE.test(explanation)) { notes.push('AI was unsure — write the explanation yourself'); explanation = ''; cap = Math.min(cap, 0.3); }
+        else if (explanation && TOO_ADVANCED.test(explanation)) { notes.push('Explanation too advanced (orbitals) — simplify it'); cap = Math.min(cap, 0.55); }
         const ideas = (Array.isArray(q.ideas) ? q.ideas : []).map(x => ({ text: str(typeof x === 'string' ? x : x && x.text, 200), points: 1 })).filter(x => x.text).slice(0, 6);
-        const conf = Number(q.confidence);
+        const raw = Number(q.confidence);
+        const conf = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw, cap)) : (cap < 1 ? cap : null);
         return {
             label: str(q.label, 12) || String(i + 1), type, prompt: str(q.question || q.prompt, 1000),
-            options: (Array.isArray(q.options) ? q.options : []).map(o => str(o, 200)).slice(0, 6),
-            answer: type === 'short' ? str(answer, 300) : answer, answerText: type === 'mcq' ? str(q.answer_text || q.answerText, 300) : '',
+            options: type === 'mcq' ? options : [],
+            answer: type === 'short' ? str(answer, 300) : answer, answerText: type === 'mcq' ? answerText : '',
             correction: type === 'tf' ? str(q.correction, 300) : '', alternatives: (Array.isArray(q.alternatives) ? q.alternatives : []).map(x => str(x, 200)).filter(Boolean).slice(0, 15),
             modelAnswer: type === 'essay' ? str(q.model_answer || q.modelAnswer, 2000) : '', ideas: type === 'essay' ? ideas : [],
-            explanation: str(q.explanation, 600), confidence: Number.isFinite(conf) ? Math.max(0, Math.min(1, conf)) : null, aiCheck: true
+            explanation, confidence: conf, aiNote: notes.join(' · '), aiCheck: true
         };
     });
 }
@@ -304,7 +328,7 @@ export async function onRequest(context) {
                 const out = await runAI(env, db, { image, prompt, model, maxTokens: task === 'solve' ? 4096 : 2048 });
                 const parsed = parseJsonLoose(out.text);
                 const res = { model: out.model, format: out.format, ms: out.ms, neurons: out.neurons, usage: out.usage, today: await usageToday(db), limit: DAILY_FREE_NEURONS, parsed };
-                if (action === 'ai-lab') return json({ ...res, task, raw: out.text, prompt });
+                if (action === 'ai-lab') return json({ ...res, task, raw: out.text, prompt, checked: task === 'solve' ? normaliseSolved(parsed) : undefined });
                 const questions = normaliseSolved(parsed);
                 return json({ ...res, questions, sections: (parsed && parsed.page_sections) || [], raw: questions.length ? undefined : String(out.text).slice(0, 3000) });
             } catch (e) {

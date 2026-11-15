@@ -467,7 +467,7 @@
         ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr'].forEach(id => $(id).addEventListener('input', () => touch()));
 
         // ---------- questions ----------
-        const fromServer = (q) => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, answer: q.answer || '', answerText: q.answerText || '', correction: q.correction || '', alternatives: q.alternatives || [], modelAnswer: q.modelAnswer || '', ideas: (q.ideas || []).map(it => ({ ...it })), options: q.options || [], explanation: q.explanation || '', aiCheck: !!q.aiCheck, confidence: q.confidence ?? null });
+        const fromServer = (q) => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, answer: q.answer || '', answerText: q.answerText || '', correction: q.correction || '', alternatives: q.alternatives || [], modelAnswer: q.modelAnswer || '', ideas: (q.ideas || []).map(it => ({ ...it })), options: q.options || [], explanation: q.explanation || '', aiCheck: !!q.aiCheck, aiNote: q.aiNote || '', confidence: q.confidence ?? null });
         function nextLabel() {
             const sec = Q.length ? String(Q[Q.length - 1].label).match(/^(\d+)\.(\d+)$/) : null;
             if (sec) return `${sec[1]}.${Number(sec[2]) + 1}`;
@@ -529,8 +529,8 @@
                     <button type="button" class="btn btn-ghost btn-sm" data-idea-even>${icon('refresh', 'sm')}Share marks evenly</button>`}
                     <span class="idea-sum ${okSum ? 'ok' : 'no'}" data-idea-sum>${okSum ? `✓ Ideas = ${s} marks` : `Ideas add up to ${s} of ${numv(q.points)}`}</span></div>`;
             }
-            const low = q.aiCheck && q.confidence !== null && q.confidence < 0.6;
-            const badge = q.aiCheck ? `<div class="ai-badge">${icon('sparkles', 'sm')}AI · check${low ? ' — not sure, please look' : ''}${locked ? '' : '<button type="button" data-approve>✓ Looks right</button>'}</div>` : '';
+            const low = q.aiCheck && ((q.confidence !== null && q.confidence < 0.6) || !!q.aiNote);
+            const badge = q.aiCheck ? `<div class="ai-badge">${icon('sparkles', 'sm')}AI · check${q.aiNote ? ' — ' + esc(q.aiNote) : low ? ' — not sure, please look' : ''}${locked ? '' : '<button type="button" data-approve>✓ Looks right</button>'}</div>` : '';
             const expl = `<div class="sub">Explanation for students <span style="font-weight:600">— shown with the result (why this answer is right)</span></div>
                 <textarea class="ta" data-f="explanation" dir="auto" rows="2" maxlength="600" placeholder="e.g. More resistance means less current, so the lamp gets dimmer." ${locked ? 'disabled' : ''}>${esc(q.explanation || '')}</textarea>`;
             return `<div class="hwq ${q.aiCheck ? 'ai' : ''} ${low ? 'low' : ''}" data-i="${i}">${badge}${head}${body}${expl}</div>`;

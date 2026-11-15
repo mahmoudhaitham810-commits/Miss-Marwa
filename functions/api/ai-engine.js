@@ -39,6 +39,7 @@ const isBusy = (e) => /3040|capacity temporarily exceeded/i.test(String(e && (e.
 const needsAgree = (e) => /agree|licen[cs]e|acceptable use/i.test(String(e && (e.message || e)));
 
 export function estimateNeurons(model, usage, promptChars = 0, outChars = 0) {
+    if (usage && Number.isFinite(Number(usage.neurons)) && Number(usage.neurons) > 0) return Math.round(Number(usage.neurons) * 10) / 10;   // Cloudflare reports it exactly
     const [ri, ro] = RATES[model] || RATES[DEFAULT_VISION_MODEL];
     const pin = usage && (usage.prompt_tokens || usage.input_tokens), pout = usage && (usage.completion_tokens || usage.output_tokens);
     const tin = Number.isFinite(pin) ? pin : Math.ceil(promptChars / 3.5) + 1600;   // ≈1.6k tokens per image when unknown
@@ -148,9 +149,16 @@ Read every question on the page and SOLVE it yourself.
 ${SECTION_RULES}
 ${continueFrom ? `The previous page ended in section ${continueFrom.section}, last question "${continueFrom.label}".` : ''}
 Types: "mcq" (choose the correct answer — answer = the letter a/b/c/d), "tf" (put ✓ or ✗ / true or false — answer = "true" or "false"; for false add the correct word in "correction"), "short" (complete / one word / table cell — answer = the missing word(s)), "essay" (give reason, what happens if, explain, compare — write a model answer and 1–4 key ideas).
+STRICT RULES:
+- If a question has lettered choices (a)(b)(c)(d) it is ALWAYS "mcq", even when the choices are symbols, numbers or pictures. Copy EVERY choice into "options" in order — normally exactly 4. Never drop a choice.
+- Atom / isotope symbols: keep BOTH numbers. Write them as mass number (top) and atomic number (bottom) like "¹³₆X", "³₁H", "⁴₂He". Never write only one number.
+- Diagrams: count what you see (electrons in each shell, protons, arrows …) before answering, and say the count in the explanation.
+- Work the answer out FIRST, then write the explanation. The explanation states the reason confidently in at most 30 words — never "however", "re-evaluating", "actually", "might be misinterpreted". If you are unsure, still give your best answer and put "confidence" below 0.5 instead of writing doubts.
+- Preparatory level only: use energy levels (K, L, M, N or 2, 8, 8, 1) — no orbitals like 4s, 3p, no sub-levels, no university terms.
+- "confidence" must be honest: 1.0 only when you are certain AND read every word and choice clearly.
 Return ONLY JSON, no prose:
 {"page_sections":[{"number":1,"title":"Choose the correct answer"}],
- "questions":[{"label":"1.1","type":"mcq","question":"…","options":["…","…","…","…"],"answer":"b","answer_text":"text of the correct option","alternatives":[],"model_answer":"","ideas":[],"explanation":"one or two simple sentences a 13-year-old understands, why this answer is right","confidence":0.0-1.0}]}
+ "questions":[{"label":"1.1","type":"mcq","question":"…","options":["…","…","…","…"],"answer":"b","answer_text":"text of the correct option","alternatives":[],"model_answer":"","ideas":[],"explanation":"one short sentence a 13-year-old understands, why this answer is right","confidence":0.0-1.0}]}
 For "essay": "model_answer" = full answer, "ideas" = [{"text":"short key idea"}].
 For "short": "alternatives" = other accepted wordings (synonyms, Arabic/English, symbols).
 Write questions, answers and explanations in the language of the booklet (usually English). Do not skip any question. If something is unreadable, still include it with "confidence" below 0.5.`;
