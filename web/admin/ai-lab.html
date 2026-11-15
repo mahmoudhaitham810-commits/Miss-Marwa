@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>AI Lab · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        .lab { display: grid; gap: 18px; grid-template-columns: 1fr; align-items: start; }
+        @media (min-width: 1100px) { .lab { grid-template-columns: 380px minmax(0, 1fr); } }
+        .meter { height: 10px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin: 8px 0 4px; }
+        .meter span { display: block; height: 100%; background: var(--primary); border-radius: inherit; }
+        .meter.hot span { background: var(--warning); }
+        pre.out { margin: 0; white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 14px; font-size: 12.5px; line-height: 1.5; max-height: 520px; overflow: auto; color: var(--text); }
+        .facts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+        .preview { width: 100%; border-radius: 14px; border: 1px solid var(--border); background: #fff; margin-top: 10px; }
+        .qrow { display: grid; grid-template-columns: 56px 70px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+        .qrow b { font-variant-numeric: tabular-nums; }
+        .tabs-out { margin-bottom: 10px; }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>AI Lab</h1><p>Try Workers AI on one page and see exactly what it returns — before students depend on it.</p></div>
+                <a class="btn btn-ghost" href="/admin/homework.html"><span data-icon="arrowLeft" style="display:contents"></span>Homework</a>
+            </div>
+            <div class="lab">
+                <div>
+                    <div class="card">
+                        <div class="card-head"><h2 class="card-title"><span data-icon="sparkles" style="display:contents"></span>Free AI today</h2></div>
+                        <div class="meter" id="meter"><span style="width:0"></span></div>
+                        <div class="small muted" id="meterText">…</div>
+                    </div>
+                    <div class="card" style="margin-top:18px">
+                        <div class="form-grid">
+                            <div class="field full"><label for="model">Model</label><select class="fin" id="model"></select></div>
+                            <div class="field full"><label>Test</label>
+                                <div class="segmented" id="taskSeg"><button data-value="solve">Solve a blank page</button><button data-value="read">Read a student page</button><button data-value="free">Own prompt</button></div></div>
+                            <div class="field full" id="hwField" hidden><label for="hwPick">Homework (its answer key tells the AI what to look for)</label><select class="fin" id="hwPick"></select></div>
+                            <div class="field full" id="promptField" hidden><label for="prompt">Prompt</label><textarea class="ta" id="prompt" rows="3">Read every question on this page and list them.</textarea></div>
+                            <div class="field full"><label>Page</label>
+                                <label class="btn btn-soft" style="cursor:pointer;justify-content:center"><span data-icon="download" style="display:contents"></span>Choose a PDF or photo<input type="file" id="file" accept="application/pdf,.pdf,image/*" hidden></label>
+                                <div class="small muted" id="fileName" style="margin-top:6px"></div></div>
+                            <div class="field full" id="pageField" hidden><label for="pageNo">Page number in the PDF</label><input class="fin" id="pageNo" type="number" min="1" value="1"></div>
+                        </div>
+                        <img class="preview" id="preview" alt="" hidden>
+                        <button class="btn btn-primary btn-block" id="run" disabled style="margin-top:14px"><span data-icon="sparkles" style="display:contents"></span>Run on Workers AI</button>
+                    </div>
+                </div>
+                <div class="card" id="outCard">
+                    <div class="card-head"><h2 class="card-title"><span data-icon="clipboard" style="display:contents"></span>Result</h2>
+                        <button class="btn btn-soft btn-sm" id="copy" disabled><span data-icon="copy2" style="display:contents"></span>Copy results</button></div>
+                    <div id="out"><p class="muted">Choose a page and run a test. You'll see the time, the free units it used, the JSON the AI returned and what the site understood from it.</p></div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/assets/hw-kit.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'homework', title: 'AI Lab' });
+        A.hydrate();
+        let task = 'solve', pdf = null, image = null, last = null;
+        async function usage() {
+            try {
+                const u = await api('/api/homework?action=usage');
+                const pct = Math.min(100, u.today / u.limit * 100);
+                $('meter').className = 'meter' + (pct > 75 ? ' hot' : ''); $('meter').firstElementChild.style.width = pct + '%';
+                $('meterText').textContent = u.ai ? `${u.today.toLocaleString()} of ${u.limit.toLocaleString()} free units used today${u.quotaHit ? ' — used up, resets at 2:00 am (Cairo)' : ''} · default model ${u.model.replace('@cf/', '')}` : 'Workers AI is not connected — add the AI binding in Cloudflare Pages.';
+                if (!$('model').options.length) $('model').innerHTML = u.models.map(m => `<option value="${esc(m)}" ${m === u.model ? 'selected' : ''}>${esc(m.replace('@cf/', ''))}</option>`).join('');
+            } catch (e) { $('meterText').textContent = e.message; }
+        }
+        A.segmented($('taskSeg'), task, async (v) => {
+            task = v; $('hwField').hidden = v !== 'read'; $('promptField').hidden = v !== 'free';
+            if (v === 'read' && !$('hwPick').options.length) {
+                const lists = await Promise.all(Object.keys(A.GRADES).map(g => api(`/api/homework?action=list&grade=${g}`).then(d => d.items).catch(() => [])));
+                const items = lists.flat().filter(h => h.questions);
+                $('hwPick').innerHTML = items.length ? items.map(h => `<option value="${h.id}">${esc(A.GRADES[h.grade])} · ${esc(h.title)} (${h.questions} q)</option>`).join('') : '<option value="">No homework with an answer key yet</option>';
+            }
+        });
+        $('file').addEventListener('change', async (e) => {
+            const f = e.target.files[0]; if (!f) return;
+            pdf = null; image = null; $('fileName').textContent = f.name;
+            if (HwKit.isPdf(f)) { pdf = await HwKit.openPdf(f); $('pageField').hidden = false; $('pageNo').max = pdf.numPages; $('fileName').textContent = `${f.name} — ${pdf.numPages} pages`; await showPage(); }
+            else { $('pageField').hidden = true; image = (await HwKit.photoToJpeg(f)).dataUrl; $('preview').src = image; $('preview').hidden = false; }
+            $('run').disabled = false; e.target.value = '';
+        });
+        async function showPage() { if (!pdf) return; const n = Math.max(1, Math.min(pdf.numPages, parseInt($('pageNo').value, 10) || 1)); image = (await HwKit.renderPage(pdf, n)).dataUrl; $('preview').src = image; $('preview').hidden = false; }
+        $('pageNo').addEventListener('change', showPage);
+        $('run').addEventListener('click', async () => {
+            if (!image) return;
+            $('run').disabled = true; $('run').classList.add('loading');
+            $('out').innerHTML = '<div class="skel" style="height:240px;border-radius:14px"></div>';
+            try {
+                const body = { image, task, model: $('model').value, prompt: $('prompt').value, assignmentId: $('hwPick').value || undefined };
+                const r = await api('/api/homework?action=ai-lab', { body });
+                last = { model: r.model, task: r.task, format: r.format, seconds: Math.round(r.ms / 100) / 10, units: r.neurons, usage: r.usage, parsed: r.parsed, raw: r.raw };
+                const qsx = r.parsed && Array.isArray(r.parsed.questions) ? r.parsed.questions : null;
+                const ans = r.parsed && Array.isArray(r.parsed.answers) ? r.parsed.answers : null;
+                $('out').innerHTML = `<div class="facts"><span class="pill primary">${esc(r.model.replace('@cf/', ''))}</span><span class="pill">${(r.ms / 1000).toFixed(1)} s</span><span class="pill">~${Math.round(r.neurons)} free units</span><span class="pill ${r.parsed ? 'success' : 'danger'}">${r.parsed ? 'JSON understood ✓' : 'No JSON found ✗'}</span><span class="pill muted">input: ${esc(r.format)}</span></div>
+                    ${qsx ? `<div class="tabs-out"><b>${qsx.length} questions</b>${qsx.map(q => `<div class="qrow"><b>${esc(q.label || '?')}</b><span class="pill muted">${esc(q.type || '')}</span><span dir="auto">${esc(q.question || '')}<br><b>→ ${esc(q.answer ?? '')}</b> ${esc(q.answer_text || '')}${q.explanation ? `<br><span class="muted">${esc(q.explanation)}</span>` : ''}${q.confidence != null ? ` <span class="pill ${q.confidence < 0.6 ? 'legacy' : ''}">${Math.round(q.confidence * 100)}%</span>` : ''}</span></div>`).join('')}</div>` : ''}
+                    ${ans ? `<div class="tabs-out"><b>${ans.length} answers read</b>${ans.map(a => `<div class="qrow"><b>${esc(a.label || '?')}</b><span class="pill ${a.legible === false ? 'danger' : 'muted'}">${a.legible === false ? 'unreadable' : 'read'}</span><span dir="auto">${esc(a.answer ?? '')}${a.correction ? ' — ' + esc(a.correction) : ''}</span></div>`).join('')}</div>` : ''}
+                    <details ${qsx || ans ? '' : 'open'}><summary class="small muted" style="cursor:pointer;margin:8px 0">Raw reply from the model</summary><pre class="out">${esc(r.raw || '')}</pre></details>`;
+                $('copy').disabled = false;
+            } catch (e) { $('out').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; }
+            finally { $('run').disabled = false; $('run').classList.remove('loading'); usage(); }
+        });
+        $('copy').addEventListener('click', async () => {
+            if (!last) return;
+            const text = JSON.stringify(last, null, 1);
+            try { await navigator.clipboard.writeText(text); Site.toast('Copied — paste it in the chat with Claude', 'success'); }
+            catch (e) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); Site.toast('Copied', 'success'); }
+        });
+        usage();
+    })();
+    </script>
+</body>
+</html>

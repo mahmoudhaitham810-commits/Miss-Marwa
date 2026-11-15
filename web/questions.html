@@ -163,6 +163,9 @@
                 }
             });
             App.reveal();
+            // opened from a homework result: unit + lesson already chosen
+            const pq = new URLSearchParams(location.search), pu = parseInt(pq.get('unit'), 10), pl = parseInt(pq.get('lesson'), 10);
+            if (pu >= 1 && pu <= K.UNITS) { $('unitPills').querySelector(`[data-u="${pu}"]`).click(); if (pl >= 1 && pl <= K.LESSONS) $('lessonPills').querySelector(`[data-l="${pl}"]`).click(); }
         }
         $('unitPills').addEventListener('click', (e) => {
             const b = e.target.closest('[data-u]'); if (!b) return;

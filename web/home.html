@@ -84,6 +84,7 @@
 
             <div class="dash">
                 <div class="col">
+                    <section class="card reveal hidden" id="hwCard"></section>
                     <section class="card exam-hero reveal" id="nextExam"><div class="skel" style="height:150px"></div></section>
                     <section class="card reveal hidden" id="continueCard"></section>
                     <section class="card reveal" id="newCard">
@@ -114,6 +115,24 @@
         const part = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
         document.getElementById('greet').innerHTML = `${icon(h >= 6 && h < 18 ? 'sun' : 'moon', 'sm')}${part}`;
         document.getElementById('helloName').innerHTML = `Hi, ${txt(session.firstName || 'there')}`;
+
+        // ---- Homework due ----
+        api('/api/hw-student?action=list').then(d => {
+            const toMs = (v) => new Date(String(v).replace(' ', 'T') + 'Z').getTime();
+            const due = d.items.filter(x => x.due).sort((a, b) => toMs(a.deadline) - toMs(b.deadline));
+            const ready = d.items.filter(x => x.submission && x.submission.released && toMs(x.submission.submittedAt) > Date.now() - 3 * 864e5);
+            const card = document.getElementById('hwCard');
+            if (!due.length && !ready.length) return;
+            const n = due[0];
+            card.innerHTML = due.length ? `
+                <div class="card-head"><h2 class="card-title">${icon('file')}Homework due</h2>${due.length > 1 ? `<span class="xs muted">${due.length} to do</span>` : ''}</div>
+                <strong style="display:block;font-size:17px">${txt(n.title)}</strong>
+                <p class="small muted" style="margin:4px 0 12px">Unit ${n.unit} · Lesson ${n.lesson} · ${toMs(n.deadline) < Date.now() ? 'deadline passed — still accepted (late)' : esc(App.timeLeft(new Date(toMs(n.deadline)).toISOString()))}</p>
+                <a class="btn btn-primary btn-block" href="${url('homework.html', { id: n.id })}">${icon('download', 'sm')}Upload my homework</a>`
+                : `<div class="card-head"><h2 class="card-title">${icon('checkCircle')}Homework marked</h2></div>
+                <a class="link" href="${url('homework.html', { id: ready[0].id })}">${txt(ready[0].title)}: ${ready[0].submission.score}/${ready[0].totalScore} — see your answers ${icon('arrowRight', 'sm')}</a>`;
+            card.classList.remove('hidden');
+        }).catch(() => { });
 
         // ---- Quick actions ----
         document.getElementById('actions').innerHTML = `

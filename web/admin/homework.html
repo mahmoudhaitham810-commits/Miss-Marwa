@@ -92,6 +92,63 @@
         .side-actions { display: grid; gap: 8px; margin-top: 14px; }
         .empty-key { text-align: center; padding: 26px 12px; color: var(--muted); border: 1.5px dashed var(--border); border-radius: 16px; }
         .lock-note { margin-bottom: 14px; }
+        .hwq.ai { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+        .hwq.ai.low { border-color: var(--warning); box-shadow: 0 0 0 3px var(--warning-soft); }
+        .ai-badge { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); font-size: 12.5px; font-weight: 800; }
+        .hwq.low .ai-badge { background: var(--warning-soft); color: var(--warning); }
+        .ai-badge button { border: 0; border-radius: 8px; padding: 4px 9px; background: var(--surface); color: var(--success); font: inherit; font-weight: 800; cursor: pointer; }
+        .opts { display: grid; gap: 6px; }
+        .opt { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; align-items: center; }
+        .opt b { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-3); color: var(--text-2); font-size: 13px; }
+        .opt.ok b { background: var(--success); color: #fff; }
+        .linkish { border: 0; background: none; padding: 0; color: var(--primary); font: inherit; font-weight: 700; font-size: 13px; cursor: pointer; }
+        /* submissions */
+        .rel-card { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+        .rel-card .grow { flex: 1; min-width: 220px; }
+        .subs { display: grid; gap: 8px; }
+        .sub-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); text-align: left; font: inherit; color: var(--text); cursor: pointer; width: 100%; }
+        .sub-row:hover { border-color: var(--primary-line, var(--primary)); }
+        .sub-row .av { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); font-weight: 800; }
+        .sub-row .meta { font-size: 12.5px; color: var(--muted); }
+        .sub-row .right { display: flex; gap: 8px; align-items: center; }
+        .sub-row .score { font-weight: 800; font-variant-numeric: tabular-nums; }
+        .rev { display: grid; gap: 16px; grid-template-columns: 1fr; }
+        @media (min-width: 980px) { .rev { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); } .rev .pages { position: sticky; top: 0; max-height: calc(100vh - 140px); overflow: auto; } }
+        .rev .pages img { width: 100%; border-radius: 12px; border: 1px solid var(--border); background: #fff; margin-bottom: 10px; display: block; }
+        .rq { display: grid; grid-template-columns: 52px minmax(0, 1fr) 92px; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); align-items: start; }
+        .rq .lab { font-weight: 800; }
+        .rq .lab small { display: block; font-weight: 600; color: var(--muted); font-size: 11px; }
+        .rq .ans { font-size: 13.5px; display: grid; gap: 3px; }
+        .rq .ans .you b, .rq .ans .key b { font-size: 11.5px; color: var(--muted); font-weight: 700; margin-inline-end: 4px; }
+        .rq .ans .key { color: var(--success); }
+        .rq .pts { display: grid; gap: 4px; justify-items: end; }
+        .rq .pts input { width: 72px; height: 36px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 800; text-align: center; }
+        .rq .pts input.changed { border-color: var(--warning); background: var(--warning-soft); }
+        .vchip { font-size: 11.5px; font-weight: 800; padding: 2px 8px; border-radius: 8px; }
+        .vchip.correct { background: var(--success-soft); color: var(--success); } .vchip.partial { background: var(--warning-soft); color: var(--warning); }
+        .vchip.wrong, .vchip.blank { background: var(--danger-soft); color: var(--danger); } .vchip.unreadable { background: var(--surface-3); color: var(--text-2); }
+        .rev-score { font-size: 28px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+        /* auto-solve window */
+        .modal { position: fixed; inset: 0; z-index: 80; background: rgba(8, 14, 30, .55); display: grid; place-items: center; padding: 16px; }
+        .modal[hidden] { display: none; }
+        .modal .box { width: min(860px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--surface); border-radius: 22px; box-shadow: 0 30px 80px rgba(0,0,0,.35); padding: 20px; }
+        .modal .box.wide { width: min(1180px, 100%); }
+        .modal-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+        .modal-head h2 { margin: 0; font-size: 20px; } .modal-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+        .modal-head .icon-btn { margin-inline-start: auto; }
+        .book-list { display: grid; gap: 6px; max-height: 260px; overflow: auto; margin-top: 10px; }
+        .book { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; text-align: left; font: inherit; color: var(--text); }
+        .book.on { border-color: var(--primary); background: var(--primary-soft); }
+        .book small { color: var(--muted); margin-inline-start: auto; white-space: nowrap; }
+        .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; margin-top: 12px; }
+        .thumb { border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface-2); position: relative; aspect-ratio: 3 / 4; display: grid; place-items: center; }
+        .thumb img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+        .thumb span { position: absolute; left: 6px; top: 6px; background: rgba(15,23,42,.75); color: #fff; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 7px; }
+        .thumb.done { border-color: var(--success); } .thumb.work { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); } .thumb.fail { border-color: var(--danger); }
+        .solve-log { margin-top: 12px; font-size: 13.5px; color: var(--text-2); display: grid; gap: 4px; }
+        .solve-bar { height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin-top: 12px; }
+        .solve-bar span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--primary), var(--accent, var(--primary))); transition: width .4s; }
+        .modal-foot { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
         @media (max-width: 560px) {
             .hwq-tools { margin-inline-start: 0; width: 100%; justify-content: flex-end; order: 5; }
             .add-many { margin-inline-start: 0; }
@@ -106,7 +163,10 @@
             <section id="listView">
                 <div class="page-head">
                     <div><h1>Homework · الواجبات</h1><p id="countLine">Students scan their notebook pages and get marked against your answer key.</p></div>
-                    <button class="btn btn-primary" id="newBtn" hidden><span data-icon="plus" style="display:contents"></span>New homework</button>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        <a class="btn btn-ghost" id="labLink" href="/admin/ai-lab.html" hidden><span data-icon="sparkles" style="display:contents"></span>AI Lab</a>
+                        <button class="btn btn-primary" id="newBtn" hidden><span data-icon="plus" style="display:contents"></span>New homework</button>
+                    </div>
                 </div>
                 <div class="toolbar sticky-bar">
                     <select class="pick" id="gradePick" aria-label="Grade" data-ui="pills"></select>
@@ -145,7 +205,9 @@
                             </div>
                         </div>
                         <div class="card" style="margin-top:18px">
-                            <div class="card-head"><h2 class="card-title"><span data-icon="checkCircle" style="display:contents"></span>Answer key</h2><span class="small muted">Numbers must match the book / notebook</span></div>
+                            <div class="card-head"><h2 class="card-title"><span data-icon="checkCircle" style="display:contents"></span>Answer key</h2>
+                                <button class="btn btn-primary btn-sm" id="solveBtn" type="button"><span data-icon="sparkles" style="display:contents"></span>Auto-solve from homework PDF</button></div>
+                            <p class="small muted" style="margin:-4px 0 12px">Numbers must match the booklet — use <b>section.question</b> (e.g. 1.7, 2.1) when numbering restarts in each section.</p>
                             <div id="key"></div>
                             <div class="add-bar" id="addBar">
                                 <span class="lbl">Add</span>
@@ -164,6 +226,7 @@
                             <div class="sum-state" id="sumState"></div>
                             <div class="typecount" id="typeCount"></div>
                             <button class="btn btn-ghost btn-sm" id="evenBtn" hidden><span data-icon="refresh" style="display:contents"></span><span id="evenLabel">Share the total evenly</span></button>
+                            <button class="btn btn-soft btn-sm" id="approveAll" hidden style="margin-top:8px"><span data-icon="check" style="display:contents"></span><span id="approveLabel">Mark all AI answers as checked</span></button>
                             <ul class="issues" id="issues"></ul>
                             <div class="side-actions">
                                 <button class="btn btn-primary btn-block" id="publishBtn"><span data-icon="send" style="display:contents"></span><span id="publishLabel">Publish</span></button>
@@ -174,12 +237,87 @@
                     </aside>
                 </div>
             </section>
+
+            <!-- ================= Submissions ================= -->
+            <section id="subsView" hidden>
+                <div class="page-head">
+                    <div style="display:flex;gap:12px;align-items:center">
+                        <button class="icon-btn" id="subsBack" aria-label="Back to homework" data-icon="arrowLeft"></button>
+                        <div><h1 id="subsTitle">Submissions</h1><p id="subsSub"></p></div>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <input class="fin sm" id="rcCode" placeholder="Receipt code" maxlength="8" style="width:150px;text-transform:uppercase" aria-label="Check a receipt code">
+                        <button class="btn btn-ghost btn-sm" id="rcBtn"><span data-icon="shield" style="display:contents"></span>Check</button>
+                    </div>
+                </div>
+                <div class="card rel-card" id="relCard">
+                    <div class="grow"><b>AI marking</b><div class="small muted" id="relText"></div></div>
+                    <div class="segmented" id="relSeg"><button data-value="confirm">Staff confirm first</button><button data-value="instant">Instant results</button></div>
+                </div>
+                <div class="toolbar"><div class="segmented" id="subsSeg"><button data-value="check">To check</button><button data-value="graded">Marked</button><button data-value="marking">Being marked</button><button data-value="missing">Not submitted</button></div>
+                    <button class="btn btn-soft btn-sm" id="waMissing" hidden><span data-icon="whatsapp" style="display:contents"></span><span id="waMissingLabel">WhatsApp parents</span></button></div>
+                <div id="subsList"></div>
+            </section>
         </div>
     </main>
+
+    <!-- ================= Review one submission ================= -->
+    <div class="modal" id="revModal" hidden role="dialog" aria-modal="true" aria-labelledby="revTitle">
+        <div class="box wide">
+            <div class="modal-head">
+                <div style="min-width:0"><h2 id="revTitle">Review</h2><p id="revSub"></p></div>
+                <button class="icon-btn" id="revClose" aria-label="Close" data-icon="x"></button>
+            </div>
+            <div id="revBody"></div>
+            <div class="modal-foot">
+                <span style="margin-inline-end:auto;display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn btn-ghost btn-sm" id="revWaParent"><span data-icon="whatsapp" style="display:contents"></span>Summary to parent</button>
+                    <button class="btn btn-ghost btn-sm" id="revWaStudent"><span data-icon="whatsapp" style="display:contents"></span>To student</button>
+                    <button class="btn btn-ghost btn-sm" id="revRegrade"><span data-icon="refresh" style="display:contents"></span>Mark again with AI</button>
+                </span>
+                <button class="btn btn-soft" id="revSave"><span data-icon="check" style="display:contents"></span>Save marks</button>
+                <button class="btn btn-primary" id="revRelease"><span data-icon="send" style="display:contents"></span><span id="revReleaseLabel">Confirm & release</span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= Auto-solve from homework PDF ================= -->
+    <div class="modal" id="solveModal" hidden role="dialog" aria-modal="true" aria-labelledby="solveTitle">
+        <div class="box">
+            <div class="modal-head">
+                <div class="bubble" style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--accent-soft, var(--primary-soft));color:var(--accent, var(--primary))"><span data-icon="sparkles" style="display:contents"></span></div>
+                <div><h2 id="solveTitle">Auto-solve from homework PDF</h2><p>Workers AI reads the printed questions, solves each one and writes an explanation. You review, then publish.</p></div>
+                <button class="icon-btn" id="solveClose" aria-label="Close" data-icon="x"></button>
+            </div>
+            <div class="segmented" id="srcSeg" style="display:inline-flex"><button data-value="r2" class="active">Our books (R2)</button><button data-value="upload">Upload PDF / photos</button></div>
+            <div id="srcR2" style="margin-top:12px">
+                <input class="fin sm" id="bookSearch" placeholder="Search books (e.g. prep1, unit 1)…" autocomplete="off">
+                <div class="book-list" id="bookList"><div class="skel" style="height:80px;border-radius:12px"></div></div>
+            </div>
+            <div id="srcUp" hidden style="margin-top:12px">
+                <label class="btn btn-soft" style="cursor:pointer"><span data-icon="download" style="display:contents"></span>Choose a PDF or photos<input type="file" id="srcFile" accept="application/pdf,.pdf,image/*" multiple hidden></label>
+                <span class="small muted" id="srcFileName" style="margin-inline-start:8px"></span>
+            </div>
+            <div class="form-grid" style="margin-top:14px" id="pagesRow" hidden>
+                <div class="field"><label for="pageRange">Pages for this lesson <small id="pageCount"></small></label><input class="fin sm" id="pageRange" placeholder="e.g. 34-37" inputmode="numeric"></div>
+                <div class="field" style="justify-content:flex-end"><button class="btn btn-ghost btn-sm" id="previewPages" type="button"><span data-icon="eye" style="display:contents"></span>Show these pages</button></div>
+            </div>
+            <div class="thumbs" id="thumbs"></div>
+            <div id="solveProgress" hidden><div class="solve-bar"><span id="solveBarIn"></span></div><div class="solve-log" id="solveLog"></div></div>
+            <div class="modal-foot">
+                <span class="small muted" id="aiUsage" style="margin-inline-end:auto;align-self:center"></span>
+                <label class="check" id="replaceWrap" hidden><input type="checkbox" id="replaceKey"> Replace the current questions</label>
+                <button class="btn btn-ghost" id="solveCancel" type="button">Cancel</button>
+                <button class="btn btn-primary" id="solveGo" type="button" disabled><span data-icon="sparkles" style="display:contents"></span><span id="solveGoLabel">Solve pages</span></button>
+                <button class="btn btn-primary" id="solveUse" type="button" hidden><span data-icon="check" style="display:contents"></span><span id="solveUseLabel">Put them in the answer key</span></button>
+            </div>
+        </div>
+    </div>
 
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
+    <script src="/assets/hw-kit.js"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -196,7 +334,7 @@
 
         A.gradeSelect($('gradePick'), grade, (v) => { grade = v; A.store.set('hw_grade', v); load(); });
         A.segmented($('stateSeg'), state, (v) => { state = v; render(); });
-        if (A.can('homework.create')) { $('newBtn').hidden = false; $('newBtn').addEventListener('click', () => openEditor(null)); }
+        if (A.can('homework.create')) { $('labLink').hidden = false; $('newBtn').hidden = false; $('newBtn').addEventListener('click', () => openEditor(null)); }
 
         // ================= List =================
         const deadlineMs = (h) => A.toMs(h.deadline);
@@ -240,6 +378,7 @@
                            <div class="hw-due">${icon('calendar', 'sm')}${deadlineMs(h) > Date.now() ? 'Due' : 'Was due'} ${esc(A.fmtDate(h.deadline, true))}${h.closesAt ? ` · late until ${esc(A.fmtDate(h.closesAt, true))}` : ''}</div>`}
                     <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
                         ${h.state === 'draft' && A.can('homework.publish') ? `<button class="btn btn-primary btn-sm" data-act="publish">${icon('send', 'sm')}Publish</button>` : ''}
+                        ${h.state !== 'draft' ? `<button class="btn btn-primary btn-sm" data-act="subs">${icon('users', 'sm')}Submissions${h.needsReview ? ` · ${h.needsReview}` : ''}</button>` : ''}
                         ${canEdit ? `<button class="btn btn-soft btn-sm" data-act="edit">${icon('edit', 'sm')}${h.state === 'draft' ? 'Edit' : 'Edit key'}</button>` : ''}
                         ${h.state === 'published' && A.can('homework.publish') ? `<button class="btn btn-ghost btn-sm" data-act="close">${icon('lock', 'sm')}Close</button>` : ''}
                         ${h.state === 'closed' && A.can('homework.publish') ? `<button class="btn btn-ghost btn-sm" data-act="reopen">${icon('refresh', 'sm')}Reopen</button>` : ''}
@@ -253,6 +392,7 @@
             const b = ev.target.closest('[data-act]'); if (!b) return;
             const h = H.find(x => x.id === Number(b.closest('[data-id]').dataset.id)); if (!h) return;
             const act = b.dataset.act;
+            if (act === 'subs') return openSubs(h.id);
             if (act === 'edit' || act === 'copy') {
                 let d; try { d = await api(`/api/homework?action=get&id=${h.id}`); } catch (e) { return Site.toast(e.message, 'error'); }
                 return openEditor(d, act === 'copy');
@@ -295,7 +435,7 @@
         }
 
         // ================= Editor =================
-        let F = null, Q = [], editing = null, dirty = false, locked = false;
+        let F = null, Q = [], editing = null, dirty = false, locked = false, SRC = null;
         const pad = (n) => String(n).padStart(2, '0');
         const toLocalInput = (v) => { const t = A.toMs(v); if (isNaN(t)) return ''; const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
         const fromLocalInput = (v) => { if (!v) return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d.toISOString(); };
@@ -327,12 +467,15 @@
         ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr'].forEach(id => $(id).addEventListener('input', () => touch()));
 
         // ---------- questions ----------
+        const fromServer = (q) => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, answer: q.answer || '', answerText: q.answerText || '', correction: q.correction || '', alternatives: q.alternatives || [], modelAnswer: q.modelAnswer || '', ideas: (q.ideas || []).map(it => ({ ...it })), options: q.options || [], explanation: q.explanation || '', aiCheck: !!q.aiCheck, confidence: q.confidence ?? null });
         function nextLabel() {
+            const sec = Q.length ? String(Q[Q.length - 1].label).match(/^(\d+)\.(\d+)$/) : null;
+            if (sec) return `${sec[1]}.${Number(sec[2]) + 1}`;
             const nums = Q.map(q => parseInt(q.label, 10)).filter(n => !isNaN(n));
             return String(nums.length ? Math.max(...nums) + 1 : Q.length + 1);
         }
         function newQ(type) {
-            const q = { label: nextLabel(), type, prompt: '', points: DEFAULT_POINTS[type], answer: '', answerText: '', correction: '', alternatives: [], modelAnswer: '', ideas: [] };
+            const q = { label: nextLabel(), type, prompt: '', points: DEFAULT_POINTS[type], answer: '', answerText: '', correction: '', alternatives: [], modelAnswer: '', ideas: [], options: [], explanation: '', aiCheck: false, confidence: null };
             if (type === 'essay') q.ideas = [{ text: '', points: 1 }, { text: '', points: 1 }];
             return q;
         }
@@ -362,7 +505,9 @@
             let body = '';
             if (q.type === 'mcq') body = `<div class="sub">Correct choice</div>
                 <div class="letters" data-letters>${['A', 'B', 'C', 'D', 'E', 'F'].map(l => `<button type="button" data-letter="${l}" class="${q.answer === l ? 'on' : ''}" ${locked ? 'disabled' : ''}>${l}</button>`).join('')}</div>
-                <input class="fin sm" data-f="answerText" dir="auto" maxlength="300" value="${esc(q.answerText)}" placeholder="Answer text (optional) — if students write the word instead of the letter" ${locked ? 'disabled' : ''}>`;
+                <input class="fin sm" data-f="answerText" dir="auto" maxlength="300" value="${esc(q.answerText)}" placeholder="Answer text (optional) — if students write the word instead of the letter" ${locked ? 'disabled' : ''}>
+                ${q.options && q.options.length ? `<div class="sub">Choices</div><div class="opts">${q.options.map((o, k) => `<div class="opt ${String.fromCharCode(65 + k) === q.answer ? 'ok' : ''}"><b>${String.fromCharCode(65 + k)}</b><input class="fin sm" data-opt="${k}" dir="auto" maxlength="200" value="${esc(o)}" ${locked ? 'disabled' : ''}></div>`).join('')}</div>`
+                    : locked ? '' : `<button type="button" class="linkish" data-add-opts>+ Add the choices' text (shown to students with the model answer)</button>`}`;
             else if (q.type === 'tf') body = `<div class="sub">Correct answer</div>
                 <div class="letters tf">${[['true', '✓ True'], ['false', '✗ False']].map(([v, l]) => `<button type="button" data-tf="${v}" class="${q.answer === v ? 'on' : ''}" ${locked ? 'disabled' : ''}>${l}</button>`).join('')}</div>
                 ${q.answer === 'false' ? `<input class="fin sm" data-f="correction" dir="auto" maxlength="300" value="${esc(q.correction)}" placeholder="Correction (optional) — the right word / statement" ${locked ? 'disabled' : ''}>` : ''}`;
@@ -384,7 +529,11 @@
                     <button type="button" class="btn btn-ghost btn-sm" data-idea-even>${icon('refresh', 'sm')}Share marks evenly</button>`}
                     <span class="idea-sum ${okSum ? 'ok' : 'no'}" data-idea-sum>${okSum ? `✓ Ideas = ${s} marks` : `Ideas add up to ${s} of ${numv(q.points)}`}</span></div>`;
             }
-            return `<div class="hwq" data-i="${i}">${head}${body}</div>`;
+            const low = q.aiCheck && q.confidence !== null && q.confidence < 0.6;
+            const badge = q.aiCheck ? `<div class="ai-badge">${icon('sparkles', 'sm')}AI · check${low ? ' — not sure, please look' : ''}${locked ? '' : '<button type="button" data-approve>✓ Looks right</button>'}</div>` : '';
+            const expl = `<div class="sub">Explanation for students <span style="font-weight:600">— shown with the result (why this answer is right)</span></div>
+                <textarea class="ta" data-f="explanation" dir="auto" rows="2" maxlength="600" placeholder="e.g. More resistance means less current, so the lamp gets dimmer." ${locked ? 'disabled' : ''}>${esc(q.explanation || '')}</textarea>`;
+            return `<div class="hwq ${q.aiCheck ? 'ai' : ''} ${low ? 'low' : ''}" data-i="${i}">${badge}${head}${body}${expl}</div>`;
         }
         function renderKey(focus) {
             $('key').innerHTML = Q.length ? Q.map(qHTML).join('') : `<div class="empty-key">${icon('clipboard', 'lg')}<p style="margin:8px 0 0">No questions yet — add them in the same order as the book / notebook.</p></div>`;
@@ -395,6 +544,7 @@
         const qOf = (el) => Q[Number(el.closest('[data-i]').dataset.i)];
         $('key').addEventListener('input', (e) => {
             const t = e.target, q = t.closest('[data-i]') && qOf(t); if (!q) return;
+            if (t.dataset.opt !== undefined) { q.options[Number(t.dataset.opt)] = t.value; touch(); return; }
             if (t.dataset.f) {
                 q[t.dataset.f] = t.dataset.f === 'points' ? t.value : t.value;
                 if (t.dataset.f === 'points' && q.type === 'essay') refreshIdeaSum(t.closest('.hwq'), q);
@@ -427,8 +577,10 @@
         $('key').addEventListener('click', (e) => {
             const t = e.target.closest('button'); if (!t || t.disabled || locked) return;
             const q = qOf(t), i = Q.indexOf(q);
+            if (t.hasAttribute('data-approve')) { q.aiCheck = false; touch(); return renderKey(); }
+            if (t.hasAttribute('data-add-opts')) { q.options = ['', '', '', '']; touch(); return renderKey(`[data-i="${i}"] [data-opt="0"]`); }
             if (t.dataset.type) { setType(q, t.dataset.type); touch(); return renderKey(); }
-            if (t.dataset.letter) { q.answer = t.dataset.letter; touch(); return renderKey(); }
+            if (t.dataset.letter) { q.answer = t.dataset.letter; if (q.options.length < 'ABCDEF'.indexOf(t.dataset.letter) + 1 && q.options.length) while (q.options.length < 'ABCDEF'.indexOf(t.dataset.letter) + 1) q.options.push(''); touch(); return renderKey(); }
             if (t.dataset.tf) { q.answer = t.dataset.tf; touch(); return renderKey(t.dataset.tf === 'false' ? `[data-i="${i}"] [data-f="correction"]` : null); }
             if (t.dataset.altDel !== undefined) { q.alternatives.splice(Number(t.dataset.altDel), 1); touch(); return renderKey(); }
             if (t.hasAttribute('data-idea-add')) { q.ideas.push({ text: '', points: 1 }); touch(); return renderKey(`[data-i="${i}"] [data-idea="${q.ideas.length - 1}"] [data-idea-f="text"]`); }
@@ -450,6 +602,11 @@
             for (let k = 0; k < n; k++) Q.push(newQ(t));
             touch(); renderKey(`[data-i="${Q.length - n}"] [data-f="prompt"]`);
             Site.toast(`Added ${n} ${TYPE_LABEL[t]} question${n === 1 ? '' : 's'}`, 'success');
+        });
+        $('approveAll').addEventListener('click', () => {
+            const n = Q.filter(q => q.aiCheck).length;
+            Site.sheet({ iconName: 'check', title: `Mark all ${n} AI answers as checked?`, subtitle: 'Only do this after reading them — students will be marked against these answers.',
+                actions: [{ label: 'Yes, I checked them', cls: 'btn-primary', onClick: (c) => { Q.forEach(q => { q.aiCheck = false; }); c(); touch(); renderKey(); } }, { label: 'Keep reviewing', cls: 'btn-ghost' }] });
         });
         $('evenBtn').addEventListener('click', () => {
             const total = numv($('fTotal').value); if (!(total > 0) || !Q.length) return;
@@ -488,6 +645,8 @@
             });
             const sum = round2(Q.reduce((t, q) => t + numv(q.points), 0));
             if (strict && Q.length && Math.abs(sum - total) > 0.01) out.push(`Questions add up to ${sum} marks, total is ${total}`);
+            const unchecked = Q.filter(q => q.aiCheck).length;
+            if (strict && unchecked) out.unshift(`${unchecked} AI answer${unchecked === 1 ? '' : 's'} not checked yet — tap “Looks right” on each (or “Mark all as checked”)`);
             return out;
         }
         function summary() {
@@ -498,6 +657,9 @@
             $('sumState').textContent = !Q.length ? 'Add the questions below' : !diff ? '✓ Points match the total' : diff > 0 ? `${diff} mark${diff === 1 ? '' : 's'} short of the total` : `${-diff} mark${diff === -1 ? '' : 's'} over the total`;
             $('evenBtn').hidden = locked || !Q.length || !diff || !(total > 0);
             $('evenLabel').textContent = `Share ${total} marks evenly`;
+            const unchecked = Q.filter(q => q.aiCheck).length;
+            $('approveAll').hidden = locked || !unchecked;
+            $('approveLabel').textContent = `Mark all ${unchecked} AI answer${unchecked === 1 ? '' : 's'} as checked`;
             const counts = Object.keys(TYPE_LABEL).map(t => [t, Q.filter(q => q.type === t).length]).filter(([, n]) => n);
             $('typeCount').innerHTML = counts.map(([t, n]) => `<span class="pill primary">${n} ${esc(TYPE_LABEL[t])}</span>`).join('');
             const list = issues(true);
@@ -519,7 +681,7 @@
             return {
                 id: editing ? editing.id : undefined, grade: F.grade, unit: F.unit, lesson: F.lesson,
                 title: $('fTitle').value.trim(), instructions: $('fInstr').value.trim(),
-                deadline: fromLocalInput($('fDeadline').value), closesAt: fromLocalInput($('fCloses').value), totalScore: numv($('fTotal').value),
+                deadline: fromLocalInput($('fDeadline').value), closesAt: fromLocalInput($('fCloses').value), totalScore: numv($('fTotal').value), source: SRC || undefined,
                 questions: Q.map(q => ({ ...q, points: numv(q.points), ideas: q.ideas.filter(it => String(it.text).trim()).map(it => ({ text: it.text, points: numv(it.points) })) }))
             };
         }
@@ -555,6 +717,7 @@
         function openEditor(d, asCopy) {
             const a = d && d.assignment, src = d ? d.questions : [];
             editing = a && !asCopy ? a : null;
+            SRC = a && a.source ? a.source : null;
             locked = !!(editing && editing.submitted);
             F = { grade: a ? a.grade : grade, unit: a ? a.unit : 1, lesson: a ? a.lesson : 1 };
             $('edTitle').textContent = editing ? (editing.status === 'draft' ? 'Edit draft' : 'Edit answer key') : asCopy ? 'New homework (copy)' : 'New homework';
@@ -565,12 +728,13 @@
             if (!a || asCopy) { const d2 = new Date($('fDeadline').value); d2.setDate(d2.getDate() + 2); $('fCloses').value = toLocalInput(d2.toISOString()); }
             $('fTotal').value = a ? a.totalScore : 10;
             $('fInstr').value = a ? a.instructions || '' : '';
-            Q = (src || []).map(q => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, answer: q.answer || '', answerText: q.answerText || '', correction: q.correction || '', alternatives: q.alternatives || [], modelAnswer: q.modelAnswer || '', ideas: (q.ideas || []).map(it => ({ ...it })) }));
+            Q = (src || []).map(fromServer);
             renderDetails();
             if (!$('fTitle').value) $('fTitle').value = autoTitle();
             $('lockNote').hidden = !locked;
             $('lockNote').innerHTML = locked ? `${icon('lock', 'sm')}<div><b>${editing.submitted} student${editing.submitted === 1 ? ' has' : 's have'} already submitted</b> — the answer key is locked so everyone is marked the same way.</div>` : '';
             ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr'].forEach(id => { $(id).disabled = locked; });
+            $('solveBtn').hidden = locked;
             setEditorState(); renderKey(); dirty = false;
             $('listView').hidden = true; $('editView').hidden = false; window.scrollTo(0, 0);
             history.pushState({ editor: 1 }, '', location.pathname + (editing ? '?edit=' + editing.id : '?new=1'));
@@ -585,11 +749,295 @@
                     { label: 'Leave without saving', cls: 'btn-danger', onClick: (c) => { c(); closeEditor(); load(); } }, { label: 'Keep editing', cls: 'btn-ghost' }] });
             else { closeEditor(); load(); }
         });
-        window.addEventListener('popstate', () => { if (!$('editView').hidden) { closeEditor(false); load(); } });
+        window.addEventListener('popstate', () => { if (!$('editView').hidden) { closeEditor(false); load(); } else if (!$('subsView').hidden) { $('subsView').hidden = true; $('listView').hidden = false; load(); } });
         window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+        // ================= Submissions & review =================
+        let SUBS = null, subsTab = 'check', REV = null;
+        const STATUS = { pending: ['Waiting for you', 'legacy'], needs_review: ['Needs a look', 'review'], graded: ['Marked', 'success'], grading: ['AI marking…', 'primary'], queued: ['Queued (AI resets 2 am)', 'muted'] };
+        const fullName = (x) => `${x.firstName || ''} ${x.lastName || ''}`.trim();
+        async function openSubs(id, push = true) {
+            $('listView').hidden = true; $('editView').hidden = true; $('subsView').hidden = false; window.scrollTo(0, 0);
+            if (push) history.pushState({ subs: id }, '', `${location.pathname}?subs=${id}`);
+            $('subsList').innerHTML = '<div class="skel" style="height:220px;border-radius:18px"></div>';
+            try { SUBS = await api(`/api/homework?action=submissions&assignment=${id}`); } catch (e) { $('subsList').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
+            const a = SUBS.assignment;
+            $('subsTitle').textContent = a.title;
+            $('subsSub').textContent = `${A.GRADES[a.grade]} · Unit ${a.unit} · Lesson ${a.lesson} · ${SUBS.submissions.length} submitted · ${SUBS.missing.length} not yet`;
+            const toCheck = SUBS.submissions.filter(x => ['pending', 'needs_review'].includes(x.status)).length;
+            subsTab = toCheck ? 'check' : SUBS.submissions.length ? 'graded' : 'missing';
+            $('subsSeg').querySelectorAll('button').forEach(b => {
+                const n = { check: toCheck, graded: SUBS.submissions.filter(x => x.status === 'graded').length, marking: SUBS.submissions.filter(x => ['grading', 'queued'].includes(x.status)).length, missing: SUBS.missing.length }[b.dataset.value];
+                b.innerHTML = `${{ check: 'To check', graded: 'Marked', marking: 'Being marked', missing: 'Not submitted' }[b.dataset.value]} <span class="count">${n}</span>`;
+                b.classList.toggle('active', b.dataset.value === subsTab);
+            });
+            loadRelease(); renderSubs();
+        }
+        A.segmented($('subsSeg'), subsTab, (v) => { subsTab = v; renderSubs(); });
+        function renderSubs() {
+            $('waMissing').hidden = subsTab !== 'missing' || !SUBS.missing.length || !A.can('reports.send');
+            $('waMissingLabel').textContent = `WhatsApp ${SUBS.missing.length} parent${SUBS.missing.length === 1 ? '' : 's'}`;
+            if (subsTab === 'missing') {
+                $('subsList').innerHTML = SUBS.missing.length ? `<div class="subs">${SUBS.missing.map(m => `<div class="sub-row" style="cursor:default"><span class="av">${esc(A.initials(fullName(m)))}</span>
+                    <div><b dir="auto">${esc(fullName(m))}</b><div class="meta">${esc(m.studentId)}${m.branch ? ' · ' + esc(m.branch) : ''}</div></div>
+                    <div class="right">${A.can('reports.send') && m.parentPhone ? `<button class="btn btn-ghost btn-sm" data-wa-one="${esc(m.studentId)}">${icon('whatsapp', 'sm')}Parent</button>` : ''}</div></div>`).join('')}</div>`
+                    : `<div class="card empty-state"><div class="bubble">${icon('party', 'lg')}</div><h3>Everyone submitted 🎉</h3></div>`;
+                return;
+            }
+            const want = { check: ['pending', 'needs_review'], graded: ['graded'], marking: ['grading', 'queued'] }[subsTab];
+            const list = SUBS.submissions.filter(x => want.includes(x.status));
+            $('subsList').innerHTML = list.length ? `<div class="subs">${list.map(x => {
+                const [lab, cls] = STATUS[x.status] || [x.status, 'muted'];
+                return `<button class="sub-row" data-sub="${x.id}"><span class="av">${esc(A.initials(fullName(x)))}</span>
+                    <div style="min-width:0"><b dir="auto">${esc(fullName(x))}</b><div class="meta">${esc(x.studentId)} · ${x.pages} page${x.pages === 1 ? '' : 's'} · ${esc(A.fmtDate(x.submittedAt, true))}${x.late ? ' · <span class="danger-text">Late</span>' : ''}${x.unreadable ? ' · unreadable page' : ''}</div></div>
+                    <div class="right"><span class="pill ${cls}">${esc(lab)}</span>${x.score != null ? `<span class="score">${x.score} / ${SUBS.assignment.totalScore}</span>` : ''}</div></button>`;
+            }).join('')}</div>` : `<div class="card empty-state"><div class="bubble">${icon('checkCircle', 'lg')}</div><h3>${subsTab === 'check' ? 'Nothing to check' : 'Nothing here'}</h3><p>${subsTab === 'check' ? 'New submissions appear here after the AI marks them.' : ''}</p></div>`;
+        }
+        $('subsList').addEventListener('click', (e) => {
+            const r = e.target.closest('[data-sub]'); if (r) return openReview(Number(r.dataset.sub));
+            const w = e.target.closest('[data-wa-one]'); if (w) return waMissing(SUBS.missing.filter(m => m.studentId === w.dataset.waOne));
+        });
+        $('waMissing').addEventListener('click', () => waMissing(SUBS.missing.filter(m => m.parentPhone)));
+        // approved wording (parent, not submitted)
+        function missingText(m) {
+            const LRM = '\u200E', RLM = '\u200F', f = String(m.gender || '').toLowerCase() === 'female', a = SUBS.assignment;
+            const iso = (v) => { const t = String(v ?? '').trim(); return /[\u0600-\u06FF]/.test(t) ? t : `${LRM}${t}${LRM}`; };
+            const d = new Date(String(a.deadline).replace(' ', 'T') + 'Z').toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
+            return ['السلام عليكم — تيم مس مروة 👋', `نود إبلاغ حضرتك أن ${iso(fullName(m))} ${f ? 'لم تسلّم' : 'لم يسلّم'} واجب ${iso(`Unit ${a.unit} · Lesson ${a.lesson}`)} حتى الآن.`, `آخر موعد للتسليم: ${d}.`, 'برجاء المتابعة.'].map(l => RLM + l).join('\n');
+        }
+        function waMissing(list) { A.sender({ list: list.map(m => ({ ...m, name: fullName(m) })), makeText: async (m) => missingText(m), title: 'Homework not submitted', kind: 'homework-missing' }); }
+        async function loadRelease() {
+            try {
+                const s = await api('/api/homework?action=settings');
+                $('relSeg').querySelectorAll('button').forEach(b => { b.classList.toggle('active', b.dataset.value === s.releaseMode); b.disabled = !s.canChange; });
+                $('relText').innerHTML = (s.releaseMode === 'confirm' ? 'Students see their score after a staff member confirms it.' : 'Students see their score as soon as the AI finishes (unreadable pages still wait for you).')
+                    + (s.answersChecked ? ` · Staff agreed with the AI on <b>${s.agreement}%</b> of ${s.answersChecked} answers (${s.submissionsChecked} confirmed).` : ' · Agreement rate appears after the first confirmed submissions.')
+                    + (s.canChange ? '' : ' · Only Miss Marwa can change this.');
+            } catch (e) { }
+        }
+        $('relSeg').addEventListener('click', async (e) => {
+            const b = e.target.closest('button[data-value]'); if (!b || b.disabled) return;
+            try { await api('/api/homework?action=set-release', { body: { mode: b.dataset.value } }); Site.toast(b.dataset.value === 'instant' ? 'Instant results on' : 'Staff confirm first', 'success'); loadRelease(); }
+            catch (err) { Site.toast(err.message, 'error'); loadRelease(); }
+        });
+        $('subsBack').addEventListener('click', () => { $('subsView').hidden = true; $('listView').hidden = false; history.pushState({}, '', location.pathname); load(); });
+        async function checkReceipt() {
+            const code = $('rcCode').value.trim(); if (!code) return;
+            try {
+                const r = await api(`/api/homework?action=verify&code=${encodeURIComponent(code)}`);
+                Site.sheet(r.found ? { iconName: 'checkCircle', title: `✅ ${r.name}`, subtitle: `${r.title} · submitted ${A.fmtDate(r.submittedAt, true)}${r.late ? ' (late)' : ''} · ${r.studentId}`, actions: [{ label: 'Open', cls: 'btn-primary', onClick: (c) => { c(); openReview(r.id); } }, { label: 'Close', cls: 'btn-ghost' }] }
+                    : { iconName: 'alert', title: 'No submission with this code', subtitle: 'Check the code on the student\'s phone — it changes for every homework.', actions: [{ label: 'OK', cls: 'btn-ghost' }] });
+            } catch (e) { Site.toast(e.message, 'error'); }
+        }
+        $('rcBtn').addEventListener('click', checkReceipt);
+        $('rcCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') checkReceipt(); });
+
+        async function openReview(id) {
+            $('revModal').hidden = false; document.body.style.overflow = 'hidden';
+            $('revBody').innerHTML = '<div class="skel" style="height:360px;border-radius:16px"></div>';
+            try { REV = await api(`/api/homework?action=submission&id=${id}`); } catch (e) { $('revBody').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
+            renderReview();
+        }
+        function revTotal() { return Math.round(REV.items.reduce((t, i) => t + (Number(i._new ?? i.earned) || 0), 0) * 100) / 100; }
+        function renderReview() {
+            const r = REV, st = r.student, [lab, cls] = STATUS[r.status] || [r.status, 'muted'];
+            $('revTitle').textContent = `${fullName(st)} · ${r.title}`;
+            $('revSub').innerHTML = `${esc(st.id)} · receipt <b>${esc(r.receipt || '—')}</b> · submitted ${esc(A.fmtDate(r.submittedAt, true))}${r.late ? ' · <span class="danger-text">Late</span>' : ''} · <span class="pill ${cls}">${esc(lab)}</span>${r.error ? ` · <span class="danger-text">${esc(r.error)}</span>` : ''}`;
+            $('revBody').innerHTML = `<div class="rev">
+                <div class="pages">${r.pageList.map(p => `<div class="small muted" style="margin:0 0 4px">Page ${p.pageNo}${p.readable ? '' : ' — <b class="danger-text">AI could not read it</b>'}</div>${p.mediaId ? `<a href="/api/homework?action=page&media=${p.mediaId}" target="_blank" rel="noopener"><img src="/api/homework?action=page&media=${p.mediaId}" alt="Page ${p.pageNo}" loading="lazy"></a>` : '<div class="notice">Photo deleted (older than 60 days)</div>'}`).join('')}</div>
+                <div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px"><span class="rev-score" id="revScore">${revTotal()} / ${r.total}</span>
+                    <span class="small muted">AI gave ${r.autoScore ?? '—'} · change any mark below</span></div>
+                ${r.items.map((i, k) => `<div class="rq" data-k="${k}"><div class="lab">${esc(i.label)}<small>${esc(i.type)}</small></div>
+                    <div class="ans">${i.question ? `<div class="muted" dir="auto">${esc(i.question)}</div>` : ''}
+                        <div class="you" dir="auto"><b>Student</b>${esc(i.yourAnswer || '—')}${i.yourCorrection ? ' — ' + esc(i.yourCorrection) : ''}</div>
+                        <div class="key" dir="auto"><b>Key</b>${esc(i.modelAnswer || '')}</div>
+                        ${i.evidence ? `<div class="muted small" dir="auto">AI: “${esc(i.evidence)}”</div>` : ''}</div>
+                    <div class="pts"><span class="vchip ${esc(i.verdict)}">${esc(i.verdict)}</span><input type="number" min="0" max="${i.points}" step="0.25" value="${i.earned}" data-pts="${k}" aria-label="Marks for ${esc(i.label)}"><small class="muted">of ${i.points}</small></div></div>`).join('')}</div></div>`;
+            $('revReleaseLabel').textContent = r.released ? 'Save & keep released' : 'Confirm & release';
+            $('revRegrade').hidden = !A.can('homework.review'); $('revSave').hidden = $('revRelease').hidden = !A.can('homework.review');
+            $('revWaParent').disabled = !st.parentPhone; $('revWaStudent').disabled = !st.phone;
+        }
+        $('revBody').addEventListener('input', (e) => {
+            const t = e.target.closest('[data-pts]'); if (!t) return;
+            const i = REV.items[Number(t.dataset.pts)];
+            i._new = t.value === '' ? null : Math.max(0, Math.min(i.points, Number(t.value)));
+            t.classList.toggle('changed', i._new !== null && Math.abs(i._new - i.earned) > 0.001);
+            $('revScore').textContent = `${revTotal()} / ${REV.total}`;
+        });
+        async function saveReview(release) {
+            const overrides = {};
+            REV.items.forEach(i => { if (i._new != null && Math.abs(i._new - i.earned) > 0.001) overrides[i.questionId] = i._new; });
+            try {
+                const r = await api('/api/homework?action=review', { body: { id: REV.id, overrides, release } });
+                Site.toast(release ? `Released — ${r.final} / ${REV.total} ✅ (student notified)` : `Saved — ${r.final} / ${REV.total}`, 'success');
+                closeReview(); openSubs(SUBS.assignment.id, false);
+            } catch (e) { Site.toast(e.message, 'error'); }
+        }
+        $('revSave').addEventListener('click', () => saveReview(false));
+        $('revRelease').addEventListener('click', () => saveReview(true));
+        $('revRegrade').addEventListener('click', () => Site.sheet({ iconName: 'refresh', title: 'Mark this submission again?', subtitle: 'The AI reads the pages again from scratch. Marks you changed are replaced.',
+            actions: [{ label: 'Mark again', cls: 'btn-primary', onClick: async (c) => {
+                c();
+                try {
+                    await api('/api/homework?action=regrade', { body: { id: REV.id } });
+                    $('revBody').innerHTML = '<div class="notice"><div>Marking again with AI… <b id="rgStep"></b></div></div>';
+                    for (let k = 0; k < 40; k++) {
+                        const r = await api('/api/homework?action=grade-step', { body: { id: REV.id } });
+                        const el = $('rgStep'); if (el) el.textContent = r.stage === 'reading' ? `page ${r.page} of ${r.pages}` : r.stage || '';
+                        if (r.done || r.queued) { if (r.queued) Site.toast('Queued — the free AI allowance is used up until 2 am', 'info'); break; }
+                        if (r.busy) await new Promise(x => setTimeout(x, 1500));
+                    }
+                    REV = await api(`/api/homework?action=submission&id=${REV.id}`); renderReview();
+                } catch (e) { Site.toast(e.message, 'error'); }
+            } }, { label: 'Cancel', cls: 'btn-ghost' }] }));
+        async function waReport(toStudent) {
+            const st = REV.student;
+            A.sender({ list: [{ studentId: st.id, firstName: st.firstName, lastName: st.lastName, parentPhone: toStudent ? st.phone : st.parentPhone, gender: st.gender }],
+                makeText: async () => (await api('/api/homework?action=report', { body: { id: REV.id } })).text, title: toStudent ? 'Homework summary → student' : 'Homework summary → parent', kind: 'homework-report' });
+        }
+        $('revWaParent').addEventListener('click', () => waReport(false));
+        $('revWaStudent').addEventListener('click', () => waReport(true));
+        function closeReview() { $('revModal').hidden = true; document.body.style.overflow = ''; REV = null; }
+        $('revClose').addEventListener('click', closeReview);
+        $('revModal').addEventListener('click', (e) => { if (e.target === $('revModal')) closeReview(); });
+
+        // ================= Auto-solve from homework PDF =================
+        const SV = { src: 'r2', books: [], book: null, pdf: null, images: null, fileName: '', pages: [], found: [], running: false, stop: false, neurons: 0 };
+        const fmtMB = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+        function openSolve() {
+            $('solveModal').hidden = false; document.body.style.overflow = 'hidden';
+            SV.found = []; SV.stop = false;
+            $('solveUse').hidden = true; $('solveGo').hidden = false; $('solveProgress').hidden = true; $('solveLog').innerHTML = '';
+            $('replaceWrap').hidden = !Q.length; $('replaceKey').checked = false;
+            if (SV.src === 'r2' && !SV.books.length) loadBooks();
+            refreshUsage(); updateGo();
+        }
+        function closeSolve() { if (SV.running) { SV.stop = true; return; } $('solveModal').hidden = true; document.body.style.overflow = ''; }
+        $('solveBtn').addEventListener('click', openSolve);
+        $('solveClose').addEventListener('click', closeSolve); $('solveCancel').addEventListener('click', closeSolve);
+        $('solveModal').addEventListener('click', (e) => { if (e.target === $('solveModal')) closeSolve(); });
+        A.segmented($('srcSeg'), 'r2', (v) => { SV.src = v; $('srcR2').hidden = v !== 'r2'; $('srcUp').hidden = v !== 'upload'; if (v === 'r2' && !SV.books.length) loadBooks(); resetDoc(); });
+        async function refreshUsage() {
+            try { const u = await api('/api/homework?action=usage'); $('aiUsage').textContent = u.ai ? `Free AI today: ${u.today.toLocaleString()} / ${u.limit.toLocaleString()} units${u.quotaHit ? ' — used up, resets 2:00 am' : ''}` : 'Workers AI is not connected (binding AI)'; }
+            catch (e) { $('aiUsage').textContent = ''; }
+        }
+        async function loadBooks() {
+            $('bookList').innerHTML = '<div class="skel" style="height:80px;border-radius:12px"></div>';
+            try { SV.books = (await api('/api/homework?action=books')).books; } catch (e) { $('bookList').innerHTML = `<div class="notice warning">${esc(e.message)}</div>`; return; }
+            renderBooks();
+        }
+        function renderBooks() {
+            const q = $('bookSearch').value.trim().toLowerCase();
+            const list = SV.books.filter(b => !q || b.key.toLowerCase().includes(q)).slice(0, 200);
+            $('bookList').innerHTML = list.length ? list.map(b => `<button type="button" class="book ${SV.book === b.key ? 'on' : ''}" data-book="${esc(b.key)}">${icon('book', 'sm')}<span dir="auto" style="min-width:0;overflow-wrap:anywhere">${esc(b.key)}</span><small>${fmtMB(b.size)}</small></button>`).join('')
+                : `<p class="muted small" style="margin:6px 0">${SV.books.length ? 'No book matches.' : 'No PDF books found in the R2 bucket yet — upload one there, or use “Upload PDF / photos”.'}</p>`;
+        }
+        $('bookSearch').addEventListener('input', renderBooks);
+        $('bookList').addEventListener('click', async (e) => {
+            const b = e.target.closest('[data-book]'); if (!b) return;
+            SV.book = b.dataset.book; renderBooks(); resetDoc(true);
+            $('pageCount').textContent = '— opening…'; $('pagesRow').hidden = false;
+            try { SV.pdf = await HwKit.openPdf(`/api/homework?action=book&key=${encodeURIComponent(SV.book)}`); SV.fileName = SV.book; $('pageCount').textContent = `— the book has ${SV.pdf.numPages} pages`; }
+            catch (err) { $('pageCount').textContent = ''; Site.toast('Could not open this PDF: ' + err.message, 'error'); }
+            updateGo();
+        });
+        $('srcFile').addEventListener('change', async (e) => {
+            const files = [...e.target.files]; if (!files.length) return;
+            resetDoc(true);
+            if (files.length === 1 && HwKit.isPdf(files[0])) {
+                SV.fileName = files[0].name; $('srcFileName').textContent = files[0].name;
+                try { SV.pdf = await HwKit.openPdf(files[0]); $('pagesRow').hidden = false; $('pageCount').textContent = `— ${SV.pdf.numPages} pages`; if (SV.pdf.numPages <= 8) $('pageRange').value = `1-${SV.pdf.numPages}`; }
+                catch (err) { Site.toast('Could not open this PDF: ' + err.message, 'error'); }
+            } else {
+                SV.images = files.filter(f => /^image\//.test(f.type)); SV.fileName = `${SV.images.length} photo${SV.images.length === 1 ? '' : 's'}`;
+                $('srcFileName').textContent = SV.fileName; $('pagesRow').hidden = true;
+                await showThumbs();
+            }
+            updateGo(); e.target.value = '';
+        });
+        function resetDoc(keepBook) { SV.pdf = null; SV.images = null; SV.pages = []; if (!keepBook) SV.book = null; $('thumbs').innerHTML = ''; $('pagesRow').hidden = true; $('pageRange').value = ''; $('srcFileName').textContent = ''; updateGo(); }
+        function selectedPages() { return SV.images ? SV.images.map((_, i) => i + 1) : SV.pdf ? HwKit.parsePages($('pageRange').value, SV.pdf.numPages) : []; }
+        function updateGo() {
+            const n = selectedPages().length;
+            $('solveGo').disabled = !n || SV.running || n > 20;
+            $('solveGoLabel').textContent = n ? `Solve ${n} page${n === 1 ? '' : 's'} with AI` : 'Solve pages';
+            if (n > 20) $('solveGoLabel').textContent = 'At most 20 pages at a time';
+        }
+        $('pageRange').addEventListener('input', updateGo);
+        $('previewPages').addEventListener('click', showThumbs);
+        async function showThumbs() {
+            const pages = selectedPages().slice(0, 20);
+            $('thumbs').innerHTML = pages.map(n => `<div class="thumb" data-p="${n}"><span>${SV.images ? 'Photo' : 'Page'} ${n}</span><div class="skel" style="width:80%;height:80%"></div></div>`).join('');
+            for (const n of pages) {
+                let src = '';
+                try { src = SV.images ? URL.createObjectURL(SV.images[n - 1]) : await HwKit.thumbOf(SV.pdf, n); } catch (e) { }
+                const el = $('thumbs').querySelector(`[data-p="${n}"]`); if (el && src) el.innerHTML = `<span>${SV.images ? 'Photo' : 'Page'} ${n}</span><img src="${src}" alt="Page ${n}">`;
+            }
+        }
+        const logLine = (t, cls = '') => { $('solveLog').insertAdjacentHTML('beforeend', `<div class="${cls}">${t}</div>`); };
+        $('solveGo').addEventListener('click', async () => {
+            const pages = selectedPages(); if (!pages.length) return;
+            if (!$('thumbs').children.length || $('thumbs').children.length !== pages.length) await showThumbs();
+            SV.running = true; SV.stop = false; SV.found = []; SV.neurons = 0; updateGo();
+            $('solveProgress').hidden = false; $('solveLog').innerHTML = ''; $('solveBarIn').style.width = '2%';
+            let cont = null, failed = 0;
+            for (let k = 0; k < pages.length; k++) {
+                if (SV.stop) { logLine('Stopped.'); break; }
+                const n = pages[k], th = $('thumbs').querySelector(`[data-p="${n}"]`);
+                th && th.classList.add('work');
+                logLine(`Reading ${SV.images ? 'photo' : 'page'} ${n}…`);
+                try {
+                    const img = SV.images ? (await HwKit.photoToJpeg(SV.images[n - 1])).dataUrl : (await HwKit.renderPage(SV.pdf, n)).dataUrl;
+                    const r = await api('/api/homework?action=ai-solve-page', { body: { image: img, grade: F.grade, unit: F.unit, lesson: F.lesson, pageNo: n, continueFrom: cont } });
+                    SV.neurons += r.neurons || 0;
+                    const qsx = r.questions || [];
+                    qsx.forEach(q => { q.page = n; });
+                    SV.found.push(...qsx);
+                    if (qsx.length) { const last = qsx[qsx.length - 1].label; const m = String(last).match(/^(\d+)\./); cont = { section: m ? m[1] : '', label: last }; }
+                    $('solveLog').lastElementChild.innerHTML = `${SV.images ? 'Photo' : 'Page'} ${n}: <b>${qsx.length}</b> question${qsx.length === 1 ? '' : 's'} solved <span class="muted">(${(r.ms / 1000).toFixed(1)} s · ~${Math.round(r.neurons || 0)} units)</span>${!qsx.length ? ' — nothing found on this page' : ''}`;
+                    th && th.classList.replace('work', 'done');
+                } catch (e) {
+                    failed++; th && th.classList.replace('work', 'fail');
+                    $('solveLog').lastElementChild.innerHTML = `<span class="danger-text">${SV.images ? 'Photo' : 'Page'} ${n}: ${esc(e.message)}</span>`;
+                    if (e.data && (e.data.code === 'AI_QUOTA' || e.data.code === 'AI_OFF')) break;
+                }
+                $('solveBarIn').style.width = `${Math.round((k + 1) / pages.length * 100)}%`;
+            }
+            SV.running = false; updateGo(); refreshUsage();
+            const merged = mergeFound(SV.found);
+            if (merged.length) {
+                const byType = Object.keys(TYPE_LABEL).map(t => [t, merged.filter(q => q.type === t).length]).filter(([, c]) => c).map(([t, c]) => `${c} ${TYPE_LABEL[t]}`).join(' · ');
+                logLine(`<b>Found ${merged.length} question${merged.length === 1 ? '' : 's'}</b> — ${byType}. About ${Math.round(SV.neurons)} free AI units used.`);
+                $('solveGo').hidden = true; $('solveUse').hidden = false; $('solveUseLabel').textContent = `Put ${merged.length} questions in the answer key`;
+            } else logLine('No questions were found. Check the pages and try again.');
+        });
+        // the same label on two pages (a question that runs over a page break) → keep the more confident one
+        function mergeFound(list) {
+            const by = new Map();
+            for (const q of list) { const k = String(q.label).trim().toLowerCase(); const prev = by.get(k); if (!prev || (q.confidence ?? 0.5) > (prev.confidence ?? 0.5)) by.set(k, q); }
+            return [...by.values()];
+        }
+        $('solveUse').addEventListener('click', () => {
+            const merged = mergeFound(SV.found).map(q => {
+                const x = { ...fromServer(q), points: DEFAULT_POINTS[q.type] || 1, aiCheck: true, confidence: q.confidence ?? null, options: q.options || [] };
+                if (x.type === 'essay') { if (!x.ideas.length) x.ideas = [{ text: x.modelAnswer.slice(0, 200) || 'Main idea', points: 2 }]; shareIdeas(x); }
+                return x;
+            });
+            const replace = !Q.length || $('replaceKey').checked;
+            if (replace) Q = merged; else { const have = new Set(Q.map(q => String(q.label).toLowerCase())); Q.push(...merged.filter(q => !have.has(String(q.label).toLowerCase()))); }
+            const sum = round2(Q.reduce((t, q) => t + numv(q.points), 0));
+            if (replace) $('fTotal').value = sum;
+            SRC = { kind: SV.book ? 'r2' : 'upload', key: SV.book || '', name: SV.fileName, pages: selectedPages() };
+            $('solveModal').hidden = true; document.body.style.overflow = '';
+            touch(); renderKey();
+            Site.toast(`${merged.length} questions added — check each “AI · check” card, then publish`, 'success');
+            $('key').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('solveModal').hidden) closeSolve(); });
 
         await load();
         if (qs.get('new') === '1' && A.can('homework.create')) openEditor(null);
+        else if (qs.get('subs')) openSubs(Number(qs.get('subs')), false);
         else if (qs.get('edit')) { try { const d = await api(`/api/homework?action=get&id=${encodeURIComponent(qs.get('edit'))}`); grade = d.assignment.grade; openEditor(d); } catch (e) { } }
     })();
     </script>

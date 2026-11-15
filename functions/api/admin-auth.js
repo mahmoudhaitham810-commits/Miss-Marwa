@@ -200,7 +200,7 @@ export async function ensureAppSchema(db) {
         id INTEGER PRIMARY KEY AUTOINCREMENT, grade TEXT NOT NULL, unit INTEGER, lesson INTEGER, title TEXT NOT NULL, instructions TEXT,
         deadline TEXT, closes_at TEXT, total_score REAL NOT NULL DEFAULT 10, status TEXT NOT NULL DEFAULT 'draft',
         created_by TEXT, updated_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        published_at TEXT, closed_at TEXT, push_sent_at TEXT)`);
+        published_at TEXT, closed_at TEXT, push_sent_at TEXT, source TEXT, ai_drafted INTEGER)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_hw_a_grade ON hw_assignments(grade, status)');
     steps.push(`CREATE TABLE IF NOT EXISTS hw_questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_id INTEGER NOT NULL, ord INTEGER NOT NULL DEFAULT 0, label TEXT,
@@ -211,12 +211,30 @@ export async function ensureAppSchema(db) {
         status TEXT NOT NULL DEFAULT 'uploading', auto_score REAL, final_score REAL, overridden_by TEXT,
         pages INTEGER NOT NULL DEFAULT 0, late INTEGER NOT NULL DEFAULT 0, reuploads INTEGER NOT NULL DEFAULT 0, receipt_code TEXT,
         submitted_at TEXT, graded_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        lock_until TEXT, unreadable INTEGER NOT NULL DEFAULT 0, released_at TEXT, released_by TEXT, report TEXT, ai_error TEXT, tries INTEGER NOT NULL DEFAULT 0,
         UNIQUE(assignment_id, student_id))`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_hw_s_student ON hw_submissions(student_id)');
     steps.push(`CREATE TABLE IF NOT EXISTS hw_answers (
         id INTEGER PRIMARY KEY AUTOINCREMENT, submission_id INTEGER NOT NULL, question_id INTEGER NOT NULL,
         transcript TEXT, verdict TEXT, points REAL, ai_points REAL, evidence TEXT, confidence REAL, override_points REAL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(submission_id, question_id))`);
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP, feedback TEXT, UNIQUE(submission_id, question_id))`);
+    steps.push(`CREATE TABLE IF NOT EXISTS hw_pages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, submission_id INTEGER NOT NULL, page_no INTEGER NOT NULL, media_id INTEGER,
+        status TEXT NOT NULL DEFAULT 'new', read_json TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_hw_pages_sub ON hw_pages(submission_id, page_no)');
+    {   // Step 3 columns (add-only; the Step 2 tables may already exist)
+        const want = {
+            hw_assignments: [['source', 'TEXT'], ['ai_drafted', 'INTEGER']],
+            hw_submissions: [['lock_until', 'TEXT'], ['unreadable', 'INTEGER NOT NULL DEFAULT 0'], ['released_at', 'TEXT'], ['released_by', 'TEXT'],
+                ['report', 'TEXT'], ['ai_error', 'TEXT'], ['tries', 'INTEGER NOT NULL DEFAULT 0']],
+            hw_answers: [['feedback', 'TEXT']]
+        };
+        for (const [table, cols] of Object.entries(want)) {
+            let have = [];
+            try { const r = await db.prepare(`PRAGMA table_info(${table})`).all(); have = (r.results || []).map(c => c.name); } catch (e) { }
+            if (have.length) for (const [c, t] of cols) if (!have.includes(c)) steps.push(`ALTER TABLE ${table} ADD COLUMN ${c} ${t}`);
+        }
+    }
     // Unified file registry (R2 primary, D1 fallback) — see media-store.js
     steps.push(...mediaSchemaSteps());
     // Devices each student is signed in on (max 2 — staff can reset them)

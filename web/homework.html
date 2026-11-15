@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F7FC">
+    <title>Homework · Science Academy</title>
+    <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <style>
+        .switch { display: inline-flex; margin-bottom: 14px; }
+        .switch a { text-decoration: none; }
+        .page-head { margin-bottom: 14px; } .page-head p { margin: 6px 0 0; color: var(--text-2); }
+        .hw-list { display: flex; flex-direction: column; gap: 12px; }
+        @media (min-width: 900px) { .hw-list { display: grid; grid-template-columns: 1fr 1fr; } }
+        .hw { display: grid; gap: 10px; text-decoration: none; color: inherit; }
+        .hw .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+        .hw h3 { margin: 0; font-size: 17px; line-height: 1.35; }
+        .hw .meta { font-size: 13px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .hw.urgent { box-shadow: inset 0 3px 0 var(--accent), var(--shadow); }
+        .score-pill { font-weight: 800; font-size: 15px; padding: 6px 12px; border-radius: 10px; }
+        .score-pill.good { background: var(--success-soft); color: var(--success); } .score-pill.mid { background: var(--primary-soft); color: var(--primary); } .score-pill.bad { background: var(--danger-soft); color: var(--danger); }
+        .sec-title { font-size: 13px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 22px 0 10px; }
+
+        /* upload */
+        .tip { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 16px; background: var(--primary-soft); color: var(--text); margin-bottom: 14px; }
+        .tip .ic { width: 38px; height: 38px; border-radius: 12px; background: var(--primary); color: #fff; display: grid; place-items: center; flex: none; }
+        .tip .tt { display: block; margin-bottom: 2px; } .tip p { margin: 0; font-size: 13.5px; color: var(--text-2); }
+        .tip .ar { display: block; margin-top: 4px; font-size: 13.5px; direction: rtl; text-align: right; }
+        .pick-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .pick { display: grid; justify-items: center; gap: 6px; padding: 18px 10px; border-radius: 16px; border: 2px dashed var(--border); background: var(--surface); cursor: pointer; text-align: center; font-weight: 700; color: var(--text); }
+        .pick:hover { border-color: var(--primary); color: var(--primary); }
+        .pick .ic { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--surface-3); }
+        .pick small { color: var(--muted); font-weight: 600; }
+        .pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 14px; }
+        .pg { position: relative; border-radius: 14px; overflow: hidden; border: 1.5px solid var(--border); background: var(--surface-2); aspect-ratio: 3 / 4; }
+        .pg img { width: 100%; height: 100%; object-fit: contain; background: #fff; display: block; }
+        .pg .no { position: absolute; left: 8px; top: 8px; background: rgba(15, 23, 42, .78); color: #fff; font-weight: 800; font-size: 12px; padding: 3px 8px; border-radius: 8px; }
+        .pg .warn { position: absolute; left: 8px; right: 8px; bottom: 46px; background: var(--warning); color: #fff; font-size: 11.5px; font-weight: 800; padding: 4px 8px; border-radius: 8px; text-align: center; }
+        .pg .tools { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 4px; padding: 6px; background: linear-gradient(transparent, rgba(15, 23, 42, .55)); }
+        .pg .tools button { width: 34px; height: 34px; border-radius: 10px; border: 0; background: rgba(255, 255, 255, .95); color: #0f172a; display: grid; place-items: center; cursor: pointer; }
+        .pg .tools button:disabled { opacity: .35; }
+        .pg.bad { border-color: var(--warning); }
+        .prep { margin-top: 12px; font-size: 13.5px; color: var(--muted); }
+        .submit-bar { position: sticky; bottom: calc(var(--bottomnav-h, 64px) + 12px); margin-top: 16px; z-index: 5; }
+        @media (min-width: 900px) { .submit-bar { bottom: 16px; } }
+
+        /* marking animation */
+        .marking { text-align: center; padding: 28px 18px; }
+        .robot { width: 120px; height: 120px; margin: 0 auto 18px; position: relative; }
+        .robot .orb { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, var(--primary), var(--accent, #F59E0B), var(--success), var(--primary)); animation: spin 1.6s linear infinite; mask: radial-gradient(farthest-side, transparent calc(100% - 9px), #000 calc(100% - 8px)); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 9px), #000 calc(100% - 8px)); }
+        .robot .core { position: absolute; inset: 18px; border-radius: 50%; background: var(--primary-soft); display: grid; place-items: center; color: var(--primary); animation: pulse 1.6s ease-in-out infinite; }
+        .robot .core .icon { width: 40px; height: 40px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 50% { transform: scale(.92); } }
+        .steps { list-style: none; padding: 0; margin: 18px auto 0; max-width: 360px; text-align: left; display: grid; gap: 10px; }
+        .steps li { display: flex; gap: 12px; align-items: center; color: var(--faint); font-weight: 700; transition: color .3s; }
+        .steps li .dot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); flex: none; transition: background .3s; }
+        .steps li.now { color: var(--text); } .steps li.now .dot { background: var(--primary); color: #fff; box-shadow: 0 0 0 5px var(--primary-soft); }
+        .steps li.done { color: var(--success); } .steps li.done .dot { background: var(--success); color: #fff; }
+        .steps li small { display: block; font-weight: 600; color: var(--muted); font-size: 12.5px; }
+        .bar { height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin: 18px auto 0; max-width: 360px; }
+        .bar span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--primary), var(--success)); transition: width .6s var(--ease); }
+
+        /* result */
+        .res-head { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+        .res-head .ring { width: 116px; height: 116px; }
+        .res-head h2 { margin: 0 0 4px; font-size: 22px; }
+        .res-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+        .q { border-radius: 16px; border: 1px solid var(--border); padding: 14px; background: var(--surface); display: grid; gap: 8px; }
+        .q + .q { margin-top: 10px; }
+        .q.correct { border-inline-start: 5px solid var(--success); } .q.partial { border-inline-start: 5px solid var(--warning); }
+        .q.wrong, .q.blank, .q.unreadable { border-inline-start: 5px solid var(--danger); }
+        .q .qh { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+        .q .qh b { font-size: 15px; }
+        .q .pts { font-weight: 800; font-variant-numeric: tabular-nums; }
+        .q .row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; font-size: 14px; }
+        .q .row span:first-child { color: var(--muted); font-weight: 700; font-size: 12.5px; padding-top: 2px; }
+        .q .model { color: var(--success); font-weight: 700; }
+        .q .why { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: 13.5px; color: var(--text-2); }
+        .ai-soon { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 14px; border-radius: 16px; background: linear-gradient(120deg, var(--accent-soft), var(--primary-soft)); margin: 14px 0; }
+        .ai-soon b { display: block; }
+        .ai-soon p { margin: 2px 0 0; font-size: 13px; color: var(--text-2); }
+
+        /* receipt */
+        .receipt { position: relative; overflow: hidden; border-radius: 22px; padding: 20px; color: #fff; background: linear-gradient(135deg, #16A34A, #0EA5E9 60%, #6366F1); box-shadow: 0 18px 40px rgba(14, 165, 233, .35); }
+        .receipt::after { content: ''; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .35) 45%, transparent 60%); transform: translateX(-100%); animation: shine 2.6s ease-in-out infinite; pointer-events: none; }
+        @keyframes shine { 60%, 100% { transform: translateX(100%); } }
+        .receipt .big { font-size: 22px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+        .receipt .big .ar { font-size: 20px; }
+        .receipt dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0 0; font-size: 14.5px; }
+        .receipt dt { opacity: .8; } .receipt dd { margin: 0; font-weight: 800; }
+        .receipt .code { margin-top: 14px; display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+        .receipt .code b { font-size: 28px; letter-spacing: .18em; font-variant-numeric: tabular-nums; }
+        .receipt .clock { text-align: right; font-variant-numeric: tabular-nums; }
+        .receipt .clock b { display: block; font-size: 22px; }
+        .receipt .pulse { width: 10px; height: 10px; border-radius: 50%; background: #fff; display: inline-block; animation: blink 1s infinite; margin-inline-end: 6px; }
+        @keyframes blink { 50% { opacity: .2; } }
+        .receipt-full { position: fixed; inset: 0; z-index: 90; background: rgba(2, 6, 23, .92); display: grid; place-items: center; padding: 18px; }
+        .receipt-full .receipt { width: min(460px, 100%); transform: scale(1.02); }
+        .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 95; overflow: hidden; }
+        .confetti i { position: absolute; top: -12px; width: 9px; height: 14px; border-radius: 3px; animation: fall linear forwards; }
+        @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
+        @media (prefers-reduced-motion: reduce) { .robot .orb, .robot .core, .receipt::after, .receipt .pulse { animation: none; } }
+    </style>
+</head>
+<body>
+    <main class="main" id="main">
+        <div class="container" id="root">
+            <div class="segmented switch reveal" id="switch"></div>
+            <div id="view"><div class="skel" style="height:220px;border-radius:20px"></div></div>
+        </div>
+    </main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/student.js"></script>
+    <script src="/assets/hw-kit.js"></script>
+    <script>
+    (function () {
+        if (!window.App) return;
+        const { session, esc, txt, icon, api, url, timeLeft, fmtDate, scoreTone, ring, animateRings, toast, sheet, soon, reveal } = App;
+        App.shell({ active: 'exams', title: 'Homework' });
+        const $ = (id) => document.getElementById(id);
+        const view = $('view');
+        $('switch').innerHTML = `<a href="${url('exams.html')}" class="">${icon('clipboard', 'sm')}Exams</a><a href="${url('homework.html')}" class="active" aria-current="page">${icon('file', 'sm')}Homework</a>`;
+        $('switch').querySelectorAll('a').forEach(a => a.setAttribute('role', 'button'));
+        const toMs = (v) => v ? new Date(String(v).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(v)) ? '' : 'Z')).getTime() : NaN;
+        const iso = (v) => new Date(toMs(v)).toISOString();
+        const when = (v) => new Date(toMs(v)).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+        const params = () => new URLSearchParams(location.search);
+        const go = (q) => { history.pushState({}, '', url('homework.html', q)); route(); };
+        window.addEventListener('popstate', route);
+
+        let MODE = 'confirm';
+        // ================= list =================
+        async function showList() {
+            view.innerHTML = `<section class="page-head reveal"><h1 class="h1">Homework <span class="ar" style="font-weight:600;color:var(--muted);font-size:.7em">· الواجبات</span></h1>
+                <p class="small">Solve in your booklet & notebook, scan the pages, upload — and see your mark.</p></section><div id="hwList"><div class="skel" style="height:180px;border-radius:20px"></div></div>`;
+            let d; try { d = await api('/api/hw-student?action=list'); } catch (e) { $('hwList').innerHTML = `<div class="card"><p class="muted">${esc(e.message)}</p></div>`; return; }
+            MODE = d.mode;
+            const due = d.items.filter(x => x.due).sort((a, b) => toMs(a.deadline) - toMs(b.deadline));
+            const done = d.items.filter(x => x.submission).sort((a, b) => toMs(b.submission.submittedAt) - toMs(a.submission.submittedAt));
+            const missed = d.items.filter(x => !x.submission && x.state === 'closed');
+            const card = (x) => {
+                const s = x.submission, late = toMs(x.deadline) < Date.now();
+                let right = '';
+                if (!s) right = late ? `<span class="chip danger">${icon('clock', 'sm')}Late — still accepted</span>` : `<span class="chip ${toMs(x.deadline) - Date.now() < 864e5 ? 'accent' : 'primary'}">${icon('clock', 'sm')}${esc(timeLeft(iso(x.deadline)))}</span>`;
+                else if (s.released) right = `<span class="score-pill num ${scoreTone(s.score, x.totalScore)}">${s.score}/${x.totalScore}</span>`;
+                else if (s.unreadable && s.reuploads < 1 && !late) right = `<span class="chip danger">${icon('alert', 'sm')}Upload again</span>`;
+                else right = `<span class="chip">${icon('hourglass', 'sm')}${s.status === 'grading' || s.status === 'queued' ? 'Being marked' : 'Waiting for Miss Marwa'}</span>`;
+                return `<a class="card hw reveal ${!s && toMs(x.deadline) - Date.now() < 864e5 ? 'urgent' : ''}" href="${url('homework.html', { id: x.id })}" data-id="${x.id}">
+                    <div class="top"><span class="xs muted">Unit ${x.unit} · Lesson ${x.lesson}</span>${right}</div>
+                    <h3>${txt(x.title)}</h3>
+                    <div class="meta">${s ? `${icon('checkCircle', 'sm')}Submitted ${esc(fmtDate(iso(s.submittedAt)))}${s.late ? ' · late' : ''}` : `${icon('calendar', 'sm')}Due ${esc(when(x.deadline))}`}</div>
+                    ${!s ? `<span class="btn btn-primary btn-block">${icon('download', 'sm')}Upload my homework</span>` : `<span class="link">${s.released ? 'See my answers' : 'Open'} ${icon('arrowRight', 'sm')}</span>`}</a>`;
+            };
+            $('hwList').innerHTML = (due.length ? `<div class="hw-list">${due.map(card).join('')}</div>` : `<div class="card reveal"><div class="empty"><div class="bubble">${icon('checkCircle')}</div><h3>No homework due</h3><p>New homework shows up here (you'll get a notification).</p></div></div>`)
+                + (done.length ? `<div class="sec-title">Submitted</div><div class="hw-list">${done.map(card).join('')}</div>` : '')
+                + (missed.length ? `<div class="sec-title">Missed</div><div class="hw-list">${missed.map(x => `<div class="card hw reveal"><div class="top"><span class="xs muted">Unit ${x.unit} · Lesson ${x.lesson}</span><span class="chip danger">${icon('lock', 'sm')}Closed</span></div><h3>${txt(x.title)}</h3><p class="small muted" style="margin:0">This homework closed before you submitted it.</p></div>`).join('')}</div>` : '');
+            $('hwList').addEventListener('click', (e) => { const a = e.target.closest('a[data-id]'); if (a) { e.preventDefault(); go({ id: a.dataset.id }); } });
+            reveal(view);
+        }
+
+        // ================= one homework =================
+        let H = null, PAGES = [], SUBMITTING = false;
+        async function showOne(id) {
+            view.innerHTML = '<div class="skel" style="height:260px;border-radius:20px"></div>';
+            try { H = await api(`/api/hw-student?action=get&id=${encodeURIComponent(id)}`); } catch (e) { view.innerHTML = `<div class="card"><p>${esc(e.message)}</p><a class="btn btn-soft" href="${url('homework.html')}">Back</a></div>`; return; }
+            MODE = H.mode;
+            const a = H.assignment, s = H.submission;
+            const head = `<section class="page-head reveal"><a class="link" href="${url('homework.html')}" data-back>${icon('arrowLeft', 'sm')}All homework</a>
+                <h1 class="h1" style="margin-top:8px">${txt(a.title)}</h1>
+                <p class="small">Unit ${a.unit} · Lesson ${a.lesson} · ${a.questions} question${a.questions === 1 ? '' : 's'} · ${a.totalScore} marks · due ${esc(when(a.deadline))}</p></section>`;
+            if (H.canUpload) return renderUpload(head);
+            if (s && ['grading', 'queued'].includes(s.status)) return runMarking(head, s.id);
+            return renderResult(head);
+        }
+
+        function renderUpload(head) {
+            const a = H.assignment;
+            PAGES = [];
+            view.innerHTML = head + `
+                ${H.reupload ? `<div class="card reveal" style="border:1.5px solid var(--danger);margin-bottom:14px"><b>${icon('alert', 'sm')} Some pages couldn't be read</b><p class="small muted" style="margin:6px 0 0">You can upload your homework one more time before the deadline. Take the photos in good light, straight from above.</p></div>` : ''}
+                ${H.late ? `<div class="card reveal" style="border:1.5px solid var(--accent);margin-bottom:14px"><b>${icon('clock', 'sm')} The deadline has passed</b><p class="small muted" style="margin:6px 0 0">You can still submit — it will be marked “Late”.</p></div>` : ''}
+                ${a.instructions ? `<div class="card reveal" style="margin-bottom:14px"><b>Note from Miss Marwa</b><p dir="auto" style="margin:6px 0 0">${txt(a.instructions)}</p></div>` : ''}
+                <div class="tip reveal"><span class="ic">${icon('edit')}</span><div><b class="tt">Write the question number next to every answer ✍️</b>
+                    <p>In your notebook write it like the booklet — e.g. <b>1.7</b> (section 1, question 7). Then scan all pages with CamScanner into <b>one PDF</b>, or take clear photos.</p>
+                    <span class="ar">اكتب رقم السؤال جنب كل إجابة في الكشكول (زي 1.7) عشان التصحيح يبقى دقيق.</span></div></div>
+                <div class="pick-row reveal">
+                    <label class="pick" id="pickPdf"><span class="ic">${icon('file')}</span>Upload PDF<small>CamScanner / Adobe Scan</small><input type="file" accept="application/pdf,.pdf" hidden id="inPdf"></label>
+                    <label class="pick" id="pickPhotos"><span class="ic">${icon('image')}</span>Add photos<small>From camera or gallery</small><input type="file" accept="image/*" multiple hidden id="inPhotos"></label>
+                </div>
+                <div class="prep" id="prep"></div>
+                <div class="pages" id="pages"></div>
+                <div class="submit-bar" id="submitBar" hidden><button class="btn btn-primary btn-block btn-lg" id="submitBtn">${icon('send')}<span id="submitLabel">Submit</span></button></div>`;
+            reveal(view);
+            $('inPdf').addEventListener('change', async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) await addPdf(f); });
+            $('inPhotos').addEventListener('change', async (e) => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) await addPhotos(fs); });
+            $('pages').addEventListener('click', onPageTool);
+            $('submitBtn').addEventListener('click', confirmSubmit);
+        }
+        async function addPdf(file) {
+            $('prep').textContent = 'Opening the PDF…';
+            try {
+                const pdf = await HwKit.openPdf(file);
+                const n = Math.min(pdf.numPages, 20 - PAGES.length);
+                if (pdf.numPages > n) toast(`Only the first ${n} pages are used (20 pages max)`, 'info');
+                for (let i = 1; i <= n; i++) {
+                    $('prep').textContent = `Preparing page ${i} of ${n}…`;
+                    const r = await HwKit.renderPage(pdf, i, { maxSide: 1600, quality: 0.8 });
+                    PAGES.push({ dataUrl: r.dataUrl, q: HwKit.checkQuality(r.canvas) });
+                    renderPages();
+                }
+            } catch (e) { toast("Couldn't open this PDF — try exporting it again from CamScanner", 'error'); }
+            $('prep').textContent = '';
+        }
+        async function addPhotos(files) {
+            for (let i = 0; i < files.length && PAGES.length < 20; i++) {
+                $('prep').textContent = `Preparing photo ${i + 1} of ${files.length}…`;
+                try { const r = await HwKit.photoToJpeg(files[i]); PAGES.push({ dataUrl: r.dataUrl, q: HwKit.checkQuality(r.canvas) }); renderPages(); }
+                catch (e) { toast(e.message, 'error'); }
+            }
+            $('prep').textContent = '';
+        }
+        function renderPages() {
+            $('pages').innerHTML = PAGES.map((p, i) => `<div class="pg ${p.q.dark || p.q.blurry ? 'bad' : ''}"><img src="${p.dataUrl}" alt="Page ${i + 1}"><span class="no">${i + 1}</span>
+                ${p.q.dark ? '<span class="warn">Too dark — retake?</span>' : p.q.blurry ? '<span class="warn">Looks blurry — retake?</span>' : ''}
+                <div class="tools"><button data-t="up" data-i="${i}" aria-label="Move page ${i + 1} up" ${i ? '' : 'disabled'}>${icon('arrowLeft', 'sm')}</button><button data-t="down" data-i="${i}" aria-label="Move page ${i + 1} down" ${i < PAGES.length - 1 ? '' : 'disabled'}>${icon('arrowRight', 'sm')}</button><button data-t="del" data-i="${i}" aria-label="Remove page ${i + 1}">${icon('trash', 'sm')}</button></div></div>`).join('');
+            $('submitBar').hidden = !PAGES.length;
+            $('submitLabel').textContent = `Submit ${PAGES.length} page${PAGES.length === 1 ? '' : 's'}${H.late ? ' (late)' : ''}`;
+        }
+        function onPageTool(e) {
+            const b = e.target.closest('button[data-t]'); if (!b) return;
+            const i = Number(b.dataset.i);
+            if (b.dataset.t === 'up' && i > 0) [PAGES[i - 1], PAGES[i]] = [PAGES[i], PAGES[i - 1]];
+            if (b.dataset.t === 'down' && i < PAGES.length - 1) [PAGES[i + 1], PAGES[i]] = [PAGES[i], PAGES[i + 1]];
+            if (b.dataset.t === 'del') PAGES.splice(i, 1);
+            renderPages();
+        }
+        function confirmSubmit() {
+            const bad = PAGES.filter(p => p.q.dark || p.q.blurry).length;
+            sheet({
+                iconName: bad ? 'alert' : 'send', tone: bad ? 'accent' : undefined,
+                title: bad ? `${bad} page${bad === 1 ? '' : 's'} may be hard to read` : `Submit ${PAGES.length} page${PAGES.length === 1 ? '' : 's'}?`,
+                subtitle: bad ? 'Blurry or dark pages can lose marks. You can retake them now, or submit anyway.' : 'Check the pages are in order and every answer has its question number.',
+                actions: [{ label: bad ? 'Submit anyway' : 'Submit homework', cls: 'btn-primary', onClick: (close) => { close(); submit(); } }, { label: bad ? 'Retake pages' : 'Not yet', cls: 'btn-ghost' }]
+            });
+        }
+        async function submit() {
+            if (SUBMITTING) return; SUBMITTING = true;
+            const head = view.querySelector('.page-head').outerHTML;
+            view.innerHTML = head + markingCard(); reveal(view);
+            setStep(0, `0 of ${PAGES.length}`); setBar(3);
+            try {
+                const st = await api('/api/hw-student?action=start', { method: 'POST', body: { id: H.assignment.id } });
+                for (let i = 0; i < PAGES.length; i++) {
+                    await api('/api/hw-student?action=page', { method: 'POST', body: { submissionId: st.submissionId, pageNo: i + 1, image: { mime: 'image/jpeg', data: HwKit.b64(PAGES[i].dataUrl) } } });
+                    setStep(0, `${i + 1} of ${PAGES.length}`); setBar(5 + (i + 1) / PAGES.length * 25);
+                }
+                await api('/api/hw-student?action=submit', { method: 'POST', body: { submissionId: st.submissionId } });
+                SUBMITTING = false;
+                await loop(st.submissionId);
+            } catch (e) {
+                SUBMITTING = false;
+                view.innerHTML = head + `<div class="card reveal in"><b>${icon('alert', 'sm')} ${esc(e.message)}</b><p class="small muted">Your pages were not lost — try again.</p><button class="btn btn-primary" id="retry">${icon('refresh', 'sm')}Try again</button></div>`;
+                $('retry').addEventListener('click', () => { view.innerHTML = head; renderUpload(head); });
+            }
+        }
+        const STEPS = [['Uploading your pages', 'download'], ['Reading your answers', 'eye'], ['Checking with the answer key', 'checkCircle'], ['Calculating your score', 'target']];
+        function markingCard() {
+            return `<div class="card marking reveal"><div class="robot"><span class="orb"></span><span class="core">${icon('sparkles')}</span></div>
+                <h2 style="margin:0">Marking your homework…</h2><p class="small muted" style="margin:6px 0 0" id="mkNote">Keep this page open — it only takes a moment.</p>
+                <ul class="steps">${STEPS.map(([t, ic], i) => `<li data-s="${i}"><span class="dot">${icon(ic, 'sm')}</span><span>${t}<small></small></span></li>`).join('')}</ul>
+                <div class="bar"><span id="mkBar"></span></div></div>`;
+        }
+        function setStep(k, sub) {
+            view.querySelectorAll('.steps li').forEach((li, i) => {
+                li.className = i < k ? 'done' : i === k ? 'now' : '';
+                li.querySelector('.dot').innerHTML = i < k ? icon('check', 'sm') : icon(STEPS[i][1], 'sm');
+                li.querySelector('small').textContent = i === k ? (sub || '') : '';
+            });
+        }
+        const setBar = (p) => { const b = $('mkBar'); if (b) b.style.width = Math.min(100, p) + '%'; };
+        async function runMarking(head, subId) { view.innerHTML = head + markingCard(); reveal(view); setStep(1, ''); setBar(35); await loop(subId); }
+        async function loop(subId) {
+            let pages = 0;
+            for (let k = 0; k < 80; k++) {
+                let r;
+                try { r = await api('/api/hw-student?action=grade', { method: 'POST', body: { submissionId: subId } }); }
+                catch (e) { await new Promise(x => setTimeout(x, 2500)); continue; }
+                pages = r.pages || pages;
+                if (r.stage === 'reading') { setStep(1, `page ${r.page} of ${r.pages}`); setBar(30 + r.page / Math.max(1, r.pages) * 45); }
+                if (r.done) {
+                    setStep(2, ''); setBar(85); await new Promise(x => setTimeout(x, 450));
+                    setStep(3, ''); setBar(100); await new Promise(x => setTimeout(x, 550));
+                    H = await api(`/api/hw-student?action=get&id=${H.assignment.id}`);
+                    return renderResult(view.querySelector('.page-head').outerHTML, true);
+                }
+                if (r.queued) {
+                    H = await api(`/api/hw-student?action=get&id=${H.assignment.id}`);
+                    return renderResult(view.querySelector('.page-head').outerHTML, false, r.reason);
+                }
+                if (r.stage !== 'reading' && !r.busy) setStep(r.page ? 1 : 2, '');
+                if (r.busy || r.retry) await new Promise(x => setTimeout(x, 1500));
+            }
+            H = await api(`/api/hw-student?action=get&id=${H.assignment.id}`);
+            renderResult(view.querySelector('.page-head').outerHTML);
+        }
+
+        // ================= result + receipt =================
+        let clockTimer = null;
+        function receiptHTML() {
+            const s = H.submission, a = H.assignment, r = H.result || {};
+            const name = `${session.firstName || ''} ${session.lastName || ''}`.trim();
+            return `<div class="receipt" id="receipt">
+                <div class="big">${icon('checkCircle')}Submitted · <span class="ar">تم التسليم ✅</span></div>
+                <dl><dt>Name</dt><dd dir="auto">${esc(name)}</dd><dt>Code</dt><dd>${esc(session.id)}</dd><dt>Lesson</dt><dd>Unit ${a.unit} · Lesson ${a.lesson}</dd>
+                    <dt>Score</dt><dd>${r.released ? `${r.score} / ${a.totalScore}` : 'Being checked'}</dd><dt>Submitted</dt><dd>${esc(when(s.submittedAt))}${s.late ? ' · late' : ''}</dd></dl>
+                <div class="code"><div><span style="opacity:.8;font-size:12px">Receipt code</span><br><b>${esc(s.receipt || '—')}</b></div>
+                    <div class="clock"><span class="pulse"></span><span style="opacity:.85;font-size:12px" id="rcDate"></span><b id="rcTime"></b></div></div></div>`;
+        }
+        function tick() {
+            const d = new Date();
+            document.querySelectorAll('#rcTime').forEach(el => { el.textContent = d.toLocaleTimeString('en-GB'); });
+            document.querySelectorAll('#rcDate').forEach(el => { el.textContent = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); });
+        }
+        function renderResult(head, fresh = false, queuedWhy = null) {
+            const s = H.submission, a = H.assignment, r = H.result;
+            clearInterval(clockTimer);
+            if (!s) { view.innerHTML = head + `<div class="card"><p class="muted">${esc(H.uploadWhy || 'This homework is closed.')}</p></div>`; return; }
+            let top = '';
+            if (r && r.released) {
+                top = `<div class="card reveal"><div class="res-head">${ring(r.score, a.totalScore, { label: 'score' })}<div><h2>${r.score >= a.totalScore * 0.85 ? 'Excellent work! 🌟' : r.score >= a.totalScore * 0.5 ? 'Good effort 👏' : 'Keep going — you can do it 💪'}</h2>
+                    <p class="small muted" style="margin:0">${r.items.filter(i => i.verdict === 'correct').length} of ${r.items.length} questions fully right${r.items.some(i => i.verdict !== 'correct') ? ` · ${r.items.filter(i => i.verdict !== 'correct').length} to revise` : ''}</p></div></div>
+                    <div class="res-actions"><button class="btn btn-soft" id="waSum">${icon('whatsapp', 'sm')}Send summary on WhatsApp</button><button class="btn btn-ghost" id="showReceipt">${icon('shield', 'sm')}Show receipt</button></div></div>`;
+            } else if (queuedWhy || s.status === 'queued') {
+                top = `<div class="card reveal"><b>${icon('checkCircle', 'sm')} Your homework is safely submitted</b><p class="small muted" style="margin:6px 0 0">The marking robot is resting until 2:00 am. You'll get a notification as soon as your homework is marked.</p></div>`;
+            } else if (s.status === 'needs_review') {
+                top = `<div class="card reveal"><b>${icon('eye', 'sm')} Miss Marwa is checking your pages</b><p class="small muted" style="margin:6px 0 0">${s.unreadable ? 'Some pages were hard to read. ' : ''}You'll get a notification when your mark is ready.</p>
+                    ${H.canUpload && H.reupload ? `<button class="btn btn-primary" style="margin-top:10px" id="reup">${icon('refresh', 'sm')}Upload clearer pages (1 chance)</button>` : ''}</div>`;
+            } else if (s.status === 'pending' || (r && !r.released)) {
+                top = `<div class="card reveal"><b>${icon('hourglass', 'sm')} Marked — waiting for Miss Marwa to confirm</b><p class="small muted" style="margin:6px 0 0">You'll get a notification when your score is ready.</p></div>`;
+            }
+            const items = r && r.released ? r.items : [];
+            const wrong = items.filter(i => i.verdict !== 'correct');
+            const qCard = (i) => {
+                const mark = i.verdict === 'correct' ? '✅' : i.verdict === 'partial' ? '🟡' : '❌';
+                return `<div class="q ${esc(i.verdict)}"><div class="qh"><b>${mark} Question ${esc(i.label)}</b><span class="pts">${i.earned} / ${i.points}</span></div>
+                    ${i.question ? `<div class="small muted" dir="auto">${txt(i.question)}</div>` : ''}
+                    <div class="row"><span>Your answer</span><span dir="auto">${i.yourAnswer ? txt(i.yourAnswer) : '<i class="muted">nothing found</i>'}${i.yourCorrection ? ' — ' + txt(i.yourCorrection) : ''}</span></div>
+                    ${i.verdict !== 'correct' ? `<div class="row"><span>Model answer</span><span class="model" dir="auto">${txt(i.modelAnswer)}</span></div>` : ''}
+                    ${i.explanation || i.feedback ? `<div class="why" dir="auto">${i.explanation ? `💡 ${txt(i.explanation)}` : ''}${i.feedback && i.verdict !== 'correct' ? `${i.explanation ? '<br>' : ''}✍️ ${txt(i.feedback)}` : ''}</div>` : ''}</div>`;
+            };
+            view.innerHTML = head + top
+                + (items.length ? `${wrong.length ? `<div class="ai-soon reveal"><div><b>${icon('sparkles', 'sm')} Study with AI <span class="soon-tag">Soon</span></b><p>Your mistakes turned into a short lesson made just for you.</p></div><button class="btn btn-soft btn-sm" id="aiSoon">Coming soon</button></div>` : ''}
+                    <div class="sec-title">${wrong.length ? 'Questions to revise' : 'All your answers'}</div><div class="reveal">${(wrong.length ? wrong : items).map(qCard).join('')}</div>
+                    ${wrong.length && items.length > wrong.length ? `<details class="reveal" style="margin-top:12px"><summary class="link" style="cursor:pointer">Show the ${items.length - wrong.length} correct answers</summary><div style="margin-top:10px">${items.filter(i => i.verdict === 'correct').map(qCard).join('')}</div></details>` : ''}
+                    ${wrong.length ? `<a class="btn btn-ghost btn-block reveal" style="margin-top:14px" href="${url('questions.html', { new: 1, unit: a.unit, lesson: a.lesson })}">${icon('help', 'sm')}Ask Miss Marwa about a question</a>` : ''}` : '')
+                + `<div class="sec-title">Your receipt — show it at the door</div><div class="reveal">${receiptHTML()}</div>`;
+            reveal(view); animateRings(view);
+            tick(); clockTimer = setInterval(tick, 1000);
+            $('aiSoon') && $('aiSoon').addEventListener('click', () => soon('Study with AI'));
+            $('showReceipt') && $('showReceipt').addEventListener('click', fullReceipt);
+            $('waSum') && $('waSum').addEventListener('click', waSummary);
+            $('reup') && $('reup').addEventListener('click', () => renderUpload(head));
+            if (fresh && r && r.released && r.score >= a.totalScore * 0.85) confetti();
+        }
+        function fullReceipt() {
+            const ov = document.createElement('div'); ov.className = 'receipt-full'; ov.innerHTML = receiptHTML().replace('id="receipt"', '') + '';
+            ov.addEventListener('click', () => ov.remove()); document.body.appendChild(ov); tick();
+        }
+        async function waSummary() {
+            const btn = $('waSum'); btn.classList.add('loading'); btn.disabled = true;
+            try {
+                const r = await api('/api/hw-student?action=report', { method: 'POST', body: { submissionId: H.submission.id } });
+                const href = `https://wa.me/?text=${encodeURIComponent(r.text)}`;
+                (window.__waOpen || ((h) => { window.open(h, '_blank', 'noopener'); }))(href);
+            } catch (e) { toast(e.message, 'error'); }
+            finally { btn.classList.remove('loading'); btn.disabled = false; }
+        }
+        function confetti() {
+            const box = document.createElement('div'); box.className = 'confetti';
+            const colors = ['#16A34A', '#0EA5E9', '#6366F1', '#F59E0B', '#EF4444'];
+            for (let i = 0; i < 70; i++) { const p = document.createElement('i'); p.style.left = Math.random() * 100 + '%'; p.style.background = colors[i % colors.length]; p.style.animationDuration = 1.8 + Math.random() * 1.6 + 's'; p.style.animationDelay = Math.random() * .5 + 's'; box.appendChild(p); }
+            document.body.appendChild(box); setTimeout(() => box.remove(), 4200);
+        }
+
+        function route() {
+            clearInterval(clockTimer);
+            const id = params().get('id');
+            if (id) showOne(id); else showList();
+            window.scrollTo(0, 0);
+        }
+        view.addEventListener('click', (e) => { const b = e.target.closest('[data-back]'); if (b) { e.preventDefault(); go({}); } });
+        route();
+    })();
+    </script>
+</body>
+</html>

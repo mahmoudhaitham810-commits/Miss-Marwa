@@ -4,7 +4,7 @@
 import { requireStaff, ensureAppSchema } from './admin-auth.js';
 
 function getDb(env) { return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function'); }
-const KINDS = ['center-exam', 'center-report', 'online-report', 'online-missed', 'online-not-submitted', 'gap', 'congrats', 'parent-link', 'other'];
+const KINDS = ['center-exam', 'center-report', 'online-report', 'online-missed', 'online-not-submitted', 'gap', 'congrats', 'parent-link', 'homework-report', 'homework-missing', 'other'];
 
 export async function onRequestPost(context) {
     const { request, env } = context;
