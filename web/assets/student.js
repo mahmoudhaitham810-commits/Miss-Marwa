@@ -433,7 +433,6 @@
                 <div class="id-card"><div><span>Student code</span><strong class="num">${esc(session.id)}</strong></div>
                     <button class="btn btn-sm btn-ghost" id="copyCode">${icon('copy', 'sm')}Copy</button></div>
                 <p class="xs muted" style="margin:8px 2px 12px">You sign in with this code. Keep it safe.</p>
-                <button class="list-btn" data-theme-toggle>${icon('moon')}Dark mode<span class="end" data-theme-state>${currentTheme() === 'dark' ? 'Dark' : 'Light'}</span></button>
                 <button class="list-btn" data-install>${icon('download')}Install the app<span class="end ar">حمّل التطبيق</span></button>
                 <button class="list-btn" id="pfNotif">${icon('bell')}Notifications<span class="end" id="pfNotifState"></span></button>
                 <a class="list-btn" href="${url('exam-results.html')}">${icon('chart')}My results<span class="end">${icon('chevronRight', 'sm')}</span></a>

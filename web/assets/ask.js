@@ -103,9 +103,11 @@
     function bubble(m, viewer, icon) {
         const mine = viewer === 'student' ? m.sender === 'student' : m.sender === 'staff';
         const fromTeam = m.sender === 'staff' || m.sender === 'auto';
-        const media = m.mediaId ? (m.mediaKind === 'image'
-            ? `<a class="ask-img" href="${mediaUrl(m.mediaId)}" target="_blank" rel="noopener"><img src="${mediaUrl(m.mediaId)}" alt="Photo" loading="lazy"></a>`
-            : `<div class="ask-audio">${icon ? icon('mic', 'sm') : ''}<audio controls preload="none" src="${mediaUrl(m.mediaId)}"></audio>${m.seconds ? `<span class="ask-dur">${mmss(m.seconds)}</span>` : ''}</div>`) : '';
+        // photo and/or voice note (older messages only have mediaId + mediaKind)
+        const image = m.image || (m.mediaKind === 'image' ? m.mediaId : null);
+        const audio = m.audio || (m.mediaKind === 'audio' && m.mediaId ? { id: m.mediaId, seconds: m.seconds } : null);
+        const media = (image ? `<a class="ask-img" href="${mediaUrl(image)}" target="_blank" rel="noopener"><img src="${mediaUrl(image)}" alt="Photo" loading="lazy"></a>` : '')
+            + (audio ? `<div class="ask-audio">${icon ? icon('mic', 'sm') : ''}<audio controls preload="none" src="${mediaUrl(audio.id)}"></audio>${audio.seconds ? `<span class="ask-dur">${mmss(audio.seconds)}</span>` : ''}</div>` : '');
         const who = m.sender === 'auto' ? 'Science Academy' : m.sender === 'staff' ? (m.staffName || 'Miss Marwa') : '';
         return `<div class="ask-row ${mine ? 'mine' : 'theirs'} ${m.sender}">
             ${!mine && fromTeam ? `<img class="ask-av" src="${m.sender === 'auto' ? '/assets/img/logo-96.png' : '/assets/img/marwa-160.png'}" alt="">` : ''}
@@ -118,12 +120,14 @@
             </div></div>`;
     }
 
-    // ---------- Composer: text + photo + voice (one attachment per message) ----------
+    // ---------- Composer: text + photo + voice note — any mix in one message ----------
     function composer(root, { placeholder = 'Write your question…', sendLabel = 'Send', icon, toast, onSend }) {
-        let media = null, rec = null, busy = false;
+        let image = null, audio = null, rec = null, busy = false;
+        const hasAny = () => !!(ta.value.trim() || image || audio);
         root.classList.add('ask-composer');
         root.innerHTML = `
-            <div class="ask-attach" hidden></div>
+            <div class="ask-attach" data-att-image hidden></div>
+            <div class="ask-attach" data-att-audio hidden></div>
             <div class="ask-recbar" hidden><span class="ask-dot"></span><b class="ask-rtime">0:00</b><span class="small muted">Recording… max 2:00</span>
                 <button type="button" class="btn btn-ghost btn-sm" data-rec-cancel>Cancel</button><button type="button" class="btn btn-primary btn-sm" data-rec-stop>Done</button></div>
             <div class="ask-inputrow">
@@ -134,24 +138,26 @@
             </div>`;
         const $ = (s) => root.querySelector(s);
         const ta = $('[data-text]');
-        const update = () => { $('[data-send]').disabled = busy || (!ta.value.trim() && !media); };
+        const update = () => {
+            $('[data-send]').disabled = busy || !hasAny();
+            const p = $('[data-photo]').closest('.ask-tool'); p.classList.toggle('on', !!image); p.title = image ? 'Change the photo' : 'Add a photo';
+            const r = $('[data-rec]'); if (r) { r.classList.toggle('on', !!audio); r.title = audio ? 'Record again' : 'Record a voice note'; }
+        };
         const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; };
         ta.addEventListener('input', () => { grow(); update(); });
         ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
         function showAttach() {
-            const a = $('.ask-attach');
-            if (!media) { a.hidden = true; a.innerHTML = ''; update(); return; }
-            a.hidden = false;
-            a.innerHTML = media.kind === 'image'
-                ? `<img src="${media.url}" alt=""><span class="small muted">${Math.round(media.size / 1024)} KB</span><button type="button" class="icon-btn" data-remove aria-label="Remove">${icon('x', 'sm')}</button>`
-                : `${icon('mic', 'sm')}<audio controls src="${media.url}"></audio><span class="small muted">${mmss(media.seconds || 0)}</span><button type="button" class="icon-btn" data-remove aria-label="Remove">${icon('x', 'sm')}</button>`;
-            a.querySelector('[data-remove]').addEventListener('click', () => { media = null; showAttach(); });
+            const ai = $('[data-att-image]'), aa = $('[data-att-audio]');
+            ai.hidden = !image; aa.hidden = !audio;
+            ai.innerHTML = image ? `<img src="${image.url}" alt=""><span class="small muted">Photo · ${Math.round(image.size / 1024)} KB</span><button type="button" class="icon-btn" data-remove="image" aria-label="Remove the photo">${icon('x', 'sm')}</button>` : '';
+            aa.innerHTML = audio ? `${icon('mic', 'sm')}<audio controls src="${audio.url}"></audio><span class="small muted">${mmss(audio.seconds || 0)}</span><button type="button" class="icon-btn" data-remove="audio" aria-label="Remove the voice note">${icon('x', 'sm')}</button>` : '';
+            root.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', () => { if (b.dataset.remove === 'image') image = null; else audio = null; showAttach(); }));
             update();
         }
         $('[data-photo]').addEventListener('change', async (e) => {
             const f = e.target.files && e.target.files[0]; e.target.value = '';
             if (!f) return;
-            try { media = await compressImage(f); showAttach(); } catch (err) { toast(err.message, 'error'); }
+            try { image = await compressImage(f); showAttach(); } catch (err) { toast(err.message, 'error'); }
         });
         $('[data-rec]')?.addEventListener('click', async () => {
             if (rec) return;
@@ -161,16 +167,17 @@
         });
         function finishRec(out) {
             rec = null; $('.ask-recbar').hidden = true; $('.ask-inputrow').hidden = false; $('.ask-rtime').textContent = '0:00';
-            if (out) { if (out.seconds < 0.8) return toast('Too short — hold on a little longer.', 'info'); media = out; showAttach(); }
+            if (out) { if (out.seconds < 0.8) return toast('Too short — hold on a little longer.', 'info'); audio = out; showAttach(); }
         }
         $('[data-rec-stop]').addEventListener('click', async () => { if (rec) finishRec(await rec.stop()); });
         $('[data-rec-cancel]').addEventListener('click', () => { if (rec) { rec.cancel(); finishRec(null); } });
+        const pack = (m) => m ? { kind: m.kind, mime: m.mime, data: m.data, seconds: m.seconds } : null;
         async function send() {
-            if (busy || (!ta.value.trim() && !media)) return;
+            if (busy || rec || !hasAny()) return;
             busy = true; update(); $('[data-send]').classList.add('loading');
             try {
-                await onSend({ text: ta.value.trim(), media: media ? { kind: media.kind, mime: media.mime, data: media.data, seconds: media.seconds } : null });
-                ta.value = ''; media = null; showAttach(); grow();
+                await onSend({ text: ta.value.trim(), image: pack(image), audio: pack(audio) });
+                ta.value = ''; image = null; audio = null; showAttach(); grow();
             } catch (err) { toast(err.message || 'Could not send — try again.', 'error'); }
             finally { busy = false; $('[data-send]').classList.remove('loading'); update(); }
         }

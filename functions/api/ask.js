@@ -38,6 +38,36 @@ function decodeMedia(m) {
     const seconds = kind === 'audio' ? Math.max(0, Math.min(600, Number(m.seconds) || 0)) : null;
     return { kind, mime, data, size, seconds };
 }
+// A message can carry a photo and/or a voice note (+ text).
+// Accepts { image, audio } or the older single { media }.
+function decodeAttachments(data) {
+    const out = { image: null, audio: null };
+    const list = [];
+    if (data.image) list.push(['image', data.image]);
+    if (data.audio) list.push(['audio', data.audio]);
+    if (data.media) list.push([data.media.kind === 'audio' ? 'audio' : 'image', data.media]);
+    for (const [slot, raw] of list) {
+        const m = decodeMedia({ ...raw, kind: raw.kind || slot });
+        if (m && m.error) return { error: m.error };
+        if (m.kind !== slot) return { error: 'نوع الملف مش مدعوم' };
+        if (out[slot]) return { error: 'صورة واحدة ورسالة صوتية واحدة بس في كل رسالة' };
+        out[slot] = m;
+    }
+    return out;
+}
+// Saves the files and returns the columns for ask_messages
+// (photo → media_id; voice → media_id when alone, audio_id when it comes with a photo).
+async function saveAttachments(db, studentId, att) {
+    const img = att.image ? await saveMedia(db, studentId, att.image) : null;
+    const aud = att.audio ? await saveMedia(db, studentId, att.audio) : null;
+    if (img) return { media_id: img, media_kind: 'image', media_seconds: null, audio_id: aud, audio_seconds: aud ? att.audio.seconds : null };
+    if (aud) return { media_id: aud, media_kind: 'audio', media_seconds: att.audio.seconds, audio_id: null, audio_seconds: null };
+    return { media_id: null, media_kind: null, media_seconds: null, audio_id: null, audio_seconds: null };
+}
+const hasAtt = (att) => !!(att.image || att.audio);
+const insertMsg = (db, qid, sender, staffName, text, c) => db.prepare(
+    'INSERT INTO ask_messages (question_id, sender, staff_name, text, media_id, media_kind, media_seconds, audio_id, audio_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+).bind(qid, sender, staffName || null, text || null, c.media_id, c.media_kind, c.media_seconds, c.audio_id, c.audio_seconds);
 async function saveMedia(db, studentId, media) {
     const r = await db.prepare('INSERT INTO ask_media (student_id, mime, size, data) VALUES (?, ?, ?, ?)')
         .bind(studentId, media.mime, media.size, media.data).run();
@@ -63,7 +93,17 @@ async function pushToStudent(env, origin, studentId, title, message) {
     } catch (e) { /* notifications are optional */ }
 }
 
-const msgOut = (m) => ({ id: m.id, sender: m.sender, staffName: m.staff_name || null, text: m.text || '', mediaId: m.media_id || null, mediaKind: m.media_kind || null, seconds: m.media_seconds || null, at: m.created_at });
+const msgOut = (m) => {
+    const image = m.media_kind === 'image' && m.media_id ? m.media_id : null;
+    const audio = m.media_kind === 'audio' && m.media_id ? { id: m.media_id, seconds: m.media_seconds || null }
+        : m.audio_id ? { id: m.audio_id, seconds: m.audio_seconds || null } : null;
+    return {
+        id: m.id, sender: m.sender, staffName: m.staff_name || null, text: m.text || '',
+        image, audio,
+        mediaId: m.media_id || null, mediaKind: m.media_kind || null, seconds: m.media_seconds || null, // older clients
+        at: m.created_at
+    };
+};
 async function messagesOf(db, qid) {
     const { results } = await db.prepare('SELECT * FROM ask_messages WHERE question_id = ? ORDER BY id').bind(qid).all();
     return (results || []).map(msgOut);
@@ -132,7 +172,7 @@ export async function onRequest(context) {
                     waiting: Object.fromEntries(GRADES.map(g => [g, ((counts || []).find(c => c.grade === g) || {}).c || 0])),
                     items: (results || []).map(q => ({
                         id: q.id, studentId: q.student_id, firstName: q.first_name || '?', lastName: q.last_name || '', gender: q.gender, branch: q.branch,
-                        unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, updatedAt: q.updated_at,
+                        unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, updatedAt: q.updated_at, bankHidden: !!q.bank_hidden,
                         unread: q.staff_unread, preview: q.last_text || q.first_text || '', lastKind: q.last_kind, lastSender: q.last_sender
                     }))
                 });
@@ -147,7 +187,7 @@ export async function onRequest(context) {
                 if (q.staff_unread) await db.prepare('UPDATE ask_questions SET staff_unread = 0 WHERE id = ?').bind(id).run();
                 const asked = await db.prepare('SELECT COUNT(*) as c FROM ask_questions WHERE student_id = ?').bind(q.student_id).first();
                 return json({
-                    question: { id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, resolvedBy: q.resolved_by, grade: q.grade },
+                    question: { id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, resolvedBy: q.resolved_by, grade: q.grade, bankHidden: !!q.bank_hidden },
                     student: { studentId: q.student_id, firstName: q.first_name || '?', lastName: q.last_name || '', gender: q.gender, branch: q.branch, grade: q.grade, questionsAsked: (asked && asked.c) || 0 },
                     messages: await messagesOf(db, id)
                 });
@@ -159,13 +199,12 @@ export async function onRequest(context) {
                 const q = id ? await db.prepare('SELECT id, student_id FROM ask_questions WHERE id = ?').bind(id).first() : null;
                 if (!q) return bad('السؤال غير موجود', 404);
                 const text = cleanText(data.text);
-                const media = decodeMedia(data.media);
-                if (media && media.error) return bad(media.error);
-                if (!text && !media) return bad('اكتبي الرد أو سجّلي رسالة صوتية');
-                const mediaId = media ? await saveMedia(db, q.student_id, media) : null;
+                const att = decodeAttachments(data);
+                if (att.error) return bad(att.error);
+                if (!text && !hasAtt(att)) return bad('اكتبي الرد أو سجّلي رسالة صوتية');
+                const cols = await saveAttachments(db, q.student_id, att);
                 await db.batch([
-                    db.prepare('INSERT INTO ask_messages (question_id, sender, staff_name, text, media_id, media_kind, media_seconds) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                        .bind(id, 'staff', staff.name, text || null, mediaId, media ? media.kind : null, media ? media.seconds : null),
+                    insertMsg(db, id, 'staff', staff.name, text, cols),
                     db.prepare("UPDATE ask_questions SET status = 'answered', waiting_since = NULL, student_unread = student_unread + 1, staff_unread = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(id)
                 ]);
                 const push = pushToStudent(env, url.origin, q.student_id, 'Miss Marwa replied 💬', 'مس مروة ردّت على سؤالك — افتح التطبيق وشوف الرد');
@@ -279,9 +318,9 @@ export async function onRequest(context) {
         if (action === 'ask' || action === 'reply') {
             if (!isPost) return bad('POST only', 405);
             const text = cleanText(data.text);
-            const media = decodeMedia(data.media);
-            if (media && media.error) return bad(media.error);
-            if (!text && !media) return bad('اكتب سؤالك أو ابعت صورة أو رسالة صوتية');
+            const att = decodeAttachments(data);
+            if (att.error) return bad(att.error);
+            if (!text && !hasAtt(att)) return bad('اكتب سؤالك أو ابعت صورة أو رسالة صوتية');
             const today = await db.prepare(
                 `SELECT (SELECT COUNT(*) FROM ask_questions WHERE student_id = ? AND created_at >= datetime('now','-1 day')) as q,
                         (SELECT COUNT(*) FROM ask_messages m JOIN ask_questions q ON q.id = m.question_id WHERE q.student_id = ? AND m.sender = 'student' AND m.created_at >= datetime('now','-1 day')) as m`
@@ -294,10 +333,9 @@ export async function onRequest(context) {
                 if (today && today.q >= MAX_QUESTIONS_PER_DAY) return bad(`أقصى عدد ${MAX_QUESTIONS_PER_DAY} سؤال في اليوم — كمّل بكرة`, 429, { code: 'DAILY_LIMIT' });
                 const r = await db.prepare('INSERT INTO ask_questions (student_id, grade, unit, lesson) VALUES (?, ?, ?, ?)').bind(sid, who.grade, unit, lesson).run();
                 const qid = Number(r.meta && r.meta.last_row_id);
-                const mediaId = media ? await saveMedia(db, sid, media) : null;
+                const cols = await saveAttachments(db, sid, att);
                 await db.batch([
-                    db.prepare('INSERT INTO ask_messages (question_id, sender, text, media_id, media_kind, media_seconds) VALUES (?, ?, ?, ?, ?, ?)')
-                        .bind(qid, 'student', text || null, mediaId, media ? media.kind : null, media ? media.seconds : null),
+                    insertMsg(db, qid, 'student', null, text, cols),
                     db.prepare('INSERT INTO ask_messages (question_id, sender, text) VALUES (?, ?, ?)').bind(qid, 'auto', AUTO_REPLY)
                 ]);
                 return json({ ok: true, id: qid, messages: await messagesOf(db, qid) });
@@ -307,10 +345,9 @@ export async function onRequest(context) {
             const id = parseInt(data.id, 10);
             const q = id ? await db.prepare('SELECT id, status FROM ask_questions WHERE id = ? AND student_id = ?').bind(id, sid).first() : null;
             if (!q) return bad('السؤال غير موجود', 404);
-            const mediaId = media ? await saveMedia(db, sid, media) : null;
+            const cols = await saveAttachments(db, sid, att);
             await db.batch([
-                db.prepare('INSERT INTO ask_messages (question_id, sender, text, media_id, media_kind, media_seconds) VALUES (?, ?, ?, ?, ?, ?)')
-                    .bind(id, 'student', text || null, mediaId, media ? media.kind : null, media ? media.seconds : null),
+                insertMsg(db, id, 'student', null, text, cols),
                 db.prepare(`UPDATE ask_questions SET status = 'waiting', waiting_since = CASE WHEN status = 'waiting' AND waiting_since IS NOT NULL THEN waiting_since ELSE CURRENT_TIMESTAMP END,
                     staff_unread = staff_unread + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(id)
             ]);

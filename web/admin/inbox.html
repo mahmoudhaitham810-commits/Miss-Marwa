@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0B1220">
     <meta name="robots" content="noindex, nofollow">
-    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
     <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
     <title>Questions · Science Academy Staff</title>
     <link rel="icon" href="/admin/icon-192.png">
@@ -27,11 +27,18 @@
         .qi.on { background: var(--primary-soft); border-color: var(--primary-line, transparent); }
         .qi .avatar { width: 38px; height: 38px; font-size: 14px; }
         .qi b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .qi .pv { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .qi .pv { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .qi .side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
         .ul-tag { font-size: 11.5px; font-weight: 800; padding: 3px 8px; border-radius: 8px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
         .wait { font-size: 12px; font-weight: 700; color: var(--warning); white-space: nowrap; }
         .wait.long { color: var(--danger); }
+        .bank-tg { gap: 6px; }
+        .bank-tg .ar { font-family: var(--font-ar, inherit); font-weight: 700; }
+        .bank-tg.on { background: var(--warning-soft, #FFF4DB); border-color: transparent; color: var(--warning, #B26B00); }
+        .nb-tag { font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 8px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+        .bank-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 12px; }
+        .bank-filter .chipb { padding: 5px 10px; font-size: 12.5px; }
+        .bank-item .ex-note { font-size: 12px; font-weight: 700; color: var(--warning, #B26B00); }
         .udot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); }
         .tpane { display: flex; flex-direction: column; min-height: 520px; }
         .thead { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
@@ -132,6 +139,7 @@
                     </div>
                     <div class="card">
                         <div class="card-head"><h2 class="card-title"><span data-icon="clipboard" style="display:contents"></span>Questions <span class="pill" id="bankCount">0</span></h2><span class="small muted">Edit the wording · untick to leave out</span></div>
+                        <div class="bank-filter" id="bankFilter" hidden></div>
                         <div id="bankList"><p class="muted">Choose units or lessons on the left.</p></div>
                     </div>
                 </div>
@@ -189,7 +197,7 @@
                 return `<button class="qi ${q.id === openId ? 'on' : ''}" data-id="${q.id}">
                     <span class="avatar">${A.initials({ firstName: q.firstName })}</span>
                     <span style="min-width:0"><b dir="auto">${esc(q.firstName)} ${esc(q.lastName)}</b><span class="pv" dir="auto">${q.lastSender === 'staff' ? 'You: ' : ''}${pv}</span></span>
-                    <span class="side"><span class="ul-tag">U${q.unit} · L${q.lesson}</span>
+                    <span class="side"><span class="ul-tag">U${q.unit} · L${q.lesson}</span>${q.bankHidden ? '<span class="nb-tag" title="Not important — left out of the Question bank">Not important</span>' : ''}
                         ${q.status === 'waiting' ? `<span class="wait ${hrs >= 24 ? 'long' : ''}">Waiting ${w}</span>` : `<span class="small muted">${q.status === 'resolved' ? 'Resolved' : 'Answered'}</span>`}
                         ${q.unread ? '<span class="udot" title="New message"></span>' : ''}</span></button>`;
             }).join('');
@@ -218,6 +226,7 @@
                     ${q.status === 'resolved'
                         ? `<button class="btn btn-ghost btn-sm" id="reopenBtn">${icon('refresh', 'sm')}Reopen</button>`
                         : `<button class="btn btn-soft btn-sm" id="resolveBtn">${icon('check', 'sm')}Mark resolved</button>`}
+                    <button class="btn btn-ghost btn-sm bank-tg" id="bankToggle"></button>
                 </div>
                 <div class="tbody"><div class="ask-thread" id="msgs">${messages.map(m => K.bubble(m, 'staff', icon)).join('')}</div></div>
                 <div class="tfoot"><div id="composer"></div>
@@ -226,8 +235,8 @@
             $('backList').addEventListener('click', () => { $('split').classList.remove('thread-open'); openId = null; history.replaceState(null, '', location.pathname); renderList(); });
             composer = K.composer($('composer'), {
                 placeholder: 'Write the answer… (or send a photo / voice note)', sendLabel: 'Reply', icon, toast,
-                onSend: async ({ text, media }) => {
-                    const d = await api('/api/ask?action=staff-reply', { body: { id: q.id, text, media } });
+                onSend: async ({ text, image, audio }) => {
+                    const d = await api('/api/ask?action=staff-reply', { body: { id: q.id, text, image, audio } });
                     thread.messages = d.messages; q.status = 'answered';
                     renderThread(true);
                     toast('Reply sent — the student gets a notification ✅', 'success');
@@ -236,6 +245,22 @@
             });
             $('resolveBtn')?.addEventListener('click', async () => { await api('/api/ask?action=resolve', { body: { id: q.id, resolved: true } }); q.status = 'resolved'; renderThread(); loadList(true); toast('Marked resolved', 'success'); });
             $('reopenBtn')?.addEventListener('click', async () => { await api('/api/ask?action=resolve', { body: { id: q.id, resolved: false } }); q.status = 'waiting'; renderThread(); loadList(true); });
+            const paintToggle = () => {
+                const b = $('bankToggle'), h = !!q.bankHidden;
+                b.classList.toggle('on', h); b.setAttribute('aria-pressed', h ? 'true' : 'false');
+                b.title = h ? 'Left out of the Question bank & PDFs — tap to put it back' : 'Leave this question out of the Question bank & PDFs (the chat stays as it is)';
+                b.innerHTML = h ? `${icon('eyeOff', 'sm')}Not important · <span class="ar">مستبعد</span> — Restore` : `${icon('eyeOff', 'sm')}Not important · <span class="ar">استبعاد من بنك الأسئلة</span>`;
+            };
+            paintToggle();
+            $('bankToggle').addEventListener('click', async () => {
+                const hidden = !q.bankHidden;
+                try { await api('/api/ask?action=bank-edit', { body: { id: q.id, hidden } }); } catch (e) { return toast(e.message, 'error'); }
+                q.bankHidden = hidden;
+                const it = items.find(x => x.id === q.id); if (it) { it.bankHidden = hidden; renderList(); }
+                const b = bank.find(x => x.id === q.id); if (b) b.hidden = hidden;
+                paintToggle();
+                toast(hidden ? 'Marked not important — it won\'t appear in the Question bank or PDFs' : 'Back in the Question bank', 'success');
+            });
             $('nextBtn')?.addEventListener('click', () => { const next = items.find(x => x.id !== q.id && x.status === 'waiting'); if (next) openThread(next.id); else toast('No one else is waiting 🎉', 'success'); });
             if (scroll) { const b = $('tpane').querySelector('.tbody'); b.scrollTop = b.scrollHeight; if (matchMedia('(max-width: 999px)').matches) window.scrollTo(0, 0); }
         }
@@ -249,7 +274,7 @@
         }, 30000);
 
         // ================= Question bank =================
-        let bank = [], bankGrade = grade, picks = new Set();   // "u-0" = whole unit, "u-l" = one lesson
+        let bank = [], bankGrade = grade, picks = new Set(), showExcluded = false;   // "u-0" = whole unit, "u-l" = one lesson
         const UNITS = K.UNITS, LESSONS = K.LESSONS;
         function bankGradeTabs() {
             $('bankGrades').innerHTML = Object.entries(A.GRADES).map(([g, l]) => `<button data-g="${g}" class="${g === bankGrade ? 'active' : ''}">${l}</button>`).join('');
@@ -263,12 +288,13 @@
             renderPicks(); renderBank();
         }
         const inPick = (it) => picks.has(`${it.unit}-0`) || picks.has(`${it.unit}-${it.lesson}`);
+        const nAll = (u, l) => bank.filter(i => i.unit === u && (!l || i.lesson === l)).length;
         function renderPicks() {
-            const n = (u, l) => bank.filter(i => i.unit === u && (!l || i.lesson === l)).length;
+            const n = (u, l) => bank.filter(i => !i.hidden && i.unit === u && (!l || i.lesson === l)).length;
             $('picks').innerHTML = Array.from({ length: UNITS }, (_, ui) => {
                 const u = ui + 1, whole = picks.has(`${u}-0`);
-                return `<div class="pick-row"><button class="chipb u ${whole ? 'on' : ''}" data-p="${u}-0" ${n(u) ? '' : 'disabled'}>Unit ${u}<small>${n(u)}</small></button>
-                    ${Array.from({ length: LESSONS }, (_, li) => { const l = li + 1, c = n(u, l); return `<button class="chipb ${whole || picks.has(`${u}-${l}`) ? 'on' : ''}" data-p="${u}-${l}" ${c && !whole ? '' : 'disabled'}>L${l}<small>${c}</small></button>`; }).join('')}</div>`;
+                return `<div class="pick-row"><button class="chipb u ${whole ? 'on' : ''}" data-p="${u}-0" ${n(u) || nAll(u) ? '' : 'disabled'}>Unit ${u}<small>${n(u)}</small></button>
+                    ${Array.from({ length: LESSONS }, (_, li) => { const l = li + 1, c = n(u, l); return `<button class="chipb ${whole || picks.has(`${u}-${l}`) ? 'on' : ''}" data-p="${u}-${l}" ${(c || nAll(u, l)) && !whole ? '' : 'disabled'}>L${l}<small>${c}</small></button>`; }).join('')}</div>`;
             }).join('');
             const sel = [...picks].sort().map(p => { const [u, l] = p.split('-'); return l === '0' ? `Unit ${u}` : `U${u} L${l}`; });
             if (!$('psTitle').dataset.touched) $('psTitle').value = `Revision sheet — ${A.GRADES[bankGrade]}${sel.length ? ' · ' + sel.join(', ') : ''}`;
@@ -281,18 +307,26 @@
             renderPicks(); renderBank();
         });
         $('clearPicks').addEventListener('click', () => { picks.clear(); renderPicks(); renderBank(); });
+        // Excluded ("Not important") questions stay out of the list unless "Show excluded" is on
+        function renderFilter(list) {
+            const ex = list.filter(i => i.hidden).length;
+            $('bankFilter').hidden = !picks.size || (!ex && !showExcluded);
+            $('bankFilter').innerHTML = `<span class="small muted">${ex} excluded as not important</span>
+                <button class="chipb ${showExcluded ? 'on' : ''}" id="exToggle">${showExcluded ? 'Hide excluded' : 'Show excluded'}</button>`;
+        }
+        $('bankFilter').addEventListener('click', (e) => { if (e.target.closest('#exToggle')) { showExcluded = !showExcluded; renderBank(); } });
         function renderBank() {
             const list = bank.filter(inPick);
             const on = list.filter(i => !i.hidden);
-            $('bankCount').textContent = `${on.length} of ${list.length}`;
-            $('printBtn').disabled = !on.length;
-            $('printLbl').textContent = on.length ? `Generate PDF · ${on.length} question${on.length === 1 ? '' : 's'}` : 'Generate PDF';
-            if (!picks.size) { $('bankList').innerHTML = `<p class="muted" style="margin:0">${bank.length ? `${bank.length} question${bank.length === 1 ? '' : 's'} collected for ${esc(A.GRADES[bankGrade])}. Choose units or lessons on the left.` : 'No questions asked in this grade yet.'}</p>`; return; }
-            if (!list.length) { $('bankList').innerHTML = '<p class="muted" style="margin:0">No questions for this selection.</p>'; return; }
-            $('bankList').innerHTML = list.map(i => `<div class="bank-item ${i.hidden ? 'off' : ''}" data-id="${i.id}">
+            const shown = showExcluded ? list : on;
+            renderBankCountOnly(); renderFilter(list);
+            if (!picks.size) { $('bankList').innerHTML = `<p class="muted" style="margin:0">${bank.length ? `${bank.filter(i => !i.hidden).length} question${bank.filter(i => !i.hidden).length === 1 ? '' : 's'} collected for ${esc(A.GRADES[bankGrade])}. Choose units or lessons on the left.` : 'No questions asked in this grade yet.'}</p>`; return; }
+            if (!shown.length) { $('bankList').innerHTML = `<p class="muted" style="margin:0">${list.length ? 'Every question here is marked not important.' : 'No questions for this selection.'}</p>`; return; }
+            $('bankList').innerHTML = shown.map(i => `<div class="bank-item ${i.hidden ? 'off' : ''}" data-id="${i.id}">
                 <input type="checkbox" ${i.hidden ? '' : 'checked'} data-inc aria-label="Include in the sheet">
                 <div style="min-width:0">
                     <div class="small muted" style="margin-bottom:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="ul-tag">U${i.unit} · L${i.lesson}</span>asked by ${esc(i.student || '—')} · ${esc(A.fmtDate(i.createdAt))}
+                        ${i.hidden ? '<span class="ex-note">Not important — tick to restore</span>' : ''}
                         ${i.edited ? `<button class="link small" data-reset style="border:0;background:none;padding:0;cursor:pointer">Use original wording</button>` : ''}</div>
                     <textarea dir="auto" data-text placeholder="${i.images.length ? '(photo question — add a line of text if you like)' : 'Question text'}">${esc(i.text)}</textarea>
                     ${i.images.length ? `<div class="imgs">${i.images.map(id => `<a href="${K.mediaUrl(id)}" target="_blank" rel="noopener"><img src="${K.mediaUrl(id)}" alt="Question photo" loading="lazy"></a>`).join('')}</div>` : ''}
@@ -303,7 +337,9 @@
             const it = bank.find(x => x.id === Number(card.dataset.id));
             if (e.target.matches('[data-inc]')) {
                 it.hidden = !e.target.checked; card.classList.toggle('off', it.hidden);
-                renderBankCountOnly();
+                const note = card.querySelector('.ex-note'); if (note) note.remove();
+                if (it.hidden) card.querySelector('.small.muted').insertAdjacentHTML('beforeend', '<span class="ex-note">Not important — tick to restore</span>');
+                renderBankCountOnly(); renderFilter(bank.filter(inPick)); renderPicks();
                 api('/api/ask?action=bank-edit', { body: { id: it.id, hidden: it.hidden } }).catch(err => toast(err.message, 'error'));
             }
             if (e.target.matches('[data-text]')) {
@@ -319,7 +355,7 @@
         });
         function renderBankCountOnly() {
             const list = bank.filter(inPick), on = list.filter(i => !i.hidden);
-            $('bankCount').textContent = `${on.length} of ${list.length}`; $('printBtn').disabled = !on.length;
+            $('bankCount').textContent = `${on.length}`; $('printBtn').disabled = !on.length;
             $('printLbl').textContent = on.length ? `Generate PDF · ${on.length} question${on.length === 1 ? '' : 's'}` : 'Generate PDF';
         }
 

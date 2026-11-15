@@ -170,8 +170,14 @@ export async function ensureAppSchema(db) {
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_student ON ask_questions(student_id, updated_at)');
     steps.push(`CREATE TABLE IF NOT EXISTS ask_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT, question_id INTEGER NOT NULL, sender TEXT NOT NULL, staff_name TEXT,
-        text TEXT, media_id INTEGER, media_kind TEXT, media_seconds REAL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+        text TEXT, media_id INTEGER, media_kind TEXT, media_seconds REAL, audio_id INTEGER, audio_seconds REAL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_m_q ON ask_messages(question_id, id)');
+    {   // a message can carry a photo AND a voice note (add-only)
+        let am = [];
+        try { const r = await db.prepare('PRAGMA table_info(ask_messages)').all(); am = (r.results || []).map(c => c.name); } catch (e) { }
+        if (am.length && !am.includes('audio_id')) steps.push('ALTER TABLE ask_messages ADD COLUMN audio_id INTEGER');
+        if (am.length && !am.includes('audio_seconds')) steps.push('ALTER TABLE ask_messages ADD COLUMN audio_seconds REAL');
+    }
     steps.push(`CREATE TABLE IF NOT EXISTS ask_media (
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
         data TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
