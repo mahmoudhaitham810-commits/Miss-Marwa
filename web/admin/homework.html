@@ -992,7 +992,7 @@
         // ================= Build the answer key from PDF =================
         // Two page pickers (homework pages + optional official answer-key pages), 3 pages read at once,
         // questions that continue a section across a page break ("?.8") joined in page order.
-        const SV = { books: [], running: false, stop: false, neurons: 0, found: [], keyOn: false, types: new Set(), pageLead: {} };
+        const SV = { books: [], running: false, stop: false, neurons: 0, found: [], keyOn: false, types: new Set(), raw: {} };
         const fmtMB = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
         function makeDoc(root) {
             const q = (sel) => root.querySelector(sel);
@@ -1006,11 +1006,16 @@
                 q('[data-books]').innerHTML = list.length ? list.map(b => `<button type="button" class="book ${D.book === b.key ? 'on' : ''}" data-book="${esc(b.key)}">${icon('book', 'sm')}<span dir="auto" style="min-width:0;overflow-wrap:anywhere">${esc(b.key)}</span><small>${fmtMB(b.size)}</small></button>`).join('')
                     : `<p class="muted small" style="margin:6px 0">${SV.books.length ? 'No book matches.' : 'No PDF books found in the R2 bucket yet — upload one there, or use “Upload PDF / photos”.'}</p>`;
             };
+            D.tok = 0;
             D.openBook = async (key) => {
+                const tok = ++D.tok;                 // only the latest choice wins (e.g. auto-opened book, then another one picked quickly)
                 D.book = key; D.renderBooks(); D.reset(true);
                 q('[data-count]').textContent = '— opening…'; q('[data-pagesrow]').hidden = false;
-                try { D.pdf = await HwKit.openPdf(`/api/homework?action=book&key=${encodeURIComponent(key)}`); D.fileName = key; q('[data-count]').textContent = `— the book has ${D.pdf.numPages} pages`; }
-                catch (err) { q('[data-count]').textContent = ''; Site.toast('Could not open this PDF: ' + err.message, 'error'); }
+                try {
+                    const pdf = await HwKit.openPdf(`/api/homework?action=book&key=${encodeURIComponent(key)}`);
+                    if (tok !== D.tok) { try { pdf.destroy && pdf.destroy(); } catch (e) { } return; }
+                    D.pdf = pdf; D.fileName = key; q('[data-count]').textContent = `— the book has ${pdf.numPages} pages`;
+                } catch (err) { if (tok === D.tok) { q('[data-count]').textContent = ''; Site.toast('Could not open this PDF: ' + err.message, 'error'); } }
                 updateGo();
             };
             const note = () => { const r = D.range(), off = r.filter(n => D.off.has(n)); const el = q('[data-selnote]'); el.hidden = !r.length; el.textContent = r.length ? `${r.length - off.length} page${r.length - off.length === 1 ? '' : 's'} selected${off.length ? ` · skipping ${off.join(', ')}` : ''}` : ''; };
@@ -1047,7 +1052,8 @@
                 note(); updateGo(); e.target.value = '';
             });
             q('[data-range]').addEventListener('input', () => { D.off = new Set(); note(); updateGo(); });
-            q('[data-range]').addEventListener('change', () => D.thumbs());
+            // draw a moment later: the box loses focus when a button is pressed, and redrawing right away would move that button before the click lands
+            q('[data-range]').addEventListener('change', () => setTimeout(() => D.thumbs(), 350));
             q('[data-preview]').addEventListener('click', () => D.thumbs(true));
             q('[data-thumbs]').addEventListener('click', (e) => {
                 const t = e.target.closest('[data-p]'); if (!t || SV.running) return;
@@ -1097,37 +1103,18 @@
             const worker = async () => { while (i < tasks.length && !SV.stop) { const t = tasks[i++]; await t(); done++; $('solveBarIn').style.width = `${Math.round(done / tasks.length * 100)}%`; } };
             await Promise.all(Array.from({ length: Math.min(size, tasks.length) }, worker));
         }
-        // "?.8" = question 8 of the section the previous page ended in → real label + the section's type
-        function stitch(byPage) {
-            const out = []; let last = null;
-            for (const n of Object.keys(byPage).map(Number).sort((a, b) => a - b)) {
-                const lead = last ? { ...last } : null; SV.pageLead[n] = lead;
-                for (const q0 of byPage[n]) {
-                    const q = { ...q0, page: n };
-                    const m = String(q.label).match(/^\?\.(.+)$/);
-                    if (m) {
-                        if (lead) {
-                            q.label = `${lead.sec}.${m[1]}`;
-                            if (lead.type && q.type !== lead.type && (!SV.types.size || SV.types.has(lead.type))) { q.type = lead.type; if (lead.type !== 'mcq') q.options = []; }
-                            if (q.type === 'tf' && q.requiresCorrection === undefined) q.requiresCorrection = lead.rc;
-                        } else { q.label = m[1]; q.aiNote = [q.aiNote, 'Section number not found — check the number'].filter(Boolean).join(' · '); }
-                    }
-                    const sec = String(q.label).split('.')[0];
-                    last = { sec, type: q.type, rc: q.type === 'tf' ? q.requiresCorrection : undefined };
-                    out.push(q);
-                }
-            }
-            return out;
-        }
+        // page results → one numbered list on the server (parts, "?.8" continuation, lesson filter, matching the key)
+        const inPageOrder = (byPage) => Object.keys(byPage).map(Number).sort((x, y) => x - y).map(n => (byPage[n] || []).map(q => ({ ...q, page: n })));
         $('solveGo').addEventListener('click', async () => {
             const hwPages = HWD.selected(), keyPages = SV.keyOn ? KYD.selected() : [];
             if (!hwPages.length) return;
-            if (!HWD.root.querySelector('[data-thumbs]').children.length) await HWD.thumbs();
-            if (SV.keyOn && !KYD.root.querySelector('[data-thumbs]').children.length) await KYD.thumbs();
-            SV.running = true; SV.stop = false; SV.found = []; SV.neurons = 0; SV.pageLead = {}; updateGo();
+            // thumbnails are only for looking — never wait for them
+            if (!HWD.root.querySelector('[data-thumbs]').children.length) HWD.thumbs().catch(() => null);
+            if (SV.keyOn && !KYD.root.querySelector('[data-thumbs]').children.length) KYD.thumbs().catch(() => null);
+            SV.running = true; SV.stop = false; SV.found = []; SV.neurons = 0; SV.raw = {}; updateGo();
             $('solveProgress').hidden = false; $('solveLog').innerHTML = ''; $('solveBarIn').style.width = '2%';
             const types = [...SV.types], ctx = { grade: F.grade, unit: F.unit, lesson: F.lesson, types };
-            const byPage = {}, answers = [], checks = []; let stopAll = false;
+            const byPage = {}, keyByPage = {}, checks = []; let stopAll = false;
             const t0 = Date.now();
             const task = (D, n, isKey) => async () => {
                 if (stopAll) return;
@@ -1139,7 +1126,11 @@
                     const r = await api(`/api/homework?action=${action}`, { body: { image: img, pageNo: n, ...ctx } });
                     SV.neurons += r.neurons || 0;
                     const sec = `<span class="muted">(${(r.ms / 1000).toFixed(1)} s · ~${Math.round(r.neurons || 0)} units)</span>`;
-                    if (isKey) { answers.push(...(r.answers || [])); line.innerHTML = `Answer page ${n}: <b>${(r.answers || []).length}</b> answers copied ${sec}`; }
+                    if (isKey) {
+                        keyByPage[n] = r.answers || [];
+                        line.innerHTML = `Answer page ${n}: <b>${keyByPage[n].length}</b> answers copied${r.lessons && r.lessons.length ? ` (lesson ${esc(r.lessons.join(', '))})` : ''} ${sec}`
+                            + (!keyByPage[n].length && r.raw ? `<details class="small"><summary class="muted" style="cursor:pointer">See what the AI replied</summary><pre style="white-space:pre-wrap;max-height:180px;overflow:auto">${esc(r.raw)}</pre></details>` : '');
+                    }
                     else {
                         const qsx = r.questions || []; byPage[n] = qsx;
                         line.innerHTML = `${D.images ? 'Photo' : 'Page'} ${n}: <b>${qsx.length}</b> question${qsx.length === 1 ? '' : 's'} ${SV.keyOn ? 'copied' : 'solved'} ${sec}${!qsx.length ? ' — nothing found on this page' : ''}`;
@@ -1160,14 +1151,15 @@
             };
             await pool([...hwPages.map(n => task(HWD, n, false)), ...keyPages.map(n => task(KYD, n, true))], 3);
             if (checks.length) { const l = logLine('Finishing the second check…'); await Promise.all(checks); l.remove(); }
-            let found = stitch(byPage), summary = '';
-            if (SV.keyOn && found.length) {
-                try {
-                    const m = await api('/api/homework?action=match-key', { body: { questions: found, answers } });
-                    found = m.questions;
-                    summary = ` · <b>${m.matched}</b> matched to the answer key${m.missing ? ` · <span style="color:var(--warning);font-weight:700">${m.missing} not found</span>` : ''}${m.extraAnswers ? ` · ${m.extraAnswers} answer${m.extraAnswers === 1 ? '' : 's'} in the key had no question` : ''}`;
-                } catch (e) { Site.toast(e.message, 'error'); }
-            }
+            SV.raw = byPage;
+            let found = [], summary = '';
+            try {
+                const m = await api('/api/homework?action=stitch', { body: { questionPages: inPageOrder(byPage), ...(SV.keyOn ? { answerPages: inPageOrder(keyByPage), lesson: F.lesson } : {}) } });
+                found = m.questions || [];
+                if (SV.keyOn) summary = ` · <b>${m.matched}</b> matched to the answer key${m.missing ? ` · <span style="color:var(--warning);font-weight:700">${m.missing} not found</span>` : ''}${m.extraAnswers ? ` · ${m.extraAnswers} answer${m.extraAnswers === 1 ? '' : 's'} in the key had no question` : ''}`;
+                const parts = new Set(found.map(q => q.partNo)).size;
+                if (parts > 1) summary += ` · ${parts} parts (numbers restart in each) → labels like <b>2.1.3</b> = part 2, section 1, question 3`;
+            } catch (e) { Site.toast(e.message, 'error'); }
             SV.found = found;
             SV.running = false; updateGo(); refreshUsage();
             if (found.length) {
@@ -1184,18 +1176,21 @@
         // questions the official key didn't cover → solve only their pages, keep only those answers
         async function solveMissing(e) {
             const btn = e.currentTarget; btn.disabled = true; btn.classList.add('loading');
-            const want = new Map(SV.found.filter(q => q.missing).map(q => [q.label, q]));
-            const pages = [...new Set([...want.values()].map(q => q.page))];
-            const solved = {};
+            const want = new Set(SV.found.filter(q => q.missing).map(q => q.label));
+            const pages = [...new Set(SV.found.filter(q => q.missing).map(q => q.page))];
+            const solvedRaw = {};
             SV.running = true; updateGo();
             await pool(pages.map(n => async () => {
-                try {
-                    const r = await api('/api/homework?action=ai-solve-page', { body: { image: await HWD.image(n), pageNo: n, grade: F.grade, unit: F.unit, lesson: F.lesson, types: [...SV.types] } });
-                    SV.neurons += r.neurons || 0;
-                    const lead = SV.pageLead[n];
-                    for (const q of r.questions || []) { const m = String(q.label).match(/^\?\.(.+)$/); const label = m ? (lead ? `${lead.sec}.${m[1]}` : m[1]) : q.label; if (want.has(label)) solved[label] = q; }
-                } catch (err) { Site.toast(err.message, 'error'); }
+                try { const r = await api('/api/homework?action=ai-solve-page', { body: { image: await HWD.image(n), pageNo: n, grade: F.grade, unit: F.unit, lesson: F.lesson, types: [...SV.types] } }); SV.neurons += r.neurons || 0; solvedRaw[n] = r.questions || []; }
+                catch (err) { Site.toast(err.message, 'error'); }
             }), 3);
+            // number the solved pages exactly like the copied ones (same neighbours), then keep only the missing labels
+            let solved = {};
+            try {
+                const mixed = { ...SV.raw }; Object.keys(solvedRaw).forEach(n => { mixed[n] = solvedRaw[n]; });
+                const st = await api('/api/homework?action=stitch', { body: { questionPages: inPageOrder(mixed) } });
+                (st.questions || []).forEach(q => { if (want.has(q.label) && solvedRaw[q.page]) solved[q.label] = q; });
+            } catch (err) { Site.toast(err.message, 'error'); }
             SV.running = false; updateGo(); refreshUsage();
             let n = 0;
             SV.found = SV.found.map(q => {

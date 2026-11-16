@@ -123,16 +123,19 @@ export function parseJsonLoose(text) {
     if (fence) s = fence[1].trim();
     const start = s.search(/[\[{]/);
     if (start < 0) return null;
-    const open = s[start], close = open === '{' ? '}' : ']';
-    let depth = 0, inStr = false, esc = false, end = -1;
+    // scan; remember the last point where a value closed cleanly, so a reply cut off by the token limit
+    // still gives every complete item (e.g. 60 of 70 questions) instead of nothing
+    const stack = []; let inStr = false, esc = false, end = -1, safe = -1, safeStack = null;
     for (let i = start; i < s.length; i++) {
         const c = s[i];
         if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
         if (c === '"') inStr = true;
-        else if (c === '{' || c === '[') depth++;
-        else if (c === '}' || c === ']') { depth--; if (depth === 0) { end = i; break; } }
+        else if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']');
+        else if (c === '}' || c === ']') { stack.pop(); if (!stack.length) { end = i; break; } safe = i; safeStack = stack.slice(); }
     }
-    let body = end > 0 ? s.slice(start, end + 1) : s.slice(start) + close.repeat(Math.max(1, depth));
+    let body = end > 0 ? s.slice(start, end + 1)
+        : safe > 0 ? s.slice(start, safe + 1) + safeStack.slice().reverse().join('')
+        : s.slice(start) + stack.slice().reverse().join('');
     for (const attempt of [body, body.replace(/,\s*([}\]])/g, '$1'), body.replace(/,\s*([}\]])/g, '$1').replace(/[“”]/g, '"')]) {
         try { return JSON.parse(attempt); } catch (e) { }
     }
@@ -140,7 +143,7 @@ export function parseJsonLoose(text) {
 }
 
 // ---------------- Prompts ----------------
-const SECTION_RULES = `Numbering: the booklet is split into numbered sections (e.g. "1 Choose the correct answer", "2 Complete the following table", "3 Complete the following statements", "4 Put (✓) or (✗)", "5 Give reasons"). Question numbers restart in each section. Label every question "section.question" — e.g. the 7th question of section 1 is "1.7". For a table, label each blank cell as its own question in reading order ("2.1", "2.2", …). If the page STARTS with questions that come before any numbered section heading (they continue a section from the previous page), label them "?.<question number>" (e.g. "?.8") — the previous page's section number is filled in later.`;
+const SECTION_RULES = `Numbering: the booklet is split into numbered sections (e.g. "1 Choose the correct answer", "2 Complete the following table", "3 Complete the following statements", "4 Put (✓) or (✗)", "5 Give reasons"). Question numbers restart in each section. Label every question "section.question" — e.g. the 7th question of section 1 is "1.7". For a table, label each blank cell as its own question in reading order ("2.1", "2.2", …). Many booklets also split a lesson into PARTS with big headings such as "First: School Book Questions", "Second: …", "Third: …" — numbering restarts in every part. Report the part number (First = 1, Second = 2, …) in "part"; use "?" when the page starts without a part heading. If the page STARTS with questions that come before any numbered section heading (they continue a section from the previous page), label them "?.<question number>" (e.g. "?.8") — the previous page's section number is filled in later.`;
 
 const TYPE_NAMES = { mcq: 'Choose the correct answer', short: 'Complete', tf: 'Put ✓ or ✗', essay: 'Give reason / explain' };
 const typesNote = (types) => Array.isArray(types) && types.length ? `This homework ONLY contains these question types: ${types.map(t => `"${t}" (${TYPE_NAMES[t] || t})`).join(', ')}. Use only these types.` : '';
@@ -179,23 +182,30 @@ ${typesNote(types)}
 Types: "mcq" (choose — copy ALL lettered choices, normally 4, keeping atom symbols with both numbers like "¹³₆X"), "tf" (put ✓ or ✗), "short" (complete / one word / table cell), "essay" (give reason, what happens if, explain, compare).
 ${TF_NOTE}
 Return ONLY JSON, no prose:
-{"page_sections":[{"number":1,"title":"Choose the correct answer","type":"mcq"}],
- "questions":[{"label":"1.1","type":"mcq","question":"…","options":["…","…","…","…"],"requires_correction":false}]}
+{"page_sections":[{"part":1,"number":1,"title":"Choose the correct answer","type":"mcq"}],
+ "questions":[{"part":1,"label":"1.1","type":"mcq","question":"…","options":["…","…","…","…"],"requires_correction":false}]}
 Do not skip any question. Keep the booklet's language (usually English).`;
 }
 
-/** Read an official answer-key page — copy answers, never solve. */
+/** Read an official answer-key page — copy answers, never solve. Compact lines (dense multi-column pages have 100+ answers). */
 export function keyReadPrompt({ unit, lesson, pageNo }) {
-    return `This image is a page${pageNo ? ` (PDF page ${pageNo})` : ''} of the OFFICIAL ANSWER KEY of an Egyptian science homework booklet${unit ? ` (we need Unit ${unit}${lesson ? `, Lesson ${lesson}` : ''})` : ''}.
-COPY the answers exactly as printed. Do NOT solve or change anything.
-${SECTION_RULES}
-If the page has answers for several lessons, copy only ${lesson ? `Lesson ${lesson}` : 'the lesson shown first'} and say which lesson in "lesson".
-For each answer give:
-- choose: "answer" = the letter (a/b/c/d) and "answer_text" = the words after it if printed
-- ✓/✗: "answer" = "✓" or "✗", and "correction" = the corrected word(s) if printed
-- complete: "answer" = the word(s)
-- give reason / explain: "answer" = the full printed answer, and "ideas" = 1–3 short key ideas taken from that answer's own words
-Return ONLY JSON: {"lesson":"1","answers":[{"label":"1.1","answer":"c","answer_text":"","correction":"","ideas":[]}]}`;
+    return `This image is a page${pageNo ? ` (PDF page ${pageNo})` : ''} of the OFFICIAL ANSWER KEY of an Egyptian science booklet${unit ? ` (we need Unit ${unit}${lesson ? `, Lesson ${lesson}` : ''})` : ''}.
+The page is DENSE and usually printed in 2–3 narrow COLUMNS. Read column by column: the whole left column from top to bottom, then the next column, and so on.
+COPY every answer exactly as printed. Do NOT solve or change anything. Do not skip answers.
+Headings you will see:
+- lesson headings ("Lesson 1", "الدرس الأول") → write a line: LESSON <number>
+- part headings ("First: School Book Questions", "Second: …", "Third: …", or numbered groups whose numbering restarts) → write a line: PART <number> | <title>
+- numbered sections ("1 Choose …", "2 Complete …", "3 Put ✓ or ✗ …", "4 Give reasons …"); question numbers restart in each section.
+Write ONE answer per line as  section.question = answer  — examples:
+1.1 = c
+1.2 = d (fourth energy level)
+2.3 = atomic number
+3.1 = ✗ | mass number → atomic number
+3.2 = ✓
+4.1 = Because the number of protons equals the number of electrons.
+For choose: the letter first (the words in brackets only if printed). For ✓/✗: the symbol, then " | " and the correction if printed. For a table, one line per cell in reading order.
+If answers at the top of a column continue a section from before (no heading), write them as ?.<question number> = answer.
+Output ONLY these lines — no JSON, no other text.`;
 }
 
 export function readPrompt({ key, pageNo, pages }) {

@@ -125,7 +125,7 @@
         .timer { font-weight: 800; font-variant-numeric: tabular-nums; padding: 6px 12px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
         .timer.warn { background: var(--accent-soft); color: var(--accent-strong, #B45309); } .timer.danger { background: var(--danger-soft); color: var(--danger); animation: blink 1s infinite; }
         .sec-head { display: flex; align-items: center; gap: 10px; margin: 20px 0 10px; }
-        .sec-head .n { width: 30px; height: 30px; border-radius: 10px; background: var(--primary); color: #fff; font-weight: 800; display: grid; place-items: center; flex: none; }
+        .sec-head .n { min-width: 30px; padding: 0 6px; height: 30px; border-radius: 10px; background: var(--primary); color: #fff; font-weight: 800; display: grid; place-items: center; flex: none; }
         .sec-head b { font-size: 16px; }
         .qa { border-radius: 18px; border: 1.5px solid var(--border); background: var(--surface); padding: 14px; display: grid; gap: 10px; transition: border-color .2s; }
         .qa + .qa { margin-top: 10px; }
@@ -429,7 +429,7 @@
             ANS = Object.assign({}, H.draft || {}, local && local.sub === s.id ? local.answers : {});
             PHOTOS = H.photos || [];
             const sections = [];
-            paper.forEach(q => { const sec = String(q.label).split('.')[0]; let g = sections.find(x => x.sec === sec); if (!g) sections.push(g = { sec, type: q.type, qs: [] }); g.qs.push(q); });
+            paper.forEach(q => { const sec = String(q.label).includes('.') ? String(q.label).replace(/\.[^.]+$/, '') : String(q.label); let g = sections.find(x => x.sec === sec); if (!g) sections.push(g = { sec, type: q.type, qs: [] }); g.qs.push(q); });
             view.innerHTML = head + `
                 ${isLastDay() ? `<div class="lastday reveal" id="lastDay">${icon('alert')}<div><b dir="rtl">النهاردة آخر يوم لتسليم الواجب — لازم تسلّم النهاردة قبل الميعاد النهائي ⏰</b><p>Today is the last day — submit before ${esc(when(a.deadline))}. Saved answers that are not submitted don't count.</p></div></div>` : ''}
                 ${a.instructions ? `<div class="card reveal" style="margin-bottom:14px"><b>Note from Miss Marwa</b><p dir="auto" style="margin:6px 0 0">${txt(a.instructions)}</p></div>` : ''}

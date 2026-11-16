@@ -208,7 +208,8 @@ export function normaliseSolved(parsed, { types = null, extractOnly = false } = 
             correction: type === 'tf' ? str(q.correction, 300) : '', alternatives: (Array.isArray(q.alternatives) ? q.alternatives : []).map(x => str(x, 200)).filter(Boolean).slice(0, 15),
             modelAnswer: type === 'essay' ? str(q.model_answer || q.modelAnswer, 2000) : '', ideas: type === 'essay' ? ideas : [],
             explanation, confidence: conf, aiNote: notes.join(' · '), aiCheck: true,
-            requiresCorrection: type === 'tf' ? (q.requires_correction === undefined ? undefined : !!q.requires_correction) : undefined
+            requiresCorrection: type === 'tf' ? (q.requires_correction === undefined ? undefined : !!q.requires_correction) : undefined,
+            part: q.part === undefined || q.part === null ? undefined : String(q.part).slice(0, 6)
         };
     });
 }
@@ -230,6 +231,55 @@ export function applyVerify(questions, parsed) {
         return addNote(q, `Second check says ${shown}${r.why ? ' — ' + str(r.why, 120) : ''}`, 0.3, 'disagree');
     });
 }
+// ---------- official answer key: compact lines → items ----------
+// "LESSON 1" / "PART 2 | Second: …" / "1.3 = c" / "3.1 = ✗ | mass number → atomic number" / "?.8 = d"
+export function parseKeyLines(text) {
+    const out = []; let lesson = null, part = '?', partTitle = '';
+    const t = String(text || '').replace(/```[a-z]*/gi, '');
+    for (const raw of t.split(/\r?\n/)) {
+        const line = raw.trim().replace(/^[-*•]\s*/, '').replace(/\*\*/g, ''); if (!line) continue;
+        let m = line.match(/^LESSON\s*[:#]?\s*([^\s|]+)/i); if (m) { lesson = m[1].replace(/[^\d٠-٩a-z]/gi, '') || m[1]; continue; }
+        m = line.match(/^PART\s*[:#]?\s*([^|]+?)\s*(?:\|\s*(.*))?$/i); if (m) { part = m[1].trim(); partTitle = str(m[2], 120); continue; }
+        m = line.match(/^(\?|\d{1,2})\s*[.\-]\s*(\d{1,3}[a-z]?)\s*[=:)]\s*(.+)$/i); if (!m) continue;
+        let answer = m[3].trim(), correction = '';
+        const tf = answer.match(/^(✓|✔|√|✗|✘|×|x)\s*(?:\|\s*(.*))?$/i);
+        if (tf) { answer = tf[1]; const c = String(tf[2] || '').trim(); correction = c.includes('→') ? c.split('→').pop().trim() : c; }
+        out.push({ label: `${m[1]}.${m[2]}`, answer: str(answer, 2000), correction: str(correction, 300), part, partTitle, lesson });
+    }
+    return out;
+}
+// Join per-page items in page order: "?.8" continues the previous section; numbering that restarts
+// (a new PART such as "Second: …") gets a part prefix → labels "2.1.3" whenever a homework has several parts.
+export function stitchPages(pages, { prefix = 'auto' } = {}) {
+    const out = []; let ord = 0, lastPart = null, last = null, seen = new Set();
+    for (const items of Array.isArray(pages) ? pages : []) for (const it of Array.isArray(items) ? items : []) {
+        const rp = it.part === undefined || it.part === null || String(it.part).trim() === '' ? '?' : String(it.part).trim();
+        if (rp !== '?' && rp !== lastPart) { ord++; lastPart = rp; seen = new Set(); }
+        if (!ord) ord = 1;
+        let lab = String(it.label || '').trim(); const notes = [];
+        let type = it.type, rc = it.requiresCorrection, options = it.options;
+        const m = lab.match(/^\?\.(.+)$/);
+        if (m) {
+            if (last) { lab = `${last.sec}.${m[1]}`; if (type && last.type && type !== last.type) { type = last.type; if (type !== 'mcq') options = []; } if (type === 'tf' && rc === undefined) rc = last.rc; }
+            else { lab = m[1]; notes.push('Section number not found — check the number'); }
+        }
+        if (seen.has(lab)) { ord++; seen = new Set(); }          // numbering restarted without a part heading
+        seen.add(lab);
+        last = { sec: lab.split('.')[0], type, rc };
+        out.push({ ...it, label: lab, ...(type !== undefined ? { type } : {}), ...(options !== undefined ? { options } : {}), ...(rc !== undefined ? { requiresCorrection: rc } : {}), _p: ord, _n: notes });
+    }
+    const multi = prefix === 'always' || new Set(out.map(x => x._p)).size > 1;
+    return out.map(({ _p, _n, ...x }) => ({ ...x, label: multi ? `${_p}.${x.label}` : x.label, partNo: _p, ...(_n.length ? { aiNote: [x.aiNote, ..._n].filter(Boolean).join(' · ') } : {}) }));
+}
+// keep only the homework's lesson when the key pages cover several lessons (lesson carries over page breaks)
+export function keyForLesson(pages, lesson) {
+    let cur = null;
+    const tagged = (Array.isArray(pages) ? pages : []).map(items => (items || []).map(a => { if (a.lesson) cur = String(a.lesson); return { ...a, lesson: a.lesson || cur }; }));
+    const want = lesson ? String(lesson) : null;
+    if (!want || !tagged.flat().some(a => a.lesson === want)) return tagged;
+    return tagged.map(items => items.filter(a => a.lesson === want));
+}
+
 // ---------- official answer key → questions (code, no AI) ----------
 const KEY_TF_TRUE = /^(✓|✔|√|true|t|صح|صحيح|ص)$/i, KEY_TF_FALSE = /^(✗|✘|×|x|false|f|خطأ|خطا|خ)$/i;
 export function matchAnswers(questions, answers) {
@@ -247,9 +297,10 @@ export function matchAnswers(questions, answers) {
         if (!a) return { ...q, answer: q.type === 'mcq' || q.type === 'tf' ? '' : q.answer || '', fromKey: false, missing: true, aiNote: [...notes, 'Not found in the answer key'].join(' · '), confidence: Math.min(q.confidence ?? 1, 0.3) };
         const raw = String(a.answer ?? '').trim();
         if (q.type === 'mcq') {
-            const m = raw.toLowerCase().replace(/[()\[\].\s]/g, '').match(/^[a-f]$/) || raw.toLowerCase().match(/^\(?([a-f])\)/);
+            const m = raw.toLowerCase().replace(/[()\[\].\s]/g, '').match(/^[a-f]$/) || raw.toLowerCase().match(/^\(?([a-f])\)?(?=$|[\s.:\-–(])/);
             let letter = m ? (m[1] || m[0]) : '';
-            const txt = str(a.answer_text || (!letter ? raw : ''), 300);
+            const inBr = (raw.match(/\(([^)]{2,})\)\s*$/) || [])[1] || '';
+            const txt = str(a.answer_text || inBr || (!letter ? raw : ''), 300);
             if (!letter && txt && (q.options || []).length) { const i = q.options.findIndex(o => o.trim().toLowerCase().replace(/[.\s]+$/, '') === txt.toLowerCase().replace(/[.\s]+$/, '')); if (i >= 0) letter = 'abcdef'[i]; }
             if (!letter) return { ...q, answer: '', fromKey: false, missing: true, aiNote: [...notes, `Answer key says "${str(raw, 40)}" — pick the letter`].join(' · '), confidence: 0.3 };
             if ((q.options || []).length && 'abcdef'.indexOf(letter) >= q.options.length) notes.push(`Key letter (${letter}) is not one of the ${q.options.length} choices read`);
@@ -323,7 +374,7 @@ export async function onRequest(context) {
         const data = isPost ? await request.json().catch(() => ({})) : {};
         const need = {
             list: 'homework.view', get: 'homework.view', save: 'homework.create', publish: 'homework.publish', close: 'homework.publish', reopen: 'homework.publish', unpublish: 'homework.publish', delete: 'homework.delete',
-            books: 'homework.create', book: 'homework.create', 'ai-solve-page': 'homework.create', 'ai-lab': 'homework.create', 'ai-verify': 'homework.create', 'ai-extract-page': 'homework.create', 'ai-read-key-page': 'homework.create', 'match-key': 'homework.create', 'explain-save': 'homework.create', usage: 'homework.view',
+            books: 'homework.create', book: 'homework.create', 'ai-solve-page': 'homework.create', 'ai-lab': 'homework.create', 'ai-verify': 'homework.create', 'ai-extract-page': 'homework.create', 'ai-read-key-page': 'homework.create', 'match-key': 'homework.create', stitch: 'homework.create', 'explain-save': 'homework.create', usage: 'homework.view',
             settings: 'homework.view', 'set-release': 'settings.manage',
             submissions: 'homework.view', submission: 'homework.view', review: 'homework.review', regrade: 'homework.review', 'grade-step': 'homework.review',
             report: 'homework.view', verify: 'homework.view', page: 'homework.view', counts: 'homework.view'
@@ -419,6 +470,16 @@ export async function onRequest(context) {
         if (action === 'match-key') {          // official answers → questions (code only)
             return json(matchAnswers(data.questions, data.answers));
         }
+        if (action === 'stitch') {             // per-page results (page order) → one numbered list (+ match the official key)
+            const questions = stitchPages(data.questionPages);
+            if (!Array.isArray(data.answerPages)) return json({ questions });
+            // number both sides with parts, so a key that only covers part 1 still lines up; drop the prefix if the homework has one part
+            const oneDrop = (l) => String(l).replace(/^1\./, '');
+            const multi = new Set(questions.map(q => q.partNo)).size > 1;
+            let answers = stitchPages(keyForLesson(data.answerPages, data.lesson), { prefix: 'always' });
+            if (!multi) answers = answers.map(a => (a.partNo === 1 ? { ...a, label: oneDrop(a.label) } : a));
+            return json({ ...matchAnswers(questions, answers), answersRead: answers.length });
+        }
         if (action === 'ai-extract-page' || action === 'ai-read-key-page') {
             if (!aiReady(env)) return bad('Workers AI is not connected — add the AI binding in Cloudflare', 503, { code: 'AI_OFF' });
             const image = String(data.image || '');
@@ -427,10 +488,17 @@ export async function onRequest(context) {
             const types = (Array.isArray(data.types) ? data.types : []).filter(t => TYPES.includes(t));
             const isKey = action === 'ai-read-key-page';
             try {
-                const out = await runAI(env, db, { image, prompt: isKey ? keyReadPrompt({ unit: data.unit, lesson: data.lesson, pageNo: parseInt(data.pageNo, 10) || null }) : extractPrompt({ grade: data.grade, unit: data.unit, lesson: data.lesson, types, pageNo: parseInt(data.pageNo, 10) || null }), maxTokens: isKey ? 1500 : 3000 });
-                const parsed = parseJsonLoose(out.text);
+                const out = await runAI(env, db, { image, prompt: isKey ? keyReadPrompt({ unit: data.unit, lesson: data.lesson, pageNo: parseInt(data.pageNo, 10) || null }) : extractPrompt({ grade: data.grade, unit: data.unit, lesson: data.lesson, types, pageNo: parseInt(data.pageNo, 10) || null }), maxTokens: isKey ? 3500 : 3000 });
                 const res = { model: out.model, ms: out.ms, neurons: out.neurons, today: await usageToday(db), limit: DAILY_FREE_NEURONS };
-                if (isKey) return json({ ...res, lesson: parsed && parsed.lesson ? String(parsed.lesson).slice(0, 10) : null, answers: (parsed && Array.isArray(parsed.answers) ? parsed.answers : []).slice(0, 120).map(a => ({ label: str(a.label, 12), answer: str(a.answer, 2000), answer_text: str(a.answer_text, 300), correction: str(a.correction, 300), ideas: Array.isArray(a.ideas) ? a.ideas.slice(0, 4).map(x => str(typeof x === 'string' ? x : x && x.text, 200)) : [] })).filter(a => a.label) });
+                if (isKey) {
+                    let answers = parseKeyLines(out.text);
+                    if (!answers.length) {          // the model answered in JSON anyway
+                        const pj = parseJsonLoose(out.text);
+                        answers = (pj && Array.isArray(pj.answers) ? pj.answers : []).map(a => ({ label: str(a.label, 12), answer: str(a.answer, 2000), correction: str(a.correction, 300), part: a.part, lesson: a.lesson || (pj && pj.lesson) || null })).filter(a => a.label);
+                    }
+                    return json({ ...res, answers: answers.slice(0, 400), lessons: [...new Set(answers.map(a => a.lesson).filter(Boolean))], raw: answers.length ? undefined : String(out.text).slice(0, 1500) });
+                }
+                const parsed = parseJsonLoose(out.text);
                 const questions = normaliseSolved(parsed, { types, extractOnly: true });
                 return json({ ...res, questions, sections: (parsed && parsed.page_sections) || [], raw: questions.length ? undefined : String(out.text).slice(0, 3000) });
             } catch (e) {
@@ -454,12 +522,13 @@ export async function onRequest(context) {
                 const key = data.assignmentId ? await loadKey(db, parseInt(data.assignmentId, 10)) : (Array.isArray(data.key) ? data.key : []);
                 if (!key.length) return bad('Pick a homework (its answer key tells the AI which questions to look for)', 400);
                 prompt = readPrompt({ key, pageNo: 1, pages: 1 });
-            } else prompt = str(data.prompt, 4000) || 'Describe this page.';
+            } else if (task === 'key') prompt = keyReadPrompt({ unit: data.unit, lesson: data.lesson });
+            else prompt = str(data.prompt, 4000) || 'Describe this page.';
             try {
-                const out = await runAI(env, db, { image, prompt, model, maxTokens: task === 'solve' ? 4096 : 2048 });
+                const out = await runAI(env, db, { image, prompt, model, maxTokens: task === 'solve' ? 4096 : task === 'key' ? 3500 : 2048 });
                 const parsed = parseJsonLoose(out.text);
                 const res = { model: out.model, format: out.format, ms: out.ms, neurons: out.neurons, usage: out.usage, today: await usageToday(db), limit: DAILY_FREE_NEURONS, parsed };
-                if (action === 'ai-lab') return json({ ...res, task, raw: out.text, prompt, checked: task === 'solve' ? normaliseSolved(parsed) : undefined });
+                if (action === 'ai-lab') return json({ ...res, task, raw: out.text, prompt, checked: task === 'solve' ? normaliseSolved(parsed) : undefined, keyLines: task === 'key' ? parseKeyLines(out.text) : undefined });
                 const questions = normaliseSolved(parsed, { types });
                 return json({ ...res, questions, sections: (parsed && parsed.page_sections) || [], raw: questions.length ? undefined : String(out.text).slice(0, 3000) });
             } catch (e) {
