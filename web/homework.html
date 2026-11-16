@@ -201,6 +201,7 @@
     <script>
     (function () {
         if (!window.App) return;
+        if (!App.features.homework) { location.replace('/exams.html'); return; }      // feature paused — old links / notifications land on Exams
         const { session, esc, txt, icon, api, url, timeLeft, fmtDate, scoreTone, ring, animateRings, toast, sheet, soon, reveal } = App;
         App.shell({ active: 'exams', title: 'Homework' });
         const $ = (id) => document.getElementById(id);

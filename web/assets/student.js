@@ -597,7 +597,12 @@
         PWA.showHelp = (title, html) => sheet({ iconName: 'download', title, subtitle: 'Open Science Academy straight from your home screen, full screen, like a normal app.', html, actions: [{ label: 'Got it', cls: 'btn-soft' }] });
         PWA.setNotify((msg) => toast(msg, 'success'));
     }
+    // Features paused for now (code + data kept; flip to true to bring back).
+    // Preview on one device: localStorage.setItem('feature_homework', '1')
+    const flag = (k) => { try { return localStorage.getItem('feature_' + k) === '1'; } catch (e) { return false; } };
+    const FEATURES = { homework: false || flag('homework') };
     window.App = {
+        features: FEATURES,
         confirmStart, setTheme, toggleTheme, currentTheme,
         session, grade, isAdmin, GRADES, GRADES_AR,
         esc, txt, hasArabic, icon, api, url, safeUrl,

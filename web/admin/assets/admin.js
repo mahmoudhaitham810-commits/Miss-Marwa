@@ -54,7 +54,8 @@
     let STAFF = null, PERMS = [];
     // Features that are built but switched off for now. Parent report links: on hold (Nov 2026) —
     // set to true to show the "Parent link" / "Report links" buttons again.
-    const FEATURES = { parentLinks: false };
+    // Homework: paused (Nov 2026) — code + data kept; set to true to bring it back.
+    const FEATURES = { parentLinks: false, homework: false };
     const feature = (k) => FEATURES[k] === true || store.get('feature_' + k, '') === '1';
     const can = (p) => PERMS.includes(p);
 
@@ -106,7 +107,7 @@
             { key: 'content', label: 'Lessons & files', icon: 'book', href: '/admin/content.html' },
             { key: 'exams', label: 'Online exams', icon: 'clipboard', href: '/admin/exams.html' },
             { key: 'results', label: 'Online results', icon: 'checkCircle', href: '/admin/results.html' },
-            { key: 'homework', label: 'Homework · الواجبات', icon: 'file', href: '/admin/homework.html' },
+            ...(feature('homework') ? [{ key: 'homework', label: 'Homework · الواجبات', icon: 'file', href: '/admin/homework.html' }] : []),
             { key: 'grades', short: 'Grades', label: 'Center grades', icon: 'edit', href: '/admin/grades.html' },
             { key: 'analytics', short: 'Analytics', label: 'Analytics', icon: 'trophy', href: '/admin/analytics.html' },
             { key: 'reports', label: 'Parent reports', icon: 'whatsapp', href: '/admin/reports.html' },
@@ -469,6 +470,7 @@
     }
 
     window.Admin = {
+        features: { homework: feature('homework') },
         boot, api, icon, esc, can, store, GRADES, BRANCHES, fmtPct, levelOf, LEVEL_LABEL, initials, segmented, normalizeDigits,
         toMs, fmtDate, timeLeft, preview, queue, sender, devicesSheet, waHref, waNumber, feature, downloadCsv, gradeSelect, hydrate, enhanceSelect,
         get staff() { return STAFF; }

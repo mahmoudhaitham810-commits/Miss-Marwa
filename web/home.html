@@ -116,8 +116,8 @@
         document.getElementById('greet').innerHTML = `${icon(h >= 6 && h < 18 ? 'sun' : 'moon', 'sm')}${part}`;
         document.getElementById('helloName').innerHTML = `Hi, ${txt(session.firstName || 'there')}`;
 
-        // ---- Homework due ----
-        api('/api/hw-student?action=list').then(d => {
+        // ---- Homework due (paused feature) ----
+        if (App.features.homework) api('/api/hw-student?action=list').then(d => {
             const toMs = (v) => new Date(String(v).replace(' ', 'T') + 'Z').getTime();
             const due = d.items.filter(x => x.due).sort((a, b) => toMs(a.deadline) - toMs(b.deadline));
             const ready = d.items.filter(x => x.submission && x.submission.released && toMs(x.submission.submittedAt) > Date.now() - 3 * 864e5);

@@ -60,7 +60,7 @@
             A.can('audit.view') ? get('/api/admin-auth?action=audit-log&limit=6') : Promise.resolve(null),
             get('/api/offline-exams?action=data-check'),
             get('/api/ask?action=counts'),
-            A.can('homework.view') ? get('/api/homework?action=counts') : Promise.resolve(null)
+            A.features.homework && A.can('homework.view') ? get('/api/homework?action=counts') : Promise.resolve(null)
         ]);
         const S = Array.isArray(students) ? students : [];
         const E = Array.isArray(exams) ? exams : [];

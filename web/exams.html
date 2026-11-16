@@ -65,12 +65,14 @@
     <script>
     (function () {
         // the homework notification opens /exams.html?tab=homework
-        if (new URLSearchParams(location.search).get('tab') === 'homework') { location.replace('/homework.html' + (new URLSearchParams(location.search).get('grade') ? '?grade=' + encodeURIComponent(new URLSearchParams(location.search).get('grade')) : '')); return; }
+        if (window.App && App.features && App.features.homework && new URLSearchParams(location.search).get('tab') === 'homework') { location.replace('/homework.html' + (new URLSearchParams(location.search).get('grade') ? '?grade=' + encodeURIComponent(new URLSearchParams(location.search).get('grade')) : '')); return; }
         if (!window.App) return;
         const { session, grade, esc, txt, icon, api, url, timeLeft, fmtDate, scoreTone } = App;
         App.shell({ active: 'exams', title: 'Exams' });
+        if (App.features.homework) {
         document.getElementById('switch').innerHTML = `<a href="${url('exams.html')}" class="active" aria-current="page" style="text-decoration:none">${icon('clipboard', 'sm')}Exams</a><a href="${url('homework.html')}" style="text-decoration:none">${icon('file', 'sm')}Homework<span class="count" id="hwDue" hidden></span></a>`;
         api('/api/hw-student?action=list').then(d => { const n = d.items.filter(x => x.due).length; const el = document.getElementById('hwDue'); if (n && el) { el.textContent = n; el.hidden = false; } }).catch(() => { });
+        } else document.getElementById('switch').remove();
 
         let exams = [], results = [], tab = null;
 
