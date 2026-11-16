@@ -177,6 +177,9 @@
         .ncard { font-size: 14px; }
         .ncard.warn { background: var(--warning-soft); border-color: transparent; }
         .ai-note { font-size: 11.5px; color: var(--muted); }
+        .ucard { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--primary-soft); border-color: transparent; padding: 10px 12px; }
+        .ucard .tx { flex: 1 1 200px; font-size: 13.5px; line-height: 1.6; }
+        .ucard .btn { flex: none; }
         .hello .brief-wrap { text-align: start; margin-top: 14px; }
         @media (prefers-reduced-motion: reduce) { .msg, .dots span, .rbtn.listening { animation: none; } }
     </style>
@@ -263,7 +266,7 @@
             const tiers = STATUS ? STATUS.tiers : [{ tier: 'free', name: 'Argon', note: 'Fast & free', ready: true }, { tier: 'pro', name: 'Krypton', note: 'Smart', ready: true }, { tier: 'max', name: 'Krypton Max', note: 'Strongest', ready: true }];
             if (!tiers.find(t => t.tier === tier && t.ready)) tier = (tiers.find(t => t.ready) || tiers[0]).tier;
             $('models').innerHTML = tiers.map(t => `<button class="model ${t.tier === tier ? 'on' : ''} ${t.ready ? '' : 'off'}" role="radio" aria-checked="${t.tier === tier}" data-tier="${t.tier}">
-                ${t.ready ? '' : icon('lock', 'lock')}<b>${esc(t.name)}</b><small>${t.ready ? esc(t.tier === 'free' ? 'Free · quick tasks' : t.tier === 'pro' ? 'Smart · everyday' : 'Strongest · heavy tasks') : 'Not connected yet'}</small></button>`).join('');
+                ${t.ready ? '' : icon('lock', 'lock')}<b>${esc(t.name)}</b><small>${t.ready ? esc(t.tier === 'free' ? 'Free · reports & lookups' : t.tier === 'pro' ? 'Science · everyday' : 'Exams & summaries') : 'Not connected yet'}</small></button>`).join('');
         }
         function renderMeter() {
             if (!STATUS) return;
@@ -296,7 +299,7 @@
         let BRIEF = null;
         function welcome() {
             return `<div class="hello"><span class="spark">${icon('sparkles')}</span><h2 dir="rtl">أهلاً يا مس مروة 👋</h2>
-                <p>Ask about any student by name — «عامل إيه عمر عادل؟» — or any grade. Science, questions and messages too.</p>
+                <p>Argon 👀 reports what's happening — ask about any student («عامل إيه عمر عادل؟») or any grade. For science, switch to Krypton 🎓</p>
                 <div class="brief-wrap" id="briefWrap">${BRIEF ? cardsHTML(BRIEF, -1) : '<div class="skel" style="height:150px;border-radius:18px"></div>'}</div>
                 <div class="chips">${CHIPS.map(([e, t]) => `<button class="chip-q" data-chip="${esc(t)}"><span class="e">${e}</span><span dir="auto">${esc(t)}</span></button>`).join('')}</div></div>`;
         }
@@ -328,6 +331,12 @@
             return `<div class="rows">${html}</div>${rows.length > limit ? `<button class="more" data-more>Show all ${rows.length}</button>` : ''}${opts.waAll && rows.some(r => r.parentPhone) ? `<div class="acts"><button class="btn btn-wa btn-sm" data-wa-all="${k}|${list}">${icon('whatsapp', 'sm')}WhatsApp ${rows.filter(r => r.parentPhone).length} parents</button></div>` : ''}`;
         }
         const CARD = {
+            upgrade: (c, k) => {
+                const ready = !STATUS || (STATUS.tiers || []).some(t => t.tier === 'pro' && t.ready);
+                const mi = Number(String(k).split(':')[0]), next = MSGS[mi + 1];
+                if (next && next.role === 'assistant' && next.tier && next.tier !== 'free') return `<div class="dc ucard"><span class="tx">✅ Krypton answered this below 👇</span></div>`;
+                return `<div class="dc ucard"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="btn btn-ai btn-sm" data-upgrade="${k}">${icon(ready ? 'sparkles' : 'lock', 'sm')}${ready ? 'Ask Krypton' : 'Krypton (not connected)'}</button></div>`;
+            },
             note: (c) => `<div class="dc ncard ${c.tone === 'warn' ? 'warn' : ''}" dir="auto">${esc(c.text || '')}</div>`,
             student(c, k) {
                 const st = c.student, sm = c.summary;
@@ -444,6 +453,15 @@
         }
         $('msgs').addEventListener('click', async (e) => {
             const c = e.target.closest('[data-chip]'); if (c) { $('input').value = c.dataset.chip; autosize(); $('input').focus(); updateSend(); return; }
+            const up = e.target.closest('[data-upgrade]');
+            if (up) {
+                const t = STATUS && STATUS.tiers.find(x => x.tier === 'pro');
+                if (t && !t.ready) { Site.sheet({ iconName: 'lock', title: "Krypton isn't connected yet", subtitle: 'Add the ANTHROPIC_API_KEY secret in Cloudflare (Settings → Variables and Secrets), then redeploy.', actions: [{ label: 'OK', cls: 'btn-ghost' }] }); return; }
+                const mi = Number(up.dataset.upgrade.split(':')[0]);
+                const q = MSGS.slice(0, mi).reverse().find(m => m.role === 'user');
+                if (q) { tier = 'pro'; A.store.set('copilot_tier', tier); renderModels(); send(q.text, false, null, true); }
+                return;
+            }
             const stu = e.target.closest('[data-student]'); if (stu) { send('', false, { type: 'student', id: stu.dataset.student }); return; }
             const cx = e.target.closest('[data-ctx]'); if (cx) { try { send('', false, JSON.parse(cx.dataset.ctx)); } catch (x) { } return; }
             const mo = e.target.closest('[data-more]'); if (mo) { mo.previousElementSibling.querySelectorAll('[data-extra]').forEach(el => el.hidden = false); mo.remove(); return; }
@@ -459,16 +477,16 @@
             if (r) { if (r.dataset.retry) { tier = r.dataset.retry; A.store.set('copilot_tier', tier); renderModels(); } const lastUser = [...MSGS].reverse().find(m => m.role === 'user'); if (lastUser) send(lastUser.ctx ? '' : lastUser.text, true, lastUser.ctx || null); }
         });
 
-        async function send(text, resend = false, context = null) {
+        async function send(text, resend = false, context = null, again = false) {
             text = String(text || '').trim(); if ((!text && !context) || sending) return;
             sending = true; updateSend();
-            if (resend) MSGS = MSGS.filter(m => m.role !== 'error'); else MSGS.push({ role: 'user', text: text || '…', ctx: context });
+            if (resend) MSGS = MSGS.filter(m => m.role !== 'error'); else if (!again) MSGS.push({ role: 'user', text: text || '…', ctx: context });
             MSGS.push({ role: 'typing' });
             render();
             try {
-                const r = await api('/api/copilot?action=send', { body: { threadId, text, tier, resend, context } });
+                const r = await api('/api/copilot?action=send', { body: { threadId, text, tier, resend, context, again } });
                 threadId = r.threadId; setChatUrl(); setTitle(r.title);
-                const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && r.user) u.text = r.user.text;
+                const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && r.user && !again) u.text = r.user.text;
                 MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push(r.reply);
                 if (r.usage) { STATUS = { ...STATUS, ...r.usage }; renderMeter(); }
             } catch (err) {

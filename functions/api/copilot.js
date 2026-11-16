@@ -37,10 +37,29 @@ async function ensureTables(db) {
 // Her name — always written exactly like this (models tend to transliterate "Marwa" wrongly, e.g. "ماروه")
 export const NAME_AR = 'مس مروة', NAME_EN = 'Miss Marwa';
 
-export function systemPrompt(staff, now = new Date()) {
+// Each model has its own job (decided with the user, 16 Nov 2026)
+const ROLE_ARGON = `
+## Your role: you are "Argon" — the platform's eyes 👀 (the free model)
+You're her news bulletin: you report what's happening on the platform — students, results, absences, exams closing, today's brief — straight from the DATA, plus quick admin help. That's your strength.
+You are NOT the science expert:
+- For a science question (explanations, exam questions, model answers, lesson content): give a SHORT, simple answer (4–5 lines max). Never write long explanations, full question sets or exams.
+- The app automatically adds a note under your reply recommending Krypton for science — so don't write such a note yourself.`;
+const ROLE_KRYPTON = `
+## Your role: you are "Krypton" — the science expert 🎓
+Science explanations, exam questions with model answers, rephrasing and summaries are your job: do them fully, accurately and carefully. You can also read the platform's data when it's given to you.`;
+
+export function systemPrompt(staff, tier = 'free', now = new Date()) {
     const date = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Cairo' });
     return `You are "Co-Pilot", the private assistant of ${NAME_EN} (${NAME_AR}) — a science teacher in Egypt who runs Science Academy (Science with ${NAME_EN}) for Prep 1, Prep 2, Prep 3 and Secondary 1 students. You are talking to HER (the teacher), not to a student.
 Today is ${date} (Cairo).
+${tier === 'free' ? ROLE_ARGON : ROLE_KRYPTON}
+
+## Personality — warm, cheerful, engaging
+- You're her friendly, upbeat assistant — like a smart, cheerful colleague who's genuinely happy to help. Natural and light, never stiff, formal or robotic.
+- Start with a short friendly line and VARY it (e.g. "حاضر يا ${NAME_AR} 😊"، "من عينيا!"، "يا سلام، سؤال حلو 👌"، "تمام كده 💪") — don't use the same opener every time.
+- 1–2 emojis per reply where they fit (😊 👌 🎉 💪 ✨ 📊 👀) — never more.
+- Good news (a student improving, top marks) → celebrate it 🎉. Bad news (a student slipping) → gentle and constructive, with one practical next step.
+- Cheerful ≠ long: still short and to the point.
 
 ## Her name
 In Arabic her name is written EXACTLY "${NAME_AR}" — never "ماروه", "مروه", "ماروة" or any other spelling. In English: "${NAME_EN}".
@@ -59,8 +78,8 @@ Examples of the style:
 ❌ Wrong (فصحى + translated terms): "المادة الصلبة لها شكل وحجم ثابت، والكتلة تقاس بالجرام."
 ❌ Wrong (full English): "Solids have a fixed shape and volume. Mass is measured in grams."
 ✅ Right — explanation written FOR STUDENTS (when she asks you to explain something the way she'd say it in class): "بص يا بطل، الـ **Solids** بيكون ليها **fixed shape** و **fixed volume**، يعني شكلها وحجمها ثابتين زي الكتاب أو القلم. أما الـ **Mass** فبنقيسها بالـ **grams (g)** أو الـ **kilograms (kg)**."
-✅ Right — talking TO HER: "تمام يا ${NAME_AR}، دي 3 أسئلة على الـ **Density** — السؤال التالت فيه حسبة صغيرة على **D = m / V**."
-Talking to her: polite and warm ("يا ${NAME_AR}"), never "يا بطل". Content meant for students: friendly student tone ("يا بطل"، "يا شباب").
+✅ Right — talking TO HER: "من عينيا يا ${NAME_AR} 😊 دي 3 أسئلة على الـ **Density** — السؤال التالت فيه حسبة صغيرة على **D = m / V**."
+Talking to her: warm and cheerful ("يا ${NAME_AR}"), never "يا بطل". Content meant for students: friendly student tone ("يا بطل"، "يا شباب").
 
 ## Never guess curriculum content
 You do NOT have the curriculum books, the lesson lists, or her lesson notes yet — they are not connected.
@@ -68,14 +87,17 @@ You do NOT have the curriculum books, the lesson lists, or her lesson notes yet 
 - When SHE names the topic herself (e.g. "the Atom", "Density"), you may explain it and write questions on it from general science knowledge.
 
 ## Her platform's data
-You can see her platform's data (students, groups, online + center exam results, absences, rankings, the Ask inbox) — READ-ONLY.
+You can see her platform's data (students, groups, online + center exam results, absences, rankings, how many student questions are waiting) — READ-ONLY.
 The system looks the data up for you automatically and gives it to you in a DATA block under these instructions, when she names a student (e.g. "عامل إيه عمر عادل؟") or asks about a grade/list (e.g. "مين مستواه واقع في Prep 2؟"، "الغياب في Prep 1"، "الأسئلة المستنية"، "ملخص النهارده").
 - Use ONLY the DATA block for any fact about students, marks, exams, absences or questions. NEVER invent a name, number, score, exam or reason.
 - If she asks about her data and there is NO DATA block, the lookup didn't find it: ask her for the student's full name (as registered) or the grade — don't guess.
 - You can't change anything (no publishing, sending, saving, editing marks). Never claim you did. Buttons under the cards let HER do things (open the profile, WhatsApp).
 
+## Students' questions ("Ask Miss Marwa") — hers, not yours
+That section belongs to ${NAME_AR}: she answers her students herself. NEVER write, draft or suggest an answer to a student's question from it, and don't comment on what students asked. You may only report how many questions are waiting and since when (from DATA). If she asks you to write a reply to a student's question, kindly remind her that this section is hers 😊 and offer help with something else.
+
 ## Other things you can do
-Explain science, write and improve questions and model answers, plan, draft messages to students or parents, brainstorm.
+${tier === 'free' ? 'Short, simple answers to quick questions; help with wording a short message to parents.' : 'Explain science, write and improve questions and model answers, plan, rephrase, summarize, draft messages to students or parents, brainstorm.'}
 
 ## Format
 Short and practical — she's busy and usually on her phone. Short paragraphs, bullet lists, **bold** key terms. Get to the point.`;
@@ -89,17 +111,32 @@ export function dataBlock(facts) {
 - Names: write them exactly as in DATA.`;
 }
 
-// Two worked example turns sent before the real chat — the small free model follows examples far better than rules
+// Worked example turns sent before the real chat — the small free model follows examples far better than rules.
+// Argon's examples show SHORT science answers (it's the observer, not the expert); Krypton's show the full style.
+const EX_LESSON = [
+    { role: 'user', content: 'Summarize Prep 2 Unit 2 Lesson 3' },
+    { role: 'assistant', content: `يا ${NAME_AR}، ملفات المنهج والدروس لسه مش متوصلة بيا 🙈 فمش هقدر أعرف الدرس ده فيه إيه بالظبط، ومش هخمّن.
+
+ابعتيلي **عنوان الدرس** وأهم النقط اللي فيه (أو الصقي النص)، وأنا أعملك الـ **summary** على طول ✨` }
+];
+export const STYLE_EXAMPLES_FREE = [
+    { role: 'user', content: 'اشرحلي الفرق بين الـ Mass والـ Weight' },
+    { role: 'assistant', content: `حاضر يا ${NAME_AR} 😊 باختصار: الـ **Mass** هي كمية المادة في الجسم وبتتقاس بالـ **kg** ومش بتتغير، أما الـ **Weight** فهو الـ **force** اللي الـ **gravity** بتشد بيها الجسم وبيتقاس بالـ **N**، علشان كده بيتغير على القمر.` },
+    ...EX_LESSON
+];
 export const STYLE_EXAMPLES = [
     { role: 'user', content: 'اشرحلي الفرق بين الـ Mass والـ Weight بطريقة أقولها للطلبة' },
-    { role: 'assistant', content: `أكيد يا ${NAME_AR}، قوليها كده للطلبة:
+    { role: 'assistant', content: `من عينيا يا ${NAME_AR} 😊 قوليها كده للطلبة:
 
-بص يا بطل، الـ **Mass** هي كمية المادة اللي في الجسم، وبنقيسها بالـ **kilograms (kg)**، ومش بتتغير مهما روحت فين. أما الـ **Weight** فهو الـ **force** اللي الـ **gravity** بتشد بيها الجسم، وبنقيسه بالـ **newtons (N)**، علشان كده وزنك على القمر بيقل بس الـ **Mass** بتاعتك زي ما هي.` },
-    { role: 'user', content: 'Summarize Prep 2 Unit 2 Lesson 3' },
-    { role: 'assistant', content: `يا ${NAME_AR}، ملفات المنهج والدروس لسه مش متوصلة بيا، فمش هقدر أعرف الدرس ده فيه إيه بالظبط، ومش هخمّن.
-
-ابعتيلي **عنوان الدرس** وأهم النقط اللي فيه (أو الصقي النص)، وأنا أعملك الـ **summary** على طول.` }
+بص يا بطل، الـ **Mass** هي كمية المادة اللي في الجسم، وبنقيسها بالـ **kilograms (kg)**، ومش بتتغير مهما روحت فين. أما الـ **Weight** فهو الـ **force** اللي الـ **gravity** بتشد بيها الجسم، وبنقيسه بالـ **newtons (N)**، علشان كده وزنك على القمر بيقل بس الـ **Mass** بتاعتك زي ما هي 🌙` },
+    ...EX_LESSON
 ];
+
+// Argon answered something that isn't a data lookup → the app (not the model) adds a "basic answer" note
+// with a one-tap "Ask Krypton". Greetings, thanks and "what can you do?" don't get it.
+const SMALLTALK = /^(شكرا|شكرًا|ميرسي|متشكره|متشكر|تسلم|تسلمي|تمام|اوك|اوكي|ok|okay|thanks|thank you|thx|hi|hello|hey|ازيك|ازيك يا \S+|صباح الخير|مساء الخير|السلام عليكم|اهلا|أهلا|ماشي|حلو|جميل|برافو|عظيم|perfect|great|nice)[\s!.,،؟?😊👌🙏❤️💪✨]*$|تقدر تعمل ايه|تقدر تعمل إيه|بتعمل ايه|بتعمل إيه|انت مين|إنت مين|what can you do|who are you|^help$|ساعدني ازاي/i;
+export const ARGON_NOTE = 'دي إجابة مبسّطة ومحدودة 🙂 — للأسئلة العلمية (شرح، أسئلة، نماذج إجابة) أنصحك تستخدمي **Krypton**.';
+export function needsUpgradeNote(tier, text, hasData) { return tier === 'free' && !hasData && !SMALLTALK.test(String(text || '').trim()); }
 
 const threadOut = (t) => ({ id: t.id, title: t.title, createdAt: t.created_at, updatedAt: t.updated_at, last: t.last_text ? String(t.last_text).replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 90) : '', count: t.n || 0 });
 const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } };
@@ -194,15 +231,19 @@ export async function onRequest(context) {
             const last = await db.prepare('SELECT * FROM copilot_messages WHERE thread_id = ? ORDER BY id DESC LIMIT 1').bind(t.id).first();
             const lastUser = last && last.role === 'user' ? last : (last && last.role === 'error' ? await db.prepare(`SELECT * FROM copilot_messages WHERE thread_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1`).bind(t.id).first() : null);
             let userMsg = null;
-            if (data.resend && lastUser && lastUser.text === text) userMsg = lastUser;
+            // "Ask Krypton" re-asks the SAME question on another model: reuse it, and leave Argon's answer out of the history
+            const lastAsked = data.again ? await db.prepare(`SELECT * FROM copilot_messages WHERE thread_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1`).bind(t.id).first() : null;
+            if (data.again && lastAsked && lastAsked.text === text) userMsg = lastAsked;
+            else if (data.resend && lastUser && lastUser.text === text) userMsg = lastUser;
             else {
                 const r = await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text) VALUES (?, 'user', ?)`).bind(t.id, text).run();
                 userMsg = { id: Number(r.meta.last_row_id), role: 'user', text, created_at: new Date().toISOString() };
             }
             if (data.resend) await db.prepare(`DELETE FROM copilot_messages WHERE thread_id = ? AND role = 'error' AND id > ?`).bind(t.id, userMsg.id).run();
-            const { results: hist } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') ORDER BY id DESC LIMIT ?`).bind(t.id, HISTORY).all();
+            const { results: hist } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
-            const cards = result ? JSON.stringify(result.cards || []) : null;
+            const upgrade = needsUpgradeNote(tier, text, !!result);
+            let cards = result ? JSON.stringify(result.cards || []) : upgrade ? JSON.stringify([{ type: 'upgrade', text: ARGON_NOTE, tier: 'pro' }]) : null;
             const saveReply = async (fields) => {
                 const r = await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text, tier, model, ms, neurons, cost_usd, tokens_in, tokens_out, error, cards) VALUES (?, 'assistant', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                     .bind(t.id, fields.text, tier, fields.model ?? null, fields.ms ?? null, fields.neurons ?? null, fields.costUsd ?? null, fields.tin ?? null, fields.tout ?? null, fields.error ?? null, cards).run();
@@ -210,9 +251,9 @@ export async function onRequest(context) {
                 return db.prepare('SELECT * FROM copilot_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
             try {
-                const system = systemPrompt(staff) + (result ? dataBlock(result.facts) : '');
-                const maxTokens = result ? (tier === 'free' ? 600 : 900) : (tier === 'max' ? 2500 : 1500);
-                const out = await chat(env, db, { tier, pool: 'staff', system, messages: [...STYLE_EXAMPLES, ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5 });
+                const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : '');
+                const maxTokens = result ? (tier === 'free' ? 600 : 900) : (tier === 'max' ? 2500 : tier === 'pro' ? 1500 : 500);
+                const out = await chat(env, db, { tier, pool: 'staff', system, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5 });
                 const u = out.usage || {};
                 const saved = await saveReply({ text: out.text || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });
                 return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });

@@ -115,11 +115,12 @@ export async function findStudents(db, text, grade = null) {
     const idm = String(text).match(/\b(MM-\d{3,})\b/i);
     const rows = await allStudents(db);
     if (idm) { const s = rows.find(r => r.studentId.toUpperCase() === idm[1].toUpperCase()); return s ? { matches: [s], strong: true } : { matches: [], strong: false, notFound: idm[1].toUpperCase() }; }
-    const words = norm(text).replace(/[^\p{L}\s]/gu, ' ').split(' ').filter(Boolean)
-        .map(w => (w.length > 3 && /^[وفلب]/.test(w) && !STOP.has(w) ? [w, w.slice(1)] : [w])).flat()
-        .filter(w => !STOP.has(w));
-    if (!words.length) return { matches: [], strong: false };
-    const keys = words.map(w => matchKey(w));
+    // keep each word's original spelling for the sound key (norm() turns ى→ي and ة→ه, which would change it)
+    const raw = String(text).replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[^\p{L}\s]/gu, ' ').split(/\s+/).filter(Boolean)
+        .map(w => (w.length > 3 && /^[وفلب]/.test(w) && !STOP.has(norm(w)) ? [w, w.slice(1)] : [w])).flat()
+        .filter(w => !STOP.has(norm(w)));
+    if (!raw.length) return { matches: [], strong: false };
+    const words = raw.map(norm), keys = raw.map(w => matchKey(w));
     const scored = [];
     for (const s of rows) {
         if (grade && s.grade !== grade) continue;
@@ -150,7 +151,7 @@ export async function findStudents(db, text, grade = null) {
 const RX = {
     brief: /ملخص (النهارده|انهارده|اليوم)|موجز|brief|صباح الخير|اخبار (النهارده|اليوم)|ايه الاخبار|عندي ايه النهارده|^today\b|morning/,
     inbox: /((اسئله|سؤال|questions?)\s.*(مستني|waiting|ماتردش|متردش|من غير رد|unanswered|اتسالت|الانبوكس))|inbox|الانبوكس|اسئله الطلبه|الاسئله المستنيه|questions waiting/,
-    exams: /(امتحان|امتحانات|exam|quiz|كويز).*(نتيج|نتايج|result|درجات|حلو|محلش|ماحلش|مخلص|اتقفل|missed|taken|مين)|(نتيج|نتايج|results?).*(امتحان|exam|كويز)|اخر امتحان|last exam/,
+    exams: /(امتحان|امتحانات|exam|quiz|كويز).*(نتيج|نتايج|result|درجات|حلو|محلش|ماحلش|مخلص|اتقفل|missed|taken|مين)|(محلش|ماحلش|محلوش|ماحلوش|حلوا|حلو|دخل|مدخلش|ماخدش).*(امتحان|exam|كويز)|(نتيج|نتايج|results?).*(امتحان|exam|كويز)|اخر امتحان|last exam/,
     absent: /غياب|غايب|غايبين|absent|absence|attendance|حضور|مجاش|محضرش|ماحضرش/,
     top: /اوائل|الاوائل|\btop\b|الاحسن|احسن (طلبه|طلاب|الطلبه)|الشاطرين|\bbest\b|المتفوقين/,
     attention: /واقع|واقعين|ضعيف|ضعاف|\bweak|at.?risk|محتاج(ين)? متابعه|متابعه|slipping|بيقع|نازل|attention|الاضعف|weakest|struggl/
@@ -327,8 +328,10 @@ const TOOLS = {
         const total = Object.values(first.waiting).reduce((a, b) => a + b, 0);
         const card = { type: 'inbox', total, waiting: first.waiting, sections };
         const age = (t) => { const h = Math.round((Date.now() - toMs(t)) / 3600000); return h >= 48 ? `${Math.round(h / 24)} days` : `${h}h`; };
+        // The AI only gets counts and waiting times — never what students asked (that section is Miss Marwa's own)
         const facts = `ASK INBOX: ${total} questions waiting (${GRADES.map(g => `${GRADE_LABEL[g]} ${first.waiting[g] || 0}`).join(', ')}).\n` +
-            sections.map(s => `${s.gradeLabel}: ${s.rows.map(r => `${r.name} — Unit ${r.unit} Lesson ${r.lesson}, waiting ${age(r.waitingSince)}: "${r.text}"`).join(' | ') || 'none'}`).join('\n');
+            sections.map(s => `${s.gradeLabel}: oldest waiting ${s.rows.length ? age(s.rows[0].waitingSince) : '—'}`).join('\n') +
+            `\nOnly report counts and how long they've waited; she answers the questions herself.`;
         return { cards: [card], facts, focus: { tool: 'inbox', args: { grade }, grade } };
     },
 
