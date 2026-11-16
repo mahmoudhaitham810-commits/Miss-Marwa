@@ -25,7 +25,7 @@ function stateOf(a, now = Date.now()) {
 function cleanAnswers(v) {
     const out = {};
     if (!v || typeof v !== 'object') return out;
-    for (const [k, x] of Object.entries(v).slice(0, 80)) {
+    for (const [k, x] of Object.entries(v).slice(0, 320)) {
         const label = String(k).trim().slice(0, 12); if (!label || !x || typeof x !== 'object') continue;
         const answer = String(x.answer ?? '').replace(/\r/g, '').slice(0, 3000), correction = String(x.correction ?? '').replace(/\r/g, '').slice(0, 300);
         if (answer.trim() || correction.trim()) out[label] = { answer, correction };
@@ -187,7 +187,7 @@ export async function onRequest(context) {
             if (s.status !== 'uploading') return bad('Already submitted', 409);
             if (s.ends_at && ms(s.ends_at) + GRACE_MS < Date.now()) return bad('Time is up', 409, { code: 'TIME_UP' });
             const body = JSON.stringify(cleanAnswers(data.answers));
-            if (body.length > 60000) return bad('Your answers are too long', 413);
+            if (body.length > 400000) return bad('Your answers are too long', 413);
             await db.prepare('UPDATE hw_submissions SET draft = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(body, s.id).run();
             return json({ ok: true, savedAt: new Date().toISOString() });
         }

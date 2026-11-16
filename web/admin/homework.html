@@ -691,6 +691,7 @@
             const out = [];
             if (!F.unit) out.push('Choose the unit');
             if (!F.lesson) out.push('Choose the lesson');
+            if (Q.length > 300) out.push(`At most 300 questions in one homework (now ${Q.length}) — split it into two`);
             const dur = $('fDur').value; if (F.mode === 'web' && dur && !(Number(dur) >= 5 && Number(dur) <= 1440)) out.push('Time limit must be between 5 minutes and 24 hours');
             const dl = $('fDeadline').value;
             if (strict && !dl) out.push('Set the deadline');
@@ -732,7 +733,8 @@
             $('approveAll').hidden = locked || !unchecked;
             $('approveLabel').textContent = `Mark all ${unchecked} AI answer${unchecked === 1 ? '' : 's'} as checked`;
             const counts = Object.keys(TYPE_LABEL).map(t => [t, Q.filter(q => q.type === t).length]).filter(([, n]) => n);
-            $('typeCount').innerHTML = counts.map(([t, n]) => `<span class="pill primary">${n} ${esc(TYPE_LABEL[t])}</span>`).join('');
+            $('typeCount').innerHTML = counts.map(([t, n]) => `<span class="pill primary">${n} ${esc(TYPE_LABEL[t])}</span>`).join('')
+                + (Q.length > 100 && Q.length <= 300 ? `<span class="pill legacy" title="Not a problem — just a heads-up">${Q.length} questions — a big homework; students can save and continue later</span>` : '');
             const list = issues(true);
             $('issues').innerHTML = list.slice(0, 6).map(x => `<li>${esc(x)}</li>`).join('') + (list.length > 6 ? `<li>…and ${list.length - 6} more</li>` : '');
             const pub = !editing || editing.status === 'draft';

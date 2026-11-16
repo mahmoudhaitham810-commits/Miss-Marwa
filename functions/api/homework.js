@@ -20,7 +20,7 @@ import { gradeStep, processQueue, resultOf, weaknessReport, releaseMode, RELEASE
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
 const TYPES = ['mcq', 'tf', 'short', 'essay'];
 export const HW_UNITS = 6, HW_LESSONS = 6;
-const MAX_QUESTIONS = 60;
+const MAX_QUESTIONS = 300;          // a full lesson in the workbook can have 70+ questions
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const bad = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
