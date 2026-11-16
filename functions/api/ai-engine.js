@@ -59,7 +59,7 @@ export async function usageToday(db) {
     try { const r = await db.prepare(`SELECT value FROM app_kv WHERE "key" = ?`).bind(`ai_usage_${today()}`).first(); return r ? Math.round(Number(r.value)) : 0; }
     catch (e) { return 0; }
 }
-async function markQuotaHit(db) {
+export async function markQuotaHit(db) {
     try { await db.prepare(`INSERT INTO app_kv ("key", value) VALUES ('ai_quota_hit', ?) ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(today()).run(); } catch (e) { }
 }
 // true when the allowance ran out earlier today (UTC) → don't even try until the reset
@@ -67,7 +67,7 @@ export async function quotaHitToday(db) {
     try { const r = await db.prepare(`SELECT value FROM app_kv WHERE "key" = 'ai_quota_hit'`).first(); return !!(r && r.value === today()); } catch (e) { return false; }
 }
 
-function textOf(res) {
+export function textOf(res) {
     if (res == null) return '';
     if (typeof res === 'string') return res;
     if (typeof res.response === 'string') return res.response;

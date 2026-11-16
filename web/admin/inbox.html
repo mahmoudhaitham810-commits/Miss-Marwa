@@ -217,6 +217,10 @@
             history.replaceState(null, '', location.pathname + '?q=' + id);
             $('tpane').innerHTML = '<div class="skel" style="height:320px;border-radius:14px"></div>';
             try { thread = await api(`/api/ask?action=staff-thread&id=${id}`); } catch (e) { $('tpane').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
+            // A question opened from a link/notification may belong to another grade: switch the tabs to it,
+            // so "Mark resolved" / Reopen updates the list you're actually looking at (it used to look like it vanished)
+            const qg = thread.question && thread.question.grade;
+            if (qg && qg !== grade && A.GRADES[qg]) { grade = qg; A.store.set('inbox_grade', grade); loadList(true); }
             const it = items.find(x => x.id === id); if (it) { it.unread = 0; renderList(); }
             renderThread(true);
         }
@@ -249,7 +253,7 @@
                     loadList(true);
                 }
             });
-            $('resolveBtn')?.addEventListener('click', async () => { await api('/api/ask?action=resolve', { body: { id: q.id, resolved: true } }); q.status = 'resolved'; renderThread(); loadList(true); toast('Marked resolved', 'success'); });
+            $('resolveBtn')?.addEventListener('click', async () => { await api('/api/ask?action=resolve', { body: { id: q.id, resolved: true } }); q.status = 'resolved'; renderThread(); loadList(true); toast(status === 'waiting' ? 'Marked resolved — find it under Answered or All' : 'Marked resolved', 'success'); });
             $('reopenBtn')?.addEventListener('click', async () => { await api('/api/ask?action=resolve', { body: { id: q.id, resolved: false } }); q.status = 'waiting'; renderThread(); loadList(true); });
             const paintToggle = () => {
                 const b = $('bankToggle'), h = !!q.bankHidden;

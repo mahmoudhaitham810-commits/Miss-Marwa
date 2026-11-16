@@ -114,7 +114,7 @@
             { key: 'duplicates', label: 'Duplicate accounts', icon: 'merge', href: '/admin/duplicates.html' },
             { key: 'datacheck', label: 'Data check', icon: 'shield', href: '/admin/data-check.html' },
             { key: 'inbox', label: 'Questions · أسئلتي', icon: 'inbox', href: '/admin/inbox.html' },
-            teacher ? { key: 'copilot', label: 'AI Co-Pilot', icon: 'sparkles', soon: true } : null,
+            teacher ? { key: 'copilot', label: 'Co-Pilot', icon: 'sparkles', href: '/admin/copilot.html' } : null,
             { key: 'settings', label: teacher ? 'Settings' : 'My password', icon: 'settings', href: '/admin/settings.html' }
         ].filter(Boolean);
     }

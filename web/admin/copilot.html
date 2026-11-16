@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <title>Co-Pilot · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        body.staff .main { padding-bottom: 0; }
+        /* the composer is sticky above the phone's bottom nav — leave room under it so the last message is never hidden */
+        .cp { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; min-height: calc(100dvh - var(--topbar-h) - 16px); padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px) + 8px); }
+        @media (min-width: 1024px) { .cp { min-height: calc(100dvh - var(--topbar-h) - 24px); padding-bottom: 0; } }
+
+        /* header */
+        .cp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .cp-head h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .cp-head h1 .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cp-head .grow { flex: 1; min-width: 0; }
+        .cp-head .sub { font-size: 12.5px; color: var(--muted); margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .spark { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; flex: none; color: #fff;
+            background: linear-gradient(135deg, var(--primary), #8b5cf6 60%, #ec4899); box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--primary) 70%, transparent); }
+        .spark .icon { width: 19px; height: 19px; }
+
+        /* model switcher */
+        .models { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 4px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--border); }
+        .model { border: 0; background: transparent; color: var(--text); border-radius: 12px; padding: 7px 6px; text-align: center; cursor: pointer; font: inherit; line-height: 1.15; position: relative; }
+        .model b { display: block; font-size: 13.5px; }
+        .model small { display: block; font-size: 10.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .model.on { background: var(--surface); box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); }
+        .model.on b { color: var(--primary); }
+        .model.off { opacity: .55; }
+        .model .lock { position: absolute; top: 4px; right: 6px; width: 12px; height: 12px; opacity: .7; }
+
+        /* usage meter */
+        .meter { display: flex; gap: 12px; align-items: center; font-size: 11.5px; color: var(--muted); margin: 8px 2px 0; flex-wrap: wrap; }
+        .meter .m { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .meter .bar { width: 64px; height: 5px; border-radius: 9px; background: var(--surface-3); overflow: hidden; flex: none; }
+        .meter .bar span { display: block; height: 100%; background: var(--primary); border-radius: 9px; transition: width .4s; }
+        .meter .bar.warn span { background: var(--warning); } .meter .bar.full span { background: var(--danger); }
+
+        /* messages */
+        .msgs { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 16px 0 12px; }
+        .msg { display: flex; gap: 10px; align-items: flex-start; max-width: 100%; animation: msgIn .35s cubic-bezier(.22, 1, .36, 1); }
+        @keyframes msgIn { from { opacity: 0; transform: translateY(6px); } }
+        .msg .av { width: 30px; height: 30px; border-radius: 10px; flex: none; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--primary), #8b5cf6); }
+        .msg .av .icon { width: 16px; height: 16px; }
+        .msg .body { min-width: 0; flex: 1; }
+        .msg.me { justify-content: flex-end; }
+        .msg.me .bubble { background: var(--primary); color: #fff; border-radius: 18px 18px 6px 18px; padding: 10px 14px; max-width: 85%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.55; }
+        .md { font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+        .md p { margin: 0 0 8px; } .md p:last-child { margin-bottom: 0; }
+        .md ul, .md ol { margin: 4px 0 8px; padding-inline-start: 22px; } .md li { margin: 2px 0; }
+        .md h4 { font-size: 15.5px; margin: 10px 0 4px; }
+        .md code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: var(--surface-3); border-radius: 6px; padding: 1px 5px; }
+        .md pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; overflow-x: auto; font-size: 13px; direction: ltr; text-align: left; }
+        .md [dir="rtl"] { font-family: 'IBM Plex Sans Arabic', Inter, sans-serif; }
+        .meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+        .meta button { border: 0; background: transparent; color: var(--muted); display: inline-flex; gap: 4px; align-items: center; cursor: pointer; padding: 2px 4px; border-radius: 6px; font: inherit; }
+        .meta button:hover { color: var(--primary); background: var(--primary-soft); }
+        .meta .icon { width: 13px; height: 13px; }
+        .err { border: 1.5px solid color-mix(in srgb, var(--danger) 40%, transparent); background: var(--danger-soft); color: var(--text); border-radius: 14px; padding: 10px 12px; font-size: 14px; }
+        .err .acts { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+        .dots span { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); margin: 0 2px; animation: bounce 1.2s infinite ease-in-out; }
+        .dots span:nth-child(2) { animation-delay: .15s; } .dots span:nth-child(3) { animation-delay: .3s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); opacity: .45; } 40% { transform: translateY(-6px); opacity: 1; } }
+
+        /* welcome */
+        .hello { text-align: center; padding: 18px 6px 4px; }
+        .hello .spark { width: 56px; height: 56px; border-radius: 18px; margin: 0 auto 10px; }
+        .hello .spark .icon { width: 28px; height: 28px; }
+        .hello h2 { margin: 0 0 4px; font-size: 21px; }
+        .hello p { margin: 0 auto; color: var(--muted); max-width: 440px; font-size: 14px; }
+        .chips { display: grid; gap: 8px; margin-top: 16px; text-align: start; }
+        @media (min-width: 640px) { .chips { grid-template-columns: 1fr 1fr; } }
+        .chip-q { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 14px; padding: 11px 12px; font: inherit; font-size: 13.5px; text-align: start; cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
+        .chip-q:hover { border-color: var(--primary); }
+        .chip-q .e { font-size: 16px; line-height: 1.2; }
+        .soon-list { margin: 18px auto 0; max-width: 520px; text-align: start; font-size: 13px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 12px; }
+        .soon-list b { color: var(--text); }
+
+        /* composer */
+        .composer { position: sticky; bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px) + 8px); z-index: 5; background: linear-gradient(to top, var(--canvas, var(--bg)) 70%, transparent); padding: 10px 0 6px; }
+        @media (min-width: 1024px) { .composer { bottom: 0; padding-bottom: 16px; } }
+        .box { display: flex; align-items: flex-end; gap: 6px; padding: 6px; border-radius: 22px; background: var(--surface); border: 1.5px solid var(--border); box-shadow: 0 10px 30px -14px rgba(15, 23, 42, .35); }
+        .box:focus-within { border-color: var(--primary); }
+        .box textarea { flex: 1; min-width: 0; border: 0; outline: 0; resize: none; background: transparent; color: var(--text); font: inherit; font-size: 16px; line-height: 1.45; padding: 8px 6px 8px 10px; max-height: 160px; }
+        .rbtn { width: 42px; height: 42px; border-radius: 15px; border: 0; display: grid; place-items: center; cursor: pointer; flex: none; color: var(--muted); background: transparent; }
+        .rbtn:hover { color: var(--primary); background: var(--primary-soft); }
+        .rbtn.send { background: var(--primary); color: #fff; }
+        .rbtn.send:disabled { opacity: .45; cursor: default; }
+        .rbtn.listening { background: var(--danger); color: #fff; animation: pulse 1.2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 55%, transparent); } 70% { box-shadow: 0 0 0 12px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+        .lang { font-size: 11px; font-weight: 800; width: 30px; height: 30px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); cursor: pointer; margin-bottom: 6px; flex: none; }
+        .hint { font-size: 11px; color: var(--muted); text-align: center; margin-top: 5px; }
+
+        /* chats sheet */
+        .th { display: flex; gap: 8px; align-items: center; padding: 10px; border-radius: 12px; border: 1px solid transparent; }
+        .th:hover { background: var(--surface-2); }
+        .th.on { border-color: var(--primary); background: var(--primary-soft); }
+        .th .open { flex: 1; min-width: 0; text-align: start; background: transparent; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 0; }
+        .th .open b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+        .th .open small { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+        .th .mini { width: 32px; height: 32px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+        .th .mini:hover { background: var(--surface-3); color: var(--text); }
+        @media (prefers-reduced-motion: reduce) { .msg, .dots span, .rbtn.listening { animation: none; } }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="cp">
+            <div class="cp-head">
+                <span class="spark" data-icon="sparkles"></span>
+                <div class="grow"><h1><span class="t" id="title">Co-Pilot</span></h1><p class="sub" id="sub">Your private assistant</p></div>
+                <button class="icon-btn" id="chatsBtn" aria-label="Saved chats" title="Saved chats"><span data-icon="clock"></span></button>
+                <button class="icon-btn" id="newBtn" aria-label="New chat" title="New chat"><span data-icon="plus"></span></button>
+            </div>
+            <div class="models" id="models" role="radiogroup" aria-label="Model"></div>
+            <div class="meter" id="meter"></div>
+            <div class="msgs" id="msgs" aria-live="polite"></div>
+            <div class="composer">
+                <div class="box">
+                    <textarea id="input" rows="1" maxlength="4000" dir="auto" placeholder="اكتبي سؤالك… · Ask anything"></textarea>
+                    <button class="lang" id="langBtn" title="Voice language" hidden>ع</button>
+                    <button class="rbtn" id="micBtn" aria-label="Speak" title="Speak" hidden><span data-icon="mic"></span></button>
+                    <button class="rbtn send" id="sendBtn" aria-label="Send" disabled><span data-icon="send"></span></button>
+                </div>
+                <p class="hint" id="hint">Co-Pilot can make mistakes — check anything important before using it.</p>
+            </div>
+        </div>
+    </main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'copilot', title: 'Co-Pilot' });
+        A.hydrate();
+
+        const qs = new URLSearchParams(location.search);
+        let STATUS = null, threadId = parseInt(qs.get('chat'), 10) || null, MSGS = [], sending = false;
+        let tier = A.store.get('copilot_tier', 'free');
+
+        // ---------- text rendering: safe markdown subset + clean Arabic/English mixing ----------
+        const AR = /[؀-ۿ]/, LAT = /[A-Za-z]/;
+        const firstStrong = (s) => { for (const ch of s) { if (AR.test(ch)) return 'rtl'; if (LAT.test(ch)) return 'ltr'; } return 'auto'; };
+        // inside an Arabic paragraph, every English run (terms, symbols, equations) is isolated so punctuation never jumps
+        const isolate = (escaped, dir) => dir !== 'rtl' ? escaped
+            : escaped.replace(/([A-Za-z0-9][A-Za-z0-9 _.,:;'’()\[\]\/+\-−×÷=^%°⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉→&;#]*[A-Za-z0-9)\]⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉%°])|([A-Za-z])/g, (m) => /&[a-z]+;?$|&#\d+;?$/.test(m) ? m : `<bdi dir="ltr">${m}</bdi>`);
+        function inline(text, dir) {
+            // **bold**, `code`; everything escaped first, English runs isolated in Arabic text
+            return text.split(/(`[^`]+`)/).map(part => {
+                if (/^`[^`]+`$/.test(part)) return `<code dir="ltr">${esc(part.slice(1, -1))}</code>`;
+                return part.split(/(\*\*[^*]+\*\*)/).map(p => {
+                    const bold = /^\*\*[^*]+\*\*$/.test(p);
+                    const t = isolate(esc(bold ? p.slice(2, -2) : p).replace(/&amp;/g, '&amp;'), dir);
+                    return bold ? `<b>${t}</b>` : t;
+                }).join('');
+            }).join('');
+        }
+        function md(src) {
+            const lines = String(src || '').replace(/\r/g, '').split('\n');
+            let html = '', list = null, para = [], code = null;
+            const flushPara = () => { if (para.length) { const t = para.join('\n'); const d = firstStrong(t); html += `<p dir="${d}">${inline(t, d).replace(/\n/g, '<br>')}</p>`; para = []; } };
+            const flushList = () => { if (list) { html += `<${list.type}>${list.items.map(it => { const d = firstStrong(it); return `<li dir="${d}">${inline(it, d)}</li>`; }).join('')}</${list.type}>`; list = null; } };
+            for (const line of lines) {
+                if (code !== null) { if (/^```/.test(line.trim())) { html += `<pre><code>${esc(code.join('\n'))}</code></pre>`; code = null; } else code.push(line); continue; }
+                if (/^```/.test(line.trim())) { flushPara(); flushList(); code = []; continue; }
+                const h = line.match(/^\s*#{1,6}\s+(.*)$/);
+                const ul = line.match(/^\s*[-*•]\s+(.*)$/), ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+                if (h) { flushPara(); flushList(); const d = firstStrong(h[1]); html += `<h4 dir="${d}">${inline(h[1].replace(/\*\*/g, ''), d)}</h4>`; }
+                else if (ul || ol) { flushPara(); const type = ul ? 'ul' : 'ol'; if (!list || list.type !== type) { flushList(); list = { type, items: [] }; } list.items.push((ul || ol)[1]); }
+                else if (!line.trim()) { flushPara(); flushList(); }
+                else { flushList(); para.push(line); }
+            }
+            if (code !== null) html += `<pre><code>${esc(code.join('\n'))}</code></pre>`;
+            flushPara(); flushList();
+            return html;
+        }
+        window.__copilotMd = md;   // for tests
+
+        // ---------- status, models, meter ----------
+        const money = (v) => v >= 0.995 ? `$${v.toFixed(2)}` : v >= 0.01 ? `$${v.toFixed(2)}` : v > 0 ? '<$0.01' : '$0';
+        function renderModels() {
+            const tiers = STATUS ? STATUS.tiers : [{ tier: 'free', name: 'Argon', note: 'Fast & free', ready: true }, { tier: 'pro', name: 'Krypton', note: 'Smart', ready: true }, { tier: 'max', name: 'Krypton Max', note: 'Strongest', ready: true }];
+            if (!tiers.find(t => t.tier === tier && t.ready)) tier = (tiers.find(t => t.ready) || tiers[0]).tier;
+            $('models').innerHTML = tiers.map(t => `<button class="model ${t.tier === tier ? 'on' : ''} ${t.ready ? '' : 'off'}" role="radio" aria-checked="${t.tier === tier}" data-tier="${t.tier}">
+                ${t.ready ? '' : icon('lock', 'lock')}<b>${esc(t.name)}</b><small>${t.ready ? esc(t.tier === 'free' ? 'Free · quick tasks' : t.tier === 'pro' ? 'Smart · everyday' : 'Strongest · heavy tasks') : 'Not connected yet'}</small></button>`).join('');
+        }
+        function renderMeter() {
+            if (!STATUS) return;
+            const p = STATUS.pools.staff, s = STATUS.spend;
+            const pf = p.cap ? Math.min(100, p.used / p.cap * 100) : 100, sf = s.dailyCap ? Math.min(100, s.today / s.dailyCap * 100) : 0;
+            const cls = (f) => f >= 100 ? 'full' : f >= 80 ? 'warn' : '';
+            $('meter').innerHTML = `<span class="m" title="Free units used today by Co-Pilot (resets 2:00 am Cairo)"><b>Argon</b><span class="bar ${cls(STATUS.freeQuotaHit ? 100 : pf)}"><span style="width:${STATUS.freeQuotaHit ? 100 : pf}%"></span></span>${STATUS.freeQuotaHit ? 'used up today' : `${p.used.toLocaleString()} / ${p.cap.toLocaleString()}`}</span>
+                ${STATUS.paidReady ? `<span class="m" title="Paid AI spend today / this month"><b>Krypton</b><span class="bar ${cls(sf)}"><span style="width:${sf}%"></span></span>${money(s.today)} today · ${money(s.month)} this month</span>` : ''}`;
+        }
+        async function loadStatus() { try { STATUS = await api('/api/copilot?action=status'); } catch (e) { STATUS = null; } renderModels(); renderMeter(); }
+        $('models').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-tier]'); if (!b) return;
+            const t = STATUS && STATUS.tiers.find(x => x.tier === b.dataset.tier);
+            if (t && !t.ready) {
+                Site.sheet({ iconName: 'lock', title: `${t.name} isn't connected yet`, subtitle: t.tier === 'free' ? 'The free model needs the Workers AI binding (AI) in Cloudflare.' : 'Add the ANTHROPIC_API_KEY secret in Cloudflare (Settings → Variables and Secrets), then redeploy.', actions: [{ label: 'OK', cls: 'btn-ghost' }] });
+                return;
+            }
+            tier = b.dataset.tier; A.store.set('copilot_tier', tier); renderModels();
+        });
+
+        // ---------- messages ----------
+        const CHIPS = [
+            ['📝', 'اكتبيلي 5 أسئلة Choose على الـ Atomic structure لـ Prep 1 مع الإجابات'],
+            ['💡', 'اشرحيلي فكرة الـ Isotopes بمثال بالبلدي أقوله للطلبة في الحصة'],
+            ['💬', 'اكتبيلي رسالة لطيفة لولي أمر طالب غاب حصتين ورا بعض'],
+            ['🧪', 'Give me 3 tricky "Give reason" questions on Newton\'s first law with model answers']
+        ];
+        function welcome() {
+            return `<div class="hello"><span class="spark">${icon('sparkles')}</span><h2 dir="rtl">أهلاً يا <bdi>${esc((A.staff && A.staff.name || 'Miss Marwa').split(' ').slice(-1)[0])}</bdi> 👋</h2>
+                <p>I'm your Co-Pilot. Ask in Arabic or English — I keep the science terms in English.</p>
+                <div class="chips">${CHIPS.map(([e, t]) => `<button class="chip-q" data-chip="${esc(t)}"><span class="e">${e}</span><span dir="auto">${esc(t)}</span></button>`).join('')}</div>
+                <div class="soon-list"><b>Coming next:</b> your morning brief, students & results, drafting replies to questions, building exams & printable papers, lesson summaries. Right now I can't see the platform's data yet.</div></div>`;
+        }
+        function msgHTML(m, i) {
+            if (m.role === 'user') return `<div class="msg me"><div class="bubble" dir="auto">${esc(m.text)}</div></div>`;
+            if (m.role === 'error') {
+                const other = m.tier === 'free' ? (STATUS && STATUS.paidReady ? 'pro' : null) : 'free';
+                return `<div class="msg"><span class="av">${icon('sparkles')}</span><div class="body"><div class="err" dir="auto">${esc(m.text)}
+                    <div class="acts">${i === MSGS.length - 1 ? `<button class="btn btn-soft btn-sm" data-retry>${icon('refresh', 'sm')}Try again</button>${other ? `<button class="btn btn-ghost btn-sm" data-retry="${other}">Use ${esc((STATUS && STATUS.brands[other] || {}).name || other)}</button>` : ''}` : ''}</div></div></div></div>`;
+            }
+            if (m.role === 'typing') return `<div class="msg" id="typing"><span class="av">${icon('sparkles')}</span><div class="body"><span class="dots"><span></span><span></span><span></span></span></div></div>`;
+            const secs = m.ms ? `${(m.ms / 1000).toFixed(1)} s` : '';
+            const cost = m.costUsd != null ? ` · ${m.costUsd < 0.001 ? '<$0.001' : '$' + m.costUsd.toFixed(3)}` : m.neurons != null ? ` · ${Math.round(m.neurons)} free units` : '';
+            return `<div class="msg"><span class="av">${icon('sparkles')}</span><div class="body"><div class="md">${md(m.text)}</div>
+                <div class="meta"><span>${esc(m.brand || '')}${secs ? ' · ' + secs : ''}${cost}</span><button data-copy="${i}" title="Copy">${icon('copy2')}Copy</button></div></div></div>`;
+        }
+        function render(scroll = true) {
+            $('msgs').innerHTML = MSGS.length ? MSGS.map(msgHTML).join('') : welcome();
+            if (scroll) requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
+        }
+        $('msgs').addEventListener('click', async (e) => {
+            const c = e.target.closest('[data-chip]'); if (c) { $('input').value = c.dataset.chip; autosize(); $('input').focus(); updateSend(); return; }
+            const cp = e.target.closest('[data-copy]');
+            if (cp) { try { await navigator.clipboard.writeText(MSGS[Number(cp.dataset.copy)].text); Site.toast('Copied', 'success'); } catch (x) { Site.toast('Copy failed', 'error'); } return; }
+            const r = e.target.closest('[data-retry]');
+            if (r) { if (r.dataset.retry) { tier = r.dataset.retry; A.store.set('copilot_tier', tier); renderModels(); } const lastUser = [...MSGS].reverse().find(m => m.role === 'user'); if (lastUser) send(lastUser.text, true); }
+        });
+
+        async function send(text, resend = false) {
+            text = String(text || '').trim(); if (!text || sending) return;
+            sending = true; updateSend();
+            if (resend) MSGS = MSGS.filter(m => m.role !== 'error'); else MSGS.push({ role: 'user', text });
+            MSGS.push({ role: 'typing' });
+            render();
+            try {
+                const r = await api('/api/copilot?action=send', { body: { threadId, text, tier, resend } });
+                threadId = r.threadId; setChatUrl(); setTitle(r.title);
+                MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push(r.reply);
+                if (r.usage) { STATUS = { ...STATUS, ...r.usage }; renderMeter(); }
+            } catch (err) {
+                const d = err.data || {};
+                if (d.threadId) { threadId = d.threadId; setChatUrl(); setTitle(d.title); }
+                if (d.usage && STATUS) { STATUS = { ...STATUS, ...d.usage }; renderMeter(); }
+                MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push({ role: 'error', text: err.message, tier, code: d.code });
+            }
+            sending = false; updateSend(); render();
+        }
+        function setChatUrl() { history.replaceState(null, '', location.pathname + (threadId ? '?chat=' + threadId : '')); }
+        function setTitle(t) { $('title').textContent = t || 'Co-Pilot'; $('sub').textContent = threadId ? 'Saved chat' : 'Your private assistant'; }
+        async function openChat(id) {
+            threadId = id; setChatUrl();
+            MSGS = []; $('msgs').innerHTML = '<div class="skel" style="height:180px;border-radius:16px"></div>';
+            try { const d = await api(`/api/copilot?action=thread&id=${id}`); MSGS = d.messages; setTitle(d.thread.title); }
+            catch (e) { threadId = null; setChatUrl(); setTitle(); Site.toast(e.message, 'error'); }
+            render();
+        }
+        function newChat() { threadId = null; MSGS = []; setChatUrl(); setTitle(); render(false); $('input').focus(); }
+        $('newBtn').addEventListener('click', newChat);
+
+        // ---------- saved chats ----------
+        $('chatsBtn').addEventListener('click', async () => {
+            let list = [];
+            try { list = (await api('/api/copilot?action=threads')).threads; } catch (e) { Site.toast(e.message, 'error'); return; }
+            const html = list.length ? `<div class="stack" style="gap:2px;max-height:60vh;overflow:auto" id="thList">${list.map(t => `<div class="th ${t.id === threadId ? 'on' : ''}" data-th="${t.id}">
+                <button class="open" data-open="${t.id}"><b dir="auto">${esc(t.title)}</b><small dir="auto">${esc(t.last || '')}</small></button>
+                <button class="mini" data-rename="${t.id}" aria-label="Rename">${icon('edit', 'sm')}</button><button class="mini" data-del="${t.id}" aria-label="Delete">${icon('trash', 'sm')}</button></div>`).join('')}</div>`
+                : '<p class="muted" style="margin:0">No saved chats yet — start one below.</p>';
+            const close = Site.sheet({ iconName: 'clock', title: 'Saved chats', html, actions: [{ label: 'New chat', cls: 'btn-primary', onClick: (c) => { c(); newChat(); } }] });
+            const box = document.getElementById('thList'); if (!box) return;
+            box.addEventListener('click', async (e) => {
+                const o = e.target.closest('[data-open]'); if (o) { close(); openChat(Number(o.dataset.open)); return; }
+                const rn = e.target.closest('[data-rename]');
+                if (rn) { const t = list.find(x => x.id === Number(rn.dataset.rename)); const name = prompt('Name this chat', t.title); if (name && name.trim()) { try { await api('/api/copilot?action=rename', { body: { id: t.id, title: name } }); t.title = name.trim(); rn.closest('.th').querySelector('b').textContent = t.title; if (t.id === threadId) setTitle(t.title); } catch (x) { Site.toast(x.message, 'error'); } } return; }
+                const dl = e.target.closest('[data-del]');
+                if (dl) { const id = Number(dl.dataset.del); try { await api('/api/copilot?action=delete', { body: { id } }); dl.closest('.th').remove(); if (id === threadId) newChat(); Site.toast('Chat deleted', 'success'); } catch (x) { Site.toast(x.message, 'error'); } }
+            });
+        });
+
+        // ---------- composer ----------
+        const input = $('input');
+        function autosize() { input.style.height = 'auto'; input.style.height = Math.min(160, input.scrollHeight) + 'px'; }
+        function updateSend() { $('sendBtn').disabled = sending || !input.value.trim(); }
+        input.addEventListener('input', () => { autosize(); updateSend(); });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(hover: hover) and (pointer: fine)').matches) { e.preventDefault(); go(); }
+        });
+        function go() { const t = input.value; if (!t.trim() || sending) return; input.value = ''; autosize(); updateSend(); send(t); }
+        $('sendBtn').addEventListener('click', go);
+
+        // ---------- voice (the phone's own speech recognition — free) ----------
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let rec = null, listening = false, voiceLang = A.store.get('copilot_voice', 'ar-EG');
+        if (SR) {
+            $('micBtn').hidden = false; $('langBtn').hidden = false;
+            const setLang = () => { $('langBtn').textContent = voiceLang === 'ar-EG' ? 'ع' : 'EN'; $('langBtn').title = voiceLang === 'ar-EG' ? 'Speaking Arabic — tap for English' : 'Speaking English — tap for Arabic'; };
+            setLang();
+            $('langBtn').addEventListener('click', () => { voiceLang = voiceLang === 'ar-EG' ? 'en-US' : 'ar-EG'; A.store.set('copilot_voice', voiceLang); setLang(); });
+            $('micBtn').addEventListener('click', () => {
+                if (listening) { rec && rec.stop(); return; }
+                rec = new SR(); rec.lang = voiceLang; rec.interimResults = true; rec.continuous = false;
+                const before = input.value ? input.value.replace(/\s*$/, ' ') : '';
+                rec.onresult = (ev) => { let t = ''; for (const r of ev.results) t += r[0].transcript; input.value = before + t; autosize(); updateSend(); };
+                rec.onerror = (ev) => { if (ev.error === 'not-allowed') Site.toast('Allow the microphone to use voice', 'error'); };
+                rec.onend = () => { listening = false; $('micBtn').classList.remove('listening'); input.focus(); };
+                try { rec.start(); listening = true; $('micBtn').classList.add('listening'); } catch (e) { Site.toast('Voice is not available here', 'error'); }
+            });
+        }
+
+        // ---------- start ----------
+        await loadStatus();
+        if (threadId) await openChat(threadId); else render(false);
+        autosize(); updateSend();
+    })();
+    </script>
+</body>
+</html>
