@@ -477,8 +477,8 @@
                     ? `<div class="opts ${q.options.every(o => o.length < 28) ? 'two' : ''}">${q.options.map((o, k) => { const l = 'abcdef'[k]; return `<button type="button" class="opt ${x.answer === l ? 'on' : ''}" data-q="${L}" data-v="${l}" aria-pressed="${x.answer === l}"><span class="L">${l}</span><span dir="auto">${txt(o)}</span></button>`; }).join('')}</div>`
                     : `<div class="hint">Choose the letter from your booklet</div><div class="letters">${'abcd'.split('').map(l => `<button type="button" class="opt ${x.answer === l ? 'on' : ''}" data-q="${L}" data-v="${l}"><span class="L">${l}</span></button>`).join('')}</div>`;
             } else if (q.type === 'tf') {
-                body = `<div class="tfrow"><button type="button" class="opt t ${x.answer === 'true' ? 'on' : ''}" data-q="${L}" data-v="true">✓ True</button><button type="button" class="opt f ${x.answer === 'false' ? 'on' : ''}" data-q="${L}" data-v="false">✗ False</button></div>
-                    <div data-corr="${L}" ${x.answer === 'false' ? '' : 'hidden'}><input class="fin" dir="auto" maxlength="300" data-in="${L}" data-f="correction" value="${esc(x.correction || '')}" placeholder="Correct it — write the right word(s)"><div class="hint" style="margin-top:4px">صحّح الخطأ واكتب الكلمة الصح علشان تاخد الدرجة كاملة</div></div>`;
+                body = `${q.requiresCorrection ? '<div class="hint">Put (✓) or (✗) — and correct the wrong statement</div>' : ''}<div class="tfrow"><button type="button" class="opt t ${x.answer === 'true' ? 'on' : ''}" data-q="${L}" data-v="true">✓ True</button><button type="button" class="opt f ${x.answer === 'false' ? 'on' : ''}" data-q="${L}" data-v="false">✗ False</button></div>
+                    ${q.requiresCorrection ? `<div data-corr="${L}" ${x.answer === 'false' ? '' : 'hidden'}><input class="fin" dir="auto" maxlength="300" data-in="${L}" data-f="correction" value="${esc(x.correction || '')}" placeholder="Correct it — write the right word(s)"><div class="hint" style="margin-top:4px">صحّح الخطأ واكتب الكلمة الصح علشان تاخد الدرجة كاملة</div></div>` : ''}`;
             } else if (q.type === 'short') {
                 body = `<input class="fin" dir="auto" maxlength="300" data-in="${L}" data-f="answer" value="${esc(x.answer || '')}" placeholder="Type the missing word(s)" autocomplete="off">`;
             } else {
@@ -621,7 +621,7 @@
                     ${i.question ? `<div class="small muted" dir="auto">${txt(i.question)}</div>` : ''}
                     <div class="row"><span>Your answer</span><span dir="auto">${i.yourAnswer ? (i.type === 'mcq' ? `(${esc(i.yourAnswer)})${txt(optText(i.yourAnswer))}` : i.type === 'tf' ? (i.yourAnswer === 'true' ? '✓ True' : '✗ False') : txt(i.yourAnswer)) : '<i class="muted">left blank</i>'}${i.yourCorrection ? ' — ' + txt(i.yourCorrection) : ''}</span></div>
                     ${i.verdict !== 'correct' ? `<div class="row"><span>Right answer</span><span class="model" dir="auto">${txt(i.modelAnswer)}</span></div>` : ''}
-                    ${i.explanation || i.feedback ? `<div class="why" dir="auto">${i.explanation ? `💡 ${txt(i.explanation)}` : ''}${i.feedback && (i.verdict !== 'correct' || i.deferred) ? `${i.explanation ? '<br>' : ''}✍️ ${txt(i.feedback)}` : ''}</div>` : ''}</div>`;
+                    ${i.explanation || i.feedback ? `<div class="why" dir="auto">${i.explanation ? `💡 ${txt(i.explanation)}` : ''}${i.feedback && (i.verdict !== 'correct' || i.deferred) ? `${i.explanation ? '<br>' : ''}✍️ ${txt(i.feedback)}` : ''}</div>` : i.verdict !== 'correct' ? `<button type="button" class="why" data-to-assist style="border:0;width:100%;text-align:start;cursor:pointer;font:inherit">🤖 Why? Your AI Assistant explains it — tap here</button>` : ''}</div>`;
             };
             $('rBody').innerHTML = `<div class="card reveal"><div class="res-head">${ring(score, outOf || a.totalScore, { label: r.released ? 'score' : 'so far' })}<div><h2>${good >= 0.85 ? 'Excellent work! 🌟' : good >= 0.5 ? 'Good effort 👏' : 'Keep going — you can do it 💪'}</h2>
                     <p class="small muted" style="margin:0">${marked.filter(i => i.verdict === 'correct').length} of ${marked.length} ${pend.length ? 'marked questions' : 'questions'} right${s.late ? ' · submitted late' : ''}</p></div></div>
@@ -637,6 +637,7 @@
             $('showReceipt').addEventListener('click', fullReceipt);
             $('waSum') && $('waSum').addEventListener('click', waSummary);
             $('toAssist') && $('toAssist').addEventListener('click', () => $('rTabs').querySelector('[data-t="assistant"]').click());
+            $('rBody').addEventListener('click', (e) => { if (e.target.closest('[data-to-assist]')) $('rTabs').querySelector('[data-t="assistant"]').click(); });
             if (wrong.length && !['ready', 'seen', 'notified'].includes(s.assistStatus)) api('/api/hw-student?action=assist', { method: 'POST', body: { submissionId: s.id } }).catch(() => null);   // start the walkthrough now so it's ready
             if (fresh && r.released && good >= 0.85) confetti();
         }

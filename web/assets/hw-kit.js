@@ -78,7 +78,7 @@
     /** "34-37, 40" → [34,35,36,37,40] (bounded by `max`) */
     function parsePages(text, max) {
         const out = new Set();
-        String(text || '').replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660)).split(/[,،\s]+/).forEach(part => {
+        String(text || '').replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660)).replace(/\s*[-–]\s*/g, '-').split(/[,،\s]+/).forEach(part => {
             const m = part.match(/^(\d+)(?:\s*[-–]\s*(\d+))?$/); if (!m) return;
             let a = parseInt(m[1], 10), b = m[2] ? parseInt(m[2], 10) : a; if (a > b) [a, b] = [b, a];
             for (let i = a; i <= b && i - a < 200; i++) if (i >= 1 && (!max || i <= max)) out.add(i);

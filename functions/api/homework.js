@@ -14,7 +14,7 @@
 // =============================================================
 import { requireStaff, ensureAppSchema, auditStmt, can } from './admin-auth.js';
 import { r2, mediaInfo, mediaResponse, deleteMedia } from './media-store.js';
-import { runAI, parseJsonLoose, solvePrompt, verifyPrompt, textModel, aiReady, usageToday, quotaHitToday, visionModel, VISION_MODELS, DAILY_FREE_NEURONS, AiQuotaError, AiUnavailableError } from './ai-engine.js';
+import { runAI, parseJsonLoose, solvePrompt, extractPrompt, keyReadPrompt, verifyPrompt, textModel, aiReady, usageToday, quotaHitToday, visionModel, VISION_MODELS, DAILY_FREE_NEURONS, AiQuotaError, AiUnavailableError } from './ai-engine.js';
 import { gradeStep, processQueue, resultOf, weaknessReport, releaseMode, RELEASE_KEY, loadKey, purgeHomeworkMedia, pushToStudent, ensureAssist } from './hw-grader.js';
 
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
@@ -67,6 +67,8 @@ export function cleanKey(input, { strict = false } = {}) {
         out.extra.explanation = str(q.explanation, 600);
         if (q.aiCheck) { out.extra.aiCheck = true; if (strict) errors.push(`${name}: check the AI answer (tap "Looks right")`); }
         if (q.aiCheck && q.aiNote) out.extra.aiNote = str(q.aiNote, 200);
+        if (q.fromKey) out.extra.fromKey = true;
+        if (q.explAi && out.extra.explanation) out.extra.explAi = true;     // explanation written by the AI Assistant for a student — staff can check it
         if (Number.isFinite(Number(q.confidence)) && q.confidence !== null && q.confidence !== '') out.extra.confidence = Math.round(Number(q.confidence) * 100) / 100;
         if (type === 'mcq') {
             const letter = str(q.answer, 1).toUpperCase();
@@ -79,6 +81,8 @@ export function cleanKey(input, { strict = false } = {}) {
             if (v !== 'true' && v !== 'false') { if (strict) errors.push(`${name}: choose True or False`); }
             else out.answer = v;
             out.extra.correction = v === 'false' ? str(q.correction, 300) : '';
+            // must the student correct a wrong statement? (old homework: only when a correction is in the key)
+            out.extra.requiresCorrection = q.requiresCorrection === undefined || q.requiresCorrection === null ? !!out.extra.correction : !!q.requiresCorrection;
         } else if (type === 'short') {
             out.answer = str(q.answer, 300);
             if (!out.answer && strict) errors.push(`${name}: type the answer`);
@@ -161,7 +165,8 @@ const fullNuclide = (o) => new RegExp(`[${SUP}]+[${SUB}]+\\s?[A-Z][a-z]?|[${SUB}
 const CONTRADICT = /\bnot (twice|double|half|equal|the same|correct|right)\b|\bnone of\b|\bdoes(?:n't| not) (match|fit|satisfy)\b|\bno (option|choice) (fits|matches)\b/i;
 const HEDGE = /\b(however|re-?evaluat|re-?check|misinterpret|actually|not sure|unsure|unclear|none of (the|these)|might be|maybe|i think|seems? to be|initial understanding)\b/i;
 const TOO_ADVANCED = /\b\d[spdf]\s?[¹²³⁴⁵⁶⁷⁸⁹⁰0-9]|\borbitals?\b|\bsub-?levels?\b|\bsubshells?\b/i;
-export function normaliseSolved(parsed) {
+export function normaliseSolved(parsed, { types = null, extractOnly = false } = {}) {
+    const hint = Array.isArray(types) && types.length ? types : null;
     const list = parsed && Array.isArray(parsed.questions) ? parsed.questions : Array.isArray(parsed) ? parsed : [];
     return list.slice(0, MAX_QUESTIONS).map((q, i) => {
         const t = String(q.type || '').toLowerCase();
@@ -169,6 +174,7 @@ export function normaliseSolved(parsed) {
         let type = ['mcq', 'choose', 'choice'].includes(t) ? 'mcq' : ['tf', 'true_false', 'truefalse', 'true/false'].includes(t) ? 'tf' : ['essay', 'reason', 'explain'].includes(t) ? 'essay' : 'short';
         const notes = [];
         let cap = 1;
+        if (hint && !hint.includes(type)) { notes.push(`AI said "${type === 'mcq' ? 'Choose' : type === 'tf' ? '✓/✗' : type === 'short' ? 'Complete' : 'Essay'}" — not in the types you picked`); cap = Math.min(cap, 0.4); }
         let answer = String(q.answer ?? '').trim();
         const answerText = str(cleanOpt(q.answer_text || q.answerText), 300);
         if (type === 'short' && options.length >= 2) {      // choices on the page ⇒ it is a choose question
@@ -179,7 +185,7 @@ export function normaliseSolved(parsed) {
         if (type === 'mcq') {
             const m = answer.toLowerCase().replace(/[()\[\].\s]/g, '').match(/^[a-f]$/) || answer.toLowerCase().match(/\b([a-f])\b/);
             answer = m ? (m[1] || m[0]).toUpperCase() : '';
-            if (!answer) { notes.push('No answer letter'); cap = Math.min(cap, 0.3); }
+            if (!answer && !extractOnly) { notes.push('No answer letter'); cap = Math.min(cap, 0.3); }
             if (options.length && options.length !== 4) { notes.push(`Read ${options.length} choices, not 4 — check them`); cap = Math.min(cap, 0.5); }
             if (answer && options.length && 'ABCDEF'.indexOf(answer) >= options.length) { notes.push('Answer letter is not one of the choices'); cap = Math.min(cap, 0.2); }
             const seen = new Set(options.map(o => o.toLowerCase().replace(/[\s.]/g, '')));
@@ -187,7 +193,7 @@ export function normaliseSolved(parsed) {
             if (options.some(looksNuclide) && !options.every(o => !looksNuclide(o) || fullNuclide(o))) { notes.push('An atom symbol is missing a number — compare the choices with the book'); cap = Math.min(cap, 0.4); }
         }
         if (type === 'tf') answer = /^(true|t|✓|yes|صح)/i.test(answer) ? 'true' : /^(false|f|✗|x|no|خطأ|خطا)/i.test(answer) ? 'false' : '';
-        if (type === 'short' && answer && answer.replace(/[^\p{L}\p{N}]/gu, '').length <= 1 && !/^\d$/.test(answer)) { notes.push('Very short answer — check it'); cap = Math.min(cap, 0.5); }
+        if (!extractOnly && type === 'short' && answer && answer.replace(/[^\p{L}\p{N}]/gu, '').length <= 1 && !/^\d$/.test(answer)) { notes.push('Very short answer — check it'); cap = Math.min(cap, 0.5); }
         let explanation = str(q.explanation, 600);
         if (explanation && CONTRADICT.test(explanation)) { notes.push('The explanation argues against the answer — check it'); explanation = ''; cap = Math.min(cap, 0.25); }
         else if (explanation && HEDGE.test(explanation)) { notes.push('AI was unsure — write the explanation yourself'); explanation = ''; cap = Math.min(cap, 0.3); }
@@ -201,7 +207,8 @@ export function normaliseSolved(parsed) {
             answer: type === 'short' ? str(answer, 300) : answer, answerText: type === 'mcq' ? answerText : '',
             correction: type === 'tf' ? str(q.correction, 300) : '', alternatives: (Array.isArray(q.alternatives) ? q.alternatives : []).map(x => str(x, 200)).filter(Boolean).slice(0, 15),
             modelAnswer: type === 'essay' ? str(q.model_answer || q.modelAnswer, 2000) : '', ideas: type === 'essay' ? ideas : [],
-            explanation, confidence: conf, aiNote: notes.join(' · '), aiCheck: true
+            explanation, confidence: conf, aiNote: notes.join(' · '), aiCheck: true,
+            requiresCorrection: type === 'tf' ? (q.requires_correction === undefined ? undefined : !!q.requires_correction) : undefined
         };
     });
 }
@@ -223,6 +230,55 @@ export function applyVerify(questions, parsed) {
         return addNote(q, `Second check says ${shown}${r.why ? ' — ' + str(r.why, 120) : ''}`, 0.3, 'disagree');
     });
 }
+// ---------- official answer key → questions (code, no AI) ----------
+const KEY_TF_TRUE = /^(✓|✔|√|true|t|صح|صحيح|ص)$/i, KEY_TF_FALSE = /^(✗|✘|×|x|false|f|خطأ|خطا|خ)$/i;
+export function matchAnswers(questions, answers) {
+    const byLabel = new Map();
+    const dup = new Set();
+    for (const a of Array.isArray(answers) ? answers : []) {
+        const l = String(a && a.label || '').trim().toLowerCase().replace(/\s/g, ''); if (!l) continue;
+        if (byLabel.has(l)) dup.add(l); else byLabel.set(l, a);
+    }
+    let matched = 0;
+    const out = (Array.isArray(questions) ? questions : []).map(q0 => {
+        const q = { ...q0, notes: undefined };
+        const notes = (q.aiNote ? [q.aiNote] : []);
+        const a = byLabel.get(String(q.label).trim().toLowerCase());
+        if (!a) return { ...q, answer: q.type === 'mcq' || q.type === 'tf' ? '' : q.answer || '', fromKey: false, missing: true, aiNote: [...notes, 'Not found in the answer key'].join(' · '), confidence: Math.min(q.confidence ?? 1, 0.3) };
+        const raw = String(a.answer ?? '').trim();
+        if (q.type === 'mcq') {
+            const m = raw.toLowerCase().replace(/[()\[\].\s]/g, '').match(/^[a-f]$/) || raw.toLowerCase().match(/^\(?([a-f])\)/);
+            let letter = m ? (m[1] || m[0]) : '';
+            const txt = str(a.answer_text || (!letter ? raw : ''), 300);
+            if (!letter && txt && (q.options || []).length) { const i = q.options.findIndex(o => o.trim().toLowerCase().replace(/[.\s]+$/, '') === txt.toLowerCase().replace(/[.\s]+$/, '')); if (i >= 0) letter = 'abcdef'[i]; }
+            if (!letter) return { ...q, answer: '', fromKey: false, missing: true, aiNote: [...notes, `Answer key says "${str(raw, 40)}" — pick the letter`].join(' · '), confidence: 0.3 };
+            if ((q.options || []).length && 'abcdef'.indexOf(letter) >= q.options.length) notes.push(`Key letter (${letter}) is not one of the ${q.options.length} choices read`);
+            matched++;
+            return { ...q, answer: letter.toUpperCase(), answerText: (q.options || [])['abcdef'.indexOf(letter)] || txt || '', fromKey: true, aiNote: notes.join(' · '), confidence: notes.length ? 0.5 : 1 };
+        }
+        if (q.type === 'tf') {
+            const sym = raw.split(/\s+/)[0] || '';
+            const v = KEY_TF_TRUE.test(sym) ? 'true' : KEY_TF_FALSE.test(sym) ? 'false' : '';
+            if (!v) return { ...q, answer: '', fromKey: false, missing: true, aiNote: [...notes, `Answer key says "${str(raw, 40)}" — choose ✓ or ✗`].join(' · '), confidence: 0.3 };
+            matched++;
+            const corr = str(a.correction || (v === 'false' ? raw.replace(/^\S+\s*[-–:)]?\s*/, '') : ''), 300);
+            return { ...q, answer: v, correction: v === 'false' ? corr : '', fromKey: true, aiNote: notes.join(' · '), confidence: 1 };
+        }
+        if (q.type === 'short') {
+            const parts = raw.split(/\s*(?:\/|\bor\b|،|أو)\s*/).map(x => str(x, 200)).filter(Boolean);
+            if (!parts.length) return { ...q, fromKey: false, missing: true, aiNote: [...notes, 'Answer key is empty for this one'].join(' · '), confidence: 0.3 };
+            matched++;
+            return { ...q, answer: parts[0], alternatives: [...new Set([...(parts.slice(1)), ...(q.alternatives || [])])].slice(0, 15), fromKey: true, aiNote: notes.join(' · '), confidence: 1 };
+        }
+        const ideas = (Array.isArray(a.ideas) ? a.ideas : []).map(x => str(typeof x === 'string' ? x : x && x.text, 200)).filter(Boolean).slice(0, 4);
+        if (!raw && !ideas.length) return { ...q, fromKey: false, missing: true, aiNote: [...notes, 'Answer key is empty for this one'].join(' · '), confidence: 0.3 };
+        matched++;
+        return { ...q, modelAnswer: str(raw, 2000), ideas: (ideas.length ? ideas : [str(raw, 200)]).map(t => ({ text: t, points: 1 })), fromKey: true, aiNote: notes.join(' · '), confidence: 1 };
+    });
+    const used = new Set(out.filter(q => q.fromKey).map(q => String(q.label).toLowerCase()));
+    return { questions: out, matched, missing: out.filter(q => q.missing).length, extraAnswers: [...byLabel.keys()].filter(l => !used.has(l)).length, duplicates: [...dup] };
+}
+
 function addNote(q, note, cap, verified) {
     return { ...q, aiNote: [q.aiNote, note].filter(Boolean).join(' · '), confidence: Math.min(q.confidence ?? 1, cap), verified };
 }
@@ -267,7 +323,7 @@ export async function onRequest(context) {
         const data = isPost ? await request.json().catch(() => ({})) : {};
         const need = {
             list: 'homework.view', get: 'homework.view', save: 'homework.create', publish: 'homework.publish', close: 'homework.publish', reopen: 'homework.publish', unpublish: 'homework.publish', delete: 'homework.delete',
-            books: 'homework.create', book: 'homework.create', 'ai-solve-page': 'homework.create', 'ai-lab': 'homework.create', 'ai-verify': 'homework.create', usage: 'homework.view',
+            books: 'homework.create', book: 'homework.create', 'ai-solve-page': 'homework.create', 'ai-lab': 'homework.create', 'ai-verify': 'homework.create', 'ai-extract-page': 'homework.create', 'ai-read-key-page': 'homework.create', 'match-key': 'homework.create', 'explain-save': 'homework.create', usage: 'homework.view',
             settings: 'homework.view', 'set-release': 'settings.manage',
             submissions: 'homework.view', submission: 'homework.view', review: 'homework.review', regrade: 'homework.review', 'grade-step': 'homework.review',
             report: 'homework.view', verify: 'homework.view', page: 'homework.view', counts: 'homework.view'
@@ -360,6 +416,29 @@ export async function onRequest(context) {
                 return bad('Workers AI error: ' + (e.message || e), 502, { code: 'AI_ERROR' });
             }
         }
+        if (action === 'match-key') {          // official answers → questions (code only)
+            return json(matchAnswers(data.questions, data.answers));
+        }
+        if (action === 'ai-extract-page' || action === 'ai-read-key-page') {
+            if (!aiReady(env)) return bad('Workers AI is not connected — add the AI binding in Cloudflare', 503, { code: 'AI_OFF' });
+            const image = String(data.image || '');
+            if (!/^data:image\/(jpeg|png|webp);base64,/.test(image)) return bad('Send the page as an image', 400);
+            if (image.length > 3_000_000) return bad('Page image too large — under 2 MB please', 413);
+            const types = (Array.isArray(data.types) ? data.types : []).filter(t => TYPES.includes(t));
+            const isKey = action === 'ai-read-key-page';
+            try {
+                const out = await runAI(env, db, { image, prompt: isKey ? keyReadPrompt({ unit: data.unit, lesson: data.lesson, pageNo: parseInt(data.pageNo, 10) || null }) : extractPrompt({ grade: data.grade, unit: data.unit, lesson: data.lesson, types, pageNo: parseInt(data.pageNo, 10) || null }), maxTokens: isKey ? 1500 : 3000 });
+                const parsed = parseJsonLoose(out.text);
+                const res = { model: out.model, ms: out.ms, neurons: out.neurons, today: await usageToday(db), limit: DAILY_FREE_NEURONS };
+                if (isKey) return json({ ...res, lesson: parsed && parsed.lesson ? String(parsed.lesson).slice(0, 10) : null, answers: (parsed && Array.isArray(parsed.answers) ? parsed.answers : []).slice(0, 120).map(a => ({ label: str(a.label, 12), answer: str(a.answer, 2000), answer_text: str(a.answer_text, 300), correction: str(a.correction, 300), ideas: Array.isArray(a.ideas) ? a.ideas.slice(0, 4).map(x => str(typeof x === 'string' ? x : x && x.text, 200)) : [] })).filter(a => a.label) });
+                const questions = normaliseSolved(parsed, { types, extractOnly: true });
+                return json({ ...res, questions, sections: (parsed && parsed.page_sections) || [], raw: questions.length ? undefined : String(out.text).slice(0, 3000) });
+            } catch (e) {
+                if (e instanceof AiQuotaError) return bad("Today's free AI allowance is used up — it resets at 2:00 am (Cairo).", 429, { code: 'AI_QUOTA' });
+                if (e instanceof AiUnavailableError) return bad(e.message, 503, { code: 'AI_OFF' });
+                return bad('Workers AI error: ' + (e.message || e), 502, { code: 'AI_ERROR' });
+            }
+        }
         if (action === 'ai-solve-page' || action === 'ai-lab') {
             if (!aiReady(env)) return bad('Workers AI is not connected — add the AI binding in Cloudflare', 503, { code: 'AI_OFF' });
             const image = String(data.image || '');
@@ -368,7 +447,8 @@ export async function onRequest(context) {
             const model = VISION_MODELS.includes(data.model) ? data.model : undefined;
             const task = action === 'ai-solve-page' ? 'solve' : (data.task || 'solve');
             let prompt;
-            if (task === 'solve') prompt = solvePrompt({ grade: data.grade, unit: data.unit, lesson: data.lesson, continueFrom: data.continueFrom || null });
+            const types = (Array.isArray(data.types) ? data.types : []).filter(t => TYPES.includes(t));
+            if (task === 'solve') prompt = solvePrompt({ grade: data.grade, unit: data.unit, lesson: data.lesson, continueFrom: data.continueFrom || null, types, pageNo: action === 'ai-solve-page' ? parseInt(data.pageNo, 10) || null : null });
             else if (task === 'read') {
                 const { readPrompt } = await import('./ai-engine.js');
                 const key = data.assignmentId ? await loadKey(db, parseInt(data.assignmentId, 10)) : (Array.isArray(data.key) ? data.key : []);
@@ -380,7 +460,7 @@ export async function onRequest(context) {
                 const parsed = parseJsonLoose(out.text);
                 const res = { model: out.model, format: out.format, ms: out.ms, neurons: out.neurons, usage: out.usage, today: await usageToday(db), limit: DAILY_FREE_NEURONS, parsed };
                 if (action === 'ai-lab') return json({ ...res, task, raw: out.text, prompt, checked: task === 'solve' ? normaliseSolved(parsed) : undefined });
-                const questions = normaliseSolved(parsed);
+                const questions = normaliseSolved(parsed, { types });
                 return json({ ...res, questions, sections: (parsed && parsed.page_sections) || [], raw: questions.length ? undefined : String(out.text).slice(0, 3000) });
             } catch (e) {
                 if (e instanceof AiQuotaError) return bad("Today's free AI allowance is used up — it resets at 2:00 am (Cairo).", 429, { code: 'AI_QUOTA' });
@@ -520,6 +600,16 @@ export async function onRequest(context) {
         const a = id ? await db.prepare('SELECT * FROM hw_assignments WHERE id = ?').bind(id).first() : null;
         if (id && !a) return bad('Homework not found', 404);
 
+        if (action === 'explain-save') {     // explanations can be fixed any time — even after students submitted
+            if (!a) return bad('Homework not found', 404);
+            const row = await db.prepare('SELECT id, extra FROM hw_questions WHERE assignment_id = ? AND label = ?').bind(a.id, str(data.label, 12)).first();
+            if (!row) return bad('Question not found', 404);
+            let extra = {}; try { extra = JSON.parse(row.extra || '{}'); } catch (e) { }
+            extra.explanation = str(data.explanation, 600); delete extra.explAi;
+            await db.batch([db.prepare('UPDATE hw_questions SET extra = ? WHERE id = ?').bind(JSON.stringify(extra), row.id),
+                auditStmt(db, request, staff, 'homework.explanation', String(a.id), { label: str(data.label, 12) })]);
+            return json({ ok: true });
+        }
         if (action === 'get') {
             if (!a) return bad('Homework not found', 404);
             return json({ assignment: rowOut(a, { submitted: await submissionsCount(db, a.id) }), questions: await loadQuestions(db, a.id) });

@@ -140,14 +140,20 @@ export function parseJsonLoose(text) {
 }
 
 // ---------------- Prompts ----------------
-const SECTION_RULES = `Numbering: the booklet is split into numbered sections (e.g. "1 Choose the correct answer", "2 Complete the following table", "3 Complete the following statements", "4 Put (✓) or (✗)", "5 Give reasons"). Question numbers restart in each section. Label every question "section.question" — e.g. the 7th question of section 1 is "1.7". For a table, label each blank cell as its own question in reading order ("2.1", "2.2", …). If a page starts in the middle of a section without its header, continue the previous page's section.`;
+const SECTION_RULES = `Numbering: the booklet is split into numbered sections (e.g. "1 Choose the correct answer", "2 Complete the following table", "3 Complete the following statements", "4 Put (✓) or (✗)", "5 Give reasons"). Question numbers restart in each section. Label every question "section.question" — e.g. the 7th question of section 1 is "1.7". For a table, label each blank cell as its own question in reading order ("2.1", "2.2", …). If the page STARTS with questions that come before any numbered section heading (they continue a section from the previous page), label them "?.<question number>" (e.g. "?.8") — the previous page's section number is filled in later.`;
 
-export function solvePrompt({ grade, unit, lesson, continueFrom }) {
+const TYPE_NAMES = { mcq: 'Choose the correct answer', short: 'Complete', tf: 'Put ✓ or ✗', essay: 'Give reason / explain' };
+const typesNote = (types) => Array.isArray(types) && types.length ? `This homework ONLY contains these question types: ${types.map(t => `"${t}" (${TYPE_NAMES[t] || t})`).join(', ')}. Use only these types.` : '';
+const TF_NOTE = `For "tf": set "requires_correction": true only if the instructions ask the student to correct the wrong statements (e.g. "Put (✓) or (✗) and correct the wrong one"), otherwise false.`;
+
+export function solvePrompt({ grade, unit, lesson, continueFrom, types, pageNo }) {
     return `You are an expert Egyptian science teacher (${grade || 'preparatory'} stage, Unit ${unit || '?'}, Lesson ${lesson || '?'}).
-This image is ONE page of a student homework booklet with PRINTED questions (usually unanswered).
+This image is ONE page${pageNo ? ` (PDF page ${pageNo})` : ''} of a student homework booklet with PRINTED questions (usually unanswered).
 Read every question on the page and SOLVE it yourself.
 ${SECTION_RULES}
 ${continueFrom ? `The previous page ended in section ${continueFrom.section}, last question "${continueFrom.label}".` : ''}
+${typesNote(types)}
+${TF_NOTE}
 Types: "mcq" (choose the correct answer — answer = the letter a/b/c/d), "tf" (put ✓ or ✗ / true or false — answer = "true" or "false"; for false add the correct word in "correction"), "short" (complete / one word / table cell — answer = the missing word(s)), "essay" (give reason, what happens if, explain, compare — write a model answer and 1–4 key ideas).
 STRICT RULES:
 - If a question has lettered choices (a)(b)(c)(d) it is ALWAYS "mcq", even when the choices are symbols, numbers or pictures. Copy EVERY choice into "options" in order — normally exactly 4. Never drop a choice.
@@ -158,10 +164,38 @@ STRICT RULES:
 - "confidence" must be honest: 1.0 only when you are certain AND read every word and choice clearly.
 Return ONLY JSON, no prose:
 {"page_sections":[{"number":1,"title":"Choose the correct answer"}],
- "questions":[{"label":"1.1","type":"mcq","question":"…","options":["…","…","…","…"],"answer":"b","answer_text":"text of the correct option","alternatives":[],"model_answer":"","ideas":[],"explanation":"one short sentence a 13-year-old understands, why this answer is right","confidence":0.0-1.0}]}
+ "questions":[{"label":"1.1","type":"mcq","question":"…","options":["…","…","…","…"],"answer":"b","answer_text":"text of the correct option","alternatives":[],"model_answer":"","ideas":[],"explanation":"one short sentence a 13-year-old understands, why this answer is right","requires_correction":false,"confidence":0.0-1.0}]}
 For "essay": "model_answer" = full answer, "ideas" = [{"text":"short key idea"}].
 For "short": "alternatives" = other accepted wordings (synonyms, Arabic/English, symbols).
 Write questions, answers and explanations in the language of the booklet (usually English). Do not skip any question. If something is unreadable, still include it with "confidence" below 0.5.`;
+}
+
+/** Copy the printed questions only — no solving, no explanations (used when the official answer key is provided). */
+export function extractPrompt({ grade, unit, lesson, types, pageNo }) {
+    return `This image is ONE page${pageNo ? ` (PDF page ${pageNo})` : ''} of an Egyptian science homework booklet (${grade || 'preparatory'} stage, Unit ${unit || '?'}, Lesson ${lesson || '?'}).
+COPY every printed question on the page. Do NOT solve anything and do NOT write explanations — the answers come from the official answer key.
+${SECTION_RULES}
+${typesNote(types)}
+Types: "mcq" (choose — copy ALL lettered choices, normally 4, keeping atom symbols with both numbers like "¹³₆X"), "tf" (put ✓ or ✗), "short" (complete / one word / table cell), "essay" (give reason, what happens if, explain, compare).
+${TF_NOTE}
+Return ONLY JSON, no prose:
+{"page_sections":[{"number":1,"title":"Choose the correct answer","type":"mcq"}],
+ "questions":[{"label":"1.1","type":"mcq","question":"…","options":["…","…","…","…"],"requires_correction":false}]}
+Do not skip any question. Keep the booklet's language (usually English).`;
+}
+
+/** Read an official answer-key page — copy answers, never solve. */
+export function keyReadPrompt({ unit, lesson, pageNo }) {
+    return `This image is a page${pageNo ? ` (PDF page ${pageNo})` : ''} of the OFFICIAL ANSWER KEY of an Egyptian science homework booklet${unit ? ` (we need Unit ${unit}${lesson ? `, Lesson ${lesson}` : ''})` : ''}.
+COPY the answers exactly as printed. Do NOT solve or change anything.
+${SECTION_RULES}
+If the page has answers for several lessons, copy only ${lesson ? `Lesson ${lesson}` : 'the lesson shown first'} and say which lesson in "lesson".
+For each answer give:
+- choose: "answer" = the letter (a/b/c/d) and "answer_text" = the words after it if printed
+- ✓/✗: "answer" = "✓" or "✗", and "correction" = the corrected word(s) if printed
+- complete: "answer" = the word(s)
+- give reason / explain: "answer" = the full printed answer, and "ideas" = 1–3 short key ideas taken from that answer's own words
+Return ONLY JSON: {"lesson":"1","answers":[{"label":"1.1","answer":"c","answer_text":"","correction":"","ideas":[]}]}`;
 }
 
 export function readPrompt({ key, pageNo, pages }) {
@@ -247,8 +281,9 @@ Mistakes:
 ${items.map(i => `[${i.label}] ${i.question || '(question in the booklet)'}${i.options && i.options.length ? `\nChoices: ${i.options.map((o, k) => `(${'abcdef'[k]}) ${o}`).join('  ')}` : ''}
 Student answered: ${i.student || '(left blank)'}
 Right answer: ${i.right}
-Explanation: ${i.explanation || '(none given — explain simply)'}${i.feedback ? `\nTeacher's note: ${i.feedback}` : ''}`).join('\n\n')}
-Return ONLY JSON: {"greeting":"one short warm opening line using their name","items":[{"label":"1.5","text":"…"}],"closing":"one short motivating line"}`;
+Explanation: ${i.explanation || 'NEEDS_EXPLANATION'}${i.feedback ? `\nTeacher's note: ${i.feedback}` : ''}`).join('\n\n')}
+For every mistake marked NEEDS_EXPLANATION also add "explanation_en": one or two simple ENGLISH sentences (preparatory level, no doubts) explaining why the right answer is right — it will be saved for other students.
+Return ONLY JSON: {"greeting":"one short warm opening line using their name","items":[{"label":"1.5","text":"…","explanation_en":"…"}],"closing":"one short motivating line"}`;
 }
 
 export function chatPrompt({ name, female, title, mistakes, history, question }) {

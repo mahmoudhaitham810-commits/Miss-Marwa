@@ -39,6 +39,7 @@
         .chips { display: flex; gap: 6px; flex-wrap: wrap; }
         .check-line { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 12px; cursor: pointer; font-weight: 500; }
         .check-line input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--primary); flex: none; }
+        .check-line.sm { padding: 8px 10px; margin-top: 8px; } .check-line.sm b { font-size: 13px; }
         .check-line small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
         .check-line:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
         .rq.need { background: linear-gradient(90deg, var(--warning-soft, rgba(245,158,11,.10)), transparent 70%); border-radius: 10px; padding-inline: 8px; }
@@ -153,6 +154,12 @@
         .thumb { border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface-2); position: relative; aspect-ratio: 3 / 4; display: grid; place-items: center; }
         .thumb img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
         .thumb span { position: absolute; left: 6px; top: 6px; background: rgba(15,23,42,.75); color: #fff; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 7px; }
+        .thumb { cursor: pointer; }
+        .thumb.off { opacity: .35; } .thumb.off::after { content: '✕ skipped'; position: absolute; inset: auto 0 8px; text-align: center; font-weight: 800; font-size: 12px; color: var(--danger); }
+        .sv-sec { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+        .sv-sec:first-of-type { border-top: 0; padding-top: 0; margin-top: 4px; }
+        .sv-h { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; } .sv-h small { color: var(--muted); }
+        .ai-badge.key { background: var(--success-soft); color: var(--success); }
         .thumb.done { border-color: var(--success); } .thumb.work { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); } .thumb.fail { border-color: var(--danger); }
         .solve-log { margin-top: 12px; font-size: 13.5px; color: var(--text-2); display: grid; gap: 4px; }
         .solve-bar { height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin-top: 12px; }
@@ -301,23 +308,40 @@
         <div class="box">
             <div class="modal-head">
                 <div class="bubble" style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--accent-soft, var(--primary-soft));color:var(--accent, var(--primary))"><span data-icon="sparkles" style="display:contents"></span></div>
-                <div><h2 id="solveTitle">Auto-solve from homework PDF</h2><p>Workers AI reads the printed questions, solves each one and writes an explanation. You review, then publish.</p></div>
+                <div><h2 id="solveTitle">Build the answer key from PDF</h2><p>Workers AI reads the printed questions — and either matches them to the official answer key, or solves them. You review, then publish.</p></div>
                 <button class="icon-btn" id="solveClose" aria-label="Close" data-icon="x"></button>
             </div>
-            <div class="segmented" id="srcSeg" style="display:inline-flex"><button data-value="r2" class="active">Our books (R2)</button><button data-value="upload">Upload PDF / photos</button></div>
-            <div id="srcR2" style="margin-top:12px">
-                <input class="fin sm" id="bookSearch" placeholder="Search books (e.g. prep1, unit 1)…" autocomplete="off">
-                <div class="book-list" id="bookList"><div class="skel" style="height:80px;border-radius:12px"></div></div>
-            </div>
-            <div id="srcUp" hidden style="margin-top:12px">
-                <label class="btn btn-soft" style="cursor:pointer"><span data-icon="download" style="display:contents"></span>Choose a PDF or photos<input type="file" id="srcFile" accept="application/pdf,.pdf,image/*" multiple hidden></label>
-                <span class="small muted" id="srcFileName" style="margin-inline-start:8px"></span>
-            </div>
-            <div class="form-grid" style="margin-top:14px" id="pagesRow" hidden>
-                <div class="field"><label for="pageRange">Pages for this lesson <small id="pageCount"></small></label><input class="fin sm" id="pageRange" placeholder="e.g. 34-37" inputmode="numeric"></div>
-                <div class="field" style="justify-content:flex-end"><button class="btn btn-ghost btn-sm" id="previewPages" type="button"><span data-icon="eye" style="display:contents"></span>Show these pages</button></div>
-            </div>
-            <div class="thumbs" id="thumbs"></div>
+            <section class="sv-sec" id="hwSec">
+                <div class="sv-h"><b>1 · Homework pages</b><small>Tap a page to skip it</small></div>
+                <div class="segmented" data-src style="display:inline-flex"><button data-value="r2" class="active">Our books (R2)</button><button data-value="upload">Upload PDF / photos</button></div>
+                <div data-r2 style="margin-top:10px"><input class="fin sm" data-search placeholder="Search books (e.g. prep1, answers)…" autocomplete="off"><div class="book-list" data-books><div class="skel" style="height:70px;border-radius:12px"></div></div></div>
+                <div data-up hidden style="margin-top:10px"><label class="btn btn-soft" style="cursor:pointer"><span data-icon="download" style="display:contents"></span>Choose a PDF or photos<input type="file" data-file accept="application/pdf,.pdf,image/*" multiple hidden></label><span class="small muted" data-fname style="margin-inline-start:8px"></span></div>
+                <div class="form-grid" style="margin-top:12px" data-pagesrow hidden>
+                    <div class="field"><label>Pages <small data-count></small></label><input class="fin sm" data-range placeholder="e.g. 21, 22, 24-27" inputmode="text"></div>
+                    <div class="field" style="justify-content:flex-end"><button class="btn btn-ghost btn-sm" data-preview type="button"><span data-icon="eye" style="display:contents"></span>Show these pages</button></div>
+                </div>
+                <p class="small muted" data-selnote style="margin:8px 0 0" hidden></p>
+                <div class="thumbs" data-thumbs></div>
+            </section>
+            <section class="sv-sec">
+                <div class="sv-h"><b>2 · Question types in this homework</b><small>optional — helps the AI; leave all off if unsure</small></div>
+                <div class="chips" id="typeChips"></div>
+            </section>
+            <section class="sv-sec">
+                <label class="check-line"><input type="checkbox" id="useKey"><span><b>3 · I have the official answer key pages</b><small>Faster &amp; cheaper: the AI only copies the questions and the code matches them to the official answers — no AI solving, no second check. Explanations are written later, only for questions students get wrong.</small></span></label>
+            </section>
+            <section class="sv-sec" id="keySec" hidden>
+                <div class="sv-h"><b>Answer key pages</b><small>From the back of the book or the answer booklet</small></div>
+                <div class="segmented" data-src style="display:inline-flex"><button data-value="r2" class="active">Our books (R2)</button><button data-value="upload">Upload PDF / photos</button></div>
+                <div data-r2 style="margin-top:10px"><input class="fin sm" data-search placeholder="Search books (e.g. prep1, answers)…" autocomplete="off"><div class="book-list" data-books><div class="skel" style="height:70px;border-radius:12px"></div></div></div>
+                <div data-up hidden style="margin-top:10px"><label class="btn btn-soft" style="cursor:pointer"><span data-icon="download" style="display:contents"></span>Choose a PDF or photos<input type="file" data-file accept="application/pdf,.pdf,image/*" multiple hidden></label><span class="small muted" data-fname style="margin-inline-start:8px"></span></div>
+                <div class="form-grid" style="margin-top:12px" data-pagesrow hidden>
+                    <div class="field"><label>Pages <small data-count></small></label><input class="fin sm" data-range placeholder="e.g. 21, 22, 24-27" inputmode="text"></div>
+                    <div class="field" style="justify-content:flex-end"><button class="btn btn-ghost btn-sm" data-preview type="button"><span data-icon="eye" style="display:contents"></span>Show these pages</button></div>
+                </div>
+                <p class="small muted" data-selnote style="margin:8px 0 0" hidden></p>
+                <div class="thumbs" data-thumbs></div>
+            </section>
             <div id="solveProgress" hidden><div class="solve-bar"><span id="solveBarIn"></span></div><div class="solve-log" id="solveLog"></div></div>
             <div class="modal-foot">
                 <span class="small muted" id="aiUsage" style="margin-inline-end:auto;align-self:center"></span>
@@ -494,7 +518,8 @@
         ['fTitle', 'fDeadline', 'fCloses', 'fTotal', 'fInstr', 'fDur'].forEach(id => $(id).addEventListener('input', () => touch()));
 
         // ---------- questions ----------
-        const fromServer = (q) => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, answer: q.answer || '', answerText: q.answerText || '', correction: q.correction || '', alternatives: q.alternatives || [], modelAnswer: q.modelAnswer || '', ideas: (q.ideas || []).map(it => ({ ...it })), options: q.options || [], explanation: q.explanation || '', aiCheck: !!q.aiCheck, aiNote: q.aiNote || '', confidence: q.confidence ?? null });
+        const fromServer = (q) => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, answer: q.answer || '', answerText: q.answerText || '', correction: q.correction || '', alternatives: q.alternatives || [], modelAnswer: q.modelAnswer || '', ideas: (q.ideas || []).map(it => ({ ...it })), options: q.options || [], explanation: q.explanation || '', aiCheck: !!q.aiCheck, aiNote: q.aiNote || '', confidence: q.confidence ?? null,
+            requiresCorrection: q.type === 'tf' ? (q.requiresCorrection === undefined || q.requiresCorrection === null ? !!q.correction : !!q.requiresCorrection) : undefined, fromKey: !!q.fromKey, explAi: !!q.explAi });
         function nextLabel() {
             const sec = Q.length ? String(Q[Q.length - 1].label).match(/^(\d+)\.(\d+)$/) : null;
             if (sec) return `${sec[1]}.${Number(sec[2]) + 1}`;
@@ -502,7 +527,7 @@
             return String(nums.length ? Math.max(...nums) + 1 : Q.length + 1);
         }
         function newQ(type) {
-            const q = { label: nextLabel(), type, prompt: '', points: DEFAULT_POINTS[type], answer: '', answerText: '', correction: '', alternatives: [], modelAnswer: '', ideas: [], options: [], explanation: '', aiCheck: false, confidence: null };
+            const q = { label: nextLabel(), type, prompt: '', points: DEFAULT_POINTS[type], answer: '', answerText: '', correction: '', alternatives: [], modelAnswer: '', ideas: [], options: [], explanation: '', aiCheck: false, confidence: null, requiresCorrection: type === 'tf' ? true : undefined };
             if (type === 'essay') q.ideas = [{ text: '', points: 1 }, { text: '', points: 1 }];
             return q;
         }
@@ -537,7 +562,8 @@
                     : locked ? '' : `<button type="button" class="linkish" data-add-opts>+ Add the choices' text (shown to students with the model answer)</button>`}`;
             else if (q.type === 'tf') body = `<div class="sub">Correct answer</div>
                 <div class="letters tf">${[['true', '✓ True'], ['false', '✗ False']].map(([v, l]) => `<button type="button" data-tf="${v}" class="${q.answer === v ? 'on' : ''}" ${locked ? 'disabled' : ''}>${l}</button>`).join('')}</div>
-                ${q.answer === 'false' ? `<input class="fin sm" data-f="correction" dir="auto" maxlength="300" value="${esc(q.correction)}" placeholder="Correction (optional) — the right word / statement" ${locked ? 'disabled' : ''}>` : ''}`;
+                <label class="check-line sm"><input type="checkbox" data-rc ${q.requiresCorrection ? 'checked' : ''} ${locked ? 'disabled' : ''}><span><b>Student must correct the wrong statement</b><small>${q.requiresCorrection ? 'Students get a box to write the correction after tapping ✗. ✗ alone = half marks.' : 'No correction asked — tapping ✗ is enough for full marks.'}</small></span></label>
+                ${q.answer === 'false' ? `<input class="fin sm" data-f="correction" dir="auto" maxlength="300" value="${esc(q.correction)}" placeholder="${q.requiresCorrection ? 'Correction — the right word / statement' : 'Correction (optional, shown in the model answer)'}" ${locked ? 'disabled' : ''}>` : ''}`;
             else if (q.type === 'short') body = `<div class="sub">Answer</div>
                 <input class="fin sm" data-f="answer" dir="auto" maxlength="300" value="${esc(q.answer)}" placeholder="e.g. Newton" ${locked ? 'disabled' : ''}>
                 <div class="sub">Also accept <span style="font-weight:600">— other wordings, press Enter after each</span></div>
@@ -557,9 +583,11 @@
                     <span class="idea-sum ${okSum ? 'ok' : 'no'}" data-idea-sum>${okSum ? `✓ Ideas = ${s} marks` : `Ideas add up to ${s} of ${numv(q.points)}`}</span></div>`;
             }
             const low = q.aiCheck && ((q.confidence !== null && q.confidence < 0.6) || !!q.aiNote);
-            const badge = q.aiCheck ? `<div class="ai-badge">${icon('sparkles', 'sm')}AI · check${q.aiNote ? ' — ' + esc(q.aiNote) : low ? ' — not sure, please look' : ''}${locked ? '' : '<button type="button" data-approve>✓ Looks right</button>'}</div>` : '';
-            const expl = `<div class="sub">Explanation for students <span style="font-weight:600">— shown with the result (why this answer is right)</span></div>
-                <textarea class="ta" data-f="explanation" dir="auto" rows="2" maxlength="600" placeholder="e.g. More resistance means less current, so the lamp gets dimmer." ${locked ? 'disabled' : ''}>${esc(q.explanation || '')}</textarea>`;
+            const badge = q.aiCheck ? (q.fromKey && !q.aiNote
+                ? `<div class="ai-badge key">${icon('book', 'sm')}From the answer key${locked ? '' : '<button type="button" data-approve>✓ Looks right</button>'}</div>`
+                : `<div class="ai-badge">${icon('sparkles', 'sm')}AI · check${q.aiNote ? ' — ' + esc(q.aiNote) : low ? ' — not sure, please look' : ''}${locked ? '' : '<button type="button" data-approve>✓ Looks right</button>'}</div>`) : '';
+            const expl = `<div class="sub">Explanation for students <span style="font-weight:600">— ${q.explanation ? 'shown with the result (why this answer is right)' : 'optional: if empty, the AI Assistant writes one the first time a student gets it wrong, and saves it here'}</span>${q.explAi ? ' <span class="pill legacy">🤖 AI explanation · check</span>' : ''}</div>
+                <textarea class="ta" data-f="explanation" dir="auto" rows="2" maxlength="600" placeholder="e.g. More resistance means less current, so the lamp gets dimmer." ${locked ? 'data-locked-expl' : ''}>${esc(q.explanation || '')}</textarea>`;
             return `<div class="hwq ${q.aiCheck ? 'ai' : ''} ${low ? 'low' : ''}" data-i="${i}">${badge}${head}${body}${expl}</div>`;
         }
         function renderKey(focus) {
@@ -574,6 +602,7 @@
             if (t.dataset.opt !== undefined) { q.options[Number(t.dataset.opt)] = t.value; touch(); return; }
             if (t.dataset.f) {
                 q[t.dataset.f] = t.dataset.f === 'points' ? t.value : t.value;
+                if (t.dataset.f === 'explanation') q.explAi = false;
                 if (t.dataset.f === 'points' && q.type === 'essay') refreshIdeaSum(t.closest('.hwq'), q);
             } else if (t.dataset.ideaF) {
                 const it = q.ideas[Number(t.closest('[data-idea]').dataset.idea)];
@@ -601,6 +630,20 @@
             input.value = ''; touch();
             renderKey(silent ? null : `[data-i="${Q.indexOf(q)}"] [data-alt-in]`);
         }
+        $('key').addEventListener('change', (e) => {
+            const t = e.target.closest('[data-rc]'); if (!t || locked) return;
+            const q = qOf(t); q.requiresCorrection = t.checked; touch(); renderKey();
+        });
+        // after students submitted the key is locked — explanations can still be fixed (saved straight away)
+        let EXPL_T = null;
+        $('key').addEventListener('input', (e) => {
+            const t = e.target.closest('[data-locked-expl]'); if (!t || !locked || !editing) return;
+            const q = qOf(t); q.explanation = t.value; q.explAi = false;
+            clearTimeout(EXPL_T); EXPL_T = setTimeout(async () => {
+                try { await api('/api/homework?action=explain-save', { body: { id: editing.id, label: q.label, explanation: q.explanation } }); Site.toast(`Explanation for ${q.label} saved ✅`, 'success'); }
+                catch (err) { Site.toast(err.message, 'error'); }
+            }, 900);
+        });
         $('key').addEventListener('click', (e) => {
             const t = e.target.closest('button'); if (!t || t.disabled || locked) return;
             const q = qOf(t), i = Q.indexOf(q);
@@ -944,137 +987,225 @@
         $('revClose').addEventListener('click', closeReview);
         $('revModal').addEventListener('click', (e) => { if (e.target === $('revModal')) closeReview(); });
 
-        // ================= Auto-solve from homework PDF =================
-        const SV = { src: 'r2', books: [], book: null, pdf: null, images: null, fileName: '', pages: [], found: [], running: false, stop: false, neurons: 0 };
+        // ================= Build the answer key from PDF =================
+        // Two page pickers (homework pages + optional official answer-key pages), 3 pages read at once,
+        // questions that continue a section across a page break ("?.8") joined in page order.
+        const SV = { books: [], running: false, stop: false, neurons: 0, found: [], keyOn: false, types: new Set(), pageLead: {} };
         const fmtMB = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+        function makeDoc(root) {
+            const q = (sel) => root.querySelector(sel);
+            const D = { src: 'r2', book: null, pdf: null, images: null, fileName: '', off: new Set(), root };
+            D.range = () => D.images ? D.images.map((_, i) => i + 1) : D.pdf ? HwKit.parsePages(q('[data-range]').value, D.pdf.numPages) : [];
+            D.selected = () => D.range().filter(n => !D.off.has(n));
+            D.reset = (keepBook) => { D.shown = ''; D.pdf = null; D.images = null; D.off = new Set(); if (!keepBook) D.book = null; q('[data-thumbs]').innerHTML = ''; q('[data-pagesrow]').hidden = true; q('[data-range]').value = ''; q('[data-fname]').textContent = ''; note(); updateGo(); };
+            D.renderBooks = () => {
+                const s = q('[data-search]').value.trim().toLowerCase();
+                const list = SV.books.filter(b => !s || b.key.toLowerCase().includes(s)).slice(0, 200);
+                q('[data-books]').innerHTML = list.length ? list.map(b => `<button type="button" class="book ${D.book === b.key ? 'on' : ''}" data-book="${esc(b.key)}">${icon('book', 'sm')}<span dir="auto" style="min-width:0;overflow-wrap:anywhere">${esc(b.key)}</span><small>${fmtMB(b.size)}</small></button>`).join('')
+                    : `<p class="muted small" style="margin:6px 0">${SV.books.length ? 'No book matches.' : 'No PDF books found in the R2 bucket yet — upload one there, or use “Upload PDF / photos”.'}</p>`;
+            };
+            D.openBook = async (key) => {
+                D.book = key; D.renderBooks(); D.reset(true);
+                q('[data-count]').textContent = '— opening…'; q('[data-pagesrow]').hidden = false;
+                try { D.pdf = await HwKit.openPdf(`/api/homework?action=book&key=${encodeURIComponent(key)}`); D.fileName = key; q('[data-count]').textContent = `— the book has ${D.pdf.numPages} pages`; }
+                catch (err) { q('[data-count]').textContent = ''; Site.toast('Could not open this PDF: ' + err.message, 'error'); }
+                updateGo();
+            };
+            const note = () => { const r = D.range(), off = r.filter(n => D.off.has(n)); const el = q('[data-selnote]'); el.hidden = !r.length; el.textContent = r.length ? `${r.length - off.length} page${r.length - off.length === 1 ? '' : 's'} selected${off.length ? ` · skipping ${off.join(', ')}` : ''}` : ''; };
+            D.thumbs = async (force) => {
+                const pages = D.range().slice(0, 30);
+                const box = q('[data-thumbs]');
+                const sig = (D.images ? 'img' : D.book || D.fileName) + ':' + pages.join(',');
+                if (!force && sig === D.shown && box.children.length === pages.length) return;      // same pages already shown (e.g. the box lost focus) — don't redraw under the finger
+                D.shown = sig;
+                box.innerHTML = pages.map(n => `<div class="thumb ${D.off.has(n) ? 'off' : ''}" data-p="${n}" role="button" tabindex="0" aria-pressed="${!D.off.has(n)}" title="Tap to skip / include"><span>${D.images ? 'Photo' : 'Page'} ${n}</span><div class="skel" style="width:80%;height:80%"></div></div>`).join('');
+                note();
+                for (const n of pages) {
+                    let src = ''; try { src = D.images ? URL.createObjectURL(D.images[n - 1]) : await HwKit.thumbOf(D.pdf, n); } catch (e) { }
+                    const el = box.querySelector(`[data-p="${n}"]`); if (el && src) el.innerHTML = `<span>${D.images ? 'Photo' : 'Page'} ${n}</span><img src="${src}" alt="Page ${n}">`;
+                }
+            };
+            D.image = async (n) => D.images ? (await HwKit.photoToJpeg(D.images[n - 1])).dataUrl : (await HwKit.renderPage(D.pdf, n)).dataUrl;
+            D.thumb = (n) => q(`[data-thumbs] [data-p="${n}"]`);
+            A.segmented(q('[data-src]'), 'r2', (v) => { D.src = v; q('[data-r2]').hidden = v !== 'r2'; q('[data-up]').hidden = v !== 'upload'; if (v === 'r2') D.renderBooks(); D.reset(); });
+            q('[data-search]').addEventListener('input', D.renderBooks);
+            q('[data-books]').addEventListener('click', (e) => { const b = e.target.closest('[data-book]'); if (b) D.openBook(b.dataset.book); });
+            q('[data-file]').addEventListener('change', async (e) => {
+                const files = [...e.target.files]; if (!files.length) return;
+                D.reset(true);
+                if (files.length === 1 && HwKit.isPdf(files[0])) {
+                    D.fileName = files[0].name; q('[data-fname]').textContent = files[0].name;
+                    try { D.pdf = await HwKit.openPdf(files[0]); q('[data-pagesrow]').hidden = false; q('[data-count]').textContent = `— ${D.pdf.numPages} pages`; if (D.pdf.numPages <= 8) q('[data-range]').value = `1-${D.pdf.numPages}`; }
+                    catch (err) { Site.toast('Could not open this PDF: ' + err.message, 'error'); }
+                } else {
+                    D.images = files.filter(f => /^image\//.test(f.type)); D.fileName = `${D.images.length} photo${D.images.length === 1 ? '' : 's'}`;
+                    q('[data-fname]').textContent = D.fileName; q('[data-pagesrow]').hidden = true;
+                    await D.thumbs();
+                }
+                note(); updateGo(); e.target.value = '';
+            });
+            q('[data-range]').addEventListener('input', () => { D.off = new Set(); note(); updateGo(); });
+            q('[data-range]').addEventListener('change', () => D.thumbs());
+            q('[data-preview]').addEventListener('click', () => D.thumbs(true));
+            q('[data-thumbs]').addEventListener('click', (e) => {
+                const t = e.target.closest('[data-p]'); if (!t || SV.running) return;
+                const n = Number(t.dataset.p); D.off.has(n) ? D.off.delete(n) : D.off.add(n);
+                t.classList.toggle('off', D.off.has(n)); t.setAttribute('aria-pressed', !D.off.has(n)); note(); updateGo();
+            });
+            return D;
+        }
+        const HWD = makeDoc($('hwSec')), KYD = makeDoc($('keySec'));
+        $('typeChips').innerHTML = [['mcq', 'Choose'], ['short', 'Complete'], ['tf', '✓ / ✗'], ['essay', 'Give reason / Essay']].map(([v, l]) => `<button type="button" class="chipb" data-v="${v}" aria-pressed="false">${esc(l)}</button>`).join('');
+        $('typeChips').addEventListener('click', (e) => { const b = e.target.closest('.chipb'); if (!b) return; const v = b.dataset.v; SV.types.has(v) ? SV.types.delete(v) : SV.types.add(v); b.classList.toggle('on', SV.types.has(v)); b.setAttribute('aria-pressed', SV.types.has(v)); });
+        $('useKey').addEventListener('change', () => {
+            SV.keyOn = $('useKey').checked; $('keySec').hidden = !SV.keyOn;
+            if (SV.keyOn && !KYD.pdf && !KYD.images && HWD.book && HWD.src === 'r2') KYD.openBook(HWD.book);   // answers are often at the back of the same book
+            else KYD.renderBooks();
+            updateGo();
+        });
         function openSolve() {
             $('solveModal').hidden = false; document.body.style.overflow = 'hidden';
             SV.found = []; SV.stop = false;
             $('solveUse').hidden = true; $('solveGo').hidden = false; $('solveProgress').hidden = true; $('solveLog').innerHTML = '';
             $('replaceWrap').hidden = !Q.length; $('replaceKey').checked = false;
-            if (SV.src === 'r2' && !SV.books.length) loadBooks();
+            if (!SV.books.length) loadBooks();
             refreshUsage(); updateGo();
         }
         function closeSolve() { if (SV.running) { SV.stop = true; return; } $('solveModal').hidden = true; document.body.style.overflow = ''; }
         $('solveBtn').addEventListener('click', openSolve);
         $('solveClose').addEventListener('click', closeSolve); $('solveCancel').addEventListener('click', closeSolve);
         $('solveModal').addEventListener('click', (e) => { if (e.target === $('solveModal')) closeSolve(); });
-        A.segmented($('srcSeg'), 'r2', (v) => { SV.src = v; $('srcR2').hidden = v !== 'r2'; $('srcUp').hidden = v !== 'upload'; if (v === 'r2' && !SV.books.length) loadBooks(); resetDoc(); });
         async function refreshUsage() {
             try { const u = await api('/api/homework?action=usage'); $('aiUsage').textContent = u.ai ? `Free AI today: ${u.today.toLocaleString()} / ${u.limit.toLocaleString()} units${u.quotaHit ? ' — used up, resets 2:00 am' : ''}` : 'Workers AI is not connected (binding AI)'; }
             catch (e) { $('aiUsage').textContent = ''; }
         }
         async function loadBooks() {
-            $('bookList').innerHTML = '<div class="skel" style="height:80px;border-radius:12px"></div>';
-            try { SV.books = (await api('/api/homework?action=books')).books; } catch (e) { $('bookList').innerHTML = `<div class="notice warning">${esc(e.message)}</div>`; return; }
-            renderBooks();
+            try { SV.books = (await api('/api/homework?action=books')).books; } catch (e) { [HWD, KYD].forEach(D => { D.root.querySelector('[data-books]').innerHTML = `<div class="notice warning">${esc(e.message)}</div>`; }); return; }
+            HWD.renderBooks(); KYD.renderBooks();
         }
-        function renderBooks() {
-            const q = $('bookSearch').value.trim().toLowerCase();
-            const list = SV.books.filter(b => !q || b.key.toLowerCase().includes(q)).slice(0, 200);
-            $('bookList').innerHTML = list.length ? list.map(b => `<button type="button" class="book ${SV.book === b.key ? 'on' : ''}" data-book="${esc(b.key)}">${icon('book', 'sm')}<span dir="auto" style="min-width:0;overflow-wrap:anywhere">${esc(b.key)}</span><small>${fmtMB(b.size)}</small></button>`).join('')
-                : `<p class="muted small" style="margin:6px 0">${SV.books.length ? 'No book matches.' : 'No PDF books found in the R2 bucket yet — upload one there, or use “Upload PDF / photos”.'}</p>`;
-        }
-        $('bookSearch').addEventListener('input', renderBooks);
-        $('bookList').addEventListener('click', async (e) => {
-            const b = e.target.closest('[data-book]'); if (!b) return;
-            SV.book = b.dataset.book; renderBooks(); resetDoc(true);
-            $('pageCount').textContent = '— opening…'; $('pagesRow').hidden = false;
-            try { SV.pdf = await HwKit.openPdf(`/api/homework?action=book&key=${encodeURIComponent(SV.book)}`); SV.fileName = SV.book; $('pageCount').textContent = `— the book has ${SV.pdf.numPages} pages`; }
-            catch (err) { $('pageCount').textContent = ''; Site.toast('Could not open this PDF: ' + err.message, 'error'); }
-            updateGo();
-        });
-        $('srcFile').addEventListener('change', async (e) => {
-            const files = [...e.target.files]; if (!files.length) return;
-            resetDoc(true);
-            if (files.length === 1 && HwKit.isPdf(files[0])) {
-                SV.fileName = files[0].name; $('srcFileName').textContent = files[0].name;
-                try { SV.pdf = await HwKit.openPdf(files[0]); $('pagesRow').hidden = false; $('pageCount').textContent = `— ${SV.pdf.numPages} pages`; if (SV.pdf.numPages <= 8) $('pageRange').value = `1-${SV.pdf.numPages}`; }
-                catch (err) { Site.toast('Could not open this PDF: ' + err.message, 'error'); }
-            } else {
-                SV.images = files.filter(f => /^image\//.test(f.type)); SV.fileName = `${SV.images.length} photo${SV.images.length === 1 ? '' : 's'}`;
-                $('srcFileName').textContent = SV.fileName; $('pagesRow').hidden = true;
-                await showThumbs();
-            }
-            updateGo(); e.target.value = '';
-        });
-        function resetDoc(keepBook) { SV.pdf = null; SV.images = null; SV.pages = []; if (!keepBook) SV.book = null; $('thumbs').innerHTML = ''; $('pagesRow').hidden = true; $('pageRange').value = ''; $('srcFileName').textContent = ''; updateGo(); }
-        function selectedPages() { return SV.images ? SV.images.map((_, i) => i + 1) : SV.pdf ? HwKit.parsePages($('pageRange').value, SV.pdf.numPages) : []; }
         function updateGo() {
-            const n = selectedPages().length;
-            $('solveGo').disabled = !n || SV.running || n > 20;
-            $('solveGoLabel').textContent = n ? `Solve ${n} page${n === 1 ? '' : 's'} with AI` : 'Solve pages';
-            if (n > 20) $('solveGoLabel').textContent = 'At most 20 pages at a time';
+            const n = HWD.selected().length, k = SV.keyOn ? KYD.selected().length : 0;
+            $('solveGo').disabled = !n || SV.running || n > 20 || (SV.keyOn && (!k || k > 10));
+            $('solveGoLabel').textContent = !n ? 'Read pages' : n > 20 ? 'At most 20 homework pages at a time' : SV.keyOn ? (!k ? 'Choose the answer-key pages' : k > 10 ? 'At most 10 answer-key pages' : `Read ${n} page${n === 1 ? '' : 's'} + ${k} answer page${k === 1 ? '' : 's'}`) : `Solve ${n} page${n === 1 ? '' : 's'} with AI`;
         }
-        $('pageRange').addEventListener('input', updateGo);
-        $('previewPages').addEventListener('click', showThumbs);
-        async function showThumbs() {
-            const pages = selectedPages().slice(0, 20);
-            $('thumbs').innerHTML = pages.map(n => `<div class="thumb" data-p="${n}"><span>${SV.images ? 'Photo' : 'Page'} ${n}</span><div class="skel" style="width:80%;height:80%"></div></div>`).join('');
-            for (const n of pages) {
-                let src = '';
-                try { src = SV.images ? URL.createObjectURL(SV.images[n - 1]) : await HwKit.thumbOf(SV.pdf, n); } catch (e) { }
-                const el = $('thumbs').querySelector(`[data-p="${n}"]`); if (el && src) el.innerHTML = `<span>${SV.images ? 'Photo' : 'Page'} ${n}</span><img src="${src}" alt="Page ${n}">`;
-            }
+        const logLine = (t, cls = '') => { $('solveLog').insertAdjacentHTML('beforeend', `<div class="${cls}">${t}</div>`); return $('solveLog').lastElementChild; };
+        // run tasks 3 at a time
+        async function pool(tasks, size = 3) {
+            let i = 0, done = 0;
+            const worker = async () => { while (i < tasks.length && !SV.stop) { const t = tasks[i++]; await t(); done++; $('solveBarIn').style.width = `${Math.round(done / tasks.length * 100)}%`; } };
+            await Promise.all(Array.from({ length: Math.min(size, tasks.length) }, worker));
         }
-        const logLine = (t, cls = '') => { $('solveLog').insertAdjacentHTML('beforeend', `<div class="${cls}">${t}</div>`); };
-        $('solveGo').addEventListener('click', async () => {
-            const pages = selectedPages(); if (!pages.length) return;
-            if (!$('thumbs').children.length || $('thumbs').children.length !== pages.length) await showThumbs();
-            SV.running = true; SV.stop = false; SV.found = []; SV.neurons = 0; updateGo();
-            $('solveProgress').hidden = false; $('solveLog').innerHTML = ''; $('solveBarIn').style.width = '2%';
-            let cont = null, failed = 0; const checks = [];
-            for (let k = 0; k < pages.length; k++) {
-                if (SV.stop) { logLine('Stopped.'); break; }
-                const n = pages[k], th = $('thumbs').querySelector(`[data-p="${n}"]`);
-                th && th.classList.add('work');
-                logLine(`Reading ${SV.images ? 'photo' : 'page'} ${n}…`);
-                try {
-                    const img = SV.images ? (await HwKit.photoToJpeg(SV.images[n - 1])).dataUrl : (await HwKit.renderPage(SV.pdf, n)).dataUrl;
-                    const r = await api('/api/homework?action=ai-solve-page', { body: { image: img, grade: F.grade, unit: F.unit, lesson: F.lesson, pageNo: n, continueFrom: cont } });
-                    SV.neurons += r.neurons || 0;
-                    const qsx = r.questions || [];
-                    qsx.forEach(q => { q.page = n; });
-                    SV.found.push(...qsx);
-                    if (qsx.length) { const last = qsx[qsx.length - 1].label; const m = String(last).match(/^(\d+)\./); cont = { section: m ? m[1] : '', label: last }; }
-                    const line = $('solveLog').lastElementChild;
-                    if (qsx.some(q => q.type === 'mcq' || q.type === 'tf')) {
-                        // independent text-only second check — runs while the next page is being read
-                        checks.push(api('/api/homework?action=ai-verify', { body: { questions: qsx } }).then(v => {
-                            SV.neurons += v.neurons || 0;
-                            const by = new Map((v.questions || []).map(q => [q.label, q]));
-                            SV.found = SV.found.map(q => q.page === n && by.has(q.label) ? { ...by.get(q.label), page: n } : q);
-                            const dis = (v.questions || []).filter(q => q.verified === 'disagree' || q.verified === 'none').length;
-                            line.insertAdjacentHTML('beforeend', dis ? ` · <span style="color:var(--warning);font-weight:700">second check disagrees on ${dis}</span>` : ' · second check agrees');
-                        }).catch(() => line.insertAdjacentHTML('beforeend', ' · second check skipped')));
+        // "?.8" = question 8 of the section the previous page ended in → real label + the section's type
+        function stitch(byPage) {
+            const out = []; let last = null;
+            for (const n of Object.keys(byPage).map(Number).sort((a, b) => a - b)) {
+                const lead = last ? { ...last } : null; SV.pageLead[n] = lead;
+                for (const q0 of byPage[n]) {
+                    const q = { ...q0, page: n };
+                    const m = String(q.label).match(/^\?\.(.+)$/);
+                    if (m) {
+                        if (lead) {
+                            q.label = `${lead.sec}.${m[1]}`;
+                            if (lead.type && q.type !== lead.type && (!SV.types.size || SV.types.has(lead.type))) { q.type = lead.type; if (lead.type !== 'mcq') q.options = []; }
+                            if (q.type === 'tf' && q.requiresCorrection === undefined) q.requiresCorrection = lead.rc;
+                        } else { q.label = m[1]; q.aiNote = [q.aiNote, 'Section number not found — check the number'].filter(Boolean).join(' · '); }
                     }
-                    $('solveLog').lastElementChild.innerHTML = `${SV.images ? 'Photo' : 'Page'} ${n}: <b>${qsx.length}</b> question${qsx.length === 1 ? '' : 's'} solved <span class="muted">(${(r.ms / 1000).toFixed(1)} s · ~${Math.round(r.neurons || 0)} units)</span>${!qsx.length ? ' — nothing found on this page' : ''}`;
+                    const sec = String(q.label).split('.')[0];
+                    last = { sec, type: q.type, rc: q.type === 'tf' ? q.requiresCorrection : undefined };
+                    out.push(q);
+                }
+            }
+            return out;
+        }
+        $('solveGo').addEventListener('click', async () => {
+            const hwPages = HWD.selected(), keyPages = SV.keyOn ? KYD.selected() : [];
+            if (!hwPages.length) return;
+            if (!HWD.root.querySelector('[data-thumbs]').children.length) await HWD.thumbs();
+            if (SV.keyOn && !KYD.root.querySelector('[data-thumbs]').children.length) await KYD.thumbs();
+            SV.running = true; SV.stop = false; SV.found = []; SV.neurons = 0; SV.pageLead = {}; updateGo();
+            $('solveProgress').hidden = false; $('solveLog').innerHTML = ''; $('solveBarIn').style.width = '2%';
+            const types = [...SV.types], ctx = { grade: F.grade, unit: F.unit, lesson: F.lesson, types };
+            const byPage = {}, answers = [], checks = []; let stopAll = false;
+            const t0 = Date.now();
+            const task = (D, n, isKey) => async () => {
+                if (stopAll) return;
+                const th = D.thumb(n); th && th.classList.add('work');
+                const line = logLine(`Reading ${isKey ? 'answer page' : D.images ? 'photo' : 'page'} ${n}…`);
+                try {
+                    const img = await D.image(n);
+                    const action = isKey ? 'ai-read-key-page' : SV.keyOn ? 'ai-extract-page' : 'ai-solve-page';
+                    const r = await api(`/api/homework?action=${action}`, { body: { image: img, pageNo: n, ...ctx } });
+                    SV.neurons += r.neurons || 0;
+                    const sec = `<span class="muted">(${(r.ms / 1000).toFixed(1)} s · ~${Math.round(r.neurons || 0)} units)</span>`;
+                    if (isKey) { answers.push(...(r.answers || [])); line.innerHTML = `Answer page ${n}: <b>${(r.answers || []).length}</b> answers copied ${sec}`; }
+                    else {
+                        const qsx = r.questions || []; byPage[n] = qsx;
+                        line.innerHTML = `${D.images ? 'Photo' : 'Page'} ${n}: <b>${qsx.length}</b> question${qsx.length === 1 ? '' : 's'} ${SV.keyOn ? 'copied' : 'solved'} ${sec}${!qsx.length ? ' — nothing found on this page' : ''}`;
+                        if (!SV.keyOn && qsx.some(q => (q.type === 'mcq' || q.type === 'tf') && !/^\?\./.test(q.label))) {
+                            checks.push(api('/api/homework?action=ai-verify', { body: { questions: qsx } }).then(v => {
+                                SV.neurons += v.neurons || 0; byPage[n] = v.questions || qsx;
+                                const dis = (v.questions || []).filter(q => q.verified === 'disagree' || q.verified === 'none').length;
+                                line.insertAdjacentHTML('beforeend', dis ? ` · <span style="color:var(--warning);font-weight:700">second check disagrees on ${dis}</span>` : ' · second check agrees');
+                            }).catch(() => line.insertAdjacentHTML('beforeend', ' · second check skipped')));
+                        }
+                    }
                     th && th.classList.replace('work', 'done');
                 } catch (e) {
-                    failed++; th && th.classList.replace('work', 'fail');
-                    $('solveLog').lastElementChild.innerHTML = `<span class="danger-text">${SV.images ? 'Photo' : 'Page'} ${n}: ${esc(e.message)}</span>`;
-                    if (e.data && (e.data.code === 'AI_QUOTA' || e.data.code === 'AI_OFF')) break;
+                    th && th.classList.replace('work', 'fail');
+                    line.innerHTML = `<span class="danger-text">${isKey ? 'Answer page' : 'Page'} ${n}: ${esc(e.message)}</span>`;
+                    if (e.data && (e.data.code === 'AI_QUOTA' || e.data.code === 'AI_OFF')) stopAll = true;
                 }
-                $('solveBarIn').style.width = `${Math.round((k + 1) / pages.length * 100)}%`;
+            };
+            await pool([...hwPages.map(n => task(HWD, n, false)), ...keyPages.map(n => task(KYD, n, true))], 3);
+            if (checks.length) { const l = logLine('Finishing the second check…'); await Promise.all(checks); l.remove(); }
+            let found = stitch(byPage), summary = '';
+            if (SV.keyOn && found.length) {
+                try {
+                    const m = await api('/api/homework?action=match-key', { body: { questions: found, answers } });
+                    found = m.questions;
+                    summary = ` · <b>${m.matched}</b> matched to the answer key${m.missing ? ` · <span style="color:var(--warning);font-weight:700">${m.missing} not found</span>` : ''}${m.extraAnswers ? ` · ${m.extraAnswers} answer${m.extraAnswers === 1 ? '' : 's'} in the key had no question` : ''}`;
+                } catch (e) { Site.toast(e.message, 'error'); }
             }
-            if (checks.length) { logLine('Finishing the second check…'); await Promise.all(checks); $('solveLog').lastElementChild.remove(); }
+            SV.found = found;
             SV.running = false; updateGo(); refreshUsage();
-            const merged = mergeFound(SV.found);
-            if (merged.length) {
-                const byType = Object.keys(TYPE_LABEL).map(t => [t, merged.filter(q => q.type === t).length]).filter(([, c]) => c).map(([t, c]) => `${c} ${TYPE_LABEL[t]}`).join(' · ');
-                logLine(`<b>Found ${merged.length} question${merged.length === 1 ? '' : 's'}</b> — ${byType}. About ${Math.round(SV.neurons)} free AI units used.`);
-                $('solveGo').hidden = true; $('solveUse').hidden = false; $('solveUseLabel').textContent = `Put ${merged.length} questions in the answer key`;
+            if (found.length) {
+                const byType = Object.keys(TYPE_LABEL).map(t => [t, found.filter(q => q.type === t).length]).filter(([, c]) => c).map(([t, c]) => `${c} ${TYPE_LABEL[t]}`).join(' · ');
+                logLine(`<b>Found ${found.length} question${found.length === 1 ? '' : 's'}</b> — ${byType}${summary}. About ${Math.round(SV.neurons)} free AI units · ${Math.round((Date.now() - t0) / 1000)} s.`);
+                const missing = found.filter(q => q.missing);
+                if (missing.length) {
+                    const l = logLine(`<button class="btn btn-soft btn-sm" id="solveMissing" type="button">${icon('sparkles', 'sm')}Solve these ${missing.length} with AI</button> <span class="small muted">(${missing.map(q => q.label).join(', ')}) — or fill them in yourself</span>`);
+                    l.querySelector('#solveMissing').addEventListener('click', solveMissing);
+                }
+                $('solveGo').hidden = true; $('solveUse').hidden = false; $('solveUseLabel').textContent = `Put ${found.length} questions in the answer key`;
             } else logLine('No questions were found. Check the pages and try again.');
         });
-        // the same label on two pages (a question that runs over a page break) → keep the more confident one
-        function mergeFound(list) {
-            const by = new Map();
-            for (const q of list) { const k = String(q.label).trim().toLowerCase(); const prev = by.get(k); if (!prev || (q.confidence ?? 0.5) > (prev.confidence ?? 0.5)) by.set(k, q); }
-            return [...by.values()];
+        // questions the official key didn't cover → solve only their pages, keep only those answers
+        async function solveMissing(e) {
+            const btn = e.currentTarget; btn.disabled = true; btn.classList.add('loading');
+            const want = new Map(SV.found.filter(q => q.missing).map(q => [q.label, q]));
+            const pages = [...new Set([...want.values()].map(q => q.page))];
+            const solved = {};
+            SV.running = true; updateGo();
+            await pool(pages.map(n => async () => {
+                try {
+                    const r = await api('/api/homework?action=ai-solve-page', { body: { image: await HWD.image(n), pageNo: n, grade: F.grade, unit: F.unit, lesson: F.lesson, types: [...SV.types] } });
+                    SV.neurons += r.neurons || 0;
+                    const lead = SV.pageLead[n];
+                    for (const q of r.questions || []) { const m = String(q.label).match(/^\?\.(.+)$/); const label = m ? (lead ? `${lead.sec}.${m[1]}` : m[1]) : q.label; if (want.has(label)) solved[label] = q; }
+                } catch (err) { Site.toast(err.message, 'error'); }
+            }), 3);
+            SV.running = false; updateGo(); refreshUsage();
+            let n = 0;
+            SV.found = SV.found.map(q => {
+                const s = solved[q.label]; if (!q.missing || !s) return q; n++;
+                return { ...q, answer: s.answer, answerText: s.answerText, correction: s.correction, alternatives: s.alternatives, modelAnswer: s.modelAnswer, ideas: s.ideas, explanation: s.explanation, missing: false, fromKey: false,
+                    aiNote: ['Solved by AI — not in the answer key', s.aiNote].filter(Boolean).join(' · '), confidence: Math.min(s.confidence ?? 0.6, 0.6) };
+            });
+            btn.closest('div').innerHTML = `<span>🤖 AI solved <b>${n}</b> of ${want.size} missing question${want.size === 1 ? '' : 's'} — check them in the answer key.</span>`;
         }
         $('solveUse').addEventListener('click', () => {
-            const merged = mergeFound(SV.found).map(q => {
-                const x = { ...fromServer(q), points: DEFAULT_POINTS[q.type] || 1, aiCheck: true, confidence: q.confidence ?? null, options: q.options || [] };
+            const merged = SV.found.map(q => {
+                const x = { ...fromServer(q), points: DEFAULT_POINTS[q.type] || 1, aiCheck: true, confidence: q.confidence ?? null, options: q.options || [], fromKey: !!q.fromKey };
                 if (x.type === 'essay') { if (!x.ideas.length) x.ideas = [{ text: x.modelAnswer.slice(0, 200) || 'Main idea', points: 2 }]; shareIdeas(x); }
                 return x;
             });
@@ -1082,10 +1213,10 @@
             if (replace) Q = merged; else { const have = new Set(Q.map(q => String(q.label).toLowerCase())); Q.push(...merged.filter(q => !have.has(String(q.label).toLowerCase()))); }
             const sum = round2(Q.reduce((t, q) => t + numv(q.points), 0));
             if (replace) $('fTotal').value = sum;
-            SRC = { kind: SV.book ? 'r2' : 'upload', key: SV.book || '', name: SV.fileName, pages: selectedPages() };
+            SRC = { kind: HWD.book ? 'r2' : 'upload', key: HWD.book || '', name: HWD.fileName, pages: HWD.selected() };
             $('solveModal').hidden = true; document.body.style.overflow = '';
             touch(); renderKey();
-            Site.toast(`${merged.length} questions added — check each “AI · check” card, then publish`, 'success');
+            Site.toast(`${merged.length} questions added — check each card, then publish`, 'success');
             $('key').scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('solveModal').hidden) closeSolve(); });

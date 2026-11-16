@@ -40,7 +40,8 @@ const asgOut = (a) => ({ id: a.id, title: a.title, unit: a.unit, lesson: a.lesso
     answerMode: isWeb(a) ? 'web' : 'photo', allowPhoto: !!a.allow_photo, durationMin: a.duration_min || null });
 const GRACE_MS = 2 * 60 * 1000;
 // the question sheet a student sees — never the answers
-const paperOf = (key) => key.map(q => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, options: q.type === 'mcq' ? (q.options || []) : [] }));
+const paperOf = (key) => key.map(q => ({ label: q.label, type: q.type, prompt: q.prompt || '', points: q.points, options: q.type === 'mcq' ? (q.options || []) : [],
+    ...(q.type === 'tf' ? { requiresCorrection: q.requiresCorrection === undefined ? !!q.correction : !!q.requiresCorrection } : {}) }));
 function subOut(s) {
     if (!s) return null;
     return { id: s.id, status: s.status, released: !!s.released_at, score: s.released_at ? s.final_score : null, late: !!s.late, pages: s.pages, unreadable: !!s.unreadable,

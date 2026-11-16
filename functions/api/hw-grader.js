@@ -86,6 +86,7 @@ export function scoreOne(q, a) {
         const v = tfOf(ans);
         if (!v) return { verdict: 'unreadable', points: 0 };
         if (v !== q.answer) return { verdict: 'wrong', points: 0 };
+        if (q.answer === 'false' && q.requiresCorrection === false) return { verdict: 'correct', points: full };   // no correction asked → ✗ is enough
         if (q.answer === 'false' && q.correction) {   // ✗ earns half, the right correction the other half
             const corr = String(a.correction || '').trim();
             if (corr && (close(corr, q.correction) || norm(corr).includes(norm(q.correction)))) return { verdict: 'correct', points: full };
@@ -505,6 +506,7 @@ export async function ensureAssist(env, db, subId, { force = false, silent = fal
     const st = await studentOf(db, sub.student_id);
     const female = String(st.gender || '').toLowerCase() === 'female', name = st.first_name || '';
     const mistakes = mistakesOf(r, key);
+    const byLabel = Object.fromEntries(key.map(q => [q.label, q]));
     const save = async (assist, status) => {
         await db.prepare(`UPDATE hw_submissions SET assist = ?, assist_status = ?, assist_lock = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(JSON.stringify(assist), status, subId).run();
         return { status: 'ready', assist };
@@ -519,7 +521,15 @@ export async function ensureAssist(env, db, subId, { force = false, silent = fal
     try {
         const out = await runAI(env, db, { prompt: assistPrompt({ name, female, title: r.title, items: mistakes.slice(0, 20) }), model: textModel(env), maxTokens: 2200, temperature: 0.4 });
         const j = parseJsonLoose(out.text);
-        const items = j && Array.isArray(j.items) ? j.items.map(x => ({ label: clip(x.label, 12), text: clip(x.text, 1200) })).filter(x => x.text) : [];
+        const items = j && Array.isArray(j.items) ? j.items.map(x => ({ label: clip(x.label, 12), text: clip(x.text, 1200), en: clip(x.explanation_en, 600) })).filter(x => x.text) : [];
+        // explanations the key didn't have → saved on the question for every other student (staff see "AI explanation · check")
+        const cache = [];
+        for (const it of items) {
+            const q = byLabel[it.label];
+            if (q && !q.explanation && it.en && !/however|re-?evaluat|not sure|misinterpret/i.test(it.en)) cache.push(db.prepare(`UPDATE hw_questions SET extra = json_set(COALESCE(extra, '{}'), '$.explanation', ?, '$.explAi', json('true')) WHERE id = ? AND COALESCE(json_extract(extra, '$.explanation'), '') = ''`).bind(it.en, q.id));
+            delete it.en;
+        }
+        if (cache.length) await db.batch(cache).catch(() => null);
         const assist = items.length ? { greeting: clip(j.greeting, 300), items, closing: clip(j.closing, 300), ai: true } : plainAssist(name, female, mistakes);
         return save(assist, silent ? 'notified' : 'ready');
     } catch (e) {
