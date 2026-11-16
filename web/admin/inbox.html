@@ -102,6 +102,7 @@
         <div class="container" style="max-width:1400px">
             <div class="page-head">
                 <div><h1>Questions · <span class="ar">أسئلتي</span></h1><p id="headLine">Students' questions — oldest waiting first.</p></div>
+                <span id="cpBtn"></span>
                 <div class="segmented" id="viewSeg"><button data-value="inbox">Inbox</button><button data-value="bank">Question bank · PDF</button></div>
             </div>
 
@@ -163,6 +164,9 @@
         const A = Admin, $ = (id) => document.getElementById(id);
         const { esc, icon, api } = A;
         await A.boot({ active: 'inbox', title: 'Questions' });
+        // ✨ Co-Pilot: waiting questions of the grade on screen (Miss Marwa only)
+        $('cpBtn').innerHTML = A.copilotBtn('inbox:', 'Co-Pilot');
+        $('cpBtn').addEventListener('click', (e) => { const a = e.target.closest('[data-copilot]'); if (a) a.href = '/admin/copilot.html?ctx=' + encodeURIComponent('inbox:' + grade); });
         const K = AskKit;
         const qs = new URLSearchParams(location.search);
         let view = qs.get('view') === 'bank' ? 'bank' : 'inbox';

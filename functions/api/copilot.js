@@ -1,11 +1,14 @@
 // =====================================================================
 // Miss Marwa's Co-Pilot (/api/copilot) — staff only (permission copilot.use = teacher).
-// Step C0: chat + saved chats + model choice (Argon free / Krypton / Krypton Max) + usage meter.
-// No platform data tools yet (they arrive in C1) — the Co-Pilot is told so and must never invent data.
+// C0: chat + saved chats + model choice (Argon free / Krypton / Krypton Max) + usage meter.
+// C1: read-only platform data — code picks the lookup (copilot-tools.js), the page draws exact data cards,
+//     the AI only writes a short takeaway from those facts. Lookups work on Argon too, and still show
+//     their cards when the AI can't answer (free units used up, Krypton not connected…).
 // =====================================================================
 import { requireStaff, ensureAppSchema } from './admin-auth.js';
 import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
 import { aiReady } from './ai-engine.js';
+import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const bad = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
@@ -24,6 +27,10 @@ async function ensureTables(db) {
             tier TEXT, model TEXT, ms INTEGER, neurons REAL, cost_usd REAL, tokens_in INTEGER, tokens_out INTEGER, error TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`),
         db.prepare('CREATE INDEX IF NOT EXISTS idx_copilot_messages_thread ON copilot_messages(thread_id, id)')
     ]);
+    // C1 (add-only): the data cards shown with a reply, and what a chat is "looking at" for follow-ups
+    const cols = async (t) => ((await db.prepare(`PRAGMA table_info(${t})`).all()).results || []).map(c => c.name);
+    if (!(await cols('copilot_messages')).includes('cards')) await db.prepare('ALTER TABLE copilot_messages ADD COLUMN cards TEXT').run();
+    if (!(await cols('copilot_threads')).includes('focus')) await db.prepare('ALTER TABLE copilot_threads ADD COLUMN focus TEXT').run();
     ready = true;
 }
 
@@ -60,13 +67,26 @@ You do NOT have the curriculum books, the lesson lists, or her lesson notes yet 
 - If she asks what a specific unit/lesson contains, or to summarize / plan / write questions "on Prep 1 – Unit 1 – Lesson 1" (or any lesson named only by its number), do NOT guess the topics. Say clearly that the lesson references aren't connected yet, and ask her to tell you the lesson's title and main points (or paste the text) — then you'll do it.
 - When SHE names the topic herself (e.g. "the Atom", "Density"), you may explain it and write questions on it from general science knowledge.
 
-## What you can and can't do now
-Can: explain science, write and improve questions and model answers, plan, draft messages to students or parents, brainstorm.
-Can't yet: see the platform's data (students, grades, attendance, exams, questions inbox) — coming soon. If she asks about her students or results, say you can't see that data yet. NEVER invent names, numbers, scores, results or lesson topics.
-Never claim to have done something on the platform (publishing, sending, saving) — you can only write text here.
+## Her platform's data
+You can see her platform's data (students, groups, online + center exam results, absences, rankings, the Ask inbox) — READ-ONLY.
+The system looks the data up for you automatically and gives it to you in a DATA block under these instructions, when she names a student (e.g. "عامل إيه عمر عادل؟") or asks about a grade/list (e.g. "مين مستواه واقع في Prep 2؟"، "الغياب في Prep 1"، "الأسئلة المستنية"، "ملخص النهارده").
+- Use ONLY the DATA block for any fact about students, marks, exams, absences or questions. NEVER invent a name, number, score, exam or reason.
+- If she asks about her data and there is NO DATA block, the lookup didn't find it: ask her for the student's full name (as registered) or the grade — don't guess.
+- You can't change anything (no publishing, sending, saving, editing marks). Never claim you did. Buttons under the cards let HER do things (open the profile, WhatsApp).
+
+## Other things you can do
+Explain science, write and improve questions and model answers, plan, draft messages to students or parents, brainstorm.
 
 ## Format
 Short and practical — she's busy and usually on her phone. Short paragraphs, bullet lists, **bold** key terms. Get to the point.`;
+}
+
+export function dataBlock(facts) {
+    return `\n\n## DATA for this question (exact, from the platform)\n${facts}\n\n## How to answer with DATA
+- The data cards with ALL the details and action buttons are shown right under your reply — so DON'T repeat every number or list everyone.
+- Write a SHORT takeaway (2–5 lines) in her style: the most important point, then one practical next step.
+- Only facts from DATA. Don't invent reasons (e.g. why a student is weak) — say what the data shows.
+- Names: write them exactly as in DATA.`;
 }
 
 // Two worked example turns sent before the real chat — the small free model follows examples far better than rules
@@ -82,7 +102,28 @@ export const STYLE_EXAMPLES = [
 ];
 
 const threadOut = (t) => ({ id: t.id, title: t.title, createdAt: t.created_at, updatedAt: t.updated_at, last: t.last_text ? String(t.last_text).replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 90) : '', count: t.n || 0 });
-const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, neurons: m.neurons, costUsd: m.cost_usd, error: m.error || null, at: m.created_at });
+const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } };
+const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, neurons: m.neurons, costUsd: m.cost_usd, error: m.error || null, at: m.created_at, cards: parse(m.cards) });
+// What the chat bubble says when she taps a ✨ button (the lookup itself comes from the context)
+function contextText(plan, result) {
+    const c = result && result.cards && result.cards[0];
+    const g = plan.args && plan.args.grade ? ` في ${GRADE_LABEL[plan.args.grade]}` : '';
+    if (plan.tool === 'student' && c && c.student) return `عامل إيه ${c.student.name}؟`;
+    if (plan.tool === 'exam' && c && c.exam) return `نتيجة امتحان «${c.exam.title}»`;
+    if (plan.tool === 'inbox') return `الأسئلة المستنية${g}`;
+    if (plan.tool === 'brief') return 'ملخص النهارده ☀️';
+    if (plan.tool === 'attention') return `مين محتاج متابعة${g}؟`;
+    if (plan.tool === 'top') return `الأوائل${g}`;
+    if (plan.tool === 'absent') return `الغياب${g}`;
+    if (plan.tool === 'exams') return `آخر الامتحانات${g}`;
+    return 'Lookup';
+}
+const NO_AI_TEXT = { POOL_EMPTY: 'دي البيانات اللي طلبتيها 👇 (الملخص بالـ AI مش متاح دلوقتي — الـ free units خلصت النهارده، بس الأرقام تحت دقيقة ومن السيستم مباشرة.)',
+    DAILY_CAP: 'دي البيانات اللي طلبتيها 👇 (وصلنا لحد الصرف بتاع النهارده، فمفيش ملخص بالـ AI — الأرقام تحت من السيستم مباشرة.)',
+    MONTHLY_CAP: 'دي البيانات اللي طلبتيها 👇 (وصلنا لحد الصرف بتاع الشهر، فمفيش ملخص بالـ AI — الأرقام تحت من السيستم مباشرة.)',
+    PAID_OFF: 'دي البيانات اللي طلبتيها 👇 (Krypton مش متوصل لسه، فمفيش ملخص — جرّبي Argon أو بصّي على الأرقام تحت.)',
+    FREE_OFF: 'دي البيانات اللي طلبتيها 👇 (Argon مش متاح دلوقتي — الأرقام تحت من السيستم مباشرة.)',
+    AI_ERROR: 'دي البيانات اللي طلبتيها 👇 (الملخص ماشتغلش المرة دي، بس الأرقام تحت من السيستم مباشرة.)' };
 
 export async function onRequest(context) {
     const { request, env } = context;
@@ -104,6 +145,11 @@ export async function onRequest(context) {
             const u = await usageSummary(env, db);
             return json({ ...u, tiers: TIERS.map(t => ({ tier: t, ...BRANDS[t], ready: t === 'free' ? aiReady(env) : claudeReady(env) })) });
         }
+        // ☀️ Morning brief for the welcome screen — data only, no AI, costs nothing
+        if (action === 'brief') {
+            const r = await runTool({ request, env, db, waitUntil: context.waitUntil }, { tool: 'brief', args: {} });
+            return json({ cards: r.cards });
+        }
         if (action === 'threads') {
             const { results } = await db.prepare(`SELECT t.*, (SELECT text FROM copilot_messages m WHERE m.thread_id = t.id AND m.role = 'assistant' AND m.error IS NULL ORDER BY m.id DESC LIMIT 1) AS last_text,
                 (SELECT COUNT(*) FROM copilot_messages m WHERE m.thread_id = t.id) AS n FROM copilot_threads t WHERE t.staff_id = ? ORDER BY t.updated_at DESC, t.id DESC LIMIT 60`).bind(staff.id).all();
@@ -118,19 +164,35 @@ export async function onRequest(context) {
 
         if (action === 'send') {
             const tier = TIERS.includes(data.tier) ? data.tier : 'free';
-            const text = String(data.text || '').replace(/\r/g, '').trim();
-            if (!text) return bad('Type a message', 400);
+            let text = String(data.text || '').replace(/\r/g, '').trim();
+            const ctxPlan = planFromContext(data.context);
+            if (!text && !ctxPlan) return bad('Type a message', 400);
             if (text.length > MAX_TEXT) return bad(`Keep it under ${MAX_TEXT} characters`, 400);
             let t = await own(parseInt(data.threadId, 10));
             if (data.threadId && !t) return bad('Chat not found', 404);
+
+            // 1) Is this a data question? Code decides (same on every model), then the lookup runs
+            const focus = t ? parse(t.focus) : null;
+            const plan = ctxPlan || (text ? await route(db, text, focus) : null);
+            let result = null;
+            if (plan) {
+                try { result = await runTool({ request, env, db, waitUntil: context.waitUntil }, plan); }
+                catch (e) {
+                    const nf = e.status === 404;
+                    result = { cards: [{ type: 'note', tone: 'warn', text: nf ? 'مش لاقية ده على السيستم — اتأكدي من الاسم أو الكود.' : 'The lookup failed — try again.' }], facts: `LOOKUP FAILED: ${nf ? 'not found on the platform' : 'error'}. Tell her briefly; don't guess.`, focus };
+                }
+            }
+            if (!text) text = contextText(plan, result);
+
             if (!t) {
                 const title = text.split('\n')[0].slice(0, 60) || 'New chat';
                 const r = await db.prepare('INSERT INTO copilot_threads (staff_id, title) VALUES (?, ?)').bind(staff.id, title).run();
                 t = await own(Number(r.meta.last_row_id));
             }
+            if (result && result.focus !== undefined) await db.prepare('UPDATE copilot_threads SET focus = ? WHERE id = ?').bind(result.focus ? JSON.stringify(result.focus) : null, t.id).run();
             // "Try again" after an error re-uses the last question instead of saving it twice
             const last = await db.prepare('SELECT * FROM copilot_messages WHERE thread_id = ? ORDER BY id DESC LIMIT 1').bind(t.id).first();
-            const lastUser = last && last.role === 'user' ? last : (last && last.error ? await db.prepare(`SELECT * FROM copilot_messages WHERE thread_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1`).bind(t.id).first() : null);
+            const lastUser = last && last.role === 'user' ? last : (last && last.role === 'error' ? await db.prepare(`SELECT * FROM copilot_messages WHERE thread_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1`).bind(t.id).first() : null);
             let userMsg = null;
             if (data.resend && lastUser && lastUser.text === text) userMsg = lastUser;
             else {
@@ -140,17 +202,28 @@ export async function onRequest(context) {
             if (data.resend) await db.prepare(`DELETE FROM copilot_messages WHERE thread_id = ? AND role = 'error' AND id > ?`).bind(t.id, userMsg.id).run();
             const { results: hist } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') ORDER BY id DESC LIMIT ?`).bind(t.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
-            try {
-                const out = await chat(env, db, { tier, pool: 'staff', system: systemPrompt(staff), messages: [...STYLE_EXAMPLES, ...messages], maxTokens: tier === 'max' ? 2500 : 1500, temperature: tier === 'free' ? 0.3 : 0.5 });
-                const u = out.usage || {};
-                const r = await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text, tier, model, ms, neurons, cost_usd, tokens_in, tokens_out) VALUES (?, 'assistant', ?, ?, ?, ?, ?, ?, ?, ?)`)
-                    .bind(t.id, out.text || '…', tier, out.model, out.ms, out.neurons ?? null, out.costUsd ?? null, u.input_tokens ?? u.prompt_tokens ?? null, u.output_tokens ?? u.completion_tokens ?? null).run();
+            const cards = result ? JSON.stringify(result.cards || []) : null;
+            const saveReply = async (fields) => {
+                const r = await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text, tier, model, ms, neurons, cost_usd, tokens_in, tokens_out, error, cards) VALUES (?, 'assistant', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                    .bind(t.id, fields.text, tier, fields.model ?? null, fields.ms ?? null, fields.neurons ?? null, fields.costUsd ?? null, fields.tin ?? null, fields.tout ?? null, fields.error ?? null, cards).run();
                 await db.prepare('UPDATE copilot_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
-                const saved = await db.prepare('SELECT * FROM copilot_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
+                return db.prepare('SELECT * FROM copilot_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
+            };
+            try {
+                const system = systemPrompt(staff) + (result ? dataBlock(result.facts) : '');
+                const maxTokens = result ? (tier === 'free' ? 600 : 900) : (tier === 'max' ? 2500 : 1500);
+                const out = await chat(env, db, { tier, pool: 'staff', system, messages: [...STYLE_EXAMPLES, ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5 });
+                const u = out.usage || {};
+                const saved = await saveReply({ text: out.text || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });
                 return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });
             } catch (e) {
                 const code = e instanceof AiLimitError ? e.code : 'AI_ERROR';
                 const message = e instanceof AiLimitError ? e.message : 'Something went wrong — try again.';
+                // A data lookup is still useful without the AI: show the exact cards with a short note
+                if (result) {
+                    const saved = await saveReply({ text: NO_AI_TEXT[code] || NO_AI_TEXT.AI_ERROR, error: code });
+                    return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db), aiError: { code, message } });
+                }
                 await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text, tier, error) VALUES (?, 'error', ?, ?, ?)`).bind(t.id, message, tier, code).run();
                 await db.prepare('UPDATE copilot_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
                 const status = ['POOL_EMPTY', 'DAILY_CAP', 'MONTHLY_CAP'].includes(code) ? 429 : ['FREE_OFF', 'PAID_OFF'].includes(code) ? 503 : 502;

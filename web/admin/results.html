@@ -23,6 +23,7 @@
         <div class="container">
             <div class="page-head">
                 <div><h1>Online results</h1><p id="headLine">Pick an exam to see who took it and who didn't.</p></div>
+                <div id="cpBtn"></div>
             </div>
             <div class="toolbar sticky-bar">
                 <select class="pick" id="gradePick" aria-label="Grade" data-ui="pills"></select>
@@ -73,6 +74,7 @@
         async function loadResults() {
             history.replaceState(null, '', `${location.pathname}?exam=${encodeURIComponent(examId)}`);
             $('content').innerHTML = '<div class="kpis"><div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div></div><div class="skel" style="height:300px;border-radius:18px"></div>';
+            $('cpBtn').innerHTML = A.copilotBtn('exam:' + examId, 'Summarize with Co-Pilot');
             try { R = await api(`/api/exams?action=results&examId=${encodeURIComponent(examId)}`); } catch (err) { $('content').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
             render();
         }

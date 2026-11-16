@@ -82,8 +82,8 @@
         .hello .spark .icon { width: 28px; height: 28px; }
         .hello h2 { margin: 0 0 4px; font-size: 21px; }
         .hello p { margin: 0 auto; color: var(--muted); max-width: 440px; font-size: 14px; }
-        .chips { display: grid; gap: 8px; margin-top: 16px; text-align: start; }
-        @media (min-width: 640px) { .chips { grid-template-columns: 1fr 1fr; } }
+        .chips { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 16px; text-align: start; }
+        @media (min-width: 640px) { .chips { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         .chip-q { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 14px; padding: 11px 12px; font: inherit; font-size: 13.5px; text-align: start; cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
         .chip-q:hover { border-color: var(--primary); }
         .chip-q .e { font-size: 16px; line-height: 1.2; }
@@ -114,6 +114,70 @@
         .th .open small { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
         .th .mini { width: 32px; height: 32px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
         .th .mini:hover { background: var(--surface-3); color: var(--text); }
+
+        /* ---------- C1 data cards ---------- */
+        .cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 10px; }
+        .cards > *, .rows > *, .dc > * { min-width: 0; }
+        .dc { border: 1px solid var(--border); background: var(--surface); border-radius: 18px; padding: 14px; min-width: 0; box-shadow: 0 6px 20px -16px rgba(15, 23, 42, .4); }
+        .dc h5 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+        .dc .sub { color: var(--muted); font-size: 12.5px; margin: 2px 0 0; }
+        .dc .sec { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+        .dc .sec-t { font-size: 12px; font-weight: 800; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; margin: 0 0 6px; display: flex; align-items: center; gap: 6px; }
+        .dc .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .dc .acts .btn { flex: 1 1 auto; justify-content: center; }
+        .shead { display: flex; gap: 12px; align-items: center; }
+        .shead .ava { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-weight: 800; font-size: 18px; background: var(--primary-soft); color: var(--primary); flex: none; }
+        .shead .who { min-width: 0; flex: 1; }
+        .shead .who b { display: block; font-size: 16.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .shead .big { text-align: end; flex: none; }
+        .shead .big b { display: block; font-size: 24px; line-height: 1; }
+        .shead .big small { font-size: 11.5px; }
+        .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+        .stat { background: var(--surface-2); border-radius: 12px; padding: 8px 10px; min-width: 0; }
+        .stat small { display: block; color: var(--muted); font-size: 11px; font-weight: 700; }
+        .stat b { display: block; font-size: 17px; }
+        .stat span { display: block; font-size: 11px; color: var(--muted); line-height: 1.35; }
+        .warns { display: grid; gap: 6px; margin-top: 10px; }
+        .warn { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; padding: 7px 10px; border-radius: 10px; background: var(--warning-soft); }
+        .warn.danger { background: var(--danger-soft); }
+        .res { display: flex; flex-wrap: wrap; gap: 6px; }
+        .rchip { display: inline-flex; flex-direction: column; padding: 5px 9px; border-radius: 10px; background: var(--surface-2); font-size: 11.5px; min-width: 0; max-width: 100%; }
+        .rchip b { font-size: 13px; }
+        .rchip span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+        .rchip.excellent b { color: var(--success); } .rchip.good b { color: var(--primary); } .rchip.average b { color: var(--warning); } .rchip.weak b, .rchip.miss b { color: var(--danger); }
+        .line { font-size: 13px; margin: 4px 0; overflow-wrap: anywhere; }
+        .line .muted { color: var(--muted); }
+        .rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+        .row { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-radius: 10px; min-width: 0; }
+        .row:hover { background: var(--surface-2); }
+        .row .rk { width: 26px; text-align: center; font-weight: 800; color: var(--muted); flex: none; font-size: 13px; }
+        .row .nm { flex: 1; min-width: 0; text-align: start; background: transparent; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+        .row .nm b, .row .nm small, .qrow b, .qrow p { text-align: left; unicode-bidi: plaintext; }
+        .row .nm b { display: block; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .row .nm small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--muted); font-size: 11.5px; overflow: hidden; line-height: 1.35; }
+        .row .pc { font-weight: 800; font-size: 14px; flex: none; }
+        .row .wa { width: 34px; height: 34px; border-radius: 10px; border: 0; background: transparent; color: #16A34A; display: grid; place-items: center; cursor: pointer; flex: none; }
+        .row .wa:hover { background: color-mix(in srgb, #16A34A 12%, transparent); }
+        .more { border: 0; background: transparent; color: var(--primary); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 6px 4px; }
+        .bitem { display: flex; gap: 10px; align-items: center; padding: 8px 0; min-width: 0; }
+        .bitem + .bitem { border-top: 1px solid var(--border); }
+        .bitem .e { font-size: 18px; flex: none; width: 26px; text-align: center; }
+        .bitem .tx { flex: 1; min-width: 0; font-size: 13.5px; }
+        .bitem .tx b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bitem .tx small { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bitem .go { flex: none; }
+        .bands { display: flex; height: 10px; border-radius: 9px; overflow: hidden; background: var(--surface-3); margin: 8px 0 4px; }
+        .bands i { display: block; height: 100%; }
+        .blegend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: var(--muted); }
+        .blegend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 4px; }
+        .qrow { display: block; padding: 8px 6px; border-radius: 10px; color: inherit; text-decoration: none; }
+        .qrow:hover { background: var(--surface-2); }
+        .qrow b { font-size: 13.5px; } .qrow small { color: var(--muted); font-size: 11.5px; }
+        .qrow p { margin: 2px 0 0; font-size: 13px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ncard { font-size: 14px; }
+        .ncard.warn { background: var(--warning-soft); border-color: transparent; }
+        .ai-note { font-size: 11.5px; color: var(--muted); }
+        .hello .brief-wrap { text-align: start; margin-top: 14px; }
         @media (prefers-reduced-motion: reduce) { .msg, .dots span, .rbtn.listening { animation: none; } }
     </style>
 </head>
@@ -222,17 +286,145 @@
 
         // ---------- messages ----------
         const CHIPS = [
-            ['📝', 'اكتبيلي 5 أسئلة Choose على الـ Atomic structure لـ Prep 1 مع الإجابات'],
+            ['👀', 'مين محتاج متابعة في Prep 2؟'],
+            ['🏆', 'مين الأوائل في Prep 1؟'],
+            ['🙋', 'الأسئلة المستنية'],
+            ['📊', 'نتيجة آخر امتحان في Prep 3'],
             ['💡', 'اشرحيلي فكرة الـ Isotopes بمثال بالبلدي أقوله للطلبة في الحصة'],
-            ['💬', 'اكتبيلي رسالة لطيفة لولي أمر طالب غاب حصتين ورا بعض'],
-            ['🧪', 'Give me 3 tricky "Give reason" questions on Newton\'s first law with model answers']
+            ['📝', 'اكتبيلي 5 أسئلة Choose على الـ Atomic structure لـ Prep 1 مع الإجابات']
         ];
+        let BRIEF = null;
         function welcome() {
             return `<div class="hello"><span class="spark">${icon('sparkles')}</span><h2 dir="rtl">أهلاً يا مس مروة 👋</h2>
-                <p>I'm your Co-Pilot. Ask in Arabic or English — I keep the science terms in English.</p>
-                <div class="chips">${CHIPS.map(([e, t]) => `<button class="chip-q" data-chip="${esc(t)}"><span class="e">${e}</span><span dir="auto">${esc(t)}</span></button>`).join('')}</div>
-                <div class="soon-list"><b>Coming next:</b> your morning brief, students & results, drafting replies to questions, building exams & printable papers, lesson summaries. Right now I can't see the platform's data yet.</div></div>`;
+                <p>Ask about any student by name — «عامل إيه عمر عادل؟» — or any grade. Science, questions and messages too.</p>
+                <div class="brief-wrap" id="briefWrap">${BRIEF ? cardsHTML(BRIEF, -1) : '<div class="skel" style="height:150px;border-radius:18px"></div>'}</div>
+                <div class="chips">${CHIPS.map(([e, t]) => `<button class="chip-q" data-chip="${esc(t)}"><span class="e">${e}</span><span dir="auto">${esc(t)}</span></button>`).join('')}</div></div>`;
         }
+        async function loadBrief() {
+            try { BRIEF = (await api('/api/copilot?action=brief')).cards; } catch (e) { BRIEF = [{ type: 'note', text: e.message }]; }
+            const w = document.getElementById('briefWrap'); if (w) w.innerHTML = cardsHTML(BRIEF, -1);
+        }
+
+        // ---------- data cards (exact numbers from the platform — the AI never writes these) ----------
+        const GL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
+        const pc = (v) => v === null || v === undefined ? '—' : `${Math.round(v * 10) / 10}%`;
+        const lvl = (v) => A.levelOf(v) || '';
+        const ago = (t) => { const ms = Date.now() - A.toMs(t); const h = Math.round(ms / 3600000); return h < 1 ? 'just now' : h < 48 ? `${h}h` : `${Math.round(h / 24)} days`; };
+        const CARDS = {};   // "msgIndex:cardIndex" → card (for buttons)
+        function cardsHTML(cards, mi) {
+            if (!cards || !cards.length) return '';
+            return `<div class="cards">${cards.map((c, ci) => { const k = `${mi}:${ci}`; CARDS[k] = c; return (CARD[c.type] || CARD.note)(c, k); }).join('')}</div>`;
+        }
+        const rowHTML = (r, k, list, idx, right = '') => `<div class="row"><button class="nm" data-student="${esc(r.studentId)}"><b dir="auto">${esc(r.name)}</b>${r.sub ? `<small dir="auto">${r.sub}</small>` : ''}</button>${right}${r.parentPhone ? `<button class="wa" data-wa-row="${k}|${list}|${idx}" aria-label="WhatsApp parent" title="WhatsApp parent">${icon('whatsapp')}</button>` : ''}</div>`;
+        function listBlock(rows, k, list, opts = {}) {
+            if (!rows || !rows.length) return `<p class="line muted">${esc(opts.empty || 'Nobody')}</p>`;
+            const limit = opts.limit || 8;
+            const html = rows.map((r, i) => {
+                const sub = r.reasons ? r.reasons.map(x => esc(x.text)).join(' · ') : r.note ? esc(r.note) : r.gradeLabel ? `${esc(r.gradeLabel)}${r.branchLabel ? ' · ' + esc(r.branchLabel) : ''}` : '';
+                const right = r.pct !== undefined && r.pct !== null ? `<span class="pc lvl ${lvl(r.pct)}">${pc(r.pct)}</span>` : '';
+                const rank = r.rank ? `<span class="rk">#${r.rank}</span>` : '';
+                return `<div ${i >= limit ? 'hidden data-extra' : ''}>${rank ? rowHTML({ ...r, sub }, k, list, i, right).replace('<div class="row">', `<div class="row">${rank}`) : rowHTML({ ...r, sub }, k, list, i, right)}</div>`;
+            }).join('');
+            return `<div class="rows">${html}</div>${rows.length > limit ? `<button class="more" data-more>Show all ${rows.length}</button>` : ''}${opts.waAll && rows.some(r => r.parentPhone) ? `<div class="acts"><button class="btn btn-wa btn-sm" data-wa-all="${k}|${list}">${icon('whatsapp', 'sm')}WhatsApp ${rows.filter(r => r.parentPhone).length} parents</button></div>` : ''}`;
+        }
+        const CARD = {
+            note: (c) => `<div class="dc ncard ${c.tone === 'warn' ? 'warn' : ''}" dir="auto">${esc(c.text || '')}</div>`,
+            student(c, k) {
+                const st = c.student, sm = c.summary;
+                const recent = c.recent.map(r => { const miss = r.status !== 'taken'; return `<span class="rchip ${miss ? 'miss' : lvl(r.pct)}"><b>${miss ? (r.status === 'absent' ? 'Absent' : 'Missed') : pc(r.pct)}</b><span dir="auto">${esc(r.name)}</span></span>`; }).join('');
+                const warns = [...c.reasons.map(r => `<div class="warn">⚠️ <span>${esc(r.text)}</span></div>`), ...c.flags.map(f => `<div class="warn ${f.level === 'danger' ? 'danger' : ''}">🔎 <span>${esc(f.exam)}: ${esc(f.text)}</span></div>`)].join('');
+                return `<div class="dc scard" data-id="${esc(st.id)}">
+                    <div class="shead"><span class="ava">${esc(String(st.name).charAt(0).toUpperCase())}</span><div class="who"><b dir="auto">${esc(st.name)}</b><span class="sub">${esc(st.gradeLabel)} · ${esc(st.branchLabel)}${st.group ? ' · ' + esc(st.group) : ''} · ${esc(st.id)}</span></div>
+                    <div class="big"><b class="lvl ${lvl(sm.combinedPct)}">${pc(sm.combinedPct)}</b><small class="lvl ${sm.level || ''}">${esc(sm.level ? A.LEVEL_LABEL[sm.level] : 'Not enough exams')}</small></div></div>
+                    <div class="stats"><div class="stat"><small>Center</small><b>${pc(sm.centerPct)}</b><span>${sm.centerTaken} exams · ${sm.centerAbsent} absent</span></div>
+                        <div class="stat"><small>Online</small><b>${pc(sm.onlinePct)}</b><span>${sm.onlineTaken} done · ${sm.onlineMissed} missed</span></div>
+                        <div class="stat"><small>Rank</small><b>${sm.combinedRank ? '#' + sm.combinedRank : '—'}</b><span>${sm.combinedRank ? 'of ' + sm.gradeSize : 'not ranked yet'}</span></div></div>
+                    ${warns ? `<div class="warns">${warns}</div>` : ''}
+                    ${recent ? `<div class="sec"><p class="sec-t">Latest results</p><div class="res">${recent}</div></div>` : ''}
+                    ${c.missedOnline.length || c.absences.length || c.openNow.length ? `<div class="sec">
+                        ${c.openNow.length ? `<p class="line">⏳ <b>Not done yet:</b> <span dir="auto">${c.openNow.map(o => esc(o.name)).join('، ')}</span></p>` : ''}
+                        ${c.missedOnline.length ? `<p class="line">📵 <b>Missed online:</b> <span dir="auto">${c.missedOnline.map(o => esc(o.name)).join('، ')}</span></p>` : ''}
+                        ${c.absences.length ? `<p class="line">🚫 <b>Absent (center):</b> <span dir="auto">${c.absences.map(o => `${esc(o.name)} <span class="muted">${esc(o.date)}</span>`).join('، ')}</span></p>` : ''}</div>` : ''}
+                    <div class="sec"><p class="sec-t">Questions · ${c.questions.total} asked${c.questions.waiting ? ` · <span class="pill danger">${c.questions.waiting} waiting</span>` : ''}</p>
+                        ${c.questions.recent.slice(0, 3).map(q => `<a class="qrow" href="/admin/inbox.html?q=${q.id}"><b>Unit ${q.unit} · Lesson ${q.lesson}</b> <small>${esc(q.status)} · ${ago(q.at)}</small><p dir="auto">${esc(q.text) || '📷 / 🎤'}</p></a>`).join('') || '<p class="line muted">No questions yet</p>'}</div>
+                    <div class="acts"><a class="btn btn-soft btn-sm" href="/admin/student.html?id=${encodeURIComponent(st.id)}">${icon('user', 'sm')}Open profile</a>
+                        ${st.parentPhone ? `<button class="btn btn-wa btn-sm" data-wa="parent" data-k="${k}">${icon('whatsapp', 'sm')}Parent</button>` : ''}
+                        ${st.phone ? `<button class="btn btn-ghost btn-sm" data-wa="student" data-k="${k}">${icon('whatsapp', 'sm')}Student</button>` : ''}</div></div>`;
+            },
+            pick: (c, k) => `<div class="dc pcard"><h5>👥 Which one?</h5><p class="sub">${c.total} students match — tap the one you mean</p><div class="rows" style="margin-top:8px">${c.rows.map(r => `<div class="row"><button class="nm" data-student="${esc(r.studentId)}"><b dir="auto">${esc(r.name)}</b><small>${esc(r.gradeLabel)}${r.branchLabel ? ' · ' + esc(r.branchLabel) : ''} · ${esc(r.studentId)}</small></button>${icon('chevronRight', 'sm')}</div>`).join('')}</div></div>`,
+            list(c, k) {
+                const ic = { attention: '⚠️', top: '🏆', absent: '🚫' }[c.kind] || '📋';
+                return `<div class="dc lcard"><h5>${ic} ${esc(c.title)}</h5><p class="sub">${esc(c.subtitle || '')}</p>
+                    <div style="margin-top:8px">${listBlock(c.rows, k, 'rows', { empty: c.empty, waAll: c.kind !== 'top' })}</div>
+                    ${(c.sections || []).map((x, si) => x.rows.length ? `<div class="sec"><p class="sec-t">${esc(x.title)}</p>${listBlock(x.rows, k, 'sections.' + si, { empty: 'Nobody' })}</div>` : '').join('')}
+                    ${c.extra && c.extra.rows && c.extra.rows.length ? `<div class="sec"><p class="sec-t">${esc(c.extra.title)}</p>${listBlock(c.extra.rows, k, 'extra.rows', { limit: 5 })}</div>` : ''}
+                    <div class="acts"><a class="btn btn-ghost btn-sm" href="/admin/analytics.html">${icon('chart', 'sm')}Open analytics</a></div></div>`;
+            },
+            inbox: (c) => `<div class="dc icard"><h5>🙋 ${c.total} question${c.total === 1 ? '' : 's'} waiting</h5><p class="sub">${Object.entries(c.waiting).filter(([, v]) => v).map(([g, v]) => `${GL[g]}: ${v}`).join(' · ') || 'All answered 🎉'}</p>
+                ${c.sections.map(sct => sct.rows.length ? `<div class="sec"><p class="sec-t">${esc(sct.gradeLabel)} · oldest first</p>${sct.rows.map(q => `<a class="qrow" href="/admin/inbox.html?q=${q.id}"><b dir="auto">${esc(q.name)}</b> <small>Unit ${q.unit} · Lesson ${q.lesson} · waiting ${ago(q.waitingSince)}</small><p dir="auto">${esc(q.text) || '📷 / 🎤'}</p></a>`).join('')}</div>` : '').join('')}
+                <div class="acts"><a class="btn btn-soft btn-sm" href="/admin/inbox.html">${icon('inbox', 'sm')}Open inbox</a></div></div>`,
+            exams: (c) => `<div class="dc xcard"><h5>📊 Exams · ${esc(c.gradeLabel)}</h5>
+                ${c.online.length ? `<div class="sec" style="border:0;padding-top:0"><p class="sec-t">Online</p>${c.online.map(e => `<div class="bitem"><span class="e">${e.closed ? '✅' : '⏳'}</span><div class="tx"><b dir="auto">${esc(e.name)}</b><small>${e.completed}/${e.eligible} done · avg ${pc(e.avg)} · ${e.notTaken} ${e.closed ? 'missed' : 'not yet'}</small></div><button class="btn btn-soft btn-sm go" data-ctx='${esc(JSON.stringify({ type: 'exam', id: e.id }))}'>Details</button></div>`).join('')}</div>` : ''}
+                ${c.center.length ? `<div class="sec"><p class="sec-t">Center</p>${c.center.map(e => `<div class="bitem"><span class="e">📝</span><div class="tx"><b dir="auto">${esc(e.name)}</b><small>${esc(e.date)} · ${e.completed} marked · avg ${pc(e.avg)} · ${e.absent} absent</small></div></div>`).join('')}</div>` : ''}</div>`,
+            exam(c, k) {
+                const b = c.bands, tot = Math.max(1, b.excellent + b.good + b.average + b.weak);
+                const col = { excellent: 'var(--success)', good: 'var(--primary)', average: 'var(--warning)', weak: 'var(--danger)' };
+                return `<div class="dc ecard"><h5>📊 ${esc(c.exam.title)}</h5><p class="sub">${esc(c.exam.gradeLabel)} · ${c.exam.total} marks · ${c.exam.closed ? 'closed' : 'open until ' + esc(A.fmtDate ? A.fmtDate(c.exam.expiresAt) : c.exam.expiresAt)}</p>
+                    <div class="stats"><div class="stat"><small>Submitted</small><b>${c.completed}/${c.eligible}</b></div><div class="stat"><small>Average</small><b class="lvl ${lvl(c.avg)}">${pc(c.avg)}</b></div><div class="stat"><small>${c.exam.closed ? 'Missed' : 'Not yet'}</small><b>${c.missing.length}</b></div></div>
+                    <div class="bands">${Object.keys(col).map(x => b[x] ? `<i style="width:${b[x] / tot * 100}%;background:${col[x]}"></i>` : '').join('')}</div>
+                    <div class="blegend">${Object.keys(col).map(x => `<span><i style="background:${col[x]}"></i>${A.LEVEL_LABEL[x]} ${b[x]}</span>`).join('')}</div>
+                    ${c.top.length ? `<div class="sec"><p class="sec-t">Top</p>${listBlock(c.top, k, 'top', { limit: 5 })}</div>` : ''}
+                    ${c.low.length ? `<div class="sec"><p class="sec-t">Under 60%</p>${listBlock(c.low, k, 'low', { limit: 5, waAll: true })}</div>` : ''}
+                    ${c.missing.length ? `<div class="sec"><p class="sec-t">${c.exam.closed ? 'Missed it' : 'Not submitted yet'}</p>${listBlock(c.missing, k, 'missing', { limit: 6, waAll: true })}</div>` : ''}
+                    <div class="acts"><a class="btn btn-soft btn-sm" href="/admin/results.html?exam=${encodeURIComponent(c.exam.id)}">${icon('chart', 'sm')}Open results</a></div></div>`;
+            },
+            brief(c) {
+                const items = [];
+                c.closing.forEach(e => items.push(`<div class="bitem"><span class="e">⏰</span><div class="tx"><b dir="auto">${esc(e.name)} · ${esc(e.gradeLabel)}</b><small>Closes ${esc(A.timeLeft ? A.timeLeft(e.expiresAt) : '')} · ${e.completed}/${e.eligible} done · ${e.left} not yet</small></div><button class="btn btn-soft btn-sm go" data-ctx='${esc(JSON.stringify({ type: 'exam', id: e.id }))}'>Who?</button></div>`));
+                c.closed.forEach(e => items.push(`<div class="bitem"><span class="e">✅</span><div class="tx"><b dir="auto">${esc(e.name)} · ${esc(e.gradeLabel)}</b><small>Closed · ${e.completed}/${e.eligible} took it · ${e.left} missed</small></div><button class="btn btn-soft btn-sm go" data-ctx='${esc(JSON.stringify({ type: 'exam', id: e.id }))}'>Results</button></div>`));
+                if (c.waitingTotal) items.push(`<div class="bitem"><span class="e">🙋</span><div class="tx"><b>${c.waitingTotal} question${c.waitingTotal === 1 ? '' : 's'} waiting</b><small>${Object.entries(c.waiting).filter(([, v]) => v).map(([g, v]) => `${GL[g]}: ${v}`).join(' · ')}${c.oldest ? ` · oldest: ${esc(c.oldest.name)}, ${ago(c.oldest.since)}` : ''}</small></div><button class="btn btn-soft btn-sm go" data-ctx='${esc(JSON.stringify({ type: 'inbox' }))}'>Show</button></div>`);
+                c.attention.filter(a => a.count).forEach(a => items.push(`<div class="bitem"><span class="e">⚠️</span><div class="tx"><b>${a.count} need attention · ${esc(a.gradeLabel)}</b><small dir="auto">${a.names.map(esc).join('، ')}${a.count > a.names.length ? '…' : ''}</small></div><button class="btn btn-soft btn-sm go" data-ctx='${esc(JSON.stringify({ type: 'attention', grade: a.grade }))}'>Who?</button></div>`));
+                if (c.newSignups) items.push(`<div class="bitem"><span class="e">👋</span><div class="tx"><b>${c.newSignups} new sign-up${c.newSignups === 1 ? '' : 's'} this week</b></div></div>`);
+                return `<div class="dc brief"><h5>☀️ Today at a glance</h5><p class="sub">${new Date(c.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                    <div style="margin-top:6px">${items.join('') || '<p class="line">Everything is calm today ✨ No exams closing, no questions waiting.</p>'}</div></div>`;
+            }
+        };
+
+        // ---------- WhatsApp (her house format; she reviews and presses Send in WhatsApp) ----------
+        const HELLO = 'السلام عليكم — تيم مس مروة 👋', BYE = 'برجاء المتابعة.';
+        const fem = (r) => r && r.gender === 'female';
+        const REASON_AR = { falling: (f) => `${f ? 'درجاتها' : 'درجاته'} نزلت في آخر امتحانين`, missing: (f) => `${f ? 'فاتها' : 'فاته'} أكتر من امتحان الفترة اللي فاتت`, weak: (f) => `متوسط ${f ? 'درجاتها' : 'درجاته'} أقل من 50%` };
+        function waTextFor(card, list, r) {
+            const name = r.name;
+            if (card.type === 'list' && card.kind === 'attention') {
+                const rs = (r.reasons || []).map(x => REASON_AR[x.code] && REASON_AR[x.code](fem(r))).filter(Boolean);
+                return `${HELLO}\nبنتابع مع حضرتك مستوى ${name} في العلوم${rs.length ? ' — لاحظنا إن ' + rs.join(' وإن ') : ''}${r.pct != null ? ` (المتوسط الحالي ${pc(r.pct)})` : ''}.\n${BYE}`;
+            }
+            if (card.type === 'list' && card.kind === 'absent') {
+                const sec = list === 'rows' ? card.subtitle : list.startsWith('sections.') ? card.sections[Number(list.split('.')[1])].title : null;
+                return `${HELLO}\nبنبلغ حضرتك إن ${name} ${list === 'extra.rows' ? `${fem(r) ? 'غابت' : 'غاب'} عن أكتر من امتحان في السنتر مؤخراً (${r.note.replace('Absent ', '').replace(' of last ', ' من آخر ')})` : `${fem(r) ? 'كانت غايبة' : 'كان غايب'} في امتحان ${sec ? sec.split(' · ')[0] : 'السنتر'}${sec && sec.includes(' · ') ? ' يوم ' + sec.split(' · ')[1] : ''}`}.\n${BYE}`;
+            }
+            if (card.type === 'list' && card.kind === 'top') return `${HELLO}\nبنهنّي حضرتك — ${name} من الأوائل في ${card.gradeLabel} في العلوم 🎉${r.pct != null ? ` بمتوسط ${pc(r.pct)}` : ''}.\n${BYE}`;
+            if (card.type === 'exam') {
+                if (list === 'missing') return card.exam.closed ? `${HELLO}\nبنبلغ حضرتك إن ${name} ${fem(r) ? 'ماحلّتش' : 'ماحلّش'} امتحان «${card.exam.title}» الأونلاين، والامتحان اتقفل.\n${BYE}` : `${HELLO}\nبنفكّر حضرتك إن ${name} لسه ${fem(r) ? 'ماحلّتش' : 'ماحلّش'} امتحان «${card.exam.title}» الأونلاين، وآخر ميعاد ${A.fmtDate ? A.fmtDate(card.exam.expiresAt) : card.exam.expiresAt}.\n${BYE}`;
+                return `${HELLO}\nنتيجة ${name} في امتحان «${card.exam.title}»: ${r.score}/${card.exam.total} (${pc(r.pct)}).\n${BYE}`;
+            }
+            return `${HELLO}\nبخصوص ${name}.\n${BYE}`;
+        }
+        function waStudent(card, who) {
+            const st = card.student, sm = card.summary, f = st.gender === 'female';
+            const lines = [];
+            if (sm.combinedPct != null) lines.push(`• المتوسط في العلوم: ${pc(sm.combinedPct)}${sm.combinedRank ? ` (الترتيب ${sm.combinedRank} من ${sm.gradeSize})` : ''}`);
+            const last = card.recent.find(r => r.status === 'taken'); if (last) lines.push(`• آخر امتحان (${last.name}): ${pc(last.pct)}`);
+            if (card.missedOnline.length) lines.push(`• امتحانات أونلاين ${f ? 'فاتتها' : 'فاتته'}: ${card.missedOnline.map(m => m.name).join('، ')}`);
+            if (card.absences.length) lines.push(`• ${f ? 'غابت' : 'غاب'} عن: ${card.absences.map(a => a.name).join('، ')}`);
+            if (card.openNow.length) lines.push(`• لسه ${f ? 'ماحلّتش' : 'ماحلّش'}: ${card.openNow.map(o => o.name).join('، ')}`);
+            const body = who === 'parent' ? `بنطمّن حضرتك على مستوى ${st.name} في العلوم:` : `أهلاً يا ${st.name.split(' ')[0]}، ده ملخص مستواك في العلوم:`;
+            return `${HELLO}\n${body}\n${lines.join('\n')}\n${BYE}`;
+        }
+        const getList = (card, path) => path.split('.').reduce((o, k) => o && o[k], card) || [];
+        function waOpen(list, makeText, title) { A.sender({ list, makeText, title, kind: 'other' }); }
+
         function msgHTML(m, i) {
             if (m.role === 'user') return `<div class="msg me"><div class="bubble" dir="auto">${esc(m.text)}</div></div>`;
             if (m.role === 'error') {
@@ -243,8 +435,8 @@
             if (m.role === 'typing') return `<div class="msg" id="typing"><span class="av">${icon('sparkles')}</span><div class="body"><span class="dots"><span></span><span></span><span></span></span></div></div>`;
             const secs = m.ms ? `${(m.ms / 1000).toFixed(1)} s` : '';
             const cost = m.costUsd != null ? ` · ${m.costUsd < 0.001 ? '<$0.001' : '$' + m.costUsd.toFixed(3)}` : m.neurons != null ? ` · ${Math.round(m.neurons)} free units` : '';
-            return `<div class="msg"><span class="av">${icon('sparkles')}</span><div class="body"><div class="md">${md(m.text)}</div>
-                <div class="meta"><span>${esc(m.brand || '')}${secs ? ' · ' + secs : ''}${cost}</span><button data-copy="${i}" title="Copy">${icon('copy2')}Copy</button></div></div></div>`;
+            return `<div class="msg"><span class="av">${icon('sparkles')}</span><div class="body"><div class="md">${md(m.text)}</div>${cardsHTML(m.cards, i)}
+                <div class="meta"><span>${m.error ? 'Data only' : esc(m.brand || '')}${secs ? ' · ' + secs : ''}${cost}</span><button data-copy="${i}" title="Copy">${icon('copy2')}Copy</button></div></div></div>`;
         }
         function render(scroll = true) {
             $('msgs').innerHTML = MSGS.length ? MSGS.map(msgHTML).join('') : welcome();
@@ -252,27 +444,38 @@
         }
         $('msgs').addEventListener('click', async (e) => {
             const c = e.target.closest('[data-chip]'); if (c) { $('input').value = c.dataset.chip; autosize(); $('input').focus(); updateSend(); return; }
+            const stu = e.target.closest('[data-student]'); if (stu) { send('', false, { type: 'student', id: stu.dataset.student }); return; }
+            const cx = e.target.closest('[data-ctx]'); if (cx) { try { send('', false, JSON.parse(cx.dataset.ctx)); } catch (x) { } return; }
+            const mo = e.target.closest('[data-more]'); if (mo) { mo.previousElementSibling.querySelectorAll('[data-extra]').forEach(el => el.hidden = false); mo.remove(); return; }
+            const wa = e.target.closest('[data-wa]');
+            if (wa) { const card = CARDS[wa.dataset.k]; const st = card.student; waOpen([{ studentId: st.id, firstName: st.name, lastName: '', parentPhone: wa.dataset.wa === 'parent' ? st.parentPhone : st.phone }], () => waStudent(card, wa.dataset.wa), wa.dataset.wa === 'parent' ? `WhatsApp · ${st.name}'s parent` : `WhatsApp · ${st.name}`); return; }
+            const wr = e.target.closest('[data-wa-row]');
+            if (wr) { const [k, path, idx] = wr.dataset.waRow.split('|'); const card = CARDS[k]; const r = getList(card, path)[Number(idx)]; waOpen([{ ...r, firstName: r.name, lastName: '' }], () => waTextFor(card, path, r), `WhatsApp · ${r.name}'s parent`); return; }
+            const wl = e.target.closest('[data-wa-all]');
+            if (wl) { const [k, path] = wl.dataset.waAll.split('|'); const card = CARDS[k]; const rows = getList(card, path).filter(r => r.parentPhone); waOpen(rows.map(r => ({ ...r, firstName: r.name, lastName: '' })), (s2) => waTextFor(card, path, rows.find(r => r.studentId === s2.studentId)), `WhatsApp · ${rows.length} parents`); return; }
             const cp = e.target.closest('[data-copy]');
             if (cp) { try { await navigator.clipboard.writeText(MSGS[Number(cp.dataset.copy)].text); Site.toast('Copied', 'success'); } catch (x) { Site.toast('Copy failed', 'error'); } return; }
             const r = e.target.closest('[data-retry]');
-            if (r) { if (r.dataset.retry) { tier = r.dataset.retry; A.store.set('copilot_tier', tier); renderModels(); } const lastUser = [...MSGS].reverse().find(m => m.role === 'user'); if (lastUser) send(lastUser.text, true); }
+            if (r) { if (r.dataset.retry) { tier = r.dataset.retry; A.store.set('copilot_tier', tier); renderModels(); } const lastUser = [...MSGS].reverse().find(m => m.role === 'user'); if (lastUser) send(lastUser.ctx ? '' : lastUser.text, true, lastUser.ctx || null); }
         });
 
-        async function send(text, resend = false) {
-            text = String(text || '').trim(); if (!text || sending) return;
+        async function send(text, resend = false, context = null) {
+            text = String(text || '').trim(); if ((!text && !context) || sending) return;
             sending = true; updateSend();
-            if (resend) MSGS = MSGS.filter(m => m.role !== 'error'); else MSGS.push({ role: 'user', text });
+            if (resend) MSGS = MSGS.filter(m => m.role !== 'error'); else MSGS.push({ role: 'user', text: text || '…', ctx: context });
             MSGS.push({ role: 'typing' });
             render();
             try {
-                const r = await api('/api/copilot?action=send', { body: { threadId, text, tier, resend } });
+                const r = await api('/api/copilot?action=send', { body: { threadId, text, tier, resend, context } });
                 threadId = r.threadId; setChatUrl(); setTitle(r.title);
+                const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && r.user) u.text = r.user.text;
                 MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push(r.reply);
                 if (r.usage) { STATUS = { ...STATUS, ...r.usage }; renderMeter(); }
             } catch (err) {
                 const d = err.data || {};
                 if (d.threadId) { threadId = d.threadId; setChatUrl(); setTitle(d.title); }
                 if (d.usage && STATUS) { STATUS = { ...STATUS, ...d.usage }; renderMeter(); }
+                const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && d.user) u.text = d.user.text;
                 MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push({ role: 'error', text: err.message, tier, code: d.code });
             }
             sending = false; updateSend(); render();
@@ -286,7 +489,7 @@
             catch (e) { threadId = null; setChatUrl(); setTitle(); Site.toast(e.message, 'error'); }
             render();
         }
-        function newChat() { threadId = null; MSGS = []; setChatUrl(); setTitle(); render(false); $('input').focus(); }
+        function newChat() { threadId = null; MSGS = []; setChatUrl(); setTitle(); render(false); loadBrief(); }
         $('newBtn').addEventListener('click', newChat);
 
         // ---------- saved chats ----------
@@ -340,7 +543,14 @@
 
         // ---------- start ----------
         await loadStatus();
-        if (threadId) await openChat(threadId); else render(false);
+        // ✨ buttons on other pages open the Co-Pilot with ?ctx=student:ID | exam:ID | inbox:grade | brief
+        const ctxParam = qs.get('ctx');
+        if (ctxParam) {
+            const [type, ...rest] = ctxParam.split(':'); const val = rest.join(':');
+            const context = type === 'inbox' ? { type, grade: val || null } : type === 'brief' ? { type } : { type, id: val };
+            threadId = null; MSGS = []; history.replaceState(null, '', location.pathname);
+            send('', false, context);
+        } else if (threadId) await openChat(threadId); else { render(false); loadBrief(); }
         autosize(); updateSend();
     })();
     </script>

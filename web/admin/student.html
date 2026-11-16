@@ -71,6 +71,7 @@
                         <p style="margin:2px 0 0">${esc(st.studentId)} · ${esc(A.GRADES[st.grade] || st.grade)} · ${st.branch ? `<span class="pill ${st.branch}">${A.BRANCHES[st.branch]}</span>` : '<span class="pill legacy">No group</span>'} · joined ${esc(day(st.createdAt))} <span id="askChip"></span></p></div>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    ${A.copilotBtn('student:' + st.studentId)}
                     ${st.parentPhone && A.can('reports.send') ? `<button class="btn btn-wa" id="centerRep">${icon('whatsapp', 'sm')}Center report</button><button class="btn btn-soft" id="onlineRep">${icon('whatsapp', 'sm')}Online report</button>` : ''}
                     ${A.can('reports.send') && A.feature('parentLinks') ? `<button class="btn btn-ghost" id="parentLink">${icon('link', 'sm')}Parent link</button>` : ''}
                 </div>

@@ -206,6 +206,8 @@
     const fmtPct = (v, d = 0) => (v === null || v === undefined ? '—' : `${Number(v).toFixed(d).replace(/\.0+$/, '')}%`);
     const levelOf = (p) => (p === null || p === undefined ? null : p >= 85 ? 'excellent' : p >= 70 ? 'good' : p >= 50 ? 'average' : 'weak');
     const LEVEL_LABEL = { excellent: 'Excellent', good: 'Good', average: 'Average', weak: 'Needs help' };
+    // ✨ "Ask Co-Pilot" button for other pages — Miss Marwa only (opens the Co-Pilot already looking at this thing)
+    const copilotBtn = (ctx, label = 'Ask Co-Pilot', cls = '') => can('copilot.use') ? `<a class="btn btn-ai ${cls}" data-copilot href="/admin/copilot.html?ctx=${encodeURIComponent(ctx)}">${icon('sparkles', 'sm')}${esc(label)}</a>` : '';
     function initials(s) {
         const ch = String(s.firstName || '').trim().charAt(0);
         return /[A-Za-z]/.test(ch) ? esc(ch.toUpperCase()) : esc(ch || '?');
@@ -472,7 +474,7 @@
     window.Admin = {
         features: { homework: feature('homework') },
         boot, api, icon, esc, can, store, GRADES, BRANCHES, fmtPct, levelOf, LEVEL_LABEL, initials, segmented, normalizeDigits,
-        toMs, fmtDate, timeLeft, preview, queue, sender, devicesSheet, waHref, waNumber, feature, downloadCsv, gradeSelect, hydrate, enhanceSelect,
+        toMs, fmtDate, timeLeft, preview, queue, sender, copilotBtn, devicesSheet, waHref, waNumber, feature, downloadCsv, gradeSelect, hydrate, enhanceSelect,
         get staff() { return STAFF; }
     };
 })();
