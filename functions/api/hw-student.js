@@ -80,12 +80,15 @@ export async function onRequest(context) {
 
         if (action === 'list') {
             bg();
-            const { results } = await db.prepare(`SELECT a.*, s.id AS s_id, s.status AS s_status, s.final_score AS s_score, s.released_at AS s_released, s.late AS s_late, s.unreadable AS s_unreadable, s.reuploads AS s_reuploads, s.submitted_at AS s_submitted
+            const { results } = await db.prepare(`SELECT a.*, s.id AS s_id, s.status AS s_status, s.final_score AS s_score, s.released_at AS s_released, s.late AS s_late, s.unreadable AS s_unreadable, s.reuploads AS s_reuploads, s.submitted_at AS s_submitted, s.draft AS s_draft,
+                (SELECT COUNT(*) FROM hw_questions q WHERE q.assignment_id = a.id) AS q_count
                 FROM hw_assignments a LEFT JOIN hw_submissions s ON s.assignment_id = a.id AND s.student_id = ?
                 WHERE LOWER(a.grade) = ? AND a.status != 'draft' ORDER BY a.deadline DESC LIMIT 100`).bind(sid, grade).all();
             const items = (results || []).map(r => {
                 const st = stateOf(r), sub = r.s_id && r.s_status !== 'uploading';
-                return { ...asgOut(r), submission: sub ? { id: r.s_id, status: r.s_status, released: !!r.s_released, score: r.s_released ? r.s_score : null, late: !!r.s_late, unreadable: !!r.s_unreadable, reuploads: r.s_reuploads, submittedAt: r.s_submitted } : null, due: st === 'published' && !sub };
+                let progress = null;
+                if (r.s_id && r.s_status === 'uploading' && isWeb(r)) { let d = {}; try { d = JSON.parse(r.s_draft || '{}'); } catch (e) { } progress = { answered: Object.keys(d).length, of: r.q_count }; }
+                return { ...asgOut(r), progress, submission: sub ? { id: r.s_id, status: r.s_status, released: !!r.s_released, score: r.s_released ? r.s_score : null, late: !!r.s_late, unreadable: !!r.s_unreadable, reuploads: r.s_reuploads, submittedAt: r.s_submitted } : null, due: st === 'published' && !sub };
             }).filter(x => x.state !== 'closed' || x.submission || ms(x.closesAt || x.deadline) > Date.now() - 30 * 864e5);
             return json({ items, mode: await releaseMode(db) });
         }

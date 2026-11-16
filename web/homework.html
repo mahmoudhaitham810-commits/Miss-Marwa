@@ -109,6 +109,13 @@
         @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
 
         /* ===== answer on the website ===== */
+        .lastday { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 16px; margin-bottom: 14px; background: var(--danger-soft); color: var(--danger); border: 1.5px solid color-mix(in srgb, var(--danger) 40%, transparent); }
+        .lastday b { display: block; font-size: 16px; } .lastday p { margin: 3px 0 0; font-size: 13px; color: var(--text-2); }
+        .save-note { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 14px; background: var(--success-soft); color: var(--text); font-size: 13.5px; margin-bottom: 14px; }
+        .save-note .ar { display: block; direction: rtl; font-size: 13px; color: var(--text-2); }
+        .send-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 10px; }
+        .send-row .btn { min-width: 0; white-space: normal; line-height: 1.2; padding-inline: 12px; }
+
         .sheet-bar { position: sticky; top: calc(var(--topbar-h, 60px) + 6px); z-index: 6; display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 14px; }
         @media (min-width: 900px) { .sheet-bar { top: 12px; } }
         .sheet-bar .prog { flex: 1; min-width: 0; }
@@ -220,7 +227,9 @@
             const card = (x) => {
                 const s = x.submission, late = toMs(x.deadline) < Date.now();
                 let right = '';
-                if (!s) right = late ? `<span class="chip danger">${icon('clock', 'sm')}Late — still accepted</span>` : `<span class="chip ${toMs(x.deadline) - Date.now() < 864e5 ? 'accent' : 'primary'}">${icon('clock', 'sm')}${esc(timeLeft(iso(x.deadline)))}</span>`;
+                const lastDay = !s && !late && toMs(x.deadline) - Date.now() < 864e5;
+                if (!s && lastDay && x.answerMode === 'web') right = `<span class="chip danger">${icon('clock', 'sm')}Last day · ${esc(timeLeft(iso(x.deadline)))}</span>`;
+                else if (!s) right = late ? `<span class="chip danger">${icon('clock', 'sm')}Late — still accepted</span>` : `<span class="chip ${toMs(x.deadline) - Date.now() < 864e5 ? 'accent' : 'primary'}">${icon('clock', 'sm')}${esc(timeLeft(iso(x.deadline)))}</span>`;
                 else if (s.released) right = `<span class="score-pill num ${scoreTone(s.score, x.totalScore)}">${s.score}/${x.totalScore}</span>`;
                 else if (s.unreadable && s.reuploads < 1 && !late) right = `<span class="chip danger">${icon('alert', 'sm')}Upload again</span>`;
                 else if (x.answerMode === 'web' && ['grading', 'pending', 'queued', 'needs_review'].includes(s.status)) right = `<span class="chip">${icon('hourglass', 'sm')}Written part being checked</span>`;
@@ -228,8 +237,9 @@
                 return `<a class="card hw reveal ${!s && toMs(x.deadline) - Date.now() < 864e5 ? 'urgent' : ''}" href="${url('homework.html', { id: x.id })}" data-id="${x.id}">
                     <div class="top"><span class="xs muted">Unit ${x.unit} · Lesson ${x.lesson}</span>${right}</div>
                     <h3>${txt(x.title)}</h3>
+                    ${lastDay && x.answerMode === 'web' ? `<div class="small" dir="rtl" style="color:var(--danger);font-weight:700">⏰ النهاردة آخر يوم لتسليم الواجب</div>` : ''}
                     <div class="meta">${s ? `${icon('checkCircle', 'sm')}Submitted ${esc(fmtDate(iso(s.submittedAt)))}${s.late ? ' · late' : ''}` : `${icon('calendar', 'sm')}Due ${esc(when(x.deadline))}`}</div>
-                    ${!s ? `<span class="btn btn-primary btn-block">${x.answerMode === 'web' ? `${icon('edit', 'sm')}Answer now` : `${icon('download', 'sm')}Upload my homework`}</span>` : `<span class="link">${s.released ? 'See my answers' : 'Open'} ${icon('arrowRight', 'sm')}</span>`}</a>`;
+                    ${!s ? `<span class="btn btn-primary btn-block">${x.answerMode === 'web' ? (x.progress ? `${icon('edit', 'sm')}Continue — ${x.progress.answered} of ${x.progress.of} answered` : `${icon('edit', 'sm')}Answer now`) : `${icon('download', 'sm')}Upload my homework`}</span>` : `<span class="link">${s.released ? 'See my answers' : 'Open'} ${icon('arrowRight', 'sm')}</span>`}</a>`;
             };
             $('hwList').innerHTML = (due.length ? `<div class="hw-list">${due.map(card).join('')}</div>` : `<div class="card reveal"><div class="empty"><div class="bubble">${icon('checkCircle')}</div><h3>No homework due</h3><p>New homework shows up here (you'll get a notification).</p></div></div>`)
                 + (done.length ? `<div class="sec-title">Submitted</div><div class="hw-list">${done.map(card).join('')}</div>` : '')
@@ -421,19 +431,44 @@
             const sections = [];
             paper.forEach(q => { const sec = String(q.label).split('.')[0]; let g = sections.find(x => x.sec === sec); if (!g) sections.push(g = { sec, type: q.type, qs: [] }); g.qs.push(q); });
             view.innerHTML = head + `
+                ${isLastDay() ? `<div class="lastday reveal" id="lastDay">${icon('alert')}<div><b dir="rtl">النهاردة آخر يوم لتسليم الواجب — لازم تسلّم النهاردة قبل الميعاد النهائي ⏰</b><p>Today is the last day — submit before ${esc(when(a.deadline))}. Saved answers that are not submitted don't count.</p></div></div>` : ''}
                 ${a.instructions ? `<div class="card reveal" style="margin-bottom:14px"><b>Note from Miss Marwa</b><p dir="auto" style="margin:6px 0 0">${txt(a.instructions)}</p></div>` : ''}
+                ${!ENDS ? `<div class="save-note reveal">${icon('checkCircle', 'sm')}<div><b>Your progress is saved — you can close and continue later</b><span class="ar">إجاباتك بتتحفظ أوتوماتيك — تقدر تقفل وتكمّل بعدين قبل آخر ميعاد.</span></div></div>` : ''}
                 <div class="sheet-bar reveal"><div class="prog"><b id="progTxt"></b> <span class="saved" id="savedTxt"></span><div class="bar"><span id="progBar"></span></div></div>${ENDS ? `<span class="timer" id="timer">${icon('clock', 'sm')}<span id="timerTxt">--:--</span></span>` : ''}</div>
                 <div id="sheet">${sections.map(g => `<div class="sec-head reveal"><span class="n">${esc(g.sec)}</span><b>${esc(SEC_TITLE[g.type] || 'Questions')}</b></div>${g.qs.map(qHTML).join('')}`).join('')}</div>
-                <div class="submit-bar"><button class="btn btn-primary btn-block btn-lg" id="sendBtn">${icon('send')}Submit answers${H.late ? ' (late)' : ''}</button></div>`;
+                <div class="submit-bar"><div class="${ENDS ? '' : 'send-row'}">${ENDS ? '' : `<button class="btn btn-soft btn-lg" id="laterBtn">${icon('clock', 'sm')}Save & continue later</button>`}<button class="btn btn-primary btn-block btn-lg" id="sendBtn">${icon('send')}Submit answers${H.late ? ' (late)' : ''}</button></div></div>`;
             reveal(view);
             const sheetEl = $('sheet');
             sheetEl.addEventListener('click', onSheetClick);
             sheetEl.addEventListener('input', onSheetInput);
             sheetEl.addEventListener('change', onSheetFile);
             $('sendBtn').addEventListener('click', confirmSend);
+            $('laterBtn') && $('laterBtn').addEventListener('click', saveLater);
+            SHEET_OPEN = true;
             progress();
             clearInterval(TICK_T); if (ENDS) { tickTimer(); TICK_T = setInterval(tickTimer, 1000); }
         }
+        let SHEET_OPEN = false;
+        const isLastDay = () => { const d = toMs(H.assignment.deadline) - Date.now(); return d > 0 && d < 864e5; };
+        async function saveLater() {
+            const b = $('laterBtn'); b.classList.add('loading'); b.disabled = true;
+            try { await saveNow(); } finally { b.classList.remove('loading'); b.disabled = false; }
+            const left = toMs(H.assignment.deadline) - Date.now();
+            toast(left > 0 ? `Saved ✅ Continue any time before ${when(H.assignment.deadline)}` : 'Saved ✅', 'success');
+            SHEET_OPEN = false; go({});
+        }
+        // last day + not submitted → think twice before leaving
+        window.addEventListener('beforeunload', (e) => { if (SHEET_OPEN && H && isLastDay()) { saveNow(); e.preventDefault(); e.returnValue = ''; } });
+        document.addEventListener('click', (e) => {
+            const a = e.target.closest('a[href]');
+            if (!a || !SHEET_OPEN || !H || !isLastDay() || a.target === '_blank' || e.defaultPrevented && !a.hasAttribute('data-back')) return;
+            e.preventDefault(); e.stopImmediatePropagation();
+            const href = a.getAttribute('href'), back = a.hasAttribute('data-back');
+            saveNow();
+            sheet({ iconName: 'alert', tone: 'accent', title: 'النهاردة آخر يوم لتسليم الواجب ⏰', subtitle: "Your answers are saved, but they only count after you submit. Submit now?",
+                actions: [{ label: 'Submit now', cls: 'btn-primary', onClick: (c) => { c(); confirmSend(); } },
+                    { label: 'Leave for now', cls: 'btn-ghost', onClick: (c) => { c(); SHEET_OPEN = false; if (back) go({}); else location.href = href; } }] });
+        }, true);
         function qHTML(q) {
             const x = ANS[q.label] || {}, L = esc(q.label);
             let body = '';
@@ -536,7 +571,7 @@
             });
         }
         async function send(auto) {
-            if (SENDING) return; SENDING = true;
+            if (SENDING) return; SENDING = true; SHEET_OPEN = false;
             clearInterval(TICK_T); clearTimeout(SAVE_T);
             const head = view.querySelector('.page-head').outerHTML;
             view.innerHTML = head + `<div class="card marking reveal"><div class="robot"><span class="orb"></span><span class="core">${icon('checkCircle')}</span></div><h2 style="margin:0">Marking your answers…</h2><p class="small muted" style="margin:6px 0 0">Just a second ⚡</p></div>`;
@@ -754,6 +789,7 @@
         }
 
         function route() {
+            SHEET_OPEN = false;
             clearInterval(clockTimer); clearInterval(TICK_T); if (typeof stopThink === 'function') stopThink();
             const id = params().get('id');
             if (id) showOne(id); else showList();

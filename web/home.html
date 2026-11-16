@@ -128,7 +128,8 @@
                 <div class="card-head"><h2 class="card-title">${icon('file')}Homework due</h2>${due.length > 1 ? `<span class="xs muted">${due.length} to do</span>` : ''}</div>
                 <strong style="display:block;font-size:17px">${txt(n.title)}</strong>
                 <p class="small muted" style="margin:4px 0 12px">Unit ${n.unit} · Lesson ${n.lesson} · ${toMs(n.deadline) < Date.now() ? 'deadline passed — still accepted (late)' : esc(App.timeLeft(new Date(toMs(n.deadline)).toISOString()))}</p>
-                <a class="btn btn-primary btn-block" href="${url('homework.html', { id: n.id })}">${icon('download', 'sm')}Upload my homework</a>`
+                ${n.answerMode === 'web' && toMs(n.deadline) > Date.now() && toMs(n.deadline) - Date.now() < 864e5 ? `<p class="small" dir="rtl" style="margin:-4px 0 12px;color:var(--danger);font-weight:700">⏰ النهاردة آخر يوم لتسليم الواجب</p>` : ''}
+                <a class="btn btn-primary btn-block" href="${url('homework.html', { id: n.id })}">${n.answerMode === 'web' ? (n.progress ? `${icon('edit', 'sm')}Continue — ${n.progress.answered} of ${n.progress.of} answered` : `${icon('edit', 'sm')}Answer now`) : `${icon('download', 'sm')}Upload my homework`}</a>`
                 : `<div class="card-head"><h2 class="card-title">${icon('checkCircle')}Homework marked</h2></div>
                 <a class="link" href="${url('homework.html', { id: ready[0].id })}">${txt(ready[0].title)}: ${ready[0].submission.score}/${ready[0].totalScore} — see your answers ${icon('arrowRight', 'sm')}</a>`;
             card.classList.remove('hidden');
