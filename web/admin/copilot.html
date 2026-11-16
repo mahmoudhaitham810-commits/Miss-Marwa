@@ -228,7 +228,7 @@
             ['🧪', 'Give me 3 tricky "Give reason" questions on Newton\'s first law with model answers']
         ];
         function welcome() {
-            return `<div class="hello"><span class="spark">${icon('sparkles')}</span><h2 dir="rtl">أهلاً يا <bdi>${esc((A.staff && A.staff.name || 'Miss Marwa').split(' ').slice(-1)[0])}</bdi> 👋</h2>
+            return `<div class="hello"><span class="spark">${icon('sparkles')}</span><h2 dir="rtl">أهلاً يا مس مروة 👋</h2>
                 <p>I'm your Co-Pilot. Ask in Arabic or English — I keep the science terms in English.</p>
                 <div class="chips">${CHIPS.map(([e, t]) => `<button class="chip-q" data-chip="${esc(t)}"><span class="e">${e}</span><span dir="auto">${esc(t)}</span></button>`).join('')}</div>
                 <div class="soon-list"><b>Coming next:</b> your morning brief, students & results, drafting replies to questions, building exams & printable papers, lesson summaries. Right now I can't see the platform's data yet.</div></div>`;
