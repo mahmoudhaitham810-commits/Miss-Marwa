@@ -59,10 +59,12 @@
         .msg.me .shot { display: block; max-width: min(260px, 70vw); max-height: 260px; border-radius: 16px; margin: 0 0 6px auto; border: 1px solid var(--border); object-fit: cover; cursor: zoom-in; }
         .msg.me .col { display: flex; flex-direction: column; align-items: flex-end; max-width: 85%; }
         .msg .av .icon { width: 16px; height: 16px; }
-        .msg .body { min-width: 0; flex: 1; }
+        /* AI reply = avatar + its own bubble right next to it; data cards still use the full width */
+        .msg .body { min-width: 0; flex: 0 1 auto; max-width: min(760px, calc(100% - 42px)); }
+        .msg .body:has(.cards) { flex: 1 1 auto; }
         .msg.me { justify-content: flex-end; }
         .msg.me .bubble { background: var(--primary); color: #fff; border-radius: 18px 18px 6px 18px; padding: 10px 14px; max-width: 85%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.55; }
-        .md { font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+        .md { font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; width: fit-content; max-width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 6px 18px 18px 18px; padding: 10px 14px; box-shadow: 0 4px 14px -10px rgba(15, 23, 42, .35); }
         .md p { margin: 0 0 8px; } .md p:last-child { margin-bottom: 0; }
         .md ul, .md ol { margin: 4px 0 8px; padding-inline-start: 22px; } .md li { margin: 2px 0; }
         .md h4 { font-size: 15.5px; margin: 10px 0 4px; }

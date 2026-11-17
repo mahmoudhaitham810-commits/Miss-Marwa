@@ -31,19 +31,21 @@
     .tc-msg { display: flex; gap: 10px; align-items: flex-start; animation: tcin .35s cubic-bezier(.22,1,.36,1); }
     @keyframes tcin { from { opacity: 0; transform: translateY(6px); } }
     .tc-msg .av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; background: #fff; border: 1.5px solid var(--border); }
-    .tc-msg .body { min-width: 0; flex: 1; }
+    /* AI reply = avatar + its own bubble right next to it (no gap across wide screens); Arabic stays right-aligned inside */
+    .tc-msg .body { min-width: 0; flex: 0 1 auto; max-width: min(720px, calc(100% - 42px)); }
+    .tc-msg .body:has(.tc-cards) { flex: 1 1 auto; }
     .tc-msg.me { justify-content: flex-end; }
     .tc-msg.me .col { display: flex; flex-direction: column; align-items: flex-end; max-width: 85%; }
     .tc-msg.me .bubble { background: var(--primary); color: #fff; border-radius: 18px 18px 6px 18px; padding: 10px 14px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.55; }
     .tc-msg.me .shot { display: block; max-width: min(240px, 66vw); max-height: 240px; border-radius: 16px; margin-bottom: 6px; border: 1px solid var(--border); object-fit: cover; }
-    .tc-md { font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
+    .tc-md { font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; width: fit-content; max-width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 6px 18px 18px 18px; padding: 10px 14px; box-shadow: 0 4px 14px -10px rgba(15, 23, 42, .35); }
     .tc-md p { margin: 0 0 8px; } .tc-md p:last-child { margin-bottom: 0; }
     .tc-md ul, .tc-md ol { margin: 4px 0 8px; padding-inline-start: 22px; }
     .tc-md h4 { font-size: 15.5px; margin: 10px 0 4px; }
     .tc-md code { background: var(--surface-3, #eef2f7); border-radius: 6px; padding: 1px 5px; font-size: 13px; }
     .tc-md pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px; overflow-x: auto; direction: ltr; text-align: left; }
     .tc-md [dir="rtl"] { font-family: 'IBM Plex Sans Arabic', Inter, sans-serif; }
-    .tc-meta { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+    .tc-meta { font-size: 11.5px; color: var(--muted); margin-top: 6px; padding-inline-start: 4px; }
     .tc-err { border: 1.5px solid color-mix(in srgb, var(--danger) 35%, transparent); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); border-radius: 14px; padding: 10px 12px; font-size: 14px; }
     .tc-err button { margin-top: 8px; }
     .tc-dots span { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); margin: 0 2px; animation: tcb 1.2s infinite ease-in-out; }
@@ -80,11 +82,11 @@
     @media (min-width: 560px) { .tc-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .tc-chips button { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 14px; padding: 11px 12px; font: inherit; font-size: 13.5px; text-align: start; cursor: pointer; }
     .tc-chips button:hover { border-color: var(--primary); }
-    .tc-comp { position: sticky; bottom: calc(var(--bottomnav-h, 68px) + env(safe-area-inset-bottom, 0px) + 8px); z-index: 5; padding: 10px 0 6px; background: linear-gradient(to top, var(--bg, #f4f7fc) 70%, transparent); }
+    .tc-comp { position: sticky; bottom: calc(var(--bottomnav-h, 68px) + env(safe-area-inset-bottom, 0px) + 8px); z-index: 5; padding: 10px 0 6px; background: linear-gradient(to top, var(--canvas) 72%, transparent); }
     @media (min-width: 1024px) { .tc-comp { bottom: 0; padding-bottom: 16px; } }
     .tc-pad { padding-bottom: calc(var(--bottomnav-h, 68px) + env(safe-area-inset-bottom, 0px) + 8px); }
     @media (min-width: 1024px) { .tc-pad { padding-bottom: 0; } }
-    .tc-hint { font-size: 11px; color: var(--muted); text-align: center; margin: 5px 0 0; }
+    .tc-hint { font-size: 11px; color: var(--muted); text-align: center; margin: 6px 0 0; background: transparent; }
     .tc-lock { text-align: center; padding: 40px 16px; }
     .tc-lock img { width: 90px; height: 90px; border-radius: 50%; }
     .tc-banner { border-radius: 14px; padding: 10px 12px; font-size: 13.5px; background: var(--warning-soft, #fff7ed); margin-bottom: 8px; }
