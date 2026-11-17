@@ -152,8 +152,8 @@
         }
         function sub() {
             if (!ST) return;
-            const t = ST.today, n = Math.max(0, t.limits.messages - t.messages), im = Math.max(0, t.limits.images - t.images);
-            $('tcSub').innerHTML = `${ST.preview ? 'Preview · ' : ''}Mini Assistant · <bdi dir="rtl">باقي ${n} رسالة${im ? ' و صورة' : ''} النهارده</bdi>`;
+            // (no counter line under the title — the user asked for it to be removed; limits are explained only when reached)
+            $('tcSub').hidden = true;
             $('tcBanner').innerHTML = (ST.preview ? `<div class="tc-banner">👀 <b>Preview</b> — you're seeing exactly what <b>${esc(ST.student.firstName)}</b> would see. Chats here stay separate from the student's own and use separate daily counters.</div>` : '')
                 + (ST.inExam ? `<div class="tc-banner">📝 إنت في امتحان دلوقتي — المساعد هيستناك لحد ما تخلّص 😉</div>` : '');
         }

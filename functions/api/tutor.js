@@ -19,7 +19,7 @@ import { chat, usageSummary, AiLimitError, BRANDS } from './ai-gateway.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
-import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, isScienceQuestion, isCapabilityQuestion, capabilitiesForStudent } from './ai-rules.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -166,6 +166,7 @@ ${tier === 'pro'
 - Never guess what's inside a specific lesson of their book ("Unit 2 Lesson 3") — the books aren't connected yet; ask them to tell you the topic.
 - Stay on studies. Off-topic chat → one friendly line, then steer back to science. Keep everything appropriate for school students.
 - Never claim you did something on the platform (you can't submit, change marks or send anything).
+- If they ask what you can do, list (numbered) what you do on the platform — their level & grades, open exams & deadlines, new lessons, one photo question a day, quick Science help — then say honestly that you're a limited model and they shouldn't rely on you entirely for the academic content.
 
 ## MY DATA (exact, from the platform — this student only)
 ${opts.bench ? '(Model test — no student data. Answer the science question only.)' : factsOf(d)}`;
@@ -182,7 +183,7 @@ const EXAMPLES = [
 
 // ---------- messages ----------
 const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } };
-const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, error: m.error || null, cards: parse(m.cards), imageId: m.image_id || null, at: m.created_at });
+const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, model: m.model || null, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, error: m.error || null, cards: parse(m.cards), imageId: m.image_id || null, at: m.created_at });
 const FRIENDLY = {
     POOL_EMPTY: 'Mini Assistant خد استراحة النهارده 😴 — بيرجع الساعة 2 بالليل. لو محتاج دلوقتي جرّب Miss Marwa Assistant Pro.',
     FREE_OFF: 'Mini Assistant مش متاح دلوقتي 🙏 جرّب كمان شوية.',
@@ -252,8 +253,10 @@ export async function onRequest(context) {
             if (!text) return bad('اكتب سؤالك الأول 🙂', 400);
             if (text.length > MAX_TEXT) return bad(`السؤال طويل شوية — خليه أقل من ${MAX_TEXT} حرف`, 400);
             if (await inExam()) return bad('إنت في امتحان دلوقتي 📝 — خلّص امتحانك الأول وبعدين أنا معاك على طول 😉', 423, { code: 'EXAM_LOCK' });
+            // "what can you do?" → a fixed, always-correct list (no AI, doesn't use a daily message)
+            const cap = !img && isCapabilityQuestion(text);
             const t0 = await today();
-            if (t0.messages >= L.messages) return bad(`خلصت رسايل Mini Assistant بتاعة النهارده (${L.messages}) 😅 — بترجع بكره، أو جرّب ${BRANDS.pro.name}.`, 429, { code: 'DAILY_LIMIT', today: t0 });
+            if (!cap && t0.messages >= L.messages) return bad(`خلصت رسايل Mini Assistant بتاعة النهارده (${L.messages}) 😅 — بترجع بكره، أو جرّب ${BRANDS.pro.name}.`, 429, { code: 'DAILY_LIMIT', today: t0 });
             if (img && t0.images >= L.images) return bad(`مسموح بصورة واحدة في اليوم على Mini Assistant 📷 — لو عايز تبعت صور أكتر جرّب ${BRANDS.pro.name} 🚀`, 429, { code: 'IMAGE_LIMIT', today: t0 });
 
             let t = await ownThread(parseInt(data.threadId, 10));
@@ -267,10 +270,16 @@ export async function onRequest(context) {
             const userMsg = { id: Number(ur.meta.last_row_id), role: 'user', text, image_id: imageId, created_at: new Date().toISOString() };
             if (img && context.waitUntil) context.waitUntil(purgeOldImages(env, db));
 
+            if (cap) {
+                const r = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, tier, model, ms) VALUES (?, 'assistant', ?, 'free', 'built-in', 0)`).bind(t.id, capabilitiesForStudent(who.student, 'free')).run();
+                await db.prepare('UPDATE tutor_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
+                const saved = await db.prepare('SELECT * FROM tutor_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
+                return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today() });
+            }
             const d = await myData(db, who.student);
             const intents = img ? [] : studentIntent(text);
             const cards = cardsFor(intents, d);
-            const science = !intents.length && !SMALL.test(text.trim());
+            const science = !intents.length && isScienceQuestion(text);   // the Pro note follows real science questions only
             if (img) cards.push({ type: 'upgrade', text: NOTE_IMAGE, tier: 'pro' });
             else if (science) cards.push({ type: 'upgrade', text: NOTE_TEXT, tier: 'pro' });
             const { results: hist } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();

@@ -14,7 +14,8 @@ export const LANGUAGE_SCHOOLS = `
 ## Language schools — the students study Science IN ENGLISH
 - Their book, definitions, laws, rules and exams are in English. Whenever you give a definition, a law/rule, a scientific reason ("Give reason"), a "what happens when…" answer, or the exact sentence to write in the exam, write THAT sentence in English the way the book / model answer says it (in **bold** or on its own line) — then explain it in Egyptian Arabic.
 - Calculations: the law, the substitution and the result with units in English/symbols (e.g. **D = m / V = 20 ÷ 5 = 4 g/cm³**); explain the steps in Egyptian Arabic.
-- A question written in English stays in English — never translate the question or the choices.`;
+- A question written in English stays in English — never translate the question or the choices.
+- The subject is called **Science** ("الـ Science") — never "العلوم". Its branches: **Physics**, **Chemistry**, **Biology**, **Earth Science** — never الفيزياء / الكيمياء / الأحياء.`;
 
 export const EXAM_ANSWER_LINE = `
 ## Exam-style questions (choose, complete, true/false, give reason, what happens, problems)
@@ -56,4 +57,62 @@ export function finalAnswers(text) {
     const re = /✅\s*\**\s*(?:الإجابة|الاجابة|Answer)\s*(?:\(([a-z0-9ivx]+)\))?\s*\**\s*[:：]\s*\**\s*([^\n]+)/gi;
     let m; while ((m = re.exec(String(text || '')))) out.push({ part: m[1] || null, text: m[2].replace(/\*+/g, '').trim() });
     return out;
+}
+
+
+// ---------- what kind of message is this? (decided by code, not by the AI) ----------
+const nrm = (t) => String(t || '').toLowerCase().replace(/[ً-ٰٟـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim();
+
+/** "What can you do / how will you help me / who are you?" */
+export function isCapabilityQuestion(text) {
+    const s = nrm(text);
+    return /(هتفيدني|تفيدني|بتفيدني|هتفيديني|تفيديني|بتفيديني|هتفيدنا|هتنفعني|تنفعني|هتنفعيني)\s*(ب|في)?\s*ايه|(تقدر|تقدري|ممكن)\s*(تعمل|تعملي|تساعد|تساعدي)\w*\s*(لي|ليا)?\s*(في)?\s*ايه|(بتعمل|بتعملي|وظيفتك|شغلتك)\s*(ايه)?|(تساعدني|تساعدنا|هتساعدني|هتساعدنا|ساعدني)\s*(ازاي|في ايه|ب ايه|بايه)|(انت|انتي|إنت)\s*مين|مين\s*(انت|انتي)|ايه\s*(اللي|الي)\s*(تقدر|بتقدر|تعرف)|what can you do|how (can|will|could) you help|what do you do|who are you|what are you|^help\??$|^مساعده\??$/.test(s);
+}
+
+// Words that are just chat, not science (so "hi", "how are you" never count as a science question)
+const CHAT_EN = new Set('mini assistant miss marwa pro argon bot chatgpt claude gemini hi hello hey hii thanks thank you thx ok okay yes no yeah yep nope how are you fine good great nice cool what who can do help me please pls sorry bye see later morning evening night the and for with this that is it its am im not really very much'.split(' '));
+const SCIENCE_AR = /(اشرح|اشرحي|اشرحلي|اشرحيلي|يعني ايه|يعني اية|معني|عرف|عرفي|تعريف|الفرق بين|قارن|ليه|علل|سبب|احسب|احسبي|حل|حلي|حللي|مساله|مسأله|قانون|معادله|وحده|وحدة|تجربه|ماذا يحدث|ايه اللي بيحصل|بيحصل ايه|صح ولا غلط|اختار|اكمل|كمل|سؤال|اسئله|امتحان|درس|ماده|عنصر|ذره|طاقه|قوه|سرعه|كثافه|كتله|خليه)/;
+/** Is this a science / study question (→ the Pro note may follow a Mini Assistant answer)? */
+export function isScienceQuestion(text) {
+    const raw = String(text || '');
+    if (!raw.trim() || isCapabilityQuestion(raw)) return false;
+    const s = nrm(raw);
+    if (SCIENCE_AR.test(s)) return true;
+    const words = (raw.match(/[A-Za-z][A-Za-z'-]{2,}/g) || []).map(w => w.toLowerCase().replace(/'.*$/, ''));
+    if (words.some(w => !CHAT_EN.has(w))) return true;            // English science terms (language schools)
+    return /[=+×÷^]|\d\s*(kg|g|cm|m|s|n|j|w|°c|k)\b/i.test(raw);   // formulas / units
+}
+
+// ---------- "what can you do?" — fixed, always-correct answers (no AI needed, free) ----------
+export function capabilitiesForStudent(st, tier = 'free') {
+    const f = st && st.gender === 'female';
+    const name = st && st.firstName ? ` ${st.firstName}` : '';
+    const g = (m, w) => (f ? w : m);
+    return `أكيد يا ${g('بطل', 'بطلة')}${name}! 😄 دي الحاجات اللي أقدر أعملها ${g('لك', 'ليكي')} على المنصة:
+
+1. 📊 **مستواك ودرجاتك** — متوسطك في امتحانات الـ Center والـ Online، ترتيبك، آخر نتايجك، ومستواك رايح على فين.
+2. 📝 **امتحاناتك** — الامتحانات المفتوحة اللي لسه ${g('ماحلّتهاش', 'ماحلّتيهاش')} وآخر ميعاد لكل واحد، واللي ${g('فاتك', 'فاتك')}.
+3. 📚 **الجديد** — آخر الدروس والملفات اللي نزلت لصفّك.
+4. 📷 **صورة سؤال** — ${g('ابعتلي', 'ابعتيلي')} صورة سؤال${tier === 'free' ? ' (صورة واحدة في اليوم)' : ''} وأحاول أحلّه${g('ولك', 'ولِك')}.
+5. 🤓 **أسئلة الـ Science** — ${tier === 'free' ? 'شرح سريع ومبسّط لأي حاجة في المنهج.' : 'شرح كامل خطوة بخطوة، والإجابة اللي تتكتب في الامتحان بالـ English.'}
+
+${tier === 'free'
+        ? `أقدر أساعد${g('ك', 'كي')} في المحتوى العلمي، بس ${g('متعتمدش', 'متعتمديش')} عليا بالكامل — أنا موديل محدود 🙂 ${g('جرّب تسألني', 'جرّبي تسأليني')}: «عامل${g('', 'ة')} إيه في درجاتي؟» أو «عندي امتحانات مفتوحة؟»`
+        : `${g('جرّب تسألني', 'جرّبي تسأليني')}: «عامل${g('', 'ة')} إيه في درجاتي؟» أو ${g('ابعتلي', 'ابعتيلي')} أي سؤال من الكتاب 💪`}`;
+}
+export function capabilitiesForStaff(tier = 'free') {
+    return `أكيد يا مس مروة 😊 دي الحاجات اللي أقدر أعملها لك على المنصة:
+
+1. 👀 **أي طالب** — اكتبي اسمه (عربي أو English) أو الكود: مستواه، درجاته في الـ Center والـ Online، ترتيبه، غيابه، الامتحانات اللي فاتته، وأسئلته.
+2. ⚠️ **مين محتاج متابعة** في أي صف — درجاته نازلة، فاته امتحانات، أو متوسطه ضعيف.
+3. 🏆 **الأوائل** — الـ Top 10 لكل صف.
+4. 🚫 **الغياب** — مين غاب في آخر امتحانات السنتر، ومين غيابه بيتكرر.
+5. 📊 **نتايج الامتحانات** — مين حل ومين محلش، والمتوسط، والدرجات الضعيفة.
+6. ☀️ **ملخص النهارده** — الامتحانات اللي هتقفل، الأسئلة المستنية، ومين محتاج متابعة.
+7. 📲 **رسايل واتساب** لأولياء الأمور — من الكروت على طول.
+8. 📷 **صورة سؤال** — ابعتيها وأحاول أحلّها.
+
+${tier === 'free'
+        ? 'أقدر أساعدك في المحتوى العلمي كمان، بس متعتمديش عليا بالكامل — أنا موديل محدود 🙂 للشرح والأسئلة ونماذج الإجابة استخدمي **Miss Marwa Assistant Pro**.'
+        : 'وكمان كـ Pro: أشرح أي حاجة في المنهج، أكتب أسئلة بنماذج إجابة، وأجهّز امتحانات وملخصات 🎓'}`;
 }

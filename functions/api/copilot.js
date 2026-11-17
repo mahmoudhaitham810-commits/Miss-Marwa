@@ -10,7 +10,7 @@ import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gate
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
-import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate, isScienceQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const bad = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
@@ -46,7 +46,8 @@ const ROLE_ARGON = `
 You're her news bulletin: you report what's happening on the platform — students, results, absences, exams closing, today's brief — straight from the DATA, plus quick admin help. That's your strength.
 You are NOT the science expert:
 - For a science question (explanations, exam questions, model answers, lesson content): give a SHORT, simple answer (4–5 lines max). Never write long explanations, full question sets or exams.
-- The app automatically adds a note under your reply recommending Miss Marwa Assistant Pro for science — so don't write such a note yourself.`;
+- The app automatically adds a note under your reply recommending Miss Marwa Assistant Pro for science — so don't write such a note yourself.
+- If she asks what you can do, list (numbered) what you do on the platform — student lookups, who needs attention, top 10, absences, exam results, today's brief, WhatsApp to parents, photo questions — then say honestly that you're a limited model for the academic content and recommend Miss Marwa Assistant Pro for it.`;
 const ROLE_KRYPTON = `
 ## Your role: you are "Miss Marwa Assistant Pro" — the science expert 🎓
 Science explanations, exam questions with model answers, rephrasing, lesson summaries and exam papers are your job: do them fully, accurately and carefully. You can also read the platform's data when it's given to you.`;
@@ -148,7 +149,7 @@ export const STYLE_EXAMPLES = [
 const SMALLTALK = /^(شكرا|شكرًا|ميرسي|متشكره|متشكر|تسلم|تسلمي|تمام|اوك|اوكي|ok|okay|thanks|thank you|thx|hi|hello|hey|ازيك( يا [^\n]{1,30})?|صباح الخير|مساء الخير|السلام عليكم|اهلا|أهلا|ماشي|حلو|جميل|برافو|عظيم|perfect|great|nice)[\s!.,،؟?😊👌🙏❤️💪✨]*$|تقدر تعمل ايه|تقدر تعمل إيه|بتعمل ايه|بتعمل إيه|انت مين|إنت مين|what can you do|who are you|^help$|ساعدني ازاي/i;
 export const ARGON_NOTE = 'دي إجابة مبسّطة ومحدودة 🙂 — للأسئلة العلمية (شرح، أسئلة، نماذج إجابة) أنصحك تستخدمي **Miss Marwa Assistant Pro**.';
 export const IMAGE_NOTE = 'دي إجابة مبدئية من Mini Assistant 🙂 — لأدق حل وتحليل للصور جرب **Miss Marwa Assistant Pro**.';
-export function needsUpgradeNote(tier, text, hasData) { return tier === 'free' && !hasData && !SMALLTALK.test(String(text || '').trim()); }
+export function needsUpgradeNote(tier, text, hasData) { return tier === 'free' && !hasData && isScienceQuestion(text); }   // real science questions only
 
 const threadOut = (t) => ({ id: t.id, title: t.title, createdAt: t.created_at, updatedAt: t.updated_at, last: t.last_text ? String(t.last_text).replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 90) : '', count: t.n || 0 });
 const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } };
@@ -269,6 +270,12 @@ export async function onRequest(context) {
                 await db.prepare('UPDATE copilot_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
                 return db.prepare('SELECT * FROM copilot_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
+            // "what can you do?" → a fixed, always-correct list of what the AI Assistant does on the site (no AI call, free)
+            if (!img && !result && isCapabilityQuestion(text)) {
+                cards = null;
+                const saved = await saveReply({ text: capabilitiesForStaff(tier), model: 'built-in', ms: 0 });
+                return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });
+            }
             try {
                 const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : '');
                 // Pro answering a science question / photo uses the reasoning mode picked on the Model test page (PRO_REASONING)

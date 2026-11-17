@@ -38,7 +38,8 @@
         const lines = String(src || '').replace(/\r/g, '').split('\n');
         let html = '', list = null, para = [], code = null;
         const flushPara = () => { if (para.length) { const t = para.join('\n'); const d = firstStrong(t); html += `<p dir="${d}">${inline(t, d).replace(/\n/g, '<br>')}</p>`; para = []; } };
-        const flushList = () => { if (list) { html += `<${list.type}>${list.items.map(it => { const d = firstStrong(it); return `<li dir="${d}">${inline(it, d)}</li>`; }).join('')}</${list.type}>`; list = null; } };
+        // the whole list follows its first item's direction, so Arabic lists put their numbers / bullets on the right
+        const flushList = () => { if (list) { const ld = firstStrong(list.items[0] || ''); html += `<${list.type} dir="${ld}">${list.items.map(it => { const d = firstStrong(it); return `<li dir="${d}">${inline(it, d)}</li>`; }).join('')}</${list.type}>`; list = null; } };
         for (const line of lines) {
             if (code !== null) { if (/^```/.test(line.trim())) { html += `<pre><code>${esc(code.join('\n'))}</code></pre>`; code = null; } else code.push(line); continue; }
             if (/^```/.test(line.trim())) { flushPara(); flushList(); code = []; continue; }
