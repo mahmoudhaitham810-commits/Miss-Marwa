@@ -163,7 +163,7 @@
         const A = Admin, $ = (id) => document.getElementById(id);
         const { esc, icon, api } = A;
         await A.boot({ active: 'inbox', title: 'Questions' });
-        // (No Co-Pilot here on purpose: the Ask section is Miss Marwa's own — no AI involved.)
+        // (No AI Assistant here on purpose: the Ask section is Miss Marwa's own — no AI involved.)
         const K = AskKit;
         const qs = new URLSearchParams(location.search);
         let view = qs.get('view') === 'bank' ? 'bank' : 'inbox';

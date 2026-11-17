@@ -7,7 +7,7 @@
     <meta name="robots" content="noindex, nofollow">
     <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
     <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
-    <title>Co-Pilot · Science Academy Staff</title>
+    <title>AI Assistant · Science Academy Staff</title>
     <link rel="icon" href="/admin/icon-192.png">
     <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
     <link rel="manifest" href="/admin/admin-manifest.json">
@@ -36,8 +36,9 @@
         /* model switcher */
         .models { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 4px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--border); }
         .model { border: 0; background: transparent; color: var(--text); border-radius: 12px; padding: 7px 6px; text-align: center; cursor: pointer; font: inherit; line-height: 1.15; position: relative; }
-        .model b { display: block; font-size: 13.5px; }
+        .model b { display: block; font-size: clamp(12px, 3.15vw, 13.5px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -.01em; }
         .model small { display: block; font-size: 10.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .model .maxpill { display: inline-block; font-size: 9px; font-weight: 900; letter-spacing: .06em; color: #fff; padding: 1px 5px; border-radius: 6px; background: linear-gradient(135deg, var(--primary), #8b5cf6 60%, #ec4899); vertical-align: 1px; }
         .model.on { background: var(--surface); box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); }
         .model.on b { color: var(--primary); }
         .model.off { opacity: .55; }
@@ -189,7 +190,7 @@
         <div class="cp">
             <div class="cp-head">
                 <span class="spark" data-icon="sparkles"></span>
-                <div class="grow"><h1><span class="t" id="title">Co-Pilot</span></h1><p class="sub" id="sub">Your private assistant</p></div>
+                <div class="grow"><h1><span class="t" id="title">AI Assistant</span></h1><p class="sub" id="sub">Your private assistant</p></div>
                 <button class="icon-btn" id="chatsBtn" aria-label="Saved chats" title="Saved chats"><span data-icon="clock"></span></button>
                 <button class="icon-btn" id="newBtn" aria-label="New chat" title="New chat"><span data-icon="plus"></span></button>
             </div>
@@ -203,7 +204,7 @@
                     <button class="rbtn" id="micBtn" aria-label="Speak" title="Speak" hidden><span data-icon="mic"></span></button>
                     <button class="rbtn send" id="sendBtn" aria-label="Send" disabled><span data-icon="send"></span></button>
                 </div>
-                <p class="hint" id="hint">Co-Pilot can make mistakes — check anything important before using it.</p>
+                <p class="hint" id="hint">AI Assistant can make mistakes — check anything important before using it.</p>
             </div>
         </div>
     </main>
@@ -215,7 +216,7 @@
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
         const { esc, icon, api } = A;
-        await A.boot({ active: 'copilot', title: 'Co-Pilot' });
+        await A.boot({ active: 'copilot', title: 'AI Assistant' });
         A.hydrate();
 
         const qs = new URLSearchParams(location.search);
@@ -263,18 +264,18 @@
         // ---------- status, models, meter ----------
         const money = (v) => v >= 0.995 ? `$${v.toFixed(2)}` : v >= 0.01 ? `$${v.toFixed(2)}` : v > 0 ? '<$0.01' : '$0';
         function renderModels() {
-            const tiers = STATUS ? STATUS.tiers : [{ tier: 'free', name: 'Argon', note: 'Fast & free', ready: true }, { tier: 'pro', name: 'Krypton', note: 'Smart', ready: true }, { tier: 'max', name: 'Krypton Max', note: 'Strongest', ready: true }];
+            const tiers = STATUS ? STATUS.tiers : [{ tier: 'free', name: 'Argon', note: 'Fast & free', ready: true }, { tier: 'pro', name: 'Marwa Cloud', note: 'Smart', ready: true }, { tier: 'max', name: 'Marwa Cloud Max', note: 'Strongest', ready: true }];
             if (!tiers.find(t => t.tier === tier && t.ready)) tier = (tiers.find(t => t.ready) || tiers[0]).tier;
             $('models').innerHTML = tiers.map(t => `<button class="model ${t.tier === tier ? 'on' : ''} ${t.ready ? '' : 'off'}" role="radio" aria-checked="${t.tier === tier}" data-tier="${t.tier}">
-                ${t.ready ? '' : icon('lock', 'lock')}<b>${esc(t.name)}</b><small>${t.ready ? esc(t.tier === 'free' ? 'Free · reports & lookups' : t.tier === 'pro' ? 'Science · everyday' : 'Exams & summaries') : 'Not connected yet'}</small></button>`).join('');
+                ${t.ready ? '' : icon('lock', 'lock')}<b>${esc(t.tier === 'max' ? t.name.replace(/\s*Max$/i, '') : t.name)}</b><small>${t.tier === 'max' ? '<span class="maxpill">MAX</span> ' : ''}${t.ready ? esc(t.tier === 'free' ? 'Free · reports' : t.tier === 'pro' ? 'Science · everyday' : 'Strongest') : 'Not connected yet'}</small></button>`).join('');
         }
         function renderMeter() {
             if (!STATUS) return;
             const p = STATUS.pools.staff, s = STATUS.spend;
             const pf = p.cap ? Math.min(100, p.used / p.cap * 100) : 100, sf = s.dailyCap ? Math.min(100, s.today / s.dailyCap * 100) : 0;
             const cls = (f) => f >= 100 ? 'full' : f >= 80 ? 'warn' : '';
-            $('meter').innerHTML = `<span class="m" title="Free units used today by Co-Pilot (resets 2:00 am Cairo)"><b>Argon</b><span class="bar ${cls(STATUS.freeQuotaHit ? 100 : pf)}"><span style="width:${STATUS.freeQuotaHit ? 100 : pf}%"></span></span>${STATUS.freeQuotaHit ? 'used up today' : `${p.used.toLocaleString()} / ${p.cap.toLocaleString()}`}</span>
-                ${STATUS.paidReady ? `<span class="m" title="Paid AI spend today / this month"><b>Krypton</b><span class="bar ${cls(sf)}"><span style="width:${sf}%"></span></span>${money(s.today)} today · ${money(s.month)} this month</span>` : ''}`;
+            $('meter').innerHTML = `<span class="m" title="Free units used today by AI Assistant (resets 2:00 am Cairo)"><b>Argon</b><span class="bar ${cls(STATUS.freeQuotaHit ? 100 : pf)}"><span style="width:${STATUS.freeQuotaHit ? 100 : pf}%"></span></span>${STATUS.freeQuotaHit ? 'used up today' : `${p.used.toLocaleString()} / ${p.cap.toLocaleString()}`}</span>
+                ${STATUS.paidReady ? `<span class="m" title="Paid AI spend today / this month"><b>Marwa Cloud</b><span class="bar ${cls(sf)}"><span style="width:${sf}%"></span></span>${money(s.today)} today · ${money(s.month)} this month</span>` : ''}`;
         }
         async function loadStatus() { try { STATUS = await api('/api/copilot?action=status'); } catch (e) { STATUS = null; } renderModels(); renderMeter(); }
         $('models').addEventListener('click', (e) => {
@@ -299,7 +300,7 @@
         let BRIEF = null;
         function welcome() {
             return `<div class="hello"><span class="spark">${icon('sparkles')}</span><h2 dir="rtl">أهلاً يا مس مروة 👋</h2>
-                <p>Argon 👀 reports what's happening — ask about any student («عامل إيه عمر عادل؟») or any grade. For science, switch to Krypton 🎓</p>
+                <p>Argon 👀 reports what's happening — ask about any student («عامل إيه عمر عادل؟») or any grade. For science, switch to Marwa Cloud 🎓</p>
                 <div class="brief-wrap" id="briefWrap">${BRIEF ? cardsHTML(BRIEF, -1) : '<div class="skel" style="height:150px;border-radius:18px"></div>'}</div>
                 <div class="chips">${CHIPS.map(([e, t]) => `<button class="chip-q" data-chip="${esc(t)}"><span class="e">${e}</span><span dir="auto">${esc(t)}</span></button>`).join('')}</div></div>`;
         }
@@ -334,8 +335,8 @@
             upgrade: (c, k) => {
                 const ready = !STATUS || (STATUS.tiers || []).some(t => t.tier === 'pro' && t.ready);
                 const mi = Number(String(k).split(':')[0]), next = MSGS[mi + 1];
-                if (next && next.role === 'assistant' && next.tier && next.tier !== 'free') return `<div class="dc ucard"><span class="tx">✅ Krypton answered this below 👇</span></div>`;
-                return `<div class="dc ucard"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="btn btn-ai btn-sm" data-upgrade="${k}">${icon(ready ? 'sparkles' : 'lock', 'sm')}${ready ? 'Ask Krypton' : 'Krypton (not connected)'}</button></div>`;
+                if (next && next.role === 'assistant' && next.tier && next.tier !== 'free') return `<div class="dc ucard"><span class="tx">✅ Marwa Cloud answered this below 👇</span></div>`;
+                return `<div class="dc ucard"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="btn btn-ai btn-sm" data-upgrade="${k}">${icon(ready ? 'sparkles' : 'lock', 'sm')}${ready ? 'Ask Marwa Cloud' : 'Marwa Cloud (not connected)'}</button></div>`;
             },
             note: (c) => `<div class="dc ncard ${c.tone === 'warn' ? 'warn' : ''}" dir="auto">${esc(c.text || '')}</div>`,
             student(c, k) {
@@ -456,7 +457,7 @@
             const up = e.target.closest('[data-upgrade]');
             if (up) {
                 const t = STATUS && STATUS.tiers.find(x => x.tier === 'pro');
-                if (t && !t.ready) { Site.sheet({ iconName: 'lock', title: "Krypton isn't connected yet", subtitle: 'Add the ANTHROPIC_API_KEY secret in Cloudflare (Settings → Variables and Secrets), then redeploy.', actions: [{ label: 'OK', cls: 'btn-ghost' }] }); return; }
+                if (t && !t.ready) { Site.sheet({ iconName: 'lock', title: "Marwa Cloud isn't connected yet", subtitle: 'Add the ANTHROPIC_API_KEY secret in Cloudflare (Settings → Variables and Secrets), then redeploy.', actions: [{ label: 'OK', cls: 'btn-ghost' }] }); return; }
                 const mi = Number(up.dataset.upgrade.split(':')[0]);
                 const q = MSGS.slice(0, mi).reverse().find(m => m.role === 'user');
                 if (q) { tier = 'pro'; A.store.set('copilot_tier', tier); renderModels(); send(q.text, false, null, true); }
@@ -499,7 +500,7 @@
             sending = false; updateSend(); render();
         }
         function setChatUrl() { history.replaceState(null, '', location.pathname + (threadId ? '?chat=' + threadId : '')); }
-        function setTitle(t) { $('title').textContent = t || 'Co-Pilot'; $('sub').textContent = threadId ? 'Saved chat' : 'Your private assistant'; }
+        function setTitle(t) { $('title').textContent = t || 'AI Assistant'; $('sub').textContent = threadId ? 'Saved chat' : 'Your private assistant'; }
         async function openChat(id) {
             threadId = id; setChatUrl();
             MSGS = []; $('msgs').innerHTML = '<div class="skel" style="height:180px;border-radius:16px"></div>';
@@ -561,7 +562,7 @@
 
         // ---------- start ----------
         await loadStatus();
-        // ✨ buttons on other pages open the Co-Pilot with ?ctx=student:ID | exam:ID | inbox:grade | brief
+        // ✨ buttons on other pages open the AI Assistant with ?ctx=student:ID | exam:ID | inbox:grade | brief
         const ctxParam = qs.get('ctx');
         if (ctxParam) {
             const [type, ...rest] = ctxParam.split(':'); const val = rest.join(':');

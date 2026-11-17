@@ -3,7 +3,7 @@
 // ============================================================
 // Two kinds of staff accounts share one portal (/admin/):
 //   teacher   = Miss Marwa — full access
-//   assistant = staff — daily operations, no deletions / settings / Co-Pilot
+//   assistant = staff — daily operations, no deletions / settings / AI Assistant
 //
 // GET  /api/admin-auth?action=status          → { configured, needsSetup }
 // POST /api/admin-auth?action=setup           → first-time: create Miss Marwa's account (needs ADMIN_PASSWORD)

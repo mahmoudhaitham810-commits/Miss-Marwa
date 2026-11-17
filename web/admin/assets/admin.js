@@ -114,7 +114,7 @@
             { key: 'duplicates', label: 'Duplicate accounts', icon: 'merge', href: '/admin/duplicates.html' },
             { key: 'datacheck', label: 'Data check', icon: 'shield', href: '/admin/data-check.html' },
             { key: 'inbox', label: 'Questions · أسئلتي', icon: 'inbox', href: '/admin/inbox.html' },
-            teacher ? { key: 'copilot', label: 'Co-Pilot', icon: 'sparkles', href: '/admin/copilot.html' } : null,
+            teacher ? { key: 'copilot', label: 'AI Assistant', icon: 'sparkles', href: '/admin/copilot.html' } : null,
             { key: 'settings', label: teacher ? 'Settings' : 'My password', icon: 'settings', href: '/admin/settings.html' }
         ].filter(Boolean);
     }
@@ -206,8 +206,8 @@
     const fmtPct = (v, d = 0) => (v === null || v === undefined ? '—' : `${Number(v).toFixed(d).replace(/\.0+$/, '')}%`);
     const levelOf = (p) => (p === null || p === undefined ? null : p >= 85 ? 'excellent' : p >= 70 ? 'good' : p >= 50 ? 'average' : 'weak');
     const LEVEL_LABEL = { excellent: 'Excellent', good: 'Good', average: 'Average', weak: 'Needs help' };
-    // ✨ "Ask Co-Pilot" button for other pages — Miss Marwa only (opens the Co-Pilot already looking at this thing)
-    const copilotBtn = (ctx, label = 'Ask Co-Pilot', cls = '') => can('copilot.use') ? `<a class="btn btn-ai ${cls}" data-copilot href="/admin/copilot.html?ctx=${encodeURIComponent(ctx)}">${icon('sparkles', 'sm')}${esc(label)}</a>` : '';
+    // ✨ "Ask AI Assistant" button for other pages — Miss Marwa only (opens the AI Assistant already looking at this thing)
+    const copilotBtn = (ctx, label = 'Ask AI Assistant', cls = '') => can('copilot.use') ? `<a class="btn btn-ai ${cls}" data-copilot href="/admin/copilot.html?ctx=${encodeURIComponent(ctx)}">${icon('sparkles', 'sm')}${esc(label)}</a>` : '';
     function initials(s) {
         const ch = String(s.firstName || '').trim().charAt(0);
         return /[A-Za-z]/.test(ch) ? esc(ch.toUpperCase()) : esc(ch || '?');

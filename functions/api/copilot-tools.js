@@ -1,15 +1,15 @@
 // =====================================================================
-// Co-Pilot data tools (Step C1) — READ-ONLY lookups for Miss Marwa.
+// AI Assistant data tools (Step C1) — READ-ONLY lookups for Miss Marwa.
 //
 // Every number comes from the platform's OWN endpoints (analytics, exams, ask), called internally
-// with her login — so the Co-Pilot always shows exactly what her Analytics / Student / Results /
+// with her login — so the AI Assistant always shows exactly what her Analytics / Student / Results /
 // Inbox pages show, and the AI never computes or invents a number.
 //
 // Each tool returns { cards: [...], facts: "compact text for the AI", focus }.
 //   cards  → drawn by the page as structured data cards with action buttons (always exact)
 //   facts  → the AI writes a short takeaway from these, in Miss Marwa's style
 // Which tool runs is decided by code (route()), not by the AI — so it works the same on Argon (free)
-// and Krypton, and a lookup still shows its cards when the free units have run out.
+// and Marwa Cloud, and a lookup still shows its cards when the free units have run out.
 // This module exports onRequest → 404 so it is never reachable as a URL.
 // =====================================================================
 import * as analytics from './analytics.js';
@@ -81,7 +81,7 @@ const STOP = new Set(('مين ايه اي عامل عامله عاملين اخ�
     'prep sec how is the of and in for show me his her student students grade grades exam exams level weak top absent today brief summary about doing').split(' ').map(norm));
 const STUDENT_INTENT = /عامل|اخبار|مستوي|مستوا|درجات|درجه|نتيج|غياب|غايب|حضور|ملف|بروفايل|profile|how ('?s|is)|doing|grades?|results?|level|absen|طالب|ابعت|رساله|ولي امر|parent|متابع|امتحانات/;
 
-// Arabic ↔ English name "sound key" for the Co-Pilot (stricter than the duplicates check's nameKey):
+// Arabic ↔ English name "sound key" for the AI Assistant (stricter than the duplicates check's nameKey):
 // keeps h (ح/ه), long و (ou/oo) and long ي (i/ee/y) so محمد/Mohamed ≠ أحمد/Ahmed ≠ محمود/Mahmoud and
 // عمر/Omar ≠ أميرة/Amira ≠ عمرو/Amr; ى and ة are vowels (مصطفى = Mostafa, سلمى = Salma).
 const AR_KEY = { 'ا': '', 'أ': '', 'إ': '', 'آ': '', 'ء': '', 'ؤ': 'w', 'ئ': 'y', 'ب': 'b', 'ت': 't', 'ة': '', 'ث': 's', 'ج': 'g', 'ح': 'h', 'خ': 'k', 'د': 'd', 'ذ': 'z', 'ر': 'r', 'ز': 'z', 'س': 's', 'ش': 's', 'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z', 'ع': '', 'غ': 'g', 'ف': 'f', 'ق': 'k', 'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n', 'ه': 'h', 'و': 'w', 'ى': '', 'ي': 'y' };

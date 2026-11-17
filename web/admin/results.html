@@ -74,7 +74,7 @@
         async function loadResults() {
             history.replaceState(null, '', `${location.pathname}?exam=${encodeURIComponent(examId)}`);
             $('content').innerHTML = '<div class="kpis"><div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div><div class="skel" style="height:96px;border-radius:18px"></div></div><div class="skel" style="height:300px;border-radius:18px"></div>';
-            $('cpBtn').innerHTML = A.copilotBtn('exam:' + examId, 'Summarize with Co-Pilot');
+            $('cpBtn').innerHTML = A.copilotBtn('exam:' + examId, 'Summarize with AI Assistant');
             try { R = await api(`/api/exams?action=results&examId=${encodeURIComponent(examId)}`); } catch (err) { $('content').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
             render();
         }

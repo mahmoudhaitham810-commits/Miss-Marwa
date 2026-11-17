@@ -3,8 +3,8 @@
 //
 //   tier 'free' → Cloudflare Workers AI, paid for by the FREE daily allowance only.
 //                 The 10,000 free units/day are split into pools:
-//                   staff   (Miss Marwa's Co-Pilot)  AI_POOL_STAFF   default 4,000
-//                   student (free "Argon" tutor)      AI_POOL_STUDENT default 6,000
+//                   staff   (Miss Marwa's AI Assistant) AI_POOL_STAFF   default 1,500
+//                   student (free "Argon" tutor)      AI_POOL_STUDENT default 8,500
 //                 A pool that is used up stops (no paid overage, ever).
 //   tier 'pro' → Claude Haiku   (env CLAUDE_FAST_MODEL, default claude-haiku-5-5)
 //   tier 'max' → Claude Sonnet  (env CLAUDE_PRO_MODEL,  default claude-sonnet-5-5)
@@ -18,8 +18,8 @@ import { aiReady, addUsage, estimateNeurons, markQuotaHit, quotaHitToday, textOf
 
 export const BRANDS = {
     free: { name: 'Argon', note: 'Fast & free', ar: 'مجاني' },
-    pro: { name: 'Krypton', note: 'Smart — everyday tasks', ar: 'ذكي' },
-    max: { name: 'Krypton Max', note: 'Strongest — exams & summaries', ar: 'الأقوى' }
+    pro: { name: 'Marwa Cloud', note: 'Science — everyday', ar: 'ذكي' },
+    max: { name: 'Marwa Cloud Max', note: 'Strongest — exams & summaries', ar: 'الأقوى' }
 };
 const FREE_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
 // USD per 1M tokens [input, output] — Anthropic pricing page, checked 16 Nov 2026
@@ -27,7 +27,7 @@ const CLAUDE_PRICES = {
     'claude-haiku-5-5': [0.10, 0.50],
     'claude-sonnet-5-5': [2, 10]
 };
-const POOL_DEFAULTS = { staff: 4000, student: 6000 };
+const POOL_DEFAULTS = { staff: 1500, student: 8500 };   // set by the user 17 Nov 2026 (was 4,000 / 6,000)
 
 export class AiLimitError extends Error {
     constructor(code, message, extra = {}) { super(message); this.code = code; Object.assign(this, extra); }
@@ -98,7 +98,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
         const used = await kvNum(db, key);
         const chars = system.length + turns.reduce((t, m) => t + m.content.length, 0);
         const guess = estimateNeurons(model, { prompt_tokens: Math.ceil(chars / 3.5), completion_tokens: Math.min(maxTokens, 400) });
-        if (await quotaHitToday(db) || used + guess > cap) throw new AiLimitError('POOL_EMPTY', `Today's free ${pool === 'staff' ? 'Co-Pilot' : 'student'} allowance is used up — it resets at 2:00 am (Cairo).`, { used: Math.round(used), cap });
+        if (await quotaHitToday(db) || used + guess > cap) throw new AiLimitError('POOL_EMPTY', `Today's free ${pool === 'staff' ? 'AI Assistantot' : 'student'} allowance is used up — it resets at 2:00 am (Cairo).`, { used: Math.round(used), cap });
         let res = null, lastErr = null;
         for (let k = 0; k < 3 && !res; k++) {
             try { res = await env.AI.run(model, { messages: [...(system ? [{ role: 'system', content: system }] : []), ...turns], max_tokens: maxTokens, temperature }); }
@@ -110,7 +110,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
                 break;
             }
         }
-        if (!res) throw new AiLimitError('AI_ERROR', 'The free model did not answer — try again, or switch to Krypton. ' + String(lastErr && lastErr.message || '').slice(0, 160));
+        if (!res) throw new AiLimitError('AI_ERROR', 'The free model did not answer — try again, or switch to Marwa Cloud. ' + String(lastErr && lastErr.message || '').slice(0, 160));
         const text = textOf(res).trim();
         const neurons = estimateNeurons(model, res.usage, chars, text.length);
         await addUsage(db, neurons);               // platform-wide meter (same as Homework / AI Lab)
@@ -119,7 +119,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
     }
 
     // ---- paid (Claude) ----
-    if (!claudeReady(env)) throw new AiLimitError('PAID_OFF', 'Krypton is not connected yet — add the ANTHROPIC_API_KEY secret in Cloudflare.');
+    if (!claudeReady(env)) throw new AiLimitError('PAID_OFF', 'Marwa Cloud is not connected yet — add the ANTHROPIC_API_KEY secret in Cloudflare.');
     const spentDay = await kvNum(db, `ai_spend_${day()}`), spentMonth = await kvNum(db, `ai_spend_${month()}`);
     if (spentDay >= dailyUsdCap(env)) throw new AiLimitError('DAILY_CAP', `Today's paid AI budget ($${dailyUsdCap(env).toFixed(2)}) is used up — use Argon until tomorrow, or raise AI_DAILY_USD.`);
     if (spentMonth >= monthlyUsdCap(env)) throw new AiLimitError('MONTHLY_CAP', `This month's paid AI budget ($${monthlyUsdCap(env).toFixed(2)}) is used up — raise AI_MONTHLY_USD to continue.`);
@@ -145,7 +145,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
             lastErr = e.name === 'AbortError' ? 'took too long' : String(e.message || e);
         } finally { clearTimeout(timer); }
     }
-    if (!res) throw new AiLimitError('AI_ERROR', 'Krypton did not answer — try again in a moment. (' + String(lastErr).slice(0, 160) + ')');
+    if (!res) throw new AiLimitError('AI_ERROR', 'Marwa Cloud did not answer — try again in a moment. (' + String(lastErr).slice(0, 160) + ')');
     const text = (res.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
     const usage = res.usage || {};
     const costUsd = claudeCost(model, usage);

@@ -1,9 +1,9 @@
 // =====================================================================
-// Miss Marwa's Co-Pilot (/api/copilot) — staff only (permission copilot.use = teacher).
-// C0: chat + saved chats + model choice (Argon free / Krypton / Krypton Max) + usage meter.
+// Miss Marwa's AI Assistant (/api/copilot) — staff only (permission copilot.use = teacher).
+// C0: chat + saved chats + model choice (Argon free / Marwa Cloud / Marwa Cloud Max) + usage meter.
 // C1: read-only platform data — code picks the lookup (copilot-tools.js), the page draws exact data cards,
 //     the AI only writes a short takeaway from those facts. Lookups work on Argon too, and still show
-//     their cards when the AI can't answer (free units used up, Krypton not connected…).
+//     their cards when the AI can't answer (free units used up, Marwa Cloud not connected…).
 // =====================================================================
 import { requireStaff, ensureAppSchema } from './admin-auth.js';
 import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
@@ -43,14 +43,14 @@ const ROLE_ARGON = `
 You're her news bulletin: you report what's happening on the platform — students, results, absences, exams closing, today's brief — straight from the DATA, plus quick admin help. That's your strength.
 You are NOT the science expert:
 - For a science question (explanations, exam questions, model answers, lesson content): give a SHORT, simple answer (4–5 lines max). Never write long explanations, full question sets or exams.
-- The app automatically adds a note under your reply recommending Krypton for science — so don't write such a note yourself.`;
+- The app automatically adds a note under your reply recommending Marwa Cloud for science — so don't write such a note yourself.`;
 const ROLE_KRYPTON = `
-## Your role: you are "Krypton" — the science expert 🎓
+## Your role: you are "Marwa Cloud" — the science expert 🎓
 Science explanations, exam questions with model answers, rephrasing and summaries are your job: do them fully, accurately and carefully. You can also read the platform's data when it's given to you.`;
 
 export function systemPrompt(staff, tier = 'free', now = new Date()) {
     const date = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Cairo' });
-    return `You are "Co-Pilot", the private assistant of ${NAME_EN} (${NAME_AR}) — a science teacher in Egypt who runs Science Academy (Science with ${NAME_EN}) for Prep 1, Prep 2, Prep 3 and Secondary 1 students. You are talking to HER (the teacher), not to a student.
+    return `You are Miss Marwa's "AI Assistant", the private assistant of ${NAME_EN} (${NAME_AR}) — a science teacher in Egypt who runs Science Academy (Science with ${NAME_EN}) for Prep 1, Prep 2, Prep 3 and Secondary 1 students. You are talking to HER (the teacher), not to a student.
 Today is ${date} (Cairo).
 ${tier === 'free' ? ROLE_ARGON : ROLE_KRYPTON}
 
@@ -112,7 +112,7 @@ export function dataBlock(facts) {
 }
 
 // Worked example turns sent before the real chat — the small free model follows examples far better than rules.
-// Argon's examples show SHORT science answers (it's the observer, not the expert); Krypton's show the full style.
+// Argon's examples show SHORT science answers (it's the observer, not the expert); Marwa Cloud's show the full style.
 const EX_LESSON = [
     { role: 'user', content: 'Summarize Prep 2 Unit 2 Lesson 3' },
     { role: 'assistant', content: `يا ${NAME_AR}، ملفات المنهج والدروس لسه مش متوصلة بيا 🙈 فمش هقدر أعرف الدرس ده فيه إيه بالظبط، ومش هخمّن.
@@ -133,9 +133,9 @@ export const STYLE_EXAMPLES = [
 ];
 
 // Argon answered something that isn't a data lookup → the app (not the model) adds a "basic answer" note
-// with a one-tap "Ask Krypton". Greetings, thanks and "what can you do?" don't get it.
+// with a one-tap "Ask Marwa Cloud". Greetings, thanks and "what can you do?" don't get it.
 const SMALLTALK = /^(شكرا|شكرًا|ميرسي|متشكره|متشكر|تسلم|تسلمي|تمام|اوك|اوكي|ok|okay|thanks|thank you|thx|hi|hello|hey|ازيك|ازيك يا \S+|صباح الخير|مساء الخير|السلام عليكم|اهلا|أهلا|ماشي|حلو|جميل|برافو|عظيم|perfect|great|nice)[\s!.,،؟?😊👌🙏❤️💪✨]*$|تقدر تعمل ايه|تقدر تعمل إيه|بتعمل ايه|بتعمل إيه|انت مين|إنت مين|what can you do|who are you|^help$|ساعدني ازاي/i;
-export const ARGON_NOTE = 'دي إجابة مبسّطة ومحدودة 🙂 — للأسئلة العلمية (شرح، أسئلة، نماذج إجابة) أنصحك تستخدمي **Krypton**.';
+export const ARGON_NOTE = 'دي إجابة مبسّطة ومحدودة 🙂 — للأسئلة العلمية (شرح، أسئلة، نماذج إجابة) أنصحك تستخدمي **Marwa Cloud**.';
 export function needsUpgradeNote(tier, text, hasData) { return tier === 'free' && !hasData && !SMALLTALK.test(String(text || '').trim()); }
 
 const threadOut = (t) => ({ id: t.id, title: t.title, createdAt: t.created_at, updatedAt: t.updated_at, last: t.last_text ? String(t.last_text).replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 90) : '', count: t.n || 0 });
@@ -158,7 +158,7 @@ function contextText(plan, result) {
 const NO_AI_TEXT = { POOL_EMPTY: 'دي البيانات اللي طلبتيها 👇 (الملخص بالـ AI مش متاح دلوقتي — الـ free units خلصت النهارده، بس الأرقام تحت دقيقة ومن السيستم مباشرة.)',
     DAILY_CAP: 'دي البيانات اللي طلبتيها 👇 (وصلنا لحد الصرف بتاع النهارده، فمفيش ملخص بالـ AI — الأرقام تحت من السيستم مباشرة.)',
     MONTHLY_CAP: 'دي البيانات اللي طلبتيها 👇 (وصلنا لحد الصرف بتاع الشهر، فمفيش ملخص بالـ AI — الأرقام تحت من السيستم مباشرة.)',
-    PAID_OFF: 'دي البيانات اللي طلبتيها 👇 (Krypton مش متوصل لسه، فمفيش ملخص — جرّبي Argon أو بصّي على الأرقام تحت.)',
+    PAID_OFF: 'دي البيانات اللي طلبتيها 👇 (Marwa Cloud مش متوصل لسه، فمفيش ملخص — جرّبي Argon أو بصّي على الأرقام تحت.)',
     FREE_OFF: 'دي البيانات اللي طلبتيها 👇 (Argon مش متاح دلوقتي — الأرقام تحت من السيستم مباشرة.)',
     AI_ERROR: 'دي البيانات اللي طلبتيها 👇 (الملخص ماشتغلش المرة دي، بس الأرقام تحت من السيستم مباشرة.)' };
 
@@ -231,7 +231,7 @@ export async function onRequest(context) {
             const last = await db.prepare('SELECT * FROM copilot_messages WHERE thread_id = ? ORDER BY id DESC LIMIT 1').bind(t.id).first();
             const lastUser = last && last.role === 'user' ? last : (last && last.role === 'error' ? await db.prepare(`SELECT * FROM copilot_messages WHERE thread_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1`).bind(t.id).first() : null);
             let userMsg = null;
-            // "Ask Krypton" re-asks the SAME question on another model: reuse it, and leave Argon's answer out of the history
+            // "Ask Marwa Cloud" re-asks the SAME question on another model: reuse it, and leave Argon's answer out of the history
             const lastAsked = data.again ? await db.prepare(`SELECT * FROM copilot_messages WHERE thread_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1`).bind(t.id).first() : null;
             if (data.again && lastAsked && lastAsked.text === text) userMsg = lastAsked;
             else if (data.resend && lastUser && lastUser.text === text) userMsg = lastUser;
