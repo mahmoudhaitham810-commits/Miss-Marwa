@@ -260,6 +260,11 @@ a.kpi:hover { transform: translateY(-2px); border-color: var(--primary-line); }
 .kv div { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); min-width: 0; }
 .kv span { display: block; font-size: 12px; color: var(--muted); }
 .kv b { display: block; overflow-wrap: anywhere; }
+/* the login code — big, first, with Copy (staff kept missing it in the grey subtitle) */
+.kv .kv-code { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 10px; background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent); }
+.kv .kv-code span { grid-column: 1; }
+.kv .kv-code b { grid-column: 1; font-size: 22px; letter-spacing: .04em; color: var(--primary); text-align: left; }
+.kv .kv-code .btn { grid-column: 2; grid-row: 1 / span 2; }
 .danger-text { color: var(--danger) !important; }
 
 /* ---------- Forms in sheets / editors ---------- */

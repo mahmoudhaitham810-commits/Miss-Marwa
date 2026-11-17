@@ -113,6 +113,8 @@
             Site.sheet({
                 iconName: 'user', title: `${s.first_name} ${s.last_name}`, subtitle: `${s.student_id} · ${A.GRADES[s.grade] || s.grade}`,
                 html: `<div class="kv">
+                        <div class="kv-code"><span>Student code · كود الدخول</span><b class="num" dir="ltr">${esc(s.student_id)}</b>
+                            <button type="button" class="btn btn-soft btn-sm" id="copyCode">${icon('copy', 'sm')}Copy</button></div>
                         <div><span>Student phone</span><b class="num">${esc(s.phone || '—')}</b></div>
                         <div><span>Parent phone</span><b class="num">${esc(s.parent_phone || '—')}</b></div>
                         <div><span>Gender</span><b>${s.gender === 'female' ? 'Girl' : s.gender === 'male' ? 'Boy' : '—'}</b></div>
@@ -121,6 +123,10 @@
                         <div class="segmented" id="grpSeg"><button data-value="center" type="button">Center</button><button data-value="private" type="button">Private</button></div>
                         ${groupOf(s) === 'none' ? '<p class="small" style="color:var(--warning);margin:6px 0 0">No group yet — pick one.</p>' : ''}</div>`,
                 actions
+            });
+            document.getElementById('copyCode')?.addEventListener('click', async () => {
+                try { await navigator.clipboard.writeText(s.student_id); Site.toast(`Copied ${s.student_id}`, 'success'); }
+                catch (e) { Site.toast(s.student_id, 'info'); }
             });
             const seg = document.getElementById('grpSeg');
             if (!A.can('students.edit')) seg.querySelectorAll('button').forEach(b => b.disabled = true);
