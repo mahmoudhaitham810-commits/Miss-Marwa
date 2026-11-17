@@ -8,14 +8,17 @@
 // login — the student's own session, or the student a staff member picked for Preview. Nothing in
 // the chat text can change it, and there is no lookup of any other student at all.
 //
-// Free limits (shared 8,500 free units a day for all students):
-//   • TUTOR_FREE_DAILY replies per student per day (default 15)
+// Free limits (shared 9,500 free units a day for all students):
+//   • TUTOR_FREE_DAILY replies per student per day, always available while the pool has units (default 10)
+//   • after that, "bonus" replies up to TUTOR_FREE_MAX (default 25) — only from the released leftover of the
+//     students' pool (units nobody is expected to need any more today, see ai-gateway.js), so one student can't
+//     drain the pool early in the day
 //   • TUTOR_FREE_IMAGES photos per student per day (default 1)
 //   • while the student is IN an online exam, the assistant is closed (no help during exams)
 // Preview chats are kept apart from the student's own chats and have their own counters.
 // =====================================================================
 import { requireStaff, ensureAppSchema, verifyStudentRequest } from './admin-auth.js';
-import { chat, usageSummary, AiLimitError, BRANDS } from './ai-gateway.js';
+import { chat, usageSummary, bonusOpen, AiLimitError, BRANDS } from './ai-gateway.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
@@ -28,7 +31,7 @@ const MAX_TEXT = 2000, HISTORY = 12;
 const GRADE_LABEL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
 const day = () => new Date().toISOString().slice(0, 10);
 const num = (v, d) => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : d; };
-export const limits = (env) => ({ messages: num(env.TUTOR_FREE_DAILY, 15), images: num(env.TUTOR_FREE_IMAGES, 1) });
+export const limits = (env) => { const m = num(env.TUTOR_FREE_DAILY, 10); return { messages: m, max: Math.max(m, num(env.TUTOR_FREE_MAX, 25)), images: num(env.TUTOR_FREE_IMAGES, 1) }; };
 export const isOpen = (env) => String(env.TUTOR_OPEN || '') === '1';
 
 let ready = false;
@@ -186,6 +189,7 @@ const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { retu
 const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, model: m.model || null, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, error: m.error || null, cards: parse(m.cards), imageId: m.image_id || null, at: m.created_at });
 const FRIENDLY = {
     POOL_EMPTY: 'Mini Assistant خد استراحة النهارده 😴 — بيرجع الساعة 2 بالليل. لو محتاج دلوقتي جرّب Miss Marwa Assistant Pro.',
+    BONUS_CLOSED: 'خلصت رسايلك النهارده 😅 — رسايل زيادة بتفتح لما يكون فيه رصيد فاضي، جرّب كمان شوية أو بكره.',
     FREE_OFF: 'Mini Assistant مش متاح دلوقتي 🙏 جرّب كمان شوية.',
     AI_ERROR: 'حصلت لخبطة صغيرة 😅 جرّب تبعت تاني.'
 };
@@ -221,7 +225,7 @@ export async function onRequest(context) {
                     { tier: 'free', name: BRANDS.free.name, note: 'Free', ready: aiReady(env) },
                     { tier: 'pro', name: BRANDS.pro.name, note: 'Coming soon', ready: false, locked: true }
                 ],
-                today: await today(), pool: { ...u.pools.student, quotaHit: u.freeQuotaHit }, inExam: await inExam()
+                today: await today(), available: !u.freeQuotaHit && u.pools.student.left > 0, inExam: await inExam()   // no unit numbers on the student side
             });
         }
         if (action === 'thread') {   // the latest chat (students see one running chat + "New chat")
@@ -256,7 +260,9 @@ export async function onRequest(context) {
             // "what can you do?" → a fixed, always-correct list (no AI, doesn't use a daily message)
             const cap = !img && isCapabilityQuestion(text);
             const t0 = await today();
-            if (!cap && t0.messages >= L.messages) return bad(`خلصت رسايل Mini Assistant بتاعة النهارده (${L.messages}) 😅 — بترجع بكره، أو جرّب ${BRANDS.pro.name}.`, 429, { code: 'DAILY_LIMIT', today: t0 });
+            const bonus = !cap && t0.messages >= L.messages;   // past their own daily messages → only from today's leftover
+            if (!cap && t0.messages >= L.max) return bad(`خلصت رسايل Mini Assistant بتاعة النهارده 😅 — بترجع بكره الساعة 2 بالليل، أو جرّب ${BRANDS.pro.name}.`, 429, { code: 'DAILY_LIMIT', today: t0 });
+            if (bonus && !(await bonusOpen(env, db))) return bad(`خلصت رسايلك النهارده (${L.messages}) 😅 — رسايل زيادة بتفتح لما يكون فيه رصيد فاضي، جرّب كمان شوية أو بكره.`, 429, { code: 'BONUS_CLOSED', today: t0 });
             if (img && t0.images >= L.images) return bad(`مسموح بصورة واحدة في اليوم على Mini Assistant 📷 — لو عايز تبعت صور أكتر جرّب ${BRANDS.pro.name} 🚀`, 429, { code: 'IMAGE_LIMIT', today: t0 });
 
             let t = await ownThread(parseInt(data.threadId, 10));
@@ -292,7 +298,7 @@ export async function onRequest(context) {
                 return db.prepare('SELECT * FROM tutor_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
             try {
-                const out = await chat(env, db, { tier: 'free', pool: 'student', system: tutorPrompt(d, 'free') + (img ? IMAGE_RULES : '') + (intents.length ? '' : taskRules(kind, 'free')), messages: [...EXAMPLES, ...messages], maxTokens: img ? 900 : 850, temperature: 0.5, image: img && !img.error ? img : null });
+                const out = await chat(env, db, { tier: 'free', pool: 'student', system: tutorPrompt(d, 'free') + (img ? IMAGE_RULES : '') + (intents.length ? '' : taskRules(kind, 'free')), messages: [...EXAMPLES, ...messages], maxTokens: img ? 900 : 850, temperature: 0.5, image: img && !img.error ? img : null, bonus });
                 await kvAdd(db, counterKey(who, 'msgs'), 1);
                 if (img) await kvAdd(db, counterKey(who, 'imgs'), 1);
                 const saved = await save({ text: (kind === 'exam' ? out.text : dropAnswerLine(out.text)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cards: cards.length ? JSON.stringify(cards) : null });
@@ -306,7 +312,7 @@ export async function onRequest(context) {
                     return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), aiError: { code } });
                 }
                 await save({ role: 'error', text: FRIENDLY[code] || FRIENDLY.AI_ERROR, error: code });
-                return json({ error: FRIENDLY[code] || FRIENDLY.AI_ERROR, code, threadId: t.id, user: msgOut(userMsg), today: await today() }, code === 'POOL_EMPTY' ? 429 : code === 'FREE_OFF' ? 503 : 502);
+                return json({ error: FRIENDLY[code] || FRIENDLY.AI_ERROR, code, threadId: t.id, user: msgOut(userMsg), today: await today() }, ['POOL_EMPTY', 'BONUS_CLOSED'].includes(code) ? 429 : code === 'FREE_OFF' ? 503 : 502);
             }
         }
         return bad('Unknown action', 404);

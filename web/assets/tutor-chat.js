@@ -177,9 +177,9 @@
                 MSGS = MSGS.filter(m => m.role !== 'typing');
                 if (d.threadId) threadId = d.threadId;
                 if (d.today && ST) { ST.today = d.today; sub(); }
-                const limit = ['DAILY_LIMIT', 'IMAGE_LIMIT', 'POOL_EMPTY'].includes(d.code);
+                const limit = ['DAILY_LIMIT', 'IMAGE_LIMIT', 'POOL_EMPTY', 'BONUS_CLOSED'].includes(d.code);
                 if (!d.user && !limit) { /* not saved → let them resend */ }
-                if (d.code === 'IMAGE_LIMIT' || d.code === 'DAILY_LIMIT') MSGS.pop();   // nothing was sent
+                if (d.code === 'IMAGE_LIMIT' || d.code === 'DAILY_LIMIT' || (d.code === 'BONUS_CLOSED' && !d.threadId)) MSGS.pop();   // nothing was sent
                 MSGS.push({ role: 'error', text: e.message, retry: !limit && d.code !== 'EXAM_LOCK' && d.code !== 'PRO_LOCKED', last: { text, image },
                     cards: limit ? [{ type: 'upgrade', text: d.code === 'IMAGE_LIMIT' ? 'عايز تبعت صور أكتر وتاخد حل أدق؟ **Miss Marwa Assistant Pro** جاي قريب 🚀' : 'عايز تسأل أكتر من كده؟ **Miss Marwa Assistant Pro** جاي قريب 🚀', tier: 'pro' }] : null });
                 if (d.code === 'EXAM_LOCK' && ST) { ST.inExam = true; sub(); }

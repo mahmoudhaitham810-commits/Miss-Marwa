@@ -211,7 +211,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
-    <script src="/assets/ai-kit.js?v=20261117c"></script>
+    <script src="/assets/ai-kit.js?v=20261117d"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -241,7 +241,10 @@
             const p = STATUS.pools.staff, s = STATUS.spend;
             const pf = p.cap ? Math.min(100, p.used / p.cap * 100) : 100, sf = s.dailyCap ? Math.min(100, s.today / s.dailyCap * 100) : 0;
             const cls = (f) => f >= 100 ? 'full' : f >= 80 ? 'warn' : '';
-            $('meter').innerHTML = `<span class="m" title="Free units used today by AI Assistant (resets 2:00 am Cairo)"><b>Mini Assistant</b><span class="bar ${cls(STATUS.freeQuotaHit ? 100 : pf)}"><span style="width:${STATUS.freeQuotaHit ? 100 : pf}%"></span></span>${STATUS.freeQuotaHit ? 'used up today' : `${p.used.toLocaleString()} / ${p.cap.toLocaleString()}`}</span>
+            // her own 500 + what she can borrow right now from the students' leftover (shown here only — never to students)
+            const extra = p.extra || 0, borrowed = p.borrowed || 0, out = STATUS.freeQuotaHit || (p.used >= p.cap && extra <= 0);
+            const txt = out ? 'used up today' : `${p.used.toLocaleString()} / ${p.cap.toLocaleString()}${borrowed ? ` (${borrowed.toLocaleString()} borrowed)` : ''}${extra > 0 ? ` · +${extra.toLocaleString()} extra free now` : ''}`;
+            $('meter').innerHTML = `<span class="m" title="Free units used today by AI Assistant (resets 2:00 am Cairo). Past ${p.cap.toLocaleString()} it borrows units the students won't need today — that extra grows as the day goes on."><b>Mini Assistant</b><span class="bar ${cls(out ? 100 : p.used >= p.cap ? 80 : pf)}"><span style="width:${out ? 100 : pf}%"></span></span>${txt}</span>
                 ${STATUS.paidReady ? `<span class="m" title="Paid AI spend today / this month"><b>Pro</b><span class="bar ${cls(sf)}"><span style="width:${sf}%"></span></span>${money(s.today)} today · ${money(s.month)} this month</span>` : ''}`;
         }
         async function loadStatus() { try { STATUS = await api('/api/copilot?action=status'); } catch (e) { STATUS = null; } renderModels(); renderMeter(); }

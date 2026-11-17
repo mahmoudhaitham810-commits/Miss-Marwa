@@ -2,10 +2,15 @@
 // AI layer — one way to talk to every model the platform uses.
 //
 //   tier 'free' → Cloudflare Workers AI, paid for by the FREE daily allowance only.
-//                 The 10,000 free units/day are split into pools:
-//                   staff   (Miss Marwa's AI Assistant) AI_POOL_STAFF   default 1,500
-//                   student (free "Argon" tutor)      AI_POOL_STUDENT default 8,500
-//                 A pool that is used up stops (no paid overage, ever).
+//                 The 10,000 free units/day are split into pools (set by the user 17 Nov 2026):
+//                   staff   (Miss Marwa's AI Assistant) AI_POOL_STAFF   default   500 guaranteed
+//                   student (Mini Assistant for students) AI_POOL_STUDENT default 9,500
+//                 Flexible sharing — "released leftover": units the students are not expected to need any more today.
+//                   reserve(now) = student pool × (hours left until the 2:00 am reset ÷ 24)
+//                   leftover     = students' units still left − reserve(now)        (grows as the day goes on)
+//                 • Miss Marwa past her 500 → borrows from that leftover (charged to the students' pool too).
+//                 • A student past their personal daily messages → "bonus" messages only from that leftover.
+//                 Nothing can ever go past the pools; when they're empty everything stops cleanly (no paid overage, ever).
 //   tier 'pro' → Claude Haiku   (env CLAUDE_FAST_MODEL, default claude-haiku-5-5)
 //   (Pro Max / Claude Sonnet was dropped on 17 Nov 2026 — too expensive; all effort goes into Pro)
 //                 Needs the Cloudflare secret ANTHROPIC_API_KEY. Every call's cost is
@@ -14,7 +19,7 @@
 //
 // Callers never see provider names — screens use the branded names below.
 // =====================================================================
-import { aiReady, addUsage, estimateNeurons, markQuotaHit, quotaHitToday, textOf } from './ai-engine.js';
+import { aiReady, addUsage, estimateNeurons, markQuotaHit, quotaHitToday, textOf, usageToday, DAILY_FREE_NEURONS } from './ai-engine.js';
 
 export const BRANDS = {
     free: { name: 'Mini Assistant', note: 'Free', ar: 'مجاني' },
@@ -46,7 +51,18 @@ const CLAUDE_PRICES = {
     'claude-haiku-5-5': [0.10, 0.50],
     'claude-sonnet-5-5': [2, 10]
 };
-const POOL_DEFAULTS = { staff: 1500, student: 8500 };   // set by the user 17 Nov 2026 (was 4,000 / 6,000)
+const POOL_DEFAULTS = { staff: 500, student: 9500 };    // set by the user 17 Nov 2026 (was 1,500 / 8,500, before that 4,000 / 6,000)
+// Fraction of the day still to come before the free allowance resets (00:00 UTC = 2:00 am Cairo)
+export const dayLeft = (now = new Date()) => { const n = new Date(now); const reset = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1); return Math.max(0, Math.min(1, (reset - n.getTime()) / 86400000)); };
+/** The students' pool right now: { cap, used (students + borrowed by staff), left, reserve, leftover } */
+export async function studentPool(env, db, now = new Date()) {
+    const cap = poolCap(env, 'student');
+    const used = await kvNum(db, `ai_pool_student_${day()}`) + await kvNum(db, `ai_pool_borrow_${day()}`);
+    const left = Math.max(0, cap - used), reserve = Math.round(cap * dayLeft(now));
+    return { cap, used: Math.round(used), left: Math.round(left), reserve, leftover: Math.max(0, Math.round(left - reserve)) };
+}
+/** Can a student's bonus message (past their personal daily number) run now? */
+export async function bonusOpen(env, db, guess = 150) { return (await studentPool(env, db)).leftover >= guess; }
 
 export class AiLimitError extends Error {
     constructor(code, message, extra = {}) { super(message); this.code = code; Object.assign(this, extra); }
@@ -80,6 +96,10 @@ export const claudeCost = (model, usage) => {
 export async function usageSummary(env, db) {
     const pools = {};
     for (const p of Object.keys(POOL_DEFAULTS)) pools[p] = { used: Math.round(await kvNum(db, `ai_pool_${p}_${day()}`)), cap: poolCap(env, p) };
+    const SP = await studentPool(env, db);
+    pools.staff.borrowed = Math.round(await kvNum(db, `ai_pool_borrow_${day()}`));
+    pools.staff.extra = SP.leftover;                 // what she can borrow right now
+    pools.student = { ...pools.student, ...SP };
     return {
         pools, freeQuotaHit: await quotaHitToday(db), freeReady: aiReady(env), paidReady: claudeReady(env),
         spend: { today: await kvNum(db, `ai_spend_${day()}`), month: await kvNum(db, `ai_spend_${month()}`), dailyCap: dailyUsdCap(env), monthlyCap: monthlyUsdCap(env) },
@@ -105,7 +125,7 @@ function tidyTurns(messages) {
  * → { text, tier, brand, model, ms, neurons?, costUsd?, usage }
  * Throws AiLimitError with code: POOL_EMPTY | FREE_OFF | PAID_OFF | DAILY_CAP | MONTHLY_CAP | AI_ERROR
  */
-export async function chat(env, db, { tier = 'free', pool = 'staff', system = '', messages = [], maxTokens = 1200, temperature = 0.4, image = null, thinking = 0 }) {
+export async function chat(env, db, { tier = 'free', pool = 'staff', system = '', messages = [], maxTokens = 1200, temperature = 0.4, image = null, thinking = 0, bonus = false }) {
     const turns = tidyTurns(messages);
     // image = { mime, b64 } → attached to the LAST user turn (the photo she/he just sent)
     const img = image && image.b64 && /^image\/(jpeg|png|webp)$/.test(image.mime || '') ? image : null;
@@ -119,7 +139,19 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
         const used = await kvNum(db, key);
         const chars = system.length + turns.reduce((t, m) => t + m.content.length, 0);
         const guess = estimateNeurons(img ? model : freeTextModel(env), { prompt_tokens: Math.ceil(chars / 3.5) + (img ? 1600 : 0), completion_tokens: Math.min(maxTokens, 400) });
-        if (await quotaHitToday(db) || used + guess > cap) throw new AiLimitError('POOL_EMPTY', `Today's free ${pool === 'staff' ? 'AI Assistant' : 'student'} allowance is used up — it resets at 2:00 am (Cairo).`, { used: Math.round(used), cap });
+        const empty = () => new AiLimitError('POOL_EMPTY', `Today's free ${pool === 'staff' ? 'AI Assistant' : 'student'} allowance is used up — it resets at 2:00 am (Cairo).`, { used: Math.round(used), cap });
+        if (await quotaHitToday(db)) throw empty();
+        const SP = await studentPool(env, db);
+        if (pool === 'student') {
+            if (SP.left < guess) throw empty();
+            if (bonus && SP.leftover < guess) throw new AiLimitError('BONUS_CLOSED', 'Extra messages are closed right now — the free units left are kept for the rest of the day.');
+        } else if (used + guess > cap && SP.leftover < guess) throw empty();   // staff past 500 → only from the students' released leftover
+        if (await usageToday(db) + guess > DAILY_FREE_NEURONS) throw empty();     // whole account (homework / AI Lab included)
+        // after a call: charge this pool; staff units above the 500 are also taken from the students' pool ("borrowed")
+        const charge = async (neurons) => {
+            await addUsage(db, neurons); await kvAdd(db, key, neurons);
+            if (pool === 'staff') { const before = await kvNum(db, key) - neurons; const over = Math.max(0, before + neurons - cap) - Math.max(0, before - cap); await kvAdd(db, `ai_pool_borrow_${day()}`, over); }
+        };
         // 1) text → the stronger text model first (one try; anything wrong → Scout below)
         const tm = freeTextModel(env), failKey = `ai_free_text_fail_${day()}`;
         if (!img && tm !== model && await kvNum(db, failKey) < 3) {
@@ -128,7 +160,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
                 const r = await env.AI.run(tm, { messages: [...sys, ...turns], max_tokens: maxTokens + (isOss(tm) ? 700 : 0), temperature });   // + room for its short private reasoning
                 const text = cleanOss(replyText(r));
                 const neurons = estimateNeurons(tm, r && r.usage, chars, text.length + (isOss(tm) ? 1200 : 0));
-                await addUsage(db, neurons); await kvAdd(db, key, neurons);
+                await charge(neurons);
                 if (text) return { text, tier, brand: BRANDS.free.name, model: tm, ms: Date.now() - t0, neurons, usage: (r && r.usage) || null };
                 await kvAdd(db, failKey, 1);
             } catch (e) {
@@ -160,8 +192,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
         if (!res) throw new AiLimitError('AI_ERROR', 'The free model did not answer — try again, or switch to Miss Marwa Assistant Pro. ' + String(lastErr && lastErr.message || '').slice(0, 160));
         const text = (replyText(res) || textOf(res)).trim();
         const neurons = estimateNeurons(model, res.usage, chars + (img ? 5600 : 0), text.length);
-        await addUsage(db, neurons);               // platform-wide meter (same as Homework / AI Lab)
-        await kvAdd(db, key, neurons);             // this pool
+        await charge(neurons);                     // platform-wide meter + this pool (+ borrowed part)
         return { text, tier, brand: BRANDS.free.name, model, ms: Date.now() - t0, neurons, usage: res.usage || null };
     }
 
