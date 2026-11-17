@@ -1,14 +1,15 @@
 // =====================================================================
 // Miss Marwa's AI Assistant (/api/copilot) — staff only (permission copilot.use = teacher).
-// C0: chat + saved chats + model choice (Argon free / Marwa Cloud / Marwa Cloud Max) + usage meter.
+// C0: chat + saved chats + model choice (Mini Assistant free / Miss Marwa Assistant Pro / Miss Marwa Assistant Pro Max) + usage meter.
 // C1: read-only platform data — code picks the lookup (copilot-tools.js), the page draws exact data cards,
-//     the AI only writes a short takeaway from those facts. Lookups work on Argon too, and still show
-//     their cards when the AI can't answer (free units used up, Marwa Cloud not connected…).
+//     the AI only writes a short takeaway from those facts. Lookups work on Mini Assistant too, and still show
+//     their cards when the AI can't answer (free units used up, Miss Marwa Assistant Pro not connected…).
 // =====================================================================
 import { requireStaff, ensureAppSchema } from './admin-auth.js';
 import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
+import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const bad = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
@@ -31,6 +32,7 @@ async function ensureTables(db) {
     const cols = async (t) => ((await db.prepare(`PRAGMA table_info(${t})`).all()).results || []).map(c => c.name);
     if (!(await cols('copilot_messages')).includes('cards')) await db.prepare('ALTER TABLE copilot_messages ADD COLUMN cards TEXT').run();
     if (!(await cols('copilot_threads')).includes('focus')) await db.prepare('ALTER TABLE copilot_threads ADD COLUMN focus TEXT').run();
+    if (!(await cols('copilot_messages')).includes('image_id')) await db.prepare('ALTER TABLE copilot_messages ADD COLUMN image_id INTEGER').run();
     ready = true;
 }
 
@@ -39,13 +41,13 @@ export const NAME_AR = 'مس مروة', NAME_EN = 'Miss Marwa';
 
 // Each model has its own job (decided with the user, 16 Nov 2026)
 const ROLE_ARGON = `
-## Your role: you are "Argon" — the platform's eyes 👀 (the free model)
+## Your role: you are "Mini Assistant" — the platform's eyes 👀 (the free model)
 You're her news bulletin: you report what's happening on the platform — students, results, absences, exams closing, today's brief — straight from the DATA, plus quick admin help. That's your strength.
 You are NOT the science expert:
 - For a science question (explanations, exam questions, model answers, lesson content): give a SHORT, simple answer (4–5 lines max). Never write long explanations, full question sets or exams.
-- The app automatically adds a note under your reply recommending Marwa Cloud for science — so don't write such a note yourself.`;
+- The app automatically adds a note under your reply recommending Miss Marwa Assistant Pro for science — so don't write such a note yourself.`;
 const ROLE_KRYPTON = `
-## Your role: you are "Marwa Cloud" — the science expert 🎓
+## Your role: you are "Miss Marwa Assistant Pro" — the science expert 🎓
 Science explanations, exam questions with model answers, rephrasing and summaries are your job: do them fully, accurately and carefully. You can also read the platform's data when it's given to you.`;
 
 export function systemPrompt(staff, tier = 'free', now = new Date()) {
@@ -103,6 +105,11 @@ ${tier === 'free' ? 'Short, simple answers to quick questions; help with wording
 Short and practical — she's busy and usually on her phone. Short paragraphs, bullet lists, **bold** key terms. Get to the point.`;
 }
 
+// When a photo is attached (the question is in the picture)
+export const IMAGE_RULES = `\n\n## A photo is attached to her last message
+Read the question(s) in the photo carefully and solve them step by step: copy each question briefly, then the answer with the reasoning (show any calculation with units).
+If a choice question: say which choice is right and why. If part of the photo is unclear, say exactly what you can't read instead of guessing.`;
+
 export function dataBlock(facts) {
     return `\n\n## DATA for this question (exact, from the platform)\n${facts}\n\n## How to answer with DATA
 - The data cards with ALL the details and action buttons are shown right under your reply — so DON'T repeat every number or list everyone.
@@ -112,7 +119,7 @@ export function dataBlock(facts) {
 }
 
 // Worked example turns sent before the real chat — the small free model follows examples far better than rules.
-// Argon's examples show SHORT science answers (it's the observer, not the expert); Marwa Cloud's show the full style.
+// Mini Assistant's examples show SHORT science answers (it's the observer, not the expert); Miss Marwa Assistant Pro's show the full style.
 const EX_LESSON = [
     { role: 'user', content: 'Summarize Prep 2 Unit 2 Lesson 3' },
     { role: 'assistant', content: `يا ${NAME_AR}، ملفات المنهج والدروس لسه مش متوصلة بيا 🙈 فمش هقدر أعرف الدرس ده فيه إيه بالظبط، ومش هخمّن.
@@ -132,15 +139,16 @@ export const STYLE_EXAMPLES = [
     ...EX_LESSON
 ];
 
-// Argon answered something that isn't a data lookup → the app (not the model) adds a "basic answer" note
-// with a one-tap "Ask Marwa Cloud". Greetings, thanks and "what can you do?" don't get it.
-const SMALLTALK = /^(شكرا|شكرًا|ميرسي|متشكره|متشكر|تسلم|تسلمي|تمام|اوك|اوكي|ok|okay|thanks|thank you|thx|hi|hello|hey|ازيك|ازيك يا \S+|صباح الخير|مساء الخير|السلام عليكم|اهلا|أهلا|ماشي|حلو|جميل|برافو|عظيم|perfect|great|nice)[\s!.,،؟?😊👌🙏❤️💪✨]*$|تقدر تعمل ايه|تقدر تعمل إيه|بتعمل ايه|بتعمل إيه|انت مين|إنت مين|what can you do|who are you|^help$|ساعدني ازاي/i;
-export const ARGON_NOTE = 'دي إجابة مبسّطة ومحدودة 🙂 — للأسئلة العلمية (شرح، أسئلة، نماذج إجابة) أنصحك تستخدمي **Marwa Cloud**.';
+// Mini Assistant answered something that isn't a data lookup → the app (not the model) adds a "basic answer" note
+// with a one-tap "Ask Miss Marwa Assistant Pro". Greetings, thanks and "what can you do?" don't get it.
+const SMALLTALK = /^(شكرا|شكرًا|ميرسي|متشكره|متشكر|تسلم|تسلمي|تمام|اوك|اوكي|ok|okay|thanks|thank you|thx|hi|hello|hey|ازيك( يا [^\n]{1,30})?|صباح الخير|مساء الخير|السلام عليكم|اهلا|أهلا|ماشي|حلو|جميل|برافو|عظيم|perfect|great|nice)[\s!.,،؟?😊👌🙏❤️💪✨]*$|تقدر تعمل ايه|تقدر تعمل إيه|بتعمل ايه|بتعمل إيه|انت مين|إنت مين|what can you do|who are you|^help$|ساعدني ازاي/i;
+export const ARGON_NOTE = 'دي إجابة مبسّطة ومحدودة 🙂 — للأسئلة العلمية (شرح، أسئلة، نماذج إجابة) أنصحك تستخدمي **Miss Marwa Assistant Pro**.';
+export const IMAGE_NOTE = 'دي إجابة مبدئية من Mini Assistant 🙂 — لأدق حل وتحليل للصور جرب **Miss Marwa Assistant Pro**.';
 export function needsUpgradeNote(tier, text, hasData) { return tier === 'free' && !hasData && !SMALLTALK.test(String(text || '').trim()); }
 
 const threadOut = (t) => ({ id: t.id, title: t.title, createdAt: t.created_at, updatedAt: t.updated_at, last: t.last_text ? String(t.last_text).replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 90) : '', count: t.n || 0 });
 const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } };
-const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, neurons: m.neurons, costUsd: m.cost_usd, error: m.error || null, at: m.created_at, cards: parse(m.cards) });
+const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, neurons: m.neurons, costUsd: m.cost_usd, error: m.error || null, at: m.created_at, cards: parse(m.cards), imageId: m.image_id || null });
 // What the chat bubble says when she taps a ✨ button (the lookup itself comes from the context)
 function contextText(plan, result) {
     const c = result && result.cards && result.cards[0];
@@ -158,8 +166,8 @@ function contextText(plan, result) {
 const NO_AI_TEXT = { POOL_EMPTY: 'دي البيانات اللي طلبتيها 👇 (الملخص بالـ AI مش متاح دلوقتي — الـ free units خلصت النهارده، بس الأرقام تحت دقيقة ومن السيستم مباشرة.)',
     DAILY_CAP: 'دي البيانات اللي طلبتيها 👇 (وصلنا لحد الصرف بتاع النهارده، فمفيش ملخص بالـ AI — الأرقام تحت من السيستم مباشرة.)',
     MONTHLY_CAP: 'دي البيانات اللي طلبتيها 👇 (وصلنا لحد الصرف بتاع الشهر، فمفيش ملخص بالـ AI — الأرقام تحت من السيستم مباشرة.)',
-    PAID_OFF: 'دي البيانات اللي طلبتيها 👇 (Marwa Cloud مش متوصل لسه، فمفيش ملخص — جرّبي Argon أو بصّي على الأرقام تحت.)',
-    FREE_OFF: 'دي البيانات اللي طلبتيها 👇 (Argon مش متاح دلوقتي — الأرقام تحت من السيستم مباشرة.)',
+    PAID_OFF: 'دي البيانات اللي طلبتيها 👇 (Miss Marwa Assistant Pro مش متوصل لسه، فمفيش ملخص — جرّبي Mini Assistant أو بصّي على الأرقام تحت.)',
+    FREE_OFF: 'دي البيانات اللي طلبتيها 👇 (Mini Assistant مش متاح دلوقتي — الأرقام تحت من السيستم مباشرة.)',
     AI_ERROR: 'دي البيانات اللي طلبتيها 👇 (الملخص ماشتغلش المرة دي، بس الأرقام تحت من السيستم مباشرة.)' };
 
 export async function onRequest(context) {
@@ -187,6 +195,8 @@ export async function onRequest(context) {
             const r = await runTool({ request, env, db, waitUntil: context.waitUntil }, { tool: 'brief', args: {} });
             return json({ cards: r.cards });
         }
+        // a photo she sent (only hers)
+        if (action === 'image') return serveImage(env, db, parseInt(url.searchParams.get('id'), 10), (info) => info.kind === 'ai-staff' && Number(info.owner_id) === Number(staff.id));
         if (action === 'threads') {
             const { results } = await db.prepare(`SELECT t.*, (SELECT text FROM copilot_messages m WHERE m.thread_id = t.id AND m.role = 'assistant' AND m.error IS NULL ORDER BY m.id DESC LIMIT 1) AS last_text,
                 (SELECT COUNT(*) FROM copilot_messages m WHERE m.thread_id = t.id) AS n FROM copilot_threads t WHERE t.staff_id = ? ORDER BY t.updated_at DESC, t.id DESC LIMIT 60`).bind(staff.id).all();
@@ -203,6 +213,9 @@ export async function onRequest(context) {
             const tier = TIERS.includes(data.tier) ? data.tier : 'free';
             let text = String(data.text || '').replace(/\r/g, '').trim();
             const ctxPlan = planFromContext(data.context);
+            let img = readImage(data.image);
+            if (img && img.error) return bad(img.error, 400);
+            if (!text && img) text = 'حلّي السؤال اللي في الصورة 📷';
             if (!text && !ctxPlan) return bad('Type a message', 400);
             if (text.length > MAX_TEXT) return bad(`Keep it under ${MAX_TEXT} characters`, 400);
             let t = await own(parseInt(data.threadId, 10));
@@ -210,7 +223,7 @@ export async function onRequest(context) {
 
             // 1) Is this a data question? Code decides (same on every model), then the lookup runs
             const focus = t ? parse(t.focus) : null;
-            const plan = ctxPlan || (text ? await route(db, text, focus) : null);
+            const plan = img ? null : ctxPlan || (text ? await route(db, text, focus) : null);   // a photo is a question, not a lookup
             let result = null;
             if (plan) {
                 try { result = await runTool({ request, env, db, waitUntil: context.waitUntil }, plan); }
@@ -231,19 +244,21 @@ export async function onRequest(context) {
             const last = await db.prepare('SELECT * FROM copilot_messages WHERE thread_id = ? ORDER BY id DESC LIMIT 1').bind(t.id).first();
             const lastUser = last && last.role === 'user' ? last : (last && last.role === 'error' ? await db.prepare(`SELECT * FROM copilot_messages WHERE thread_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1`).bind(t.id).first() : null);
             let userMsg = null;
-            // "Ask Marwa Cloud" re-asks the SAME question on another model: reuse it, and leave Argon's answer out of the history
+            // "Ask Miss Marwa Assistant Pro" re-asks the SAME question on another model: reuse it, and leave Mini Assistant's answer out of the history
             const lastAsked = data.again ? await db.prepare(`SELECT * FROM copilot_messages WHERE thread_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1`).bind(t.id).first() : null;
-            if (data.again && lastAsked && lastAsked.text === text) userMsg = lastAsked;
+            if (data.again && lastAsked && lastAsked.text === text) { userMsg = lastAsked; if (!img && lastAsked.image_id) img = await loadImage(env, db, lastAsked.image_id); }
             else if (data.resend && lastUser && lastUser.text === text) userMsg = lastUser;
             else {
-                const r = await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text) VALUES (?, 'user', ?)`).bind(t.id, text).run();
-                userMsg = { id: Number(r.meta.last_row_id), role: 'user', text, created_at: new Date().toISOString() };
+                const imageId = img ? await saveImage(env, db, img, { kind: 'ai-staff', ownerId: staff.id }) : null;
+                const r = await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text, image_id) VALUES (?, 'user', ?, ?)`).bind(t.id, text, imageId).run();
+                userMsg = { id: Number(r.meta.last_row_id), role: 'user', text, image_id: imageId, created_at: new Date().toISOString() };
+                if (img && context.waitUntil) context.waitUntil(purgeOldImages(env, db));
             }
             if (data.resend) await db.prepare(`DELETE FROM copilot_messages WHERE thread_id = ? AND role = 'error' AND id > ?`).bind(t.id, userMsg.id).run();
             const { results: hist } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
-            const upgrade = needsUpgradeNote(tier, text, !!result);
-            let cards = result ? JSON.stringify(result.cards || []) : upgrade ? JSON.stringify([{ type: 'upgrade', text: ARGON_NOTE, tier: 'pro' }]) : null;
+            const upgrade = img ? tier === 'free' : needsUpgradeNote(tier, text, !!result);
+            let cards = result ? JSON.stringify(result.cards || []) : upgrade ? JSON.stringify([{ type: 'upgrade', text: img ? IMAGE_NOTE : ARGON_NOTE, tier: 'pro' }]) : null;
             const saveReply = async (fields) => {
                 const r = await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text, tier, model, ms, neurons, cost_usd, tokens_in, tokens_out, error, cards) VALUES (?, 'assistant', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                     .bind(t.id, fields.text, tier, fields.model ?? null, fields.ms ?? null, fields.neurons ?? null, fields.costUsd ?? null, fields.tin ?? null, fields.tout ?? null, fields.error ?? null, cards).run();
@@ -252,8 +267,8 @@ export async function onRequest(context) {
             };
             try {
                 const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : '');
-                const maxTokens = result ? (tier === 'free' ? 600 : 900) : (tier === 'max' ? 2500 : tier === 'pro' ? 1500 : 500);
-                const out = await chat(env, db, { tier, pool: 'staff', system, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5 });
+                const maxTokens = result ? (tier === 'free' ? 600 : 900) : img ? (tier === 'free' ? 800 : 2000) : (tier === 'max' ? 2500 : tier === 'pro' ? 1500 : 500);
+                const out = await chat(env, db, { tier, pool: 'staff', system: system + (img ? IMAGE_RULES : ''), messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img });
                 const u = out.usage || {};
                 const saved = await saveReply({ text: out.text || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });
                 return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });

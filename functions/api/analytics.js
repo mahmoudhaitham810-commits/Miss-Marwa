@@ -142,6 +142,72 @@ function rankMap(rows) {
 }
 const r1 = (v) => (v === null || v === undefined ? null : Math.round(v * 10) / 10);
 
+// One student's full picture — shared by the staff Analytics/Student pages and the student's own AI assistant
+// (so both always show the same numbers). Returns null when the student doesn't exist.
+export async function studentProfile(db, studentId) {
+    const st = await db.prepare(
+        `SELECT student_id as studentId, first_name as firstName, last_name as lastName, gender, branch, grade,
+                phone, parent_phone as parentPhone, created_at as createdAt FROM students WHERE student_id = ?`
+    ).bind(studentId).first();
+    if (!st) return null;
+    const grade = String(st.grade || '').toLowerCase();
+    const data = await loadGrade(db, grade);
+    const s = data.students.find(x => x.studentId === studentId) || { ...st };
+    const v = boardValue(s, data, 'combined', null);
+    const rows = data.students.map(x => ({ studentId: x.studentId, c: boardValue(x, data, 'center', null), b: boardValue(x, data, 'combined', null) }));
+    const centerRanks = rankMap(rows.map(r => ({ studentId: r.studentId, pct: r.c.pct, ranked: r.c.ranked })));
+    const combinedRanks = rankMap(rows.map(r => ({ studentId: r.studentId, pct: r.b.pct, ranked: r.b.ranked })));
+    const sameGroup = data.students.filter(x => x.branch === s.branch).map(x => x.studentId);
+
+    // Center: every graded column that applies to this student (the other group's columns are skipped)
+    const center = v.center.history.map(h => ({ name: h.name, date: h.date, status: h.status, score: h.score, total: h.total, pct: r1(h.pct) }));
+
+    // Online: straight from the submissions, with how the attempt went
+    const { results: oRows } = await db.prepare(
+        `SELECT e.id, e.title, e.questions, e.created_at as createdAt, e.expires_at as expiresAt, e.time_limit_minutes as timeLimit,
+                sub.status, sub.score, sub.started_at as startedAt, sub.submitted_at as submittedAt,
+                sub.leave_count as leaves, sub.auto_submitted as auto
+         FROM exams e LEFT JOIN exam_submissions sub ON sub.exam_id = e.id AND sub.student_id = ?
+         WHERE LOWER(TRIM(e.grade)) = ? ORDER BY e.expires_at DESC`
+    ).bind(studentId, grade).all();
+    const joined = toMs(st.createdAt), now = Date.now();
+    const online = [];
+    for (const e of oRows || []) {
+        let total = 0; try { total = JSON.parse(e.questions).length; } catch (x) { }
+        const closed = toMs(e.expiresAt) <= now;
+        if (!e.status && joined && joined > toMs(e.expiresAt)) continue; // closed before they signed up
+        const status = e.status === 'submitted' ? 'taken' : e.status === 'started' ? (closed ? 'opened' : 'in-progress') : (closed ? 'missed' : 'not-yet');
+        const score = status === 'taken' ? Number(e.score) : null;
+        const pct = status === 'taken' && total ? (score / total) * 100 : null;
+        const mins = e.startedAt && e.submittedAt ? Math.max(0, (toMs(e.submittedAt) - toMs(e.startedAt)) / 60000) : null;
+        const recorded = e.status ? e.leaves !== null && e.leaves !== undefined : null;
+        const flags = [];
+        if (recorded && e.leaves > 0) flags.push({ level: e.leaves >= 2 ? 'danger' : 'warn', code: 'left', text: `Left the exam page ${e.leaves} time${e.leaves > 1 ? 's' : ''}` });
+        if (e.auto === 'left-page') flags.push({ level: 'danger', code: 'auto-left', text: 'Submitted automatically after leaving the page twice' });
+        if (e.auto === 'time-up') flags.push({ level: 'info', code: 'time-up', text: 'Time ran out — submitted automatically' });
+        if (status === 'opened') flags.push({ level: 'warn', code: 'opened', text: 'Opened the exam but never submitted' });
+        if (status === 'taken' && mins !== null && total && pct >= 80 && mins * 60 < Math.max(60, total * 10)) flags.push({ level: 'warn', code: 'fast', text: `Very fast for a high score — ${mins < 1 ? 'under a minute' : Math.round(mins) + ' min'} for ${total} questions` });
+        online.push({ id: e.id, name: e.title, date: String(e.expiresAt || '').slice(0, 10), expiresAt: e.expiresAt, status, score, total, pct: r1(pct), startedAt: e.startedAt, submittedAt: e.submittedAt, minutes: mins === null ? null : r1(mins), timeLimit: e.timeLimit || null, leaves: recorded ? e.leaves : null, recorded, flags });
+    }
+
+    // Online clearly above center → worth a look (same rule as the analytics page)
+    const gap = v.online.pct !== null && v.center.pct !== null && v.online.taken >= GAP_MIN_EXAMS && v.center.taken >= GAP_MIN_EXAMS
+        && v.online.pct - v.center.pct > GAP_THRESHOLD ? r1(v.online.pct - v.center.pct) : null;
+    const flagged = online.filter(o => o.flags.some(f => f.level !== 'info')).length;
+    return {
+        student: { ...st, grade },
+        summary: {
+            centerPct: r1(v.center.pct), centerTaken: v.center.taken, centerAbsent: v.center.missed,
+            onlinePct: r1(v.online.pct), onlineTaken: v.online.taken, onlineMissed: v.online.missed,
+            combinedPct: r1(v.pct), level: levelOf(v.pct), ranked: v.ranked, participation: r1(v.participation * 100),
+            centerRank: centerRanks[studentId] || null, combinedRank: combinedRanks[studentId] || null,
+            gradeSize: data.students.length, groupSize: sameGroup.length
+        },
+        center, online,
+        integrity: { gap, flaggedExams: flagged, notRecorded: online.filter(o => o.recorded === false).length }
+    };
+}
+
 export async function onRequestGet(context) {
     const { request, env } = context;
     const auth = await requireStaff(request, env, 'analytics.view');
@@ -315,68 +381,9 @@ export async function onRequestGet(context) {
 
         // Student profile: every center + online exam with score, % and date, plus exam-integrity flags
         if (action === 'profile') {
-            const studentId = url.searchParams.get('studentId') || '';
-            const st = await db.prepare(
-                `SELECT student_id as studentId, first_name as firstName, last_name as lastName, gender, branch, grade,
-                        phone, parent_phone as parentPhone, created_at as createdAt FROM students WHERE student_id = ?`
-            ).bind(studentId).first();
-            if (!st) return Response.json({ error: 'الطالب غير موجود' }, { status: 404 });
-            const grade = String(st.grade || '').toLowerCase();
-            const data = await loadGrade(db, grade);
-            const s = data.students.find(x => x.studentId === studentId) || { ...st };
-            const v = boardValue(s, data, 'combined', null);
-            const rows = data.students.map(x => ({ studentId: x.studentId, c: boardValue(x, data, 'center', null), b: boardValue(x, data, 'combined', null) }));
-            const centerRanks = rankMap(rows.map(r => ({ studentId: r.studentId, pct: r.c.pct, ranked: r.c.ranked })));
-            const combinedRanks = rankMap(rows.map(r => ({ studentId: r.studentId, pct: r.b.pct, ranked: r.b.ranked })));
-            const sameGroup = data.students.filter(x => x.branch === s.branch).map(x => x.studentId);
-
-            // Center: every graded column that applies to this student (the other group's columns are skipped)
-            const center = v.center.history.map(h => ({ name: h.name, date: h.date, status: h.status, score: h.score, total: h.total, pct: r1(h.pct) }));
-
-            // Online: straight from the submissions, with how the attempt went
-            const { results: oRows } = await db.prepare(
-                `SELECT e.id, e.title, e.questions, e.created_at as createdAt, e.expires_at as expiresAt, e.time_limit_minutes as timeLimit,
-                        sub.status, sub.score, sub.started_at as startedAt, sub.submitted_at as submittedAt,
-                        sub.leave_count as leaves, sub.auto_submitted as auto
-                 FROM exams e LEFT JOIN exam_submissions sub ON sub.exam_id = e.id AND sub.student_id = ?
-                 WHERE LOWER(TRIM(e.grade)) = ? ORDER BY e.expires_at DESC`
-            ).bind(studentId, grade).all();
-            const joined = toMs(st.createdAt), now = Date.now();
-            const online = [];
-            for (const e of oRows || []) {
-                let total = 0; try { total = JSON.parse(e.questions).length; } catch (x) { }
-                const closed = toMs(e.expiresAt) <= now;
-                if (!e.status && joined && joined > toMs(e.expiresAt)) continue; // closed before they signed up
-                const status = e.status === 'submitted' ? 'taken' : e.status === 'started' ? (closed ? 'opened' : 'in-progress') : (closed ? 'missed' : 'not-yet');
-                const score = status === 'taken' ? Number(e.score) : null;
-                const pct = status === 'taken' && total ? (score / total) * 100 : null;
-                const mins = e.startedAt && e.submittedAt ? Math.max(0, (toMs(e.submittedAt) - toMs(e.startedAt)) / 60000) : null;
-                const recorded = e.status ? e.leaves !== null && e.leaves !== undefined : null;
-                const flags = [];
-                if (recorded && e.leaves > 0) flags.push({ level: e.leaves >= 2 ? 'danger' : 'warn', code: 'left', text: `Left the exam page ${e.leaves} time${e.leaves > 1 ? 's' : ''}` });
-                if (e.auto === 'left-page') flags.push({ level: 'danger', code: 'auto-left', text: 'Submitted automatically after leaving the page twice' });
-                if (e.auto === 'time-up') flags.push({ level: 'info', code: 'time-up', text: 'Time ran out — submitted automatically' });
-                if (status === 'opened') flags.push({ level: 'warn', code: 'opened', text: 'Opened the exam but never submitted' });
-                if (status === 'taken' && mins !== null && total && pct >= 80 && mins * 60 < Math.max(60, total * 10)) flags.push({ level: 'warn', code: 'fast', text: `Very fast for a high score — ${mins < 1 ? 'under a minute' : Math.round(mins) + ' min'} for ${total} questions` });
-                online.push({ id: e.id, name: e.title, date: String(e.expiresAt || '').slice(0, 10), expiresAt: e.expiresAt, status, score, total, pct: r1(pct), startedAt: e.startedAt, submittedAt: e.submittedAt, minutes: mins === null ? null : r1(mins), timeLimit: e.timeLimit || null, leaves: recorded ? e.leaves : null, recorded, flags });
-            }
-
-            // Online clearly above center → worth a look (same rule as the analytics page)
-            const gap = v.online.pct !== null && v.center.pct !== null && v.online.taken >= GAP_MIN_EXAMS && v.center.taken >= GAP_MIN_EXAMS
-                && v.online.pct - v.center.pct > GAP_THRESHOLD ? r1(v.online.pct - v.center.pct) : null;
-            const flagged = online.filter(o => o.flags.some(f => f.level !== 'info')).length;
-            return Response.json({
-                student: { ...st, grade },
-                summary: {
-                    centerPct: r1(v.center.pct), centerTaken: v.center.taken, centerAbsent: v.center.missed,
-                    onlinePct: r1(v.online.pct), onlineTaken: v.online.taken, onlineMissed: v.online.missed,
-                    combinedPct: r1(v.pct), level: levelOf(v.pct), ranked: v.ranked, participation: r1(v.participation * 100),
-                    centerRank: centerRanks[studentId] || null, combinedRank: combinedRanks[studentId] || null,
-                    gradeSize: data.students.length, groupSize: sameGroup.length
-                },
-                center, online,
-                integrity: { gap, flaggedExams: flagged, notRecorded: online.filter(o => o.recorded === false).length }
-            });
+            const p = await studentProfile(db, url.searchParams.get('studentId') || '');
+            if (!p) return Response.json({ error: 'الطالب غير موجود' }, { status: 404 });
+            return Response.json(p);
         }
 
         // One student's full picture (both kinds, absences and missed exams included)

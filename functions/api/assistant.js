@@ -762,7 +762,13 @@ async function handleClear(studentId, db) {
 }
 
 // ─── Main POST Handler ───
+// The old (Gemini) student assistant is replaced by /api/tutor (Miss Marwa AI Assistant, hidden until opened).
+// Switched off so students can't reach any AI before it's ready; code + saved chats kept. Set LEGACY_ASSISTANT=1 to bring it back.
+const replaced = (env) => String(env.LEGACY_ASSISTANT || '') !== '1'
+    ? Response.json({ error: 'The AI assistant is coming soon 🚀', code: 'REPLACED' }, { status: 410 }) : null;
+
 export async function onRequestPost({ request, env }) {
+  { const off = replaced(env); if (off) return off; }
   try {
     const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
     await ensureTables(db);
@@ -808,5 +814,6 @@ export async function onRequestPost({ request, env }) {
 
 // ─── Health Check GET ───
 export async function onRequestGet({ request, env }) {
+  { const off = replaced(env); if (off) return off; }
   return Response.json({ message: "Assistant API is running.", status: "ok" });
 }

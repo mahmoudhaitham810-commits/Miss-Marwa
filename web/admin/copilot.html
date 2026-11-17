@@ -55,7 +55,9 @@
         .msgs { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 16px 0 12px; }
         .msg { display: flex; gap: 10px; align-items: flex-start; max-width: 100%; animation: msgIn .35s cubic-bezier(.22, 1, .36, 1); }
         @keyframes msgIn { from { opacity: 0; transform: translateY(6px); } }
-        .msg .av { width: 30px; height: 30px; border-radius: 10px; flex: none; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--primary), #8b5cf6); }
+        .msg .av { width: 32px; height: 32px; border-radius: 50%; flex: none; object-fit: cover; background: #fff; border: 1.5px solid color-mix(in srgb, var(--primary) 30%, var(--border)); }
+        .msg.me .shot { display: block; max-width: min(260px, 70vw); max-height: 260px; border-radius: 16px; margin: 0 0 6px auto; border: 1px solid var(--border); object-fit: cover; cursor: zoom-in; }
+        .msg.me .col { display: flex; flex-direction: column; align-items: flex-end; max-width: 85%; }
         .msg .av .icon { width: 16px; height: 16px; }
         .msg .body { min-width: 0; flex: 1; }
         .msg.me { justify-content: flex-end; }
@@ -194,17 +196,12 @@
                 <button class="icon-btn" id="chatsBtn" aria-label="Saved chats" title="Saved chats"><span data-icon="clock"></span></button>
                 <button class="icon-btn" id="newBtn" aria-label="New chat" title="New chat"><span data-icon="plus"></span></button>
             </div>
-            <div class="models" id="models" role="radiogroup" aria-label="Model"></div>
             <div class="meter" id="meter"></div>
             <div class="msgs" id="msgs" aria-live="polite"></div>
             <div class="composer">
-                <div class="box">
-                    <textarea id="input" rows="1" maxlength="4000" dir="auto" placeholder="اكتبي سؤالك… · Ask anything"></textarea>
-                    <button class="lang" id="langBtn" title="Voice language" hidden>ع</button>
-                    <button class="rbtn" id="micBtn" aria-label="Speak" title="Speak" hidden><span data-icon="mic"></span></button>
-                    <button class="rbtn send" id="sendBtn" aria-label="Send" disabled><span data-icon="send"></span></button>
-                </div>
+                <div id="comp"></div>
                 <p class="hint" id="hint">AI Assistant can make mistakes — check anything important before using it.</p>
+            </div>
             </div>
         </div>
     </main>
@@ -212,6 +209,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
+    <script src="/assets/ai-kit.js"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -223,71 +221,28 @@
         let STATUS = null, threadId = parseInt(qs.get('chat'), 10) || null, MSGS = [], sending = false;
         let tier = A.store.get('copilot_tier', 'free');
 
-        // ---------- text rendering: safe markdown subset + clean Arabic/English mixing ----------
-        const AR = /[؀-ۿ]/, LAT = /[A-Za-z]/;
-        const firstStrong = (s) => { for (const ch of s) { if (AR.test(ch)) return 'rtl'; if (LAT.test(ch)) return 'ltr'; } return 'auto'; };
-        // inside an Arabic paragraph, every English run (terms, symbols, equations) is isolated so punctuation never jumps
-        const isolate = (escaped, dir) => dir !== 'rtl' ? escaped
-            : escaped.replace(/([A-Za-z0-9][A-Za-z0-9 _.,:;'’()\[\]\/+\-−×÷=^%°⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉→&;#]*[A-Za-z0-9)\]⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉%°])|([A-Za-z])/g, (m) => /&[a-z]+;?$|&#\d+;?$/.test(m) ? m : `<bdi dir="ltr">${m}</bdi>`);
-        function inline(text, dir) {
-            // **bold**, `code`; everything escaped first, English runs isolated in Arabic text
-            return text.split(/(`[^`]+`)/).map(part => {
-                if (/^`[^`]+`$/.test(part)) return `<code dir="ltr">${esc(part.slice(1, -1))}</code>`;
-                return part.split(/(\*\*[^*]+\*\*)/).map(p => {
-                    const bold = /^\*\*[^*]+\*\*$/.test(p);
-                    const t = isolate(esc(bold ? p.slice(2, -2) : p).replace(/&amp;/g, '&amp;'), dir);
-                    return bold ? `<b>${t}</b>` : t;
-                }).join('');
-            }).join('');
-        }
-        function md(src) {
-            const lines = String(src || '').replace(/\r/g, '').split('\n');
-            let html = '', list = null, para = [], code = null;
-            const flushPara = () => { if (para.length) { const t = para.join('\n'); const d = firstStrong(t); html += `<p dir="${d}">${inline(t, d).replace(/\n/g, '<br>')}</p>`; para = []; } };
-            const flushList = () => { if (list) { html += `<${list.type}>${list.items.map(it => { const d = firstStrong(it); return `<li dir="${d}">${inline(it, d)}</li>`; }).join('')}</${list.type}>`; list = null; } };
-            for (const line of lines) {
-                if (code !== null) { if (/^```/.test(line.trim())) { html += `<pre><code>${esc(code.join('\n'))}</code></pre>`; code = null; } else code.push(line); continue; }
-                if (/^```/.test(line.trim())) { flushPara(); flushList(); code = []; continue; }
-                const h = line.match(/^\s*#{1,6}\s+(.*)$/);
-                const ul = line.match(/^\s*[-*•]\s+(.*)$/), ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
-                if (h) { flushPara(); flushList(); const d = firstStrong(h[1]); html += `<h4 dir="${d}">${inline(h[1].replace(/\*\*/g, ''), d)}</h4>`; }
-                else if (ul || ol) { flushPara(); const type = ul ? 'ul' : 'ol'; if (!list || list.type !== type) { flushList(); list = { type, items: [] }; } list.items.push((ul || ol)[1]); }
-                else if (!line.trim()) { flushPara(); flushList(); }
-                else { flushList(); para.push(line); }
-            }
-            if (code !== null) html += `<pre><code>${esc(code.join('\n'))}</code></pre>`;
-            flushPara(); flushList();
-            return html;
-        }
+        const md = AiKit.md;
         window.__copilotMd = md;   // for tests
 
         // ---------- status, models, meter ----------
         const money = (v) => v >= 0.995 ? `$${v.toFixed(2)}` : v >= 0.01 ? `$${v.toFixed(2)}` : v > 0 ? '<$0.01' : '$0';
-        function renderModels() {
-            const tiers = STATUS ? STATUS.tiers : [{ tier: 'free', name: 'Argon', note: 'Fast & free', ready: true }, { tier: 'pro', name: 'Marwa Cloud', note: 'Smart', ready: true }, { tier: 'max', name: 'Marwa Cloud Max', note: 'Strongest', ready: true }];
-            if (!tiers.find(t => t.tier === tier && t.ready)) tier = (tiers.find(t => t.ready) || tiers[0]).tier;
-            $('models').innerHTML = tiers.map(t => `<button class="model ${t.tier === tier ? 'on' : ''} ${t.ready ? '' : 'off'}" role="radio" aria-checked="${t.tier === tier}" data-tier="${t.tier}">
-                ${t.ready ? '' : icon('lock', 'lock')}<b>${esc(t.tier === 'max' ? t.name.replace(/\s*Max$/i, '') : t.name)}</b><small>${t.tier === 'max' ? '<span class="maxpill">MAX</span> ' : ''}${t.ready ? esc(t.tier === 'free' ? 'Free · reports' : t.tier === 'pro' ? 'Science · everyday' : 'Strongest') : 'Not connected yet'}</small></button>`).join('');
+        const NOTES = { free: 'Free · reports & quick help', pro: 'Science · everyday', max: 'Strongest · exams & summaries' };
+        const modelList = () => (STATUS ? STATUS.tiers : [{ tier: 'free', name: 'Mini Assistant', ready: true }, { tier: 'pro', name: 'Miss Marwa Assistant Pro', ready: false }, { tier: 'max', name: 'Miss Marwa Assistant Pro Max', ready: false }])
+            .map(t => ({ tier: t.tier, name: t.name, ready: t.ready, note: NOTES[t.tier] }));
+        const brand = (t) => ((STATUS && STATUS.brands && STATUS.brands[t]) || {}).name || ({ free: 'Mini Assistant', pro: 'Miss Marwa Assistant Pro', max: 'Miss Marwa Assistant Pro Max' }[t]);
+        function renderModels() { if (!comp) return; comp.setModels(modelList()); if (comp.tier !== tier) { const ok = modelList().find(m => m.tier === tier && m.ready); if (ok) comp.setTier(tier); else tier = comp.tier; } }
+        function notConnected(m) {
+            Site.sheet({ iconName: 'lock', title: `${m.name} isn't connected yet`, subtitle: m.tier === 'free' ? 'The free model needs the Workers AI binding (AI) in Cloudflare.' : 'Add the ANTHROPIC_API_KEY secret in Cloudflare (Settings → Variables and Secrets), then redeploy.', actions: [{ label: 'OK', cls: 'btn-ghost' }] });
         }
         function renderMeter() {
             if (!STATUS) return;
             const p = STATUS.pools.staff, s = STATUS.spend;
             const pf = p.cap ? Math.min(100, p.used / p.cap * 100) : 100, sf = s.dailyCap ? Math.min(100, s.today / s.dailyCap * 100) : 0;
             const cls = (f) => f >= 100 ? 'full' : f >= 80 ? 'warn' : '';
-            $('meter').innerHTML = `<span class="m" title="Free units used today by AI Assistant (resets 2:00 am Cairo)"><b>Argon</b><span class="bar ${cls(STATUS.freeQuotaHit ? 100 : pf)}"><span style="width:${STATUS.freeQuotaHit ? 100 : pf}%"></span></span>${STATUS.freeQuotaHit ? 'used up today' : `${p.used.toLocaleString()} / ${p.cap.toLocaleString()}`}</span>
-                ${STATUS.paidReady ? `<span class="m" title="Paid AI spend today / this month"><b>Marwa Cloud</b><span class="bar ${cls(sf)}"><span style="width:${sf}%"></span></span>${money(s.today)} today · ${money(s.month)} this month</span>` : ''}`;
+            $('meter').innerHTML = `<span class="m" title="Free units used today by AI Assistant (resets 2:00 am Cairo)"><b>Mini Assistant</b><span class="bar ${cls(STATUS.freeQuotaHit ? 100 : pf)}"><span style="width:${STATUS.freeQuotaHit ? 100 : pf}%"></span></span>${STATUS.freeQuotaHit ? 'used up today' : `${p.used.toLocaleString()} / ${p.cap.toLocaleString()}`}</span>
+                ${STATUS.paidReady ? `<span class="m" title="Paid AI spend today / this month"><b>Pro</b><span class="bar ${cls(sf)}"><span style="width:${sf}%"></span></span>${money(s.today)} today · ${money(s.month)} this month</span>` : ''}`;
         }
         async function loadStatus() { try { STATUS = await api('/api/copilot?action=status'); } catch (e) { STATUS = null; } renderModels(); renderMeter(); }
-        $('models').addEventListener('click', (e) => {
-            const b = e.target.closest('[data-tier]'); if (!b) return;
-            const t = STATUS && STATUS.tiers.find(x => x.tier === b.dataset.tier);
-            if (t && !t.ready) {
-                Site.sheet({ iconName: 'lock', title: `${t.name} isn't connected yet`, subtitle: t.tier === 'free' ? 'The free model needs the Workers AI binding (AI) in Cloudflare.' : 'Add the ANTHROPIC_API_KEY secret in Cloudflare (Settings → Variables and Secrets), then redeploy.', actions: [{ label: 'OK', cls: 'btn-ghost' }] });
-                return;
-            }
-            tier = b.dataset.tier; A.store.set('copilot_tier', tier); renderModels();
-        });
-
         // ---------- messages ----------
         const CHIPS = [
             ['👀', 'مين محتاج متابعة في Prep 2؟'],
@@ -300,7 +255,7 @@
         let BRIEF = null;
         function welcome() {
             return `<div class="hello"><span class="spark">${icon('sparkles')}</span><h2 dir="rtl">أهلاً يا مس مروة 👋</h2>
-                <p>Argon 👀 reports what's happening — ask about any student («عامل إيه عمر عادل؟») or any grade. For science, switch to Marwa Cloud 🎓</p>
+                <p>Mini Assistant 👀 reports what's happening — ask about any student («عامل إيه عمر عادل؟») or any grade, or send a 📷 photo of a question. For science, switch to Pro 🎓</p>
                 <div class="brief-wrap" id="briefWrap">${BRIEF ? cardsHTML(BRIEF, -1) : '<div class="skel" style="height:150px;border-radius:18px"></div>'}</div>
                 <div class="chips">${CHIPS.map(([e, t]) => `<button class="chip-q" data-chip="${esc(t)}"><span class="e">${e}</span><span dir="auto">${esc(t)}</span></button>`).join('')}</div></div>`;
         }
@@ -335,8 +290,8 @@
             upgrade: (c, k) => {
                 const ready = !STATUS || (STATUS.tiers || []).some(t => t.tier === 'pro' && t.ready);
                 const mi = Number(String(k).split(':')[0]), next = MSGS[mi + 1];
-                if (next && next.role === 'assistant' && next.tier && next.tier !== 'free') return `<div class="dc ucard"><span class="tx">✅ Marwa Cloud answered this below 👇</span></div>`;
-                return `<div class="dc ucard"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="btn btn-ai btn-sm" data-upgrade="${k}">${icon(ready ? 'sparkles' : 'lock', 'sm')}${ready ? 'Ask Marwa Cloud' : 'Marwa Cloud (not connected)'}</button></div>`;
+                if (next && next.role === 'assistant' && next.tier && next.tier !== 'free') return `<div class="dc ucard"><span class="tx">✅ Pro answered this below 👇</span></div>`;
+                return `<div class="dc ucard"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="btn btn-ai btn-sm" data-upgrade="${k}">${icon(ready ? 'sparkles' : 'lock', 'sm')}${ready ? 'Ask Pro' : 'Pro (not connected)'}</button></div>`;
             },
             note: (c) => `<div class="dc ncard ${c.tone === 'warn' ? 'warn' : ''}" dir="auto">${esc(c.text || '')}</div>`,
             student(c, k) {
@@ -436,16 +391,16 @@
         function waOpen(list, makeText, title) { A.sender({ list, makeText, title, kind: 'other' }); }
 
         function msgHTML(m, i) {
-            if (m.role === 'user') return `<div class="msg me"><div class="bubble" dir="auto">${esc(m.text)}</div></div>`;
+            if (m.role === 'user') { const src = m.imgUrl || (m.imageId ? `/api/copilot?action=image&id=${m.imageId}` : ''); return `<div class="msg me"><div class="col">${src ? `<img class="shot" src="${esc(src)}" alt="Photo" data-zoom>` : ''}<div class="bubble" dir="auto">${esc(m.text)}</div></div></div>`; }
             if (m.role === 'error') {
                 const other = m.tier === 'free' ? (STATUS && STATUS.paidReady ? 'pro' : null) : 'free';
-                return `<div class="msg"><span class="av">${icon('sparkles')}</span><div class="body"><div class="err" dir="auto">${esc(m.text)}
+                return `<div class="msg"><img class="av" src="/assets/img/marwa-160.png" alt=""><div class="body"><div class="err" dir="auto">${esc(m.text)}
                     <div class="acts">${i === MSGS.length - 1 ? `<button class="btn btn-soft btn-sm" data-retry>${icon('refresh', 'sm')}Try again</button>${other ? `<button class="btn btn-ghost btn-sm" data-retry="${other}">Use ${esc((STATUS && STATUS.brands[other] || {}).name || other)}</button>` : ''}` : ''}</div></div></div></div>`;
             }
-            if (m.role === 'typing') return `<div class="msg" id="typing"><span class="av">${icon('sparkles')}</span><div class="body"><span class="dots"><span></span><span></span><span></span></span></div></div>`;
+            if (m.role === 'typing') return `<div class="msg" id="typing"><img class="av" src="/assets/img/marwa-160.png" alt=""><div class="body"><span class="dots"><span></span><span></span><span></span></span></div></div>`;
             const secs = m.ms ? `${(m.ms / 1000).toFixed(1)} s` : '';
             const cost = m.costUsd != null ? ` · ${m.costUsd < 0.001 ? '<$0.001' : '$' + m.costUsd.toFixed(3)}` : m.neurons != null ? ` · ${Math.round(m.neurons)} free units` : '';
-            return `<div class="msg"><span class="av">${icon('sparkles')}</span><div class="body"><div class="md">${md(m.text)}</div>${cardsHTML(m.cards, i)}
+            return `<div class="msg"><img class="av" src="/assets/img/marwa-160.png" alt=""><div class="body"><div class="md">${md(m.text)}</div>${cardsHTML(m.cards, i)}
                 <div class="meta"><span>${m.error ? 'Data only' : esc(m.brand || '')}${secs ? ' · ' + secs : ''}${cost}</span><button data-copy="${i}" title="Copy">${icon('copy2')}Copy</button></div></div></div>`;
         }
         function render(scroll = true) {
@@ -453,11 +408,12 @@
             if (scroll) requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
         }
         $('msgs').addEventListener('click', async (e) => {
-            const c = e.target.closest('[data-chip]'); if (c) { $('input').value = c.dataset.chip; autosize(); $('input').focus(); updateSend(); return; }
+            const c = e.target.closest('[data-chip]'); if (c) { comp.fill(c.dataset.chip); return; }
+            const z = e.target.closest('[data-zoom]'); if (z) { window.open(z.src, '_blank'); return; }
             const up = e.target.closest('[data-upgrade]');
             if (up) {
                 const t = STATUS && STATUS.tiers.find(x => x.tier === 'pro');
-                if (t && !t.ready) { Site.sheet({ iconName: 'lock', title: "Marwa Cloud isn't connected yet", subtitle: 'Add the ANTHROPIC_API_KEY secret in Cloudflare (Settings → Variables and Secrets), then redeploy.', actions: [{ label: 'OK', cls: 'btn-ghost' }] }); return; }
+                if (t && !t.ready) { Site.sheet({ iconName: 'lock', title: "Miss Marwa Assistant Pro isn't connected yet", subtitle: 'Add the ANTHROPIC_API_KEY secret in Cloudflare (Settings → Variables and Secrets), then redeploy.', actions: [{ label: 'OK', cls: 'btn-ghost' }] }); return; }
                 const mi = Number(up.dataset.upgrade.split(':')[0]);
                 const q = MSGS.slice(0, mi).reverse().find(m => m.role === 'user');
                 if (q) { tier = 'pro'; A.store.set('copilot_tier', tier); renderModels(); send(q.text, false, null, true); }
@@ -478,16 +434,16 @@
             if (r) { if (r.dataset.retry) { tier = r.dataset.retry; A.store.set('copilot_tier', tier); renderModels(); } const lastUser = [...MSGS].reverse().find(m => m.role === 'user'); if (lastUser) send(lastUser.ctx ? '' : lastUser.text, true, lastUser.ctx || null); }
         });
 
-        async function send(text, resend = false, context = null, again = false) {
-            text = String(text || '').trim(); if ((!text && !context) || sending) return;
+        async function send(text, resend = false, context = null, again = false, image = null) {
+            text = String(text || '').trim(); if ((!text && !context && !image) || sending) return;
             sending = true; updateSend();
-            if (resend) MSGS = MSGS.filter(m => m.role !== 'error'); else if (!again) MSGS.push({ role: 'user', text: text || '…', ctx: context });
+            if (resend) MSGS = MSGS.filter(m => m.role !== 'error'); else if (!again) MSGS.push({ role: 'user', text: text || (image ? '📷' : '…'), ctx: context, imgUrl: image && image.url });
             MSGS.push({ role: 'typing' });
             render();
             try {
-                const r = await api('/api/copilot?action=send', { body: { threadId, text, tier, resend, context, again } });
+                const r = await api('/api/copilot?action=send', { body: { threadId, text, tier, resend, context, again, image: image ? { mime: image.mime, b64: image.b64 } : null } });
                 threadId = r.threadId; setChatUrl(); setTitle(r.title);
-                const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && r.user && !again) u.text = r.user.text;
+                const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && r.user && !again) { u.text = r.user.text; if (r.user.imageId) u.imageId = r.user.imageId; }
                 MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push(r.reply);
                 if (r.usage) { STATUS = { ...STATUS, ...r.usage }; renderMeter(); }
             } catch (err) {
@@ -530,35 +486,17 @@
             });
         });
 
-        // ---------- composer ----------
-        const input = $('input');
-        function autosize() { input.style.height = 'auto'; input.style.height = Math.min(160, input.scrollHeight) + 'px'; }
-        function updateSend() { $('sendBtn').disabled = sending || !input.value.trim(); }
-        input.addEventListener('input', () => { autosize(); updateSend(); });
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(hover: hover) and (pointer: fine)').matches) { e.preventDefault(); go(); }
+        // ---------- composer (shared with the students' assistant): [↑][🎤][Model ⌄] … [+] ----------
+        let comp = null;
+        function updateSend() { if (comp) comp.setBusy(sending); }
+        comp = AiKit.composer($('comp'), {
+            models: modelList(), tier, placeholder: 'اكتبي سؤالك… · Ask anything', maxLength: 4000, voiceKey: 'copilot_voice',
+            toast: (m, k) => Site.toast(m, k || 'info'),
+            onSend: ({ text, image }) => send(text, false, null, false, image),
+            onTier: (t) => { tier = t; A.store.set('copilot_tier', t); },
+            onLocked: notConnected
         });
-        function go() { const t = input.value; if (!t.trim() || sending) return; input.value = ''; autosize(); updateSend(); send(t); }
-        $('sendBtn').addEventListener('click', go);
-
-        // ---------- voice (the phone's own speech recognition — free) ----------
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let rec = null, listening = false, voiceLang = A.store.get('copilot_voice', 'ar-EG');
-        if (SR) {
-            $('micBtn').hidden = false; $('langBtn').hidden = false;
-            const setLang = () => { $('langBtn').textContent = voiceLang === 'ar-EG' ? 'ع' : 'EN'; $('langBtn').title = voiceLang === 'ar-EG' ? 'Speaking Arabic — tap for English' : 'Speaking English — tap for Arabic'; };
-            setLang();
-            $('langBtn').addEventListener('click', () => { voiceLang = voiceLang === 'ar-EG' ? 'en-US' : 'ar-EG'; A.store.set('copilot_voice', voiceLang); setLang(); });
-            $('micBtn').addEventListener('click', () => {
-                if (listening) { rec && rec.stop(); return; }
-                rec = new SR(); rec.lang = voiceLang; rec.interimResults = true; rec.continuous = false;
-                const before = input.value ? input.value.replace(/\s*$/, ' ') : '';
-                rec.onresult = (ev) => { let t = ''; for (const r of ev.results) t += r[0].transcript; input.value = before + t; autosize(); updateSend(); };
-                rec.onerror = (ev) => { if (ev.error === 'not-allowed') Site.toast('Allow the microphone to use voice', 'error'); };
-                rec.onend = () => { listening = false; $('micBtn').classList.remove('listening'); input.focus(); };
-                try { rec.start(); listening = true; $('micBtn').classList.add('listening'); } catch (e) { Site.toast('Voice is not available here', 'error'); }
-            });
-        }
+        window.__comp = comp;
 
         // ---------- start ----------
         await loadStatus();
@@ -570,7 +508,7 @@
             threadId = null; MSGS = []; history.replaceState(null, '', location.pathname);
             send('', false, context);
         } else if (threadId) await openChat(threadId); else { render(false); loadBrief(); }
-        autosize(); updateSend();
+        updateSend();
     })();
     </script>
 </body>

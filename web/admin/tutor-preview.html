@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Student AI preview · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        body.staff .main { padding-bottom: 0; }
+        .pv { max-width: 760px; margin: 0 auto; }
+        .pick { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+        .pick input { flex: 1 1 220px; min-width: 0; height: 44px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 15px; padding: 0 12px; }
+        .res { display: grid; gap: 2px; margin-bottom: 12px; }
+        .res button { display: flex; gap: 10px; align-items: center; width: 100%; text-align: start; border: 0; background: var(--surface); border-radius: 12px; padding: 10px 12px; font: inherit; color: inherit; cursor: pointer; }
+        .res button:hover { background: var(--surface-2); }
+        .res b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .res small { color: var(--muted); }
+        .who { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--primary-soft); margin-bottom: 10px; }
+        .who b { flex: 1; min-width: 0; }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="pv">
+            <div class="page-head"><div><h1>Student AI · preview</h1><p>Hidden from students. Pick a student and chat exactly as they would — with only their own data.</p></div></div>
+            <div class="pick"><input id="q" type="search" placeholder="Search a student by name or code (MM-…)" autocomplete="off" dir="auto"></div>
+            <div class="res" id="res"></div>
+            <div id="who"></div>
+            <div id="root"></div>
+        </div>
+    </main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/assets/ai-kit.js"></script>
+    <script src="/assets/tutor-chat.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, api } = A;
+        await A.boot({ active: 'tutorpreview', title: 'Student AI preview' });
+        const GL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
+        let S = [];
+        try { const d = await api('/api/students'); S = (Array.isArray(d) ? d : d.students || []).map(s => ({ id: s.student_id, name: `${s.first_name || ''} ${s.last_name || ''}`.trim(), grade: String(s.grade || '').toLowerCase() })); }
+        catch (e) { $('res').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; }
+        const norm = (t) => String(t || '').toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+        function search() {
+            const q = norm($('q').value.trim());
+            if (!q) { $('res').innerHTML = ''; return; }
+            const hits = S.filter(s => norm(s.name).includes(q) || s.id.toLowerCase().includes(q)).slice(0, 8);
+            $('res').innerHTML = hits.map(s => `<button data-id="${esc(s.id)}"><b dir="auto">${esc(s.name)}</b><small>${esc(GL[s.grade] || s.grade)} · ${esc(s.id)}</small></button>`).join('') || '<p class="muted" style="margin:4px">No student found</p>';
+        }
+        $('q').addEventListener('input', search);
+        function open(id) {
+            const s = S.find(x => x.id === id) || { id, name: id, grade: '' };
+            $('res').innerHTML = ''; $('q').value = '';
+            history.replaceState(null, '', '?id=' + encodeURIComponent(id));
+            $('who').innerHTML = `<div class="who"><span>👀</span><b dir="auto">Previewing as ${esc(s.name)} · ${esc(GL[s.grade] || '')}</b></div>`;
+            TutorChat.mount($('root'), { as: id, toast: (m, k) => Site.toast(m, k || 'info') });
+        }
+        $('res').addEventListener('click', (e) => { const b = e.target.closest('[data-id]'); if (b) open(b.dataset.id); });
+        const pre = new URLSearchParams(location.search).get('id');
+        if (pre) open(pre);
+    })();
+    </script>
+</body>
+</html>

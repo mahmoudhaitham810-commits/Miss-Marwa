@@ -72,6 +72,7 @@
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     ${A.copilotBtn('student:' + st.studentId)}
+                    ${A.can('students.view') ? `<a class="btn btn-ghost" data-tutor-preview href="/admin/tutor-preview.html?id=${encodeURIComponent(st.studentId)}">${icon('bot', 'sm')}Student AI preview</a>` : ''}
                     ${st.parentPhone && A.can('reports.send') ? `<button class="btn btn-wa" id="centerRep">${icon('whatsapp', 'sm')}Center report</button><button class="btn btn-soft" id="onlineRep">${icon('whatsapp', 'sm')}Online report</button>` : ''}
                     ${A.can('reports.send') && A.feature('parentLinks') ? `<button class="btn btn-ghost" id="parentLink">${icon('link', 'sm')}Parent link</button>` : ''}
                 </div>

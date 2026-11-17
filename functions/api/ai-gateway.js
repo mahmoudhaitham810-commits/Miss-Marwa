@@ -17,9 +17,9 @@
 import { aiReady, addUsage, estimateNeurons, markQuotaHit, quotaHitToday, textOf } from './ai-engine.js';
 
 export const BRANDS = {
-    free: { name: 'Argon', note: 'Fast & free', ar: 'مجاني' },
-    pro: { name: 'Marwa Cloud', note: 'Science — everyday', ar: 'ذكي' },
-    max: { name: 'Marwa Cloud Max', note: 'Strongest — exams & summaries', ar: 'الأقوى' }
+    free: { name: 'Mini Assistant', note: 'Free', ar: 'مجاني' },
+    pro: { name: 'Miss Marwa Assistant Pro', note: 'Science — everyday', ar: 'ذكي' },
+    max: { name: 'Miss Marwa Assistant Pro Max', note: 'Strongest — staff only', ar: 'الأقوى' }
 };
 const FREE_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
 // USD per 1M tokens [input, output] — Anthropic pricing page, checked 16 Nov 2026
@@ -86,8 +86,10 @@ function tidyTurns(messages) {
  * → { text, tier, brand, model, ms, neurons?, costUsd?, usage }
  * Throws AiLimitError with code: POOL_EMPTY | FREE_OFF | PAID_OFF | DAILY_CAP | MONTHLY_CAP | AI_ERROR
  */
-export async function chat(env, db, { tier = 'free', pool = 'staff', system = '', messages = [], maxTokens = 1200, temperature = 0.4 }) {
+export async function chat(env, db, { tier = 'free', pool = 'staff', system = '', messages = [], maxTokens = 1200, temperature = 0.4, image = null }) {
     const turns = tidyTurns(messages);
+    // image = { mime, b64 } → attached to the LAST user turn (the photo she/he just sent)
+    const img = image && image.b64 && /^image\/(jpeg|png|webp)$/.test(image.mime || '') ? image : null;
     if (!turns.length) throw new AiLimitError('AI_ERROR', 'Nothing to send');
     const model = modelFor(env, tier);
     const t0 = Date.now();
@@ -97,31 +99,39 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
         const cap = poolCap(env, pool), key = `ai_pool_${pool}_${day()}`;
         const used = await kvNum(db, key);
         const chars = system.length + turns.reduce((t, m) => t + m.content.length, 0);
-        const guess = estimateNeurons(model, { prompt_tokens: Math.ceil(chars / 3.5), completion_tokens: Math.min(maxTokens, 400) });
-        if (await quotaHitToday(db) || used + guess > cap) throw new AiLimitError('POOL_EMPTY', `Today's free ${pool === 'staff' ? 'AI Assistantot' : 'student'} allowance is used up — it resets at 2:00 am (Cairo).`, { used: Math.round(used), cap });
+        const guess = estimateNeurons(model, { prompt_tokens: Math.ceil(chars / 3.5) + (img ? 1600 : 0), completion_tokens: Math.min(maxTokens, 400) });
+        if (await quotaHitToday(db) || used + guess > cap) throw new AiLimitError('POOL_EMPTY', `Today's free ${pool === 'staff' ? 'AI Assistant' : 'student'} allowance is used up — it resets at 2:00 am (Cairo).`, { used: Math.round(used), cap });
         let res = null, lastErr = null;
         for (let k = 0; k < 3 && !res; k++) {
-            try { res = await env.AI.run(model, { messages: [...(system ? [{ role: 'system', content: system }] : []), ...turns], max_tokens: maxTokens, temperature }); }
+            const sys = system ? [{ role: 'system', content: system }] : [];
+            let input;
+            if (!img) input = { messages: [...sys, ...turns], max_tokens: maxTokens, temperature };
+            else if (k === 0) {   // OpenAI-style parts (what Llama 4 Scout reads — same as the homework AI Lab)
+                const last = turns[turns.length - 1];
+                input = { messages: [...sys, ...turns.slice(0, -1), { role: 'user', content: [{ type: 'text', text: last.content }, { type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.b64}` } }] }], max_tokens: maxTokens, temperature };
+            } else input = { messages: [...sys, ...turns], image: `data:${img.mime};base64,${img.b64}`, max_tokens: maxTokens, temperature };   // older image field
+            try { res = await env.AI.run(model, input); }
             catch (e) {
                 lastErr = e;
                 const m = String(e && e.message || e);
                 if (/3036|daily free allocation/i.test(m)) { await markQuotaHit(db); throw new AiLimitError('POOL_EMPTY', "Today's free allowance is used up — it resets at 2:00 am (Cairo).", { used: Math.round(used), cap }); }
                 if (/3040|capacity/i.test(m) && k < 2) { await new Promise(r => setTimeout(r, 1000 * (k + 1))); continue; }
+                if (img && k === 0) continue;   // try the other image format once
                 break;
             }
         }
-        if (!res) throw new AiLimitError('AI_ERROR', 'The free model did not answer — try again, or switch to Marwa Cloud. ' + String(lastErr && lastErr.message || '').slice(0, 160));
+        if (!res) throw new AiLimitError('AI_ERROR', 'The free model did not answer — try again, or switch to Miss Marwa Assistant Pro. ' + String(lastErr && lastErr.message || '').slice(0, 160));
         const text = textOf(res).trim();
-        const neurons = estimateNeurons(model, res.usage, chars, text.length);
+        const neurons = estimateNeurons(model, res.usage, chars + (img ? 5600 : 0), text.length);
         await addUsage(db, neurons);               // platform-wide meter (same as Homework / AI Lab)
         await kvAdd(db, key, neurons);             // this pool
         return { text, tier, brand: BRANDS.free.name, model, ms: Date.now() - t0, neurons, usage: res.usage || null };
     }
 
     // ---- paid (Claude) ----
-    if (!claudeReady(env)) throw new AiLimitError('PAID_OFF', 'Marwa Cloud is not connected yet — add the ANTHROPIC_API_KEY secret in Cloudflare.');
+    if (!claudeReady(env)) throw new AiLimitError('PAID_OFF', 'Miss Marwa Assistant Pro is not connected yet — add the ANTHROPIC_API_KEY secret in Cloudflare.');
     const spentDay = await kvNum(db, `ai_spend_${day()}`), spentMonth = await kvNum(db, `ai_spend_${month()}`);
-    if (spentDay >= dailyUsdCap(env)) throw new AiLimitError('DAILY_CAP', `Today's paid AI budget ($${dailyUsdCap(env).toFixed(2)}) is used up — use Argon until tomorrow, or raise AI_DAILY_USD.`);
+    if (spentDay >= dailyUsdCap(env)) throw new AiLimitError('DAILY_CAP', `Today's paid AI budget ($${dailyUsdCap(env).toFixed(2)}) is used up — use Mini Assistant until tomorrow, or raise AI_DAILY_USD.`);
     if (spentMonth >= monthlyUsdCap(env)) throw new AiLimitError('MONTHLY_CAP', `This month's paid AI budget ($${monthlyUsdCap(env).toFixed(2)}) is used up — raise AI_MONTHLY_USD to continue.`);
     let res = null, body = null, lastErr = '';
     for (let k = 0; k < 2 && !res; k++) {
@@ -130,7 +140,8 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
             const r = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST', signal: ctl.signal,
                 headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-                body: JSON.stringify({ model, max_tokens: maxTokens, temperature, ...(system ? { system } : {}), messages: turns })
+                body: JSON.stringify({ model, max_tokens: maxTokens, temperature, ...(system ? { system } : {}),
+                    messages: img ? [...turns.slice(0, -1), { role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: img.mime, data: img.b64 } }, { type: 'text', text: turns[turns.length - 1].content }] }] : turns })
             });
             body = await r.json().catch(() => null);
             if (r.ok) { res = body; break; }
@@ -145,7 +156,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
             lastErr = e.name === 'AbortError' ? 'took too long' : String(e.message || e);
         } finally { clearTimeout(timer); }
     }
-    if (!res) throw new AiLimitError('AI_ERROR', 'Marwa Cloud did not answer — try again in a moment. (' + String(lastErr).slice(0, 160) + ')');
+    if (!res) throw new AiLimitError('AI_ERROR', 'Miss Marwa Assistant Pro did not answer — try again in a moment. (' + String(lastErr).slice(0, 160) + ')');
     const text = (res.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
     const usage = res.usage || {};
     const costUsd = claudeCost(model, usage);
