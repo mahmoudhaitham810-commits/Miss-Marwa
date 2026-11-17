@@ -26,7 +26,10 @@ const RATES = {
     '@cf/meta/llama-4-scout-17b-16e-instruct': [24545, 77273],
     '@cf/meta/llama-3.2-11b-vision-instruct': [4410, 61493],
     '@cf/mistralai/mistral-small-3.1-24b-instruct': [31876, 50488],
-    '@cf/google/gemma-3-12b-it': [31371, 50560]
+    '@cf/google/gemma-3-12b-it': [31371, 50560],
+    '@cf/openai/gpt-oss-120b': [31818, 68182],     // $0.35 / $0.75 per M tokens ÷ $0.011 per 1,000 neurons
+    '@cf/openai/gpt-oss-20b': [18182, 27273],
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast': [26364, 204545]
 };
 export const visionModel = (env) => (env && env.HW_VISION_MODEL) || DEFAULT_VISION_MODEL;
 export const textModel = (env) => (env && env.HW_TEXT_MODEL) || visionModel(env);

@@ -21,23 +21,42 @@
 
     // ---------- text: safe markdown subset + Arabic/English ----------
     const AR = /[؀-ۿ]/, LAT = /[A-Za-z]/;
-    const firstStrong = (s) => { for (const ch of s) { if (AR.test(ch)) return 'rtl'; if (LAT.test(ch)) return 'ltr'; } return 'auto'; };
-    const isolate = (escaped, dir) => dir !== 'rtl' ? escaped
-        : escaped.replace(/([A-Za-z0-9][A-Za-z0-9 _.,:;'’()\[\]\/+\-−×÷=^%°⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉→&;#]*[A-Za-z0-9)\]⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉%°])|([A-Za-z])/g, (m) => /&[a-z]+;?$|&#\d+;?$/.test(m) ? m : `<bdi dir="ltr">${m}</bdi>`);
+    const firstStrong0 = (s) => { for (const ch of s) { if (AR.test(ch)) return 'rtl'; if (LAT.test(ch)) return 'ltr'; } return 'auto'; };
+    // direction of a line: its first letter decides, except a mostly-Arabic line that opens with an English term
+    // ("**Water depth**: كل ما زاد العمق…") — that one is still Arabic (right-to-left)
+    const firstStrong = (s) => { const d = firstStrong0(s); if (d !== 'ltr') return d; const ar = (s.match(/[\u0621-\u064A]/g) || []).length, la = (s.match(/[A-Za-z]/g) || []).length; return ar > la ? 'rtl' : 'ltr'; };
+    // An English stretch inside an Arabic line is isolated as ONE piece (<bdi dir="ltr">) — bold words and `code`
+    // inside it included — so "Sunlight penetrates … **marine life** and **photosynthesis**" keeps its word order.
+    const RUN = /[A-Za-z0-9][A-Za-z0-9 _.,:;'’()\[\]\/+\-−×÷=^%°⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉→&#]*[A-Za-z0-9)\]⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉%°][.!?]*|[A-Za-z]/g;   // a sentence keeps its own full stop
     function inline(text, dir) {
-        return text.split(/(`[^`]+`)/).map(part => {
-            if (/^`[^`]+`$/.test(part)) return `<code dir="ltr">${esc(part.slice(1, -1))}</code>`;
-            return part.split(/(\*\*[^*]+\*\*)/).map(p => {
-                const bold = /^\*\*[^*]+\*\*$/.test(p);
-                const t = isolate(esc(bold ? p.slice(2, -2) : p), dir);
-                return bold ? `<b>${t}</b>` : t;
-            }).join('');
-        }).join('');
+        const ch = [];   // one entry per character: { c, b (bold), code }
+        text.split(/(`[^`]+`)/).forEach(part => {
+            if (/^`[^`]+`$/.test(part)) { ch.push({ c: '', b: false, code: part.slice(1, -1) }); return; }
+            part.split(/(\*\*[^*]+\*\*)/).forEach(p => { const bold = /^\*\*[^*]+\*\*$/.test(p); for (const c of (bold ? p.slice(2, -2) : p)) ch.push({ c, b: bold }); });
+        });
+        const starts = new Set(), ends = new Set();
+        if (dir === 'rtl') {
+            const at = []; let flat = '';
+            ch.forEach((x, k) => { for (let i = 0; i < x.c.length; i++) at.push(k); flat += x.c; });
+            let m; RUN.lastIndex = 0;
+            while ((m = RUN.exec(flat))) { starts.add(at[m.index]); ends.add(at[m.index + m[0].length - 1]); }
+        }
+        let html = '', b = false;
+        ch.forEach((x, k) => {
+            if (starts.has(k)) html += (b ? '</b>' : '') + '<bdi dir="ltr">' + (b ? '<b>' : '');
+            if (x.b !== b) { html += x.b ? '<b>' : '</b>'; b = x.b; }
+            html += x.code != null ? `<code dir="ltr">${esc(x.code)}</code>` : esc(x.c);
+            if (ends.has(k)) html += (b ? '</b>' : '') + '</bdi>' + (b ? '<b>' : '');
+        });
+        if (b) html += '</b>';
+        return html.replace(/<b><\/b>/g, '');
     }
     function md(src) {
+        if (typeof document !== 'undefined') injectCss();   // .ak-ln lives in the shared styles
         const lines = String(src || '').replace(/\r/g, '').split('\n');
         let html = '', list = null, para = [], code = null;
-        const flushPara = () => { if (para.length) { const t = para.join('\n'); const d = firstStrong(t); html += `<p dir="${d}">${inline(t, d).replace(/\n/g, '<br>')}</p>`; para = []; } };
+        // each line keeps its own direction (an English sentence on its own line reads left-to-right)
+        const flushPara = () => { if (para.length) { const d = firstStrong(para.join(' ')); html += `<p dir="${d}">${para.length === 1 ? inline(para[0], d) : para.map(l => { const ld = firstStrong(l) === 'auto' ? d : firstStrong(l); return `<span class="ak-ln" dir="${ld}">${inline(l, ld)}</span>`; }).join('')}</p>`; para = []; } };
         // the whole list follows its first item's direction, so Arabic lists put their numbers / bullets on the right
         const flushList = () => { if (list) { const ld = firstStrong(list.items[0] || ''); html += `<${list.type} dir="${ld}">${list.items.map(it => { const d = firstStrong(it); return `<li dir="${d}">${inline(it, d)}</li>`; }).join('')}</${list.type}>`; list = null; } };
         for (const line of lines) {
@@ -77,6 +96,7 @@
 
     // ---------- styles ----------
     const CSS = `
+    .ak-ln { display: block; }
     .ak { display: grid; gap: 4px; padding: 8px; border-radius: 24px; background: var(--surface); border: 1.5px solid var(--border); box-shadow: 0 12px 32px -16px rgba(15, 23, 42, .4); }
     .ak:focus-within { border-color: var(--primary); }
     .ak-att { display: flex; gap: 8px; align-items: center; padding: 2px 4px 4px; }

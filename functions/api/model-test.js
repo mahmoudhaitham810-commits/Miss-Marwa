@@ -13,7 +13,7 @@
 import { requireStaff, ensureAppSchema } from './admin-auth.js';
 import { chat, AiLimitError, BRANDS, claudeReady, modelFor } from './ai-gateway.js';
 import { tutorPrompt } from './tutor.js';
-import { reasoning, REASONING_MODES, stripPrivate, finalAnswers } from './ai-rules.js';
+import { reasoning, REASONING_MODES, stripPrivate, finalAnswers, taskRules } from './ai-rules.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -241,7 +241,7 @@ export async function onRequest(context) {
             const R = reasoning(env, run.mode);
             let fields;
             try {
-                const out = await chat(env, db, { tier: 'pro', system: tutorPrompt(null, 'pro', { bench: { grade: set.grade } }) + R.system, messages: [{ role: 'user', content: askText(item) }], maxTokens: 1500 + R.extraTokens, temperature: 0.3, thinking: R.thinking });
+                const out = await chat(env, db, { tier: 'pro', system: tutorPrompt(null, 'pro', { bench: { grade: set.grade } }) + taskRules('exam', 'pro') + R.system, messages: [{ role: 'user', content: askText(item) }], maxTokens: 1500 + R.extraTokens, temperature: 0.3, thinking: R.thinking });
                 const text = stripPrivate(out.text);
                 const m = autoMark(item, text);
                 const u = out.usage || {};

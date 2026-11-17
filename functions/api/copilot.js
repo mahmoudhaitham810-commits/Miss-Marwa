@@ -10,7 +10,7 @@ import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gate
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
-import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate, isScienceQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate, askKind, taskRules, dropAnswerLine, isScienceQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const bad = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
@@ -104,7 +104,7 @@ The system looks the data up for you automatically and gives it to you in a DATA
 That section belongs to ${NAME_AR}: she answers her students herself. NEVER write, draft or suggest an answer to a student's question from it, and don't comment on what students asked. You may only report how many questions are waiting and since when (from DATA). If she asks you to write a reply to a student's question, kindly remind her that this section is hers 😊 and offer help with something else.
 
 ## Other things you can do
-${tier === 'free' ? 'Short, simple answers to quick questions; help with wording a short message to parents.' : 'Explain science, write and improve questions and model answers, plan, rephrase, summarize, draft messages to students or parents, brainstorm.'}
+${tier === 'free' ? 'Short, simple answers to quick questions; a complete, organized summary when she asks you to summarize or explain a topic; help with wording a short message to parents.' : 'Explain science, write and improve questions and model answers, plan, rephrase, summarize, draft messages to students or parents, brainstorm.'}
 
 ## Format
 Short and practical — she's busy and usually on her phone. Short paragraphs, bullet lists, **bold** key terms. Get to the point.`;
@@ -277,13 +277,15 @@ export async function onRequest(context) {
                 return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });
             }
             try {
-                const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : '');
+                const kind = result ? 'other' : img ? 'exam' : askKind(text);   // ✅ answer line only on exam questions
+                const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : taskRules(kind, tier));
                 // Pro answering a science question / photo uses the reasoning mode picked on the Model test page (PRO_REASONING)
                 const R = tier === 'pro' && !result ? reasoning(env, proMode(env)) : reasoning(env, 'plain');
-                const maxTokens = (result ? (tier === 'free' ? 600 : 900) : img ? (tier === 'free' ? 800 : 2000) : (tier === 'pro' ? 3000 : 500)) + R.extraTokens;
+                const maxTokens = (result ? (tier === 'free' ? 600 : 900) : img ? (tier === 'free' ? 800 : 2000) : (tier === 'pro' ? 3000 : 850)) + R.extraTokens;
                 const out = await chat(env, db, { tier, pool: 'staff', thinking: R.thinking, system: system + (img ? IMAGE_RULES : '') + R.system, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img });
                 const u = out.usage || {};
-                const saved = await saveReply({ text: stripPrivate(out.text) || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });
+                const clean = kind === 'exam' ? stripPrivate(out.text) : dropAnswerLine(stripPrivate(out.text));
+                const saved = await saveReply({ text: clean || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });
                 return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });
             } catch (e) {
                 const code = e instanceof AiLimitError ? e.code : 'AI_ERROR';

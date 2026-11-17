@@ -20,7 +20,27 @@ export const BRANDS = {
     free: { name: 'Mini Assistant', note: 'Free', ar: 'مجاني' },
     pro: { name: 'Miss Marwa Assistant Pro', note: 'Science, exams & summaries', ar: 'ذكي' }
 };
-const FREE_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
+const FREE_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';          // photos (it can see) + backup for text
+// Text questions go to the strongest free text model (17 Nov 2026): OpenAI gpt-oss-120b — much better at
+// science reasoning than Llama 4 Scout / Llama 3.3 70B. Set FREE_TEXT_MODEL to change it (or to the Scout id to switch back).
+// If it fails or answers empty, the same question goes to Scout; after 3 failures in a day it is skipped until tomorrow.
+const FREE_TEXT_MODEL = '@cf/openai/gpt-oss-120b';
+export const freeTextModel = (env) => (env && env.FREE_TEXT_MODEL) || FREE_TEXT_MODEL;
+const isOss = (m) => /gpt-oss/i.test(m || '');
+// Text out of any Workers AI reply shape (chat-completions, Responses API, classic { response })
+export function replyText(res) {
+    if (res == null) return '';
+    if (typeof res === 'string') return res;
+    if (typeof res.response === 'string') return res.response;
+    if (res.result && typeof res.result === 'object') return replyText(res.result);
+    const c = Array.isArray(res.choices) && res.choices[0];
+    if (c) { const m = c.message || {}; if (typeof m.content === 'string') return m.content; if (Array.isArray(m.content)) return m.content.map(x => x && (x.text || '')).join(''); if (typeof c.text === 'string') return c.text; }
+    if (typeof res.output_text === 'string') return res.output_text;
+    if (Array.isArray(res.output)) return res.output.filter(o => o && o.type === 'message').flatMap(o => o.content || []).filter(x => x && /text/.test(x.type || 'text')).map(x => x.text || '').join('');
+    return '';
+}
+// gpt-oss sometimes leaks its channel markers — keep only the final message
+const cleanOss = (t) => { let s = String(t || ''); if (/<\|(channel|message|start|end|return)\|>/.test(s)) { const i = s.lastIndexOf('<|message|>'); if (i >= 0) s = s.slice(i + 11); s = s.replace(/<\|[a-z_]+\|>/g, ''); } return s.trim(); };
 // USD per 1M tokens [input, output] — Anthropic pricing page, checked 16 Nov 2026
 const CLAUDE_PRICES = {
     'claude-haiku-5-5': [0.10, 0.50],
@@ -98,8 +118,26 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
         const cap = poolCap(env, pool), key = `ai_pool_${pool}_${day()}`;
         const used = await kvNum(db, key);
         const chars = system.length + turns.reduce((t, m) => t + m.content.length, 0);
-        const guess = estimateNeurons(model, { prompt_tokens: Math.ceil(chars / 3.5) + (img ? 1600 : 0), completion_tokens: Math.min(maxTokens, 400) });
+        const guess = estimateNeurons(img ? model : freeTextModel(env), { prompt_tokens: Math.ceil(chars / 3.5) + (img ? 1600 : 0), completion_tokens: Math.min(maxTokens, 400) });
         if (await quotaHitToday(db) || used + guess > cap) throw new AiLimitError('POOL_EMPTY', `Today's free ${pool === 'staff' ? 'AI Assistant' : 'student'} allowance is used up — it resets at 2:00 am (Cairo).`, { used: Math.round(used), cap });
+        // 1) text → the stronger text model first (one try; anything wrong → Scout below)
+        const tm = freeTextModel(env), failKey = `ai_free_text_fail_${day()}`;
+        if (!img && tm !== model && await kvNum(db, failKey) < 3) {
+            try {
+                const sys = system ? [{ role: 'system', content: (isOss(tm) ? 'Reasoning: low\n\n' : '') + system }] : (isOss(tm) ? [{ role: 'system', content: 'Reasoning: low' }] : []);
+                const r = await env.AI.run(tm, { messages: [...sys, ...turns], max_tokens: maxTokens + (isOss(tm) ? 700 : 0), temperature });   // + room for its short private reasoning
+                const text = cleanOss(replyText(r));
+                const neurons = estimateNeurons(tm, r && r.usage, chars, text.length + (isOss(tm) ? 1200 : 0));
+                await addUsage(db, neurons); await kvAdd(db, key, neurons);
+                if (text) return { text, tier, brand: BRANDS.free.name, model: tm, ms: Date.now() - t0, neurons, usage: (r && r.usage) || null };
+                await kvAdd(db, failKey, 1);
+            } catch (e) {
+                const m = String(e && e.message || e);
+                if (/3036|daily free allocation/i.test(m)) { await markQuotaHit(db); throw new AiLimitError('POOL_EMPTY', "Today's free allowance is used up — it resets at 2:00 am (Cairo).", { used: Math.round(used), cap }); }
+                await kvAdd(db, failKey, 1);
+            }
+        }
+        // 2) Scout (photos, or the backup for text)
         let res = null, lastErr = null;
         for (let k = 0; k < 3 && !res; k++) {
             const sys = system ? [{ role: 'system', content: system }] : [];
@@ -120,7 +158,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
             }
         }
         if (!res) throw new AiLimitError('AI_ERROR', 'The free model did not answer — try again, or switch to Miss Marwa Assistant Pro. ' + String(lastErr && lastErr.message || '').slice(0, 160));
-        const text = textOf(res).trim();
+        const text = (replyText(res) || textOf(res)).trim();
         const neurons = estimateNeurons(model, res.usage, chars + (img ? 5600 : 0), text.length);
         await addUsage(db, neurons);               // platform-wide meter (same as Homework / AI Lab)
         await kvAdd(db, key, neurons);             // this pool

@@ -18,12 +18,13 @@ export const LANGUAGE_SCHOOLS = `
 - The subject is called **Science** ("الـ Science") — never "العلوم". Its branches: **Physics**, **Chemistry**, **Biology**, **Earth Science** — never الفيزياء / الكيمياء / الأحياء.`;
 
 export const EXAM_ANSWER_LINE = `
-## Exam-style questions (choose, complete, true/false, give reason, what happens, problems)
-Explain briefly, then end with a final line exactly like this:
+## Exam-style questions ONLY (choose, complete, true/false, give reason, define, what happens, problems)
+When — and only when — the message is an actual exam / practice question, explain briefly, then end with a final line exactly like this:
 ✅ **الإجابة:** <the answer to write in the exam, in English>
 - Choose: the letter and the option, e.g. ✅ **الإجابة:** (b) neutrons
 - True/False: True, or False + the correct statement
-- Several parts: one final line per part, e.g. ✅ **الإجابة (a):** …`;
+- Several parts: one final line per part, e.g. ✅ **الإجابة (a):** …
+- NEVER add this line to a summary, an explanation, a "what is…" question or a chat message.`;
 
 export const PRO_ACCURACY = `
 ## Accuracy — you are the paid model, students and Miss Marwa rely on you
@@ -71,7 +72,7 @@ export function isCapabilityQuestion(text) {
 
 // Words that are just chat, not science (so "hi", "how are you" never count as a science question)
 const CHAT_EN = new Set('mini assistant miss marwa pro argon bot chatgpt claude gemini hi hello hey hii thanks thank you thx ok okay yes no yeah yep nope how are you fine good great nice cool what who can do help me please pls sorry bye see later morning evening night the and for with this that is it its am im not really very much'.split(' '));
-const SCIENCE_AR = /(اشرح|اشرحي|اشرحلي|اشرحيلي|يعني ايه|يعني اية|معني|عرف|عرفي|تعريف|الفرق بين|قارن|ليه|علل|سبب|احسب|احسبي|حل|حلي|حللي|مساله|مسأله|قانون|معادله|وحده|وحدة|تجربه|ماذا يحدث|ايه اللي بيحصل|بيحصل ايه|صح ولا غلط|اختار|اكمل|كمل|سؤال|اسئله|امتحان|درس|ماده|عنصر|ذره|طاقه|قوه|سرعه|كثافه|كتله|خليه)/;
+const SCIENCE_AR = /(لخص|ملخص|فهمني|اشرح|اشرحي|اشرحلي|اشرحيلي|يعني ايه|يعني اية|معني|عرف|عرفي|تعريف|الفرق بين|قارن|ليه|علل|سبب|احسب|احسبي|حل|حلي|حللي|مساله|مسأله|قانون|معادله|وحده|وحدة|تجربه|ماذا يحدث|ايه اللي بيحصل|بيحصل ايه|صح ولا غلط|اختار|اكمل|كمل|سؤال|اسئله|امتحان|درس|ماده|عنصر|ذره|طاقه|قوه|سرعه|كثافه|كتله|خليه)/;
 /** Is this a science / study question (→ the Pro note may follow a Mini Assistant answer)? */
 export function isScienceQuestion(text) {
     const raw = String(text || '');
@@ -81,6 +82,35 @@ export function isScienceQuestion(text) {
     const words = (raw.match(/[A-Za-z][A-Za-z'-]{2,}/g) || []).map(w => w.toLowerCase().replace(/'.*$/, ''));
     if (words.some(w => !CHAT_EN.has(w))) return true;            // English science terms (language schools)
     return /[=+×÷^]|\d\s*(kg|g|cm|m|s|n|j|w|°c|k)\b/i.test(raw);   // formulas / units
+}
+
+// ---------- what does THIS message ask for? exam question | summary/explanation | other ----------
+const EXAM_EN = /\b(choose|true or false|give (a )?reasons?|complete( the)?|define|what happens|calculate|find the|compare between|correct the (underlined|wrong)|put \(?[✓✔x]\)?)\b|^\s*\(?[a-d]\)\s|\n\s*\(?[a-d][).]\s|\s\([a-d]\)\s|(true|false)\s*\?|\.{4,}|…{2,}|_{3,}/i;
+const EXAM_AR = /(^|\s)(علل|عللي|اختار|اختاري|اختر|اكمل|اكملي|كمل|كملي|احسب|احسبي|عرف|عرفي|قارن|قارني)(?=[\s:：،.؟?]|$)|صح (ولا|او|أو) (غلط|خطا|خطأ)|ماذا يحدث|ايه اللي (يحصل|هيحصل|بيحصل) لو|حل(ي|لي|يلي)? (السؤال|المساله|المسائل|الاسئله|التمرين)|حللي/;
+const SUMMARY = /(لخص|لخصلي|لخصيلي|ملخص|اشرح|اشرحي|اشرحلي|اشرحيلي|فهمني|فهميني|explain|summari[sz]e|summary|tell me (all )?about|overview|revise|revision|مراجعه)/i;
+/** 'exam' (gets the ✅ answer line) | 'summary' (full organized summary) | 'other' */
+export function askKind(text) {
+    const raw = String(text || ''); const s = nrm(raw);
+    if (EXAM_EN.test(raw) || EXAM_AR.test(s)) return 'exam';
+    if (SUMMARY.test(raw) || SUMMARY.test(s)) return 'summary';
+    return 'other';
+}
+/** The rules for this one message (added to the system prompt). */
+export function taskRules(kind, tier = 'free') {
+    if (kind === 'exam') return `\n\n## This message is an exam / practice question\nAnswer it, then end with the ✅ **الإجابة:** line(s) as described above.`;
+    if (kind === 'summary') return `\n\n## This message asks you to SUMMARIZE / EXPLAIN a topic
+Give a complete, well-organized summary of the WHOLE topic at the student's curriculum level — never just 2 quick lines:
+- One short opening line: what it is, in Egyptian Arabic with the English term.
+- **Key definition(s)** in English, the way the book writes them (bold or on their own line), then the meaning in Egyptian Arabic.
+- The main points under short headings (### …) with bullets: how it works, the factors that affect it, types / stages / zones, important numbers, units or laws, and an everyday example. Cover every main point the book normally includes for that topic (e.g. for "penetration of sunlight in water": how deep light reaches, which colours / wavelengths are absorbed first and which go deepest, water clarity, and the effect on photosynthesis and marine life).
+- Finish with 2–3 bullets under "📌 **Remember for the exam**" — the key facts, in English.
+- About ${tier === 'free' ? '200–350' : '250–500'} words, still fun and friendly. Do NOT add a ✅ **الإجابة** line.`;
+    return `\n\n## This message is not an exam question\nDon't add a ✅ **الإجابة** line.`;
+}
+/** Remove "✅ الإجابة:" lines from a reply that wasn't an exam question (the model sometimes adds them anyway). */
+export function dropAnswerLine(text) {
+    const out = String(text || '').split('\n').filter(l => !/^\s*✅\s*\**\s*(الإجابة|الاجابة|Answer)[^\n]*[:：]/i.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    return out || String(text || '').trim();
 }
 
 // ---------- "what can you do?" — fixed, always-correct answers (no AI needed, free) ----------

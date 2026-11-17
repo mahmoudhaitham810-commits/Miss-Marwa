@@ -19,7 +19,7 @@ import { chat, usageSummary, AiLimitError, BRANDS } from './ai-gateway.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
-import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, isScienceQuestion, isCapabilityQuestion, capabilitiesForStudent } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, askKind, taskRules, dropAnswerLine, isScienceQuestion, isCapabilityQuestion, capabilitiesForStudent } from './ai-rules.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -159,7 +159,7 @@ ${EXAM_ANSWER_LINE}
 ## Your job as ${BRANDS[tier].name}
 ${tier === 'pro'
         ? `- You're the paid model — the student pays for real, high-value teaching. Explain clearly and completely at their grade's level: the idea, why it's true, a quick everyday example, and the exact exam answer. Problems: every step with units.${PRO_ACCURACY}`
-        : `- Help with SCIENCE and with their own progress on the platform. You're the free model: answer science questions clearly but SHORT (up to ~6 lines). The app automatically adds a note under science answers suggesting ${BRANDS.pro.name} for deeper explanations — never write such a note yourself.`}
+        : `- Help with SCIENCE and with their own progress on the platform. You're the free model: quick questions get clear, SHORT answers (up to ~6 lines); when they ask you to summarize or explain a topic (لخصلي / اشرحلي), give a complete, organized summary of all its main points (see "This message" below). The app automatically adds a note under science answers suggesting ${BRANDS.pro.name} for deeper explanations — never write such a note yourself.`}
 - Use ONLY the "MY DATA" block below for anything about their grades, rank, exams, absences or lessons. Never invent a number, exam, lesson or date. If something isn't there, say you don't see it.
 - Cards with their exact numbers appear under your reply when they ask about their grades, open exams or new lessons — so keep that part short and fun, don't repeat every number.
 - You can ONLY see this student's own data. If they ask about another student's grades or anything private about someone else, say kindly that you can't see that 🙂.
@@ -280,6 +280,7 @@ export async function onRequest(context) {
             const intents = img ? [] : studentIntent(text);
             const cards = cardsFor(intents, d);
             const science = !intents.length && isScienceQuestion(text);   // the Pro note follows real science questions only
+            const kind = img ? 'exam' : intents.length ? 'other' : askKind(text);   // ✅ answer line only on real exam questions
             if (img) cards.push({ type: 'upgrade', text: NOTE_IMAGE, tier: 'pro' });
             else if (science) cards.push({ type: 'upgrade', text: NOTE_TEXT, tier: 'pro' });
             const { results: hist } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
@@ -291,10 +292,10 @@ export async function onRequest(context) {
                 return db.prepare('SELECT * FROM tutor_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
             try {
-                const out = await chat(env, db, { tier: 'free', pool: 'student', system: tutorPrompt(d, 'free') + (img ? IMAGE_RULES : ''), messages: [...EXAMPLES, ...messages], maxTokens: img ? 800 : 550, temperature: 0.5, image: img && !img.error ? img : null });
+                const out = await chat(env, db, { tier: 'free', pool: 'student', system: tutorPrompt(d, 'free') + (img ? IMAGE_RULES : '') + (intents.length ? '' : taskRules(kind, 'free')), messages: [...EXAMPLES, ...messages], maxTokens: img ? 900 : 850, temperature: 0.5, image: img && !img.error ? img : null });
                 await kvAdd(db, counterKey(who, 'msgs'), 1);
                 if (img) await kvAdd(db, counterKey(who, 'imgs'), 1);
-                const saved = await save({ text: out.text || '…', model: out.model, ms: out.ms, neurons: out.neurons, cards: cards.length ? JSON.stringify(cards) : null });
+                const saved = await save({ text: (kind === 'exam' ? out.text : dropAnswerLine(out.text)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cards: cards.length ? JSON.stringify(cards) : null });
                 return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today() });
             } catch (e) {
                 const code = e instanceof AiLimitError ? e.code : 'AI_ERROR';
