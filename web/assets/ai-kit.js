@@ -99,7 +99,6 @@
     .ak-pill { height: 40px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; padding: 0 10px 0 12px; cursor: pointer; min-width: 0; max-width: 46vw; }
     .ak-pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ak-pill svg { width: 16px; height: 16px; flex: none; opacity: .7; }
-    .ak-pill.max { background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, var(--surface)), color-mix(in srgb, #ec4899 12%, var(--surface))); }
     .ak-menu { position: fixed; z-index: 1000; min-width: 250px; max-width: calc(100vw - 24px); background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 18px 50px -12px rgba(15, 23, 42, .45); padding: 6px; animation: akin .16s ease-out; }
     @keyframes akin { from { opacity: 0; transform: translateY(6px); } }
     .ak-menu .it { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; color: var(--text); font: inherit; text-align: start; padding: 10px 12px; border-radius: 12px; cursor: pointer; }
@@ -150,7 +149,7 @@
         const autosize = () => { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; };
         const update = () => { sendB.disabled = busy || (!ta.value.trim() && !image); };
         const cur = () => models.find(m => m.tier === tier) || models[0] || { name: '—' };
-        const drawPill = () => { const m = cur(); pill.querySelector('span').textContent = m.name; pill.classList.toggle('max', m.tier === 'max'); };
+        const drawPill = () => { const m = cur(); pill.querySelector('span').textContent = m.name; };
 
         // model menu
         function closeMenu() { document.querySelectorAll('.ak-menu, .ak-scrim').forEach(x => x.remove()); pill.setAttribute('aria-expanded', 'false'); }

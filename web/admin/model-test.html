@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Model test · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        .mt { max-width: 980px; margin: 0 auto; }
+        .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+        @media (min-width: 760px) { .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .box { border: 1px solid var(--border); background: var(--surface); border-radius: 18px; padding: 14px; min-width: 0; }
+        .box h3 { margin: 0 0 4px; font-size: 16px; }
+        .muted { color: var(--muted); }
+        .runs { display: grid; gap: 6px; margin-top: 10px; }
+        .runrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); }
+        .runrow b { font-size: 13.5px; }
+        .k { display: inline-flex; gap: 4px; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--surface-3, #eef2f7); }
+        .k.good { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+        .k.bad { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
+        .k.warn { background: color-mix(in srgb, var(--warning) 16%, transparent); color: var(--warning); }
+        .seg { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); flex-wrap: wrap; }
+        .seg button { border: 0; background: transparent; color: var(--text); font: inherit; font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
+        .seg button.on { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.08); color: var(--primary); }
+        .bar { height: 8px; border-radius: 9px; background: var(--surface-3, #eef2f7); overflow: hidden; margin: 10px 0 4px; }
+        .bar span { display: block; height: 100%; background: var(--primary); transition: width .3s; }
+        .q { border: 1px solid var(--border); background: var(--surface); border-radius: 18px; padding: 14px; min-width: 0; }
+        .q.wrong { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+        .q .qh { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+        .q .qt { font-weight: 700; white-space: pre-wrap; overflow-wrap: anywhere; direction: ltr; text-align: left; }
+        .q ol { margin: 6px 0 0; padding-left: 22px; direction: ltr; text-align: left; }
+        .q ol li.key { color: var(--success); font-weight: 700; }
+        .q .key { font-size: 13px; margin-top: 6px; direction: ltr; text-align: left; }
+        .ans { margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); font-size: 14.5px; line-height: 1.7; overflow-wrap: anywhere; }
+        .ans p { margin: 0 0 6px; } .ans p:last-child { margin: 0; }
+        .ans pre { overflow-x: auto; direction: ltr; text-align: left; }
+        .acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+        .mk { width: 40px; height: 40px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); font-size: 18px; cursor: pointer; }
+        .mk.on.ok { background: color-mix(in srgb, var(--success) 18%, var(--surface)); border-color: var(--success); }
+        .mk.on.no { background: color-mix(in srgb, var(--danger) 15%, var(--surface)); border-color: var(--danger); }
+        .tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        .tbl th, .tbl td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+        .tbl th { font-size: 12px; color: var(--muted); font-weight: 800; }
+        .scroll { overflow-x: auto; }
+        textarea.json { width: 100%; min-height: 220px; box-sizing: border-box; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: 12.5px ui-monospace, Menlo, monospace; padding: 10px; }
+        .errs { color: var(--danger); font-size: 13px; margin: 8px 0 0; padding-left: 18px; }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main"><div class="mt" id="app"></div></main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/assets/ai-kit.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, api, icon } = A;
+        await A.boot({ active: 'modeltest', title: 'Model test' });
+        const GL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
+        const MODE = { plain: 'Plain', check: 'Check first', thinking: 'Claude thinking' };
+        const MODE_HELP = { plain: 'Answers straight away (cheapest, fastest).', check: 'Checks the fact, units and every choice privately first, then answers.', thinking: "Claude's built-in thinking before answering (slower, a bit more expensive)." };
+        const KIND = { mcq: 'Choose', tf: 'True / False', complete: 'Complete', reason: 'Give reason', define: 'Define', 'what-happens': 'What happens', problem: 'Problem', compare: 'Compare', other: 'Other' };
+        const pc = (v) => v === null || v === undefined ? '—' : `${v}%`;
+        let ST = null, mode = 'check', SET = null, view = { run: null, filter: 'all', compare: [] };
+        try { ST = await api('/api/model-test?action=status'); } catch (e) { $('app').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
+
+        const qs = () => new URLSearchParams(location.search);
+        const go = (params) => { history.pushState(null, '', '?' + new URLSearchParams(params).toString()); route(); };
+        window.addEventListener('popstate', route);
+        async function route() { const p = qs(); if (p.get('set')) await openSet(Number(p.get('set')), p.get('run') ? Number(p.get('run')) : null); else await home(); }
+
+        const head = (sub) => `<div class="page-head"><div><h1>Model test · ${esc(ST.brand)}</h1><p>${sub}</p></div></div>
+            ${ST.proReady ? '' : `<div class="notice warn" style="margin-bottom:12px"><span>Pro isn't connected yet — add the <b>ANTHROPIC_API_KEY</b> secret in Cloudflare, redeploy, then run tests here. You can already import exam sets.</span></div>`}`;
+        const sumChips = (s) => `<span class="k ${s.accuracy >= 90 ? 'good' : s.accuracy >= 75 ? 'warn' : s.accuracy !== null ? 'bad' : ''}">✔ ${pc(s.accuracy)} right${s.graded ? ` (${s.correct}/${s.graded})` : ''}</span>
+            <span class="k ${s.style >= 90 ? 'good' : s.style >= 70 ? 'warn' : s.style !== null ? 'bad' : ''}">🗣 style ${pc(s.style)}</span>
+            ${s.needsMarking ? `<span class="k warn">✍ ${s.needsMarking} to mark</span>` : ''}${s.errors ? `<span class="k bad">⚠ ${s.errors} failed</span>` : ''}
+            <span class="k">⏱ ${s.avgSeconds ?? '—'} s</span><span class="k">💰 ${s.costPerAnswerEgp ?? '—'} EGP/answer</span>`;
+
+        // ---------- home: all sets ----------
+        async function home() {
+            let d; try { d = await api('/api/model-test?action=sets'); } catch (e) { $('app').innerHTML = head('') + `<div class="notice danger">${esc(e.message)}</div>`; return; }
+            const byGrade = Object.keys(GL).map(g => [g, d.sets.filter(s => s.grade === g)]);
+            $('app').innerHTML = head(`Hidden — only you see this. Real first-term exams, asked exactly like a student would, to make Pro as accurate as possible. Pro now answers in mode <b>${esc(MODE[ST.current] || ST.current)}</b> (Cloudflare variable PRO_REASONING).`)
+                + `<div class="acts" style="margin:0 0 12px"><button class="btn btn-primary" id="impBtn">${icon('plus', 'sm')}Import exam set</button><span class="muted" style="font-size:13px">${d.sets.length} set${d.sets.length === 1 ? '' : 's'} · ${d.sets.reduce((t, s) => t + s.questions, 0)} questions</span></div>
+                <div class="grid two">${byGrade.map(([g, sets]) => `<div class="box"><h3>${GL[g]}</h3>${sets.length ? sets.map(s => `<div style="margin-top:10px">
+                    <a href="?set=${s.id}" data-set="${s.id}" style="font-weight:800;text-decoration:none" dir="auto">${esc(s.title)}</a> <span class="muted" style="font-size:12.5px">· ${s.questions} questions</span>
+                    <div class="runs">${s.runs.slice(0, 3).map(r => `<div class="runrow"><b>${esc(MODE[r.mode] || r.mode)}</b>${r.finished ? '' : '<span class="k warn">unfinished</span>'} ${sumChips(r.summary)}</div>`).join('') || '<span class="muted" style="font-size:13px">Not tested yet</span>'}</div></div>`).join('') : '<p class="muted" style="margin:6px 0 0;font-size:13px">No exams yet</p>'}</div>`).join('')}</div>`;
+            $('impBtn').addEventListener('click', importSheet);
+            $('app').querySelectorAll('[data-set]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); go({ set: a.dataset.set }); }));
+        }
+        function importSheet() {
+            const close = Site.sheet({ iconName: 'plus', title: 'Import an exam set', subtitle: 'Choose the .json file Claude prepared from the exam paper (or paste it).',
+                html: `<input type="file" id="impFile" accept=".json,application/json" style="margin-bottom:8px"><textarea class="json" id="impText" placeholder='{"title": "...", "grade": "prep2", "items": [...]}'></textarea><ul class="errs" id="impErr"></ul>`,
+                actions: [{ label: 'Import', cls: 'btn-primary', keep: true, onClick: async (c) => {
+                    try { const r = await api('/api/model-test?action=import', { body: { json: $('impText').value } }); c(); Site.toast(`Imported — ${r.questions} questions`, 'success'); go({ set: r.id }); }
+                    catch (e) { $('impErr').innerHTML = ((e.data && e.data.errors) || [e.message]).map(x => `<li>${esc(x)}</li>`).join(''); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }] });
+            $('impFile').addEventListener('change', async () => { const f = $('impFile').files[0]; if (f) $('impText').value = await f.text(); });
+        }
+
+        // ---------- one set ----------
+        let running = null;
+        async function openSet(id, runId) {
+            try { SET = await api(`/api/model-test?action=set&id=${id}`); } catch (e) { $('app').innerHTML = head('') + `<div class="notice danger">${esc(e.message)}</div>`; return; }
+            view.run = runId || (SET.runs[0] && SET.runs[0].id) || null;
+            draw();
+        }
+        function draw() {
+            const S = SET.set, run = SET.runs.find(r => r.id === view.run);
+            $('app').innerHTML = head(`<a href="?" id="back">← All exams</a> · ${GL[S.grade]} · ${SET.items.length} questions${S.source ? ' · ' + esc(S.source) : ''}`)
+                + `<div class="box"><h3 dir="auto">${esc(S.title)}</h3>
+                    <p class="muted" style="margin:0 0 10px;font-size:13px">Run the whole exam through Pro in one reasoning mode. Compare modes, then set the best one as PRO_REASONING.</p>
+                    <div class="seg" id="modeSeg">${Object.keys(MODE).map(m => `<button data-mode="${m}" class="${m === mode ? 'on' : ''}">${MODE[m]}</button>`).join('')}</div>
+                    <p class="muted" style="font-size:12.5px;margin:6px 0 0" id="modeHelp">${MODE_HELP[mode]}</p>
+                    <div class="acts"><button class="btn btn-primary" id="runBtn" ${ST.proReady && !running ? '' : 'disabled'}>▶ Run ${SET.items.length} questions</button>
+                        <a class="btn btn-ghost" href="/api/model-test?action=export&id=${S.id}" download>⬇ Export for independent marking</a>
+                        <button class="btn btn-ghost" id="delSet">Delete set</button></div>
+                    <div id="prog" ${running ? '' : 'hidden'}><div class="bar"><span id="progBar" style="width:0%"></span></div><span class="muted" style="font-size:13px" id="progTxt"></span> <button class="btn btn-ghost btn-sm" id="stopBtn">Pause</button></div>
+                    <div class="runs">${SET.runs.map(r => `<div class="runrow" style="${r.id === view.run ? 'outline:2px solid var(--primary)' : ''}">
+                        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-cmp="${r.id}" ${view.compare.includes(r.id) ? 'checked' : ''}></label>
+                        <a href="?set=${S.id}&run=${r.id}" data-run="${r.id}"><b>#${r.id} ${esc(MODE[r.mode] || r.mode)}</b></a>${r.finished ? '' : '<span class="k warn">unfinished</span>'} ${sumChips(r.summary)}
+                        ${r.finished ? '' : `<button class="btn btn-soft btn-sm" data-resume="${r.id}">Resume</button>`}<button class="btn btn-ghost btn-sm" data-delrun="${r.id}">Delete</button></div>`).join('')}</div>
+                    ${SET.runs.length >= 2 ? `<div class="acts"><button class="btn btn-soft btn-sm" id="cmpBtn" ${view.compare.length === 2 ? '' : 'disabled'}>Compare the 2 ticked runs</button></div>` : ''}
+                </div><div id="detail" style="margin-top:12px"></div>`;
+            $('back').addEventListener('click', (e) => { e.preventDefault(); go({}); });
+            $('modeSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (!b) return; mode = b.dataset.mode; $('modeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); $('modeHelp').textContent = MODE_HELP[mode]; $('runBtn').textContent = `▶ Run ${SET.items.length} questions`; });
+            $('runBtn').addEventListener('click', () => startRun());
+            $('delSet').addEventListener('click', () => Site.sheet({ iconName: 'alert', title: 'Delete this exam set?', subtitle: 'Its questions and all test runs are removed.', actions: [{ label: 'Delete', cls: 'btn-danger', onClick: async (c) => { await api('/api/model-test?action=delete-set', { body: { id: SET.set.id } }); c(); go({}); } }, { label: 'Cancel', cls: 'btn-ghost' }] }));
+            $('app').querySelectorAll('[data-run]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); view.run = Number(a.dataset.run); view.filter = 'all'; history.replaceState(null, '', `?set=${SET.set.id}&run=${view.run}`); draw(); }));
+            $('app').querySelectorAll('[data-resume]').forEach(b => b.addEventListener('click', () => { const r = SET.runs.find(x => x.id === Number(b.dataset.resume)); startRun(r.id); }));
+            $('app').querySelectorAll('[data-delrun]').forEach(b => b.addEventListener('click', async () => { await api('/api/model-test?action=delete-run', { body: { id: Number(b.dataset.delrun) } }); await openSet(SET.set.id); }));
+            $('app').querySelectorAll('[data-cmp]').forEach(c => c.addEventListener('change', () => { const id = Number(c.dataset.cmp); view.compare = c.checked ? [...view.compare.filter(x => x !== id), id].slice(-2) : view.compare.filter(x => x !== id); draw(); }));
+            if ($('cmpBtn')) $('cmpBtn').addEventListener('click', compare);
+            if ($('stopBtn')) $('stopBtn').addEventListener('click', () => { if (running) running.stop = true; });
+            detail();
+        }
+
+        // ---------- running (one question at a time, 2 in parallel; can pause / resume) ----------
+        async function startRun(resumeId) {
+            if (running) return;
+            let runId = resumeId, ids = SET.items.map(i => i.id);
+            if (!runId) { try { const r = await api('/api/model-test?action=run-start', { body: { setId: SET.set.id, mode } }); runId = r.runId; ids = r.itemIds; } catch (e) { Site.toast(e.message, 'error'); return; } }
+            running = { stop: false, done: 0, total: ids.length, runId };
+            view.run = runId; await openSet(SET.set.id, runId);
+            $('prog').hidden = false;
+            const queue = [...ids]; let stopMsg = null;
+            const tick = () => { $('progBar').style.width = `${running.done / running.total * 100}%`; $('progTxt').textContent = `${running.done} / ${running.total} answered`; };
+            tick();
+            const worker = async () => {
+                while (queue.length && !running.stop) {
+                    const itemId = queue.shift();
+                    try { const r = await api('/api/model-test?action=run-one', { body: { runId, itemId } }); if (r.stop) { stopMsg = r.stop; running.stop = true; } }
+                    catch (e) { stopMsg = e.message; running.stop = true; }
+                    running.done++; tick();
+                }
+            };
+            await Promise.all([worker(), worker()]);
+            const paused = running.stop; running = null;
+            if (stopMsg) Site.toast(stopMsg, 'error'); else Site.toast(paused ? 'Paused — press Resume to continue' : 'Test finished ✅', paused ? 'info' : 'success');
+            await openSet(SET.set.id, runId);
+        }
+
+        // ---------- results of one run ----------
+        function detail() {
+            const run = SET.runs.find(r => r.id === view.run);
+            if (!run) { $('detail').innerHTML = SET.items.length ? `<div class="box muted">No runs yet. Press ▶ Run to test Pro on this exam.</div>` + questionsList() : ''; return; }
+            const ans = Object.fromEntries(run.answers.map(a => [a.itemId, a]));
+            const verdict = (a) => !a ? null : a.error ? 'error' : (a.mark ?? a.auto);
+            const rows = SET.items.filter(it => {
+                const a = ans[it.id], v = verdict(a);
+                if (view.filter === 'wrong') return v === 0;
+                if (view.filter === 'mark') return a && !a.error && (a.mark === null || a.mark === undefined) && (a.auto === null || a.auto === undefined);
+                if (view.filter === 'style') return a && a.style && a.style.score < 1;
+                if (view.filter === 'errors') return a && a.error;
+                return true;
+            });
+            const by = run.summary.byKind || {};
+            $('detail').innerHTML = `<div class="box"><h3>Run #${run.id} · ${esc(MODE[run.mode] || run.mode)} · ${esc(run.model || '')}</h3><div class="acts" style="margin-top:6px">${sumChips(run.summary)}</div>
+                <div class="scroll" style="margin-top:10px"><table class="tbl"><tr><th>Question type</th><th>Right</th><th>Marked</th></tr>${Object.entries(by).map(([k, v]) => `<tr><td>${esc(KIND[k] || k)}</td><td>${Math.round(v.ok / v.graded * 100)}%</td><td>${v.ok}/${v.graded}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">Nothing marked yet</td></tr>'}</table></div>
+                <div class="seg" style="margin-top:12px" id="filt">${[['all', 'All'], ['wrong', 'Wrong'], ['mark', 'To mark'], ['style', 'Style issues'], ['errors', 'Failed']].map(([k, l]) => `<button data-f="${k}" class="${view.filter === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+                <div class="grid" style="margin-top:12px">${rows.map(it => qCard(it, ans[it.id])).join('') || '<div class="box muted">Nothing here 🎉</div>'}</div>`;
+            $('filt').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { view.filter = b.dataset.f; detail(); } });
+            $('detail').querySelectorAll('[data-mark]').forEach(b => b.addEventListener('click', async () => {
+                const [aid, v] = b.dataset.mark.split(':'); const a = run.answers.find(x => x.id === Number(aid));
+                const mark = a.mark === Number(v) ? null : Number(v);
+                try { await api('/api/model-test?action=mark', { body: { answerId: a.id, mark } }); a.mark = mark; const fresh = await api(`/api/model-test?action=set&id=${SET.set.id}`); SET = fresh; draw(); } catch (e) { Site.toast(e.message, 'error'); }
+            }));
+            $('detail').querySelectorAll('[data-redo]').forEach(b => b.addEventListener('click', async () => {
+                b.disabled = true; b.textContent = '…';
+                try { await api('/api/model-test?action=run-one', { body: { runId: run.id, itemId: Number(b.dataset.redo), redo: true } }); SET = await api(`/api/model-test?action=set&id=${SET.set.id}`); draw(); } catch (e) { Site.toast(e.message, 'error'); b.disabled = false; }
+            }));
+        }
+        function qText(it) {
+            return `<div class="qt">${esc(it.question)}</div>${it.options ? `<ol type="a">${it.options.map((o, i) => `<li class="${i === it.answerIndex ? 'key' : ''}">${esc(o)}${i === it.answerIndex ? ' ✓' : ''}</li>`).join('')}</ol>` : ''}
+                ${it.kind !== 'mcq' ? `<div class="key"><b>Model answer:</b> ${esc(it.answer)}</div>` : ''}`;
+        }
+        function questionsList() { return `<div class="grid" style="margin-top:12px">${SET.items.map(it => `<div class="q"><div class="qh"><span class="k">${it.ord}. ${esc(KIND[it.kind] || it.kind)}</span>${it.section ? `<span class="muted" style="font-size:12px">${esc(it.section)}</span>` : ''}</div>${qText(it)}</div>`).join('')}</div>`; }
+        function qCard(it, a) {
+            const v = !a ? null : a.error ? 'error' : (a.mark ?? a.auto);
+            const st = a && a.style;
+            const styleChips = st ? [['egyptian', 'Egyptian Arabic'], ['englishTerms', 'English terms'], ['mixed', 'Not all-English'], ['finalLine', 'Exam answer line']].map(([k, l]) => `<span class="k ${st[k] ? 'good' : 'bad'}">${st[k] ? '✓' : '✗'} ${l}</span>`).join('') + (st.translated && st.translated.length ? `<span class="k bad">translated: ${esc(st.translated.join('، '))}</span>` : '') : '';
+            return `<div class="q ${v === 0 ? 'wrong' : ''}"><div class="qh"><span class="k">${it.ord}. ${esc(KIND[it.kind] || it.kind)}</span>
+                    ${v === 1 ? '<span class="k good">✓ right</span>' : v === 0 ? '<span class="k bad">✗ wrong</span>' : v === 'error' ? '<span class="k bad">failed</span>' : a ? '<span class="k warn">✍ needs your mark</span>' : '<span class="k">not answered</span>'}
+                    ${a && a.mark !== null && a.mark !== undefined ? '<span class="muted" style="font-size:12px">(your mark)</span>' : a && a.auto !== null && a.auto !== undefined ? '<span class="muted" style="font-size:12px">(auto)</span>' : ''}</div>
+                ${qText(it)}
+                ${a && a.error ? `<div class="notice danger" style="margin-top:8px">${esc(a.error)}</div>` : a ? `<div class="ans">${AiKit.md(a.text || '')}</div>
+                    ${a.final ? `<div class="key"><b>Its exam answer:</b> ${esc(a.final)}</div>` : ''}
+                    <div class="acts">${styleChips}</div>
+                    <div class="acts"><button class="mk ${a.mark === 1 ? 'on ok' : ''}" data-mark="${a.id}:1" title="Right">✓</button><button class="mk ${a.mark === 0 ? 'on no' : ''}" data-mark="${a.id}:0" title="Wrong">✗</button>
+                        <span class="muted" style="font-size:12px">${a.ms ? (a.ms / 1000).toFixed(1) + ' s' : ''} · ${a.costUsd != null ? (a.costUsd * ST.rate).toFixed(3) + ' EGP' : ''}${a.tokensOut ? ' · ' + a.tokensOut + ' tokens out' : ''}</span>
+                        <button class="btn btn-ghost btn-sm" data-redo="${it.id}">Ask again</button></div>` : ''}</div>`;
+        }
+
+        // ---------- compare two runs ----------
+        function compare() {
+            const [r1, r2] = view.compare.map(id => SET.runs.find(r => r.id === id));
+            const v = (r, it) => { const a = r.answers.find(x => x.itemId === it.id); return !a ? '—' : a.error ? '⚠' : (a.mark ?? a.auto) === 1 ? '✓' : (a.mark ?? a.auto) === 0 ? '✗' : '?'; };
+            const diff = SET.items.filter(it => v(r1, it) !== v(r2, it));
+            $('detail').innerHTML = `<div class="box"><h3>#${r1.id} ${esc(MODE[r1.mode])} vs #${r2.id} ${esc(MODE[r2.mode])}</h3>
+                <div class="scroll"><table class="tbl"><tr><th></th><th>#${r1.id} ${esc(MODE[r1.mode])}</th><th>#${r2.id} ${esc(MODE[r2.mode])}</th></tr>
+                ${[['Right', s => pc(s.accuracy)], ['Right (by marks)', s => pc(s.marksAccuracy)], ['Style', s => pc(s.style)], ['Seconds / answer', s => s.avgSeconds ?? '—'], ['EGP / answer', s => s.costPerAnswerEgp ?? '—'], ['Still to mark', s => s.needsMarking]].map(([l, f]) => `<tr><td>${l}</td><td><b>${f(r1.summary)}</b></td><td><b>${f(r2.summary)}</b></td></tr>`).join('')}</table></div>
+                <h3 style="margin-top:14px">Questions where they differ (${diff.length})</h3>
+                <div class="scroll"><table class="tbl"><tr><th>#</th><th>Question</th><th>#${r1.id}</th><th>#${r2.id}</th></tr>${diff.map(it => `<tr><td>${it.ord}</td><td dir="auto">${esc(it.question.slice(0, 120))}</td><td>${v(r1, it)}</td><td>${v(r2, it)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Same verdict on every question</td></tr>'}</table></div>
+                <div class="acts"><button class="btn btn-ghost btn-sm" id="cmpBack">Back to results</button></div></div>`;
+            $('cmpBack').addEventListener('click', detail);
+        }
+
+        route();
+    })();
+    </script>
+</body>
+</html>

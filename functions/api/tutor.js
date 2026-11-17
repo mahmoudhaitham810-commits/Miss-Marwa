@@ -19,6 +19,7 @@ import { chat, usageSummary, AiLimitError, BRANDS } from './ai-gateway.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY } from './ai-rules.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -134,8 +135,9 @@ function cardsFor(intents, d) {
 
 // ---------- personality ----------
 const ME = 'Miss Marwa AI Assistant';
-export function tutorPrompt(d, tier = 'free') {
-    const st = d ? d.student : { firstName: '', gender: 'male', gradeLabel: '' };
+// opts.bench = { grade } → the Model test: same tutor, no real student's data
+export function tutorPrompt(d, tier = 'free', opts = {}) {
+    const st = opts.bench ? { firstName: 'a student', gender: 'male', gradeLabel: GRADE_LABEL[opts.bench.grade] || 'Prep' } : d ? d.student : { firstName: '', gender: 'male', gradeLabel: '' };
     const girl = st.gender === 'female';
     return `You are "${ME}" (model: ${BRANDS[tier].name}) — the study buddy of the students of ${'مس مروة'} (Miss Marwa), a science teacher in Egypt (Science Academy). You're talking to ONE student: ${st.firstName} (${girl ? 'a girl — talk to her in the feminine: يا بطلة، إنتِ، عملتي' : 'a boy — talk to him in the masculine: يا بطل، إنت، عملت'}), ${st.gradeLabel}.
 
@@ -151,8 +153,13 @@ export function tutorPrompt(d, tier = 'free') {
 - Put **bold** on the English science terms. Short paragraphs; the student is on a phone.
 Example: "بص يا ${girl ? 'بطلة' : 'بطل'}، الـ **Density** دي ببساطة هي الـ **mass** مقسومة على الـ **volume**: **D = m / V** — يعني لو حاجتين نفس الحجم، اللي أتقل فيهم كثافته أعلى 🧱🪶"
 
+${LANGUAGE_SCHOOLS}
+${EXAM_ANSWER_LINE}
+
 ## Your job as ${BRANDS[tier].name}
-- Help with SCIENCE and with their own progress on the platform. You're the free model: answer science questions clearly but SHORT (up to ~6 lines). The app automatically adds a note under science answers suggesting ${BRANDS.pro.name} for deeper explanations — never write such a note yourself.
+${tier === 'pro'
+        ? `- You're the paid model — the student pays for real, high-value teaching. Explain clearly and completely at their grade's level: the idea, why it's true, a quick everyday example, and the exact exam answer. Problems: every step with units.${PRO_ACCURACY}`
+        : `- Help with SCIENCE and with their own progress on the platform. You're the free model: answer science questions clearly but SHORT (up to ~6 lines). The app automatically adds a note under science answers suggesting ${BRANDS.pro.name} for deeper explanations — never write such a note yourself.`}
 - Use ONLY the "MY DATA" block below for anything about their grades, rank, exams, absences or lessons. Never invent a number, exam, lesson or date. If something isn't there, say you don't see it.
 - Cards with their exact numbers appear under your reply when they ask about their grades, open exams or new lessons — so keep that part short and fun, don't repeat every number.
 - You can ONLY see this student's own data. If they ask about another student's grades or anything private about someone else, say kindly that you can't see that 🙂.
@@ -161,7 +168,7 @@ Example: "بص يا ${girl ? 'بطلة' : 'بطل'}، الـ **Density** دي ب
 - Never claim you did something on the platform (you can't submit, change marks or send anything).
 
 ## MY DATA (exact, from the platform — this student only)
-${factsOf(d)}`;
+${opts.bench ? '(Model test — no student data. Answer the science question only.)' : factsOf(d)}`;
 }
 const SMALL = /^(شكرا|شكرًا|ميرسي|تسلم|تسلمي|تمام|اوك|اوكي|ok|okay|thanks|thank you|hi|hello|hey|ازيك|اهلا|أهلا|السلام عليكم|صباح الخير|مساء الخير|ماشي|حلو|جميل|برافو|يس|نو|اه|لا)[\s!.,،؟?😊👌🙏❤️💪✨😂]*$|انت مين|إنت مين|تقدر تعمل ايه|تقدر تعمل إيه|بتعمل ايه/i;
 export const NOTE_TEXT = 'دي إجابة مبسّطة من Mini Assistant 🙂 — لشرح أعمق وأدق جرّب **Miss Marwa Assistant Pro**.';
@@ -236,8 +243,7 @@ export async function onRequest(context) {
         }
 
         if (action === 'send') {
-            const tier = data.tier === 'pro' || data.tier === 'max' ? data.tier : 'free';
-            if (tier === 'max') return bad('This model is for Miss Marwa only.', 403, { code: 'STAFF_ONLY' });
+            const tier = data.tier === 'pro' ? 'pro' : 'free';
             if (tier === 'pro') return bad(`${BRANDS.pro.name} جاي قريب جداً 🚀`, 403, { code: 'PRO_LOCKED' });
             let text = String(data.text || '').replace(/\r/g, '').trim();
             const img = readImage(data.image);

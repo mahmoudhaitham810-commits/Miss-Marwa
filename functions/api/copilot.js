@@ -1,6 +1,6 @@
 // =====================================================================
 // Miss Marwa's AI Assistant (/api/copilot) — staff only (permission copilot.use = teacher).
-// C0: chat + saved chats + model choice (Mini Assistant free / Miss Marwa Assistant Pro / Miss Marwa Assistant Pro Max) + usage meter.
+// C0: chat + saved chats + model choice (Mini Assistant free / Miss Marwa Assistant Pro) + usage meter.
 // C1: read-only platform data — code picks the lookup (copilot-tools.js), the page draws exact data cards,
 //     the AI only writes a short takeaway from those facts. Lookups work on Mini Assistant too, and still show
 //     their cards when the AI can't answer (free units used up, Miss Marwa Assistant Pro not connected…).
@@ -10,11 +10,12 @@ import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gate
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate } from './ai-rules.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const bad = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
-const TIERS = ['free', 'pro', 'max'];
+const TIERS = ['free', 'pro'];   // Pro Max (Sonnet) dropped 17 Nov 2026
 const MAX_TEXT = 4000, HISTORY = 20;
 
 let ready = false;
@@ -48,13 +49,16 @@ You are NOT the science expert:
 - The app automatically adds a note under your reply recommending Miss Marwa Assistant Pro for science — so don't write such a note yourself.`;
 const ROLE_KRYPTON = `
 ## Your role: you are "Miss Marwa Assistant Pro" — the science expert 🎓
-Science explanations, exam questions with model answers, rephrasing and summaries are your job: do them fully, accurately and carefully. You can also read the platform's data when it's given to you.`;
+Science explanations, exam questions with model answers, rephrasing, lesson summaries and exam papers are your job: do them fully, accurately and carefully. You can also read the platform's data when it's given to you.`;
 
 export function systemPrompt(staff, tier = 'free', now = new Date()) {
     const date = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Cairo' });
     return `You are Miss Marwa's "AI Assistant", the private assistant of ${NAME_EN} (${NAME_AR}) — a science teacher in Egypt who runs Science Academy (Science with ${NAME_EN}) for Prep 1, Prep 2, Prep 3 and Secondary 1 students. You are talking to HER (the teacher), not to a student.
 Today is ${date} (Cairo).
 ${tier === 'free' ? ROLE_ARGON : ROLE_KRYPTON}
+${LANGUAGE_SCHOOLS}
+${EXAM_ANSWER_LINE}
+${tier === 'pro' ? PRO_ACCURACY : ''}
 
 ## Personality — warm, cheerful, engaging
 - You're her friendly, upbeat assistant — like a smart, cheerful colleague who's genuinely happy to help. Natural and light, never stiff, formal or robotic.
@@ -267,10 +271,12 @@ export async function onRequest(context) {
             };
             try {
                 const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : '');
-                const maxTokens = result ? (tier === 'free' ? 600 : 900) : img ? (tier === 'free' ? 800 : 2000) : (tier === 'max' ? 2500 : tier === 'pro' ? 1500 : 500);
-                const out = await chat(env, db, { tier, pool: 'staff', system: system + (img ? IMAGE_RULES : ''), messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img });
+                // Pro answering a science question / photo uses the reasoning mode picked on the Model test page (PRO_REASONING)
+                const R = tier === 'pro' && !result ? reasoning(env, proMode(env)) : reasoning(env, 'plain');
+                const maxTokens = (result ? (tier === 'free' ? 600 : 900) : img ? (tier === 'free' ? 800 : 2000) : (tier === 'pro' ? 3000 : 500)) + R.extraTokens;
+                const out = await chat(env, db, { tier, pool: 'staff', thinking: R.thinking, system: system + (img ? IMAGE_RULES : '') + R.system, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img });
                 const u = out.usage || {};
-                const saved = await saveReply({ text: out.text || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });
+                const saved = await saveReply({ text: stripPrivate(out.text) || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });
                 return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });
             } catch (e) {
                 const code = e instanceof AiLimitError ? e.code : 'AI_ERROR';

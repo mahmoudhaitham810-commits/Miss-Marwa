@@ -7,7 +7,7 @@
 //                   student (free "Argon" tutor)      AI_POOL_STUDENT default 8,500
 //                 A pool that is used up stops (no paid overage, ever).
 //   tier 'pro' → Claude Haiku   (env CLAUDE_FAST_MODEL, default claude-haiku-5-5)
-//   tier 'max' → Claude Sonnet  (env CLAUDE_PRO_MODEL,  default claude-sonnet-5-5)
+//   (Pro Max / Claude Sonnet was dropped on 17 Nov 2026 — too expensive; all effort goes into Pro)
 //                 Needs the Cloudflare secret ANTHROPIC_API_KEY. Every call's cost is
 //                 metered; daily / monthly caps (AI_DAILY_USD default 1, AI_MONTHLY_USD
 //                 default 15) stop paid calls before they overspend.
@@ -18,8 +18,7 @@ import { aiReady, addUsage, estimateNeurons, markQuotaHit, quotaHitToday, textOf
 
 export const BRANDS = {
     free: { name: 'Mini Assistant', note: 'Free', ar: 'مجاني' },
-    pro: { name: 'Miss Marwa Assistant Pro', note: 'Science — everyday', ar: 'ذكي' },
-    max: { name: 'Miss Marwa Assistant Pro Max', note: 'Strongest — staff only', ar: 'الأقوى' }
+    pro: { name: 'Miss Marwa Assistant Pro', note: 'Science, exams & summaries', ar: 'ذكي' }
 };
 const FREE_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
 // USD per 1M tokens [input, output] — Anthropic pricing page, checked 16 Nov 2026
@@ -40,7 +39,7 @@ export const poolCap = (env, pool) => num(env && env[pool === 'student' ? 'AI_PO
 export const dailyUsdCap = (env) => num(env && env.AI_DAILY_USD, 1);
 export const monthlyUsdCap = (env) => num(env && env.AI_MONTHLY_USD, 15);
 export const claudeReady = (env) => !!(env && env.ANTHROPIC_API_KEY);
-export const modelFor = (env, tier) => tier === 'max' ? (env.CLAUDE_PRO_MODEL || 'claude-sonnet-5-5') : tier === 'pro' ? (env.CLAUDE_FAST_MODEL || 'claude-haiku-5-5') : (env.COPILOT_FREE_MODEL || FREE_MODEL);
+export const modelFor = (env, tier) => tier === 'pro' ? (env.CLAUDE_FAST_MODEL || 'claude-haiku-5-5') : (env.COPILOT_FREE_MODEL || FREE_MODEL);
 
 async function kvNum(db, key) {
     try { const r = await db.prepare(`SELECT value FROM app_kv WHERE "key" = ?`).bind(key).first(); return r ? Number(r.value) || 0 : 0; } catch (e) { return 0; }
@@ -86,7 +85,7 @@ function tidyTurns(messages) {
  * → { text, tier, brand, model, ms, neurons?, costUsd?, usage }
  * Throws AiLimitError with code: POOL_EMPTY | FREE_OFF | PAID_OFF | DAILY_CAP | MONTHLY_CAP | AI_ERROR
  */
-export async function chat(env, db, { tier = 'free', pool = 'staff', system = '', messages = [], maxTokens = 1200, temperature = 0.4, image = null }) {
+export async function chat(env, db, { tier = 'free', pool = 'staff', system = '', messages = [], maxTokens = 1200, temperature = 0.4, image = null, thinking = 0 }) {
     const turns = tidyTurns(messages);
     // image = { mime, b64 } → attached to the LAST user turn (the photo she/he just sent)
     const img = image && image.b64 && /^image\/(jpeg|png|webp)$/.test(image.mime || '') ? image : null;
@@ -140,7 +139,8 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
             const r = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST', signal: ctl.signal,
                 headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-                body: JSON.stringify({ model, max_tokens: maxTokens, temperature, ...(system ? { system } : {}),
+                // thinking > 0 → Claude's extended thinking (the API needs the default temperature then)
+                body: JSON.stringify({ model, max_tokens: maxTokens + (thinking > 0 ? thinking : 0), ...(thinking > 0 ? { thinking: { type: 'enabled', budget_tokens: thinking } } : { temperature }), ...(system ? { system } : {}),
                     messages: img ? [...turns.slice(0, -1), { role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: img.mime, data: img.b64 } }, { type: 'text', text: turns[turns.length - 1].content }] }] : turns })
             });
             body = await r.json().catch(() => null);
@@ -148,6 +148,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
             const msg = (body && body.error && body.error.message) || `HTTP ${r.status}`;
             lastErr = msg;
             if (r.status === 401 || r.status === 403) throw new AiLimitError('PAID_OFF', 'The Claude API key was refused — check the ANTHROPIC_API_KEY secret in Cloudflare.');
+            if (thinking > 0 && r.status === 400 && /think/i.test(msg)) throw new AiLimitError('AI_ERROR', `This model doesn't accept "thinking" — use another reasoning mode. (${msg.slice(0, 160)})`);
             if (r.status === 404 || /model/i.test(msg) && r.status === 400) throw new AiLimitError('AI_ERROR', `Model "${model}" isn't available — check CLAUDE_FAST_MODEL / CLAUDE_PRO_MODEL. (${msg.slice(0, 160)})`);
             if ([429, 500, 502, 503, 529].includes(r.status) && k === 0) { await new Promise(x => setTimeout(x, 1500)); continue; }
             break;

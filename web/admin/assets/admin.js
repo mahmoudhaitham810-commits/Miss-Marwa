@@ -115,6 +115,7 @@
             { key: 'datacheck', label: 'Data check', icon: 'shield', href: '/admin/data-check.html' },
             { key: 'inbox', label: 'Questions · أسئلتي', icon: 'inbox', href: '/admin/inbox.html' },
             teacher ? { key: 'copilot', label: 'AI Assistant', icon: 'sparkles', href: '/admin/copilot.html' } : null,
+            teacher ? { key: 'modeltest', label: 'Model test', icon: 'chart', href: '/admin/model-test.html' } : null,
             { key: 'tutorpreview', label: 'Student AI · preview', icon: 'bot', href: '/admin/tutor-preview.html' },
             { key: 'settings', label: teacher ? 'Settings' : 'My password', icon: 'settings', href: '/admin/settings.html' }
         ].filter(Boolean);

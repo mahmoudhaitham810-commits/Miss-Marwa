@@ -226,10 +226,10 @@
 
         // ---------- status, models, meter ----------
         const money = (v) => v >= 0.995 ? `$${v.toFixed(2)}` : v >= 0.01 ? `$${v.toFixed(2)}` : v > 0 ? '<$0.01' : '$0';
-        const NOTES = { free: 'Free · reports & quick help', pro: 'Science · everyday', max: 'Strongest · exams & summaries' };
-        const modelList = () => (STATUS ? STATUS.tiers : [{ tier: 'free', name: 'Mini Assistant', ready: true }, { tier: 'pro', name: 'Miss Marwa Assistant Pro', ready: false }, { tier: 'max', name: 'Miss Marwa Assistant Pro Max', ready: false }])
+        const NOTES = { free: 'Free · reports & quick help', pro: 'Science, exams & summaries' };
+        const modelList = () => (STATUS ? STATUS.tiers : [{ tier: 'free', name: 'Mini Assistant', ready: true }, { tier: 'pro', name: 'Miss Marwa Assistant Pro', ready: false }])
             .map(t => ({ tier: t.tier, name: t.name, ready: t.ready, note: NOTES[t.tier] }));
-        const brand = (t) => ((STATUS && STATUS.brands && STATUS.brands[t]) || {}).name || ({ free: 'Mini Assistant', pro: 'Miss Marwa Assistant Pro', max: 'Miss Marwa Assistant Pro Max' }[t]);
+        const brand = (t) => ((STATUS && STATUS.brands && STATUS.brands[t]) || {}).name || ({ free: 'Mini Assistant', pro: 'Miss Marwa Assistant Pro' }[t]);
         function renderModels() { if (!comp) return; comp.setModels(modelList()); if (comp.tier !== tier) { const ok = modelList().find(m => m.tier === tier && m.ready); if (ok) comp.setTier(tier); else tier = comp.tier; } }
         function notConnected(m) {
             Site.sheet({ iconName: 'lock', title: `${m.name} isn't connected yet`, subtitle: m.tier === 'free' ? 'The free model needs the Workers AI binding (AI) in Cloudflare.' : 'Add the ANTHROPIC_API_KEY secret in Cloudflare (Settings → Variables and Secrets), then redeploy.', actions: [{ label: 'OK', cls: 'btn-ghost' }] });
