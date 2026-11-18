@@ -19,6 +19,12 @@
         .hero-ask { display: flex; gap: 16px; align-items: center; padding: 18px; margin-bottom: 16px; }
         .hero-ask img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex: none; background: #fff; }
         .unit-group { margin-bottom: 14px; }
+        .topic-or { display: flex; align-items: center; gap: 10px; margin: 14px 0 10px; color: var(--muted); font-size: 12.5px; }
+        .topic-or::before, .topic-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        .general-btn { width: 100%; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; text-align: start; padding: 12px 14px; border-radius: 16px; border: 1.5px dashed var(--border); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+        .general-btn b { font-size: 15.5px; } .general-btn small { grid-column: 2; color: var(--muted); font-size: 12.5px; }
+        .general-btn.on { border-style: solid; border-color: var(--primary); background: var(--primary-soft); }
+        .qitem.from-mm .tag { background: var(--primary); color: #fff; }
         .unit-group > h2 { font-size: 15px; margin: 0 0 8px; color: var(--muted); font-weight: 700; display: flex; align-items: center; gap: 8px; }
         .qitem { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--border); color: inherit; text-decoration: none; }
         .qitem:first-of-type { border-top: 0; }
@@ -58,7 +64,10 @@
             <!-- New question -->
             <section id="newView" hidden>
                 <div class="chat-head"><a class="icon-btn" href="questions.html" data-back aria-label="Back"></a><h1>New question</h1></div>
-                <div class="card step-card reveal"><h2>1. Which unit?</h2><p class="small muted">So Miss Marwa knows exactly which part it's about.</p><div class="unit-pills" id="unitPills"></div></div>
+                <div class="card step-card reveal"><h2>1. What's it about?</h2><p class="small muted">A lesson — or anything else (<span class="ar">مثلاً: هناخد إيه بكرة؟</span>).</p>
+                    <div class="unit-pills" id="unitPills"></div>
+                    <div class="topic-or"><span>or</span></div>
+                    <button type="button" class="general-btn" id="generalBtn">💬 <b class="ar">سؤال خارج المنهج</b><small>Question outside the curriculum — no unit / lesson needed</small></button></div>
                 <div class="card step-card reveal" id="lessonStep" hidden><h2>2. Which lesson?</h2><p class="small muted" id="lessonHint"></p><div class="lesson-pills" id="lessonPills"></div></div>
                 <div id="askStep" hidden>
                     <h2 style="font-size:17px;margin:4px 0 10px">3. Your question</h2>
@@ -80,8 +89,8 @@
     </main>
 
     <script src="/assets/pwa.js"></script>
-    <script src="/assets/student.js"></script>
-    <script src="/assets/ask.js"></script>
+    <script src="/assets/student.js?v=20261118b"></script>
+    <script src="/assets/ask.js?v=20261118b"></script>
     <script>
     (function () {
         if (!window.App) return;
@@ -91,7 +100,7 @@
         document.querySelectorAll('[data-back]').forEach(a => a.innerHTML = icon('arrowLeft'));
         document.querySelector('[data-go-new]').innerHTML = `${icon('plus', 'sm')}New question`;
         const K = AskKit;
-        let items = [], filter = 'all', unit = null, lesson = null, current = null, poll = null;
+        let items = [], filter = 'all', unit = null, lesson = null, general = false, current = null, poll = null;
 
         // ---------- views ----------
         function show(view) {
@@ -125,23 +134,29 @@
         function renderList() {
             if (!items.length) {
                 $('list').innerHTML = `<div class="card hero-ask reveal"><img src="/assets/img/marwa-160.png" alt="">
-                    <div><strong style="font-size:17px">Stuck on something?</strong><p class="small muted" style="margin:4px 0 12px">Pick the unit and lesson, then ask — text, a photo of the question, or a voice note. Miss Marwa and the team reply right here.</p>
+                    <div><strong style="font-size:17px">Stuck on something?</strong><p class="small muted" style="margin:4px 0 12px">Pick the unit and lesson — or ask anything outside the curriculum — with text, a photo or a voice note. Miss Marwa and the team reply right here.</p>
                     <a class="btn btn-primary btn-sm" href="?new=1" data-go-new>${icon('plus', 'sm')}Ask your first question</a></div></div>`;
                 App.reveal(); return;
             }
             const counts = { all: items.length, waiting: items.filter(i => i.status === 'waiting').length, answered: items.filter(i => i.status !== 'waiting').length };
             const list = items.filter(i => filter === 'all' || (filter === 'waiting' ? i.status === 'waiting' : i.status !== 'waiting'));
             const groups = {};
-            list.forEach(i => { (groups[i.unit] ||= []).push(i); });
+            list.forEach(i => { const k = i.unit ? i.unit : (i.origin === 'staff' || i.origin === 'broadcast') ? 'mm' : 'gen'; (groups[k] ||= []).push(i); });
+            const order = ['mm', 'gen', ...Object.keys(groups).filter(k => !isNaN(k)).sort((a, b) => a - b)].filter(k => groups[k]);
+            const head = (k) => k === 'mm' ? `${icon('sparkles', 'sm')}Messages from Miss Marwa` : k === 'gen' ? `${icon('help', 'sm')}General · <span class="ar">خارج المنهج</span>` : `${icon('book', 'sm')}Unit ${k}`;
+            const row = (i) => {
+                const mm = i.origin === 'staff' || i.origin === 'broadcast';
+                const tag = i.unit ? `L${i.lesson}` : mm ? '📣' : '💬';
+                const meta = i.unit ? `Lesson ${i.lesson} · ` : '';
+                const title = i.text ? esc(i.text) : i.kind === 'image' ? (mm ? '📷 Photo' : '📷 Photo question') : i.kind === 'audio' ? (mm ? '🎤 Voice note' : '🎤 Voice question') : 'Question';
+                return `<a class="qitem ${mm ? 'from-mm' : ''}" href="?q=${i.id}" data-q="${i.id}"><span class="tag">${tag}</span>
+                    <span class="body"><b dir="auto">${title}</b><span class="meta">${meta}${esc(fmtDate(i.updatedAt || i.createdAt))}${!mm && i.replies ? ` · ${i.replies} repl${i.replies === 1 ? 'y' : 'ies'}` : ''}</span></span>
+                    ${i.unread ? `<span class="st new">${mm ? 'New' : 'New reply'}</span>` : mm ? '' : `<span class="st ${i.status}">${i.status === 'waiting' ? 'Waiting' : 'Answered'}</span>`}</a>`;
+            };
             $('list').innerHTML = `
                 <div class="segmented seg-filter" id="seg">${[['all', 'All'], ['waiting', 'Waiting'], ['answered', 'Answered']].map(([k, l]) => `<button data-f="${k}" class="${filter === k ? 'active' : ''}">${l} <span class="muted">${counts[k]}</span></button>`).join('')}</div>
-                ${Object.keys(groups).sort((a, b) => a - b).map(u => `<div class="unit-group reveal"><h2>${icon('book', 'sm')}Unit ${u}</h2><div class="card" style="padding:0;overflow:hidden">
-                    ${groups[u].sort((a, b) => a.lesson - b.lesson || b.id - a.id).map(i => `<a class="qitem" href="?q=${i.id}" data-q="${i.id}">
-                        <span class="tag">L${i.lesson}</span>
-                        <span class="body"><b dir="auto">${i.text ? esc(i.text) : i.kind === 'image' ? '📷 Photo question' : i.kind === 'audio' ? '🎤 Voice question' : 'Question'}</b>
-                            <span class="meta">Lesson ${i.lesson} · ${esc(fmtDate(i.createdAt))}${i.replies ? ` · ${i.replies} repl${i.replies === 1 ? 'y' : 'ies'}` : ''}</span></span>
-                        ${i.unread ? '<span class="st new">New reply</span>' : `<span class="st ${i.status}">${i.status === 'waiting' ? 'Waiting' : 'Answered'}</span>`}
-                    </a>`).join('')}</div></div>`).join('') || '<p class="muted">Nothing here.</p>'}`;
+                ${order.map(k => `<div class="unit-group reveal"><h2>${head(k)}</h2><div class="card" style="padding:0;overflow:hidden">
+                    ${groups[k].sort((a, b) => (a.lesson - b.lesson) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')) || b.id - a.id).map(row).join('')}</div></div>`).join('') || '<p class="muted">Nothing here.</p>'}`;
             $('seg').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; renderList(); } });
             App.reveal();
         }
@@ -150,16 +165,16 @@
         let newComposer = null;
         function openNew() {
             show('newView');
-            unit = null; lesson = null;
+            unit = null; lesson = null; general = false; $('generalBtn').classList.remove('on');
             $('unitPills').innerHTML = Array.from({ length: K.UNITS }, (_, i) => `<button type="button" data-u="${i + 1}">Unit ${i + 1}</button>`).join('');
             $('lessonStep').hidden = true; $('askStep').hidden = true;
             if (!newComposer) newComposer = K.composer($('newComposer'), {
                 placeholder: 'Write your question… (you can also add a photo or a voice note)', sendLabel: 'Send', icon, toast,
                 onSend: async ({ text, image, audio }) => {
-                    if (!unit || !lesson) throw new Error('Pick the unit and lesson first.');
-                    const d = await api('/api/ask?action=ask', { method: 'POST', body: { unit, lesson, text, image, audio } });
+                    if (!general && (!unit || !lesson)) throw new Error('Pick the unit and lesson — or "سؤال خارج المنهج".');
+                    const d = await api('/api/ask?action=ask', { method: 'POST', body: general ? { general: true, text, image, audio } : { unit, lesson, text, image, audio } });
                     history.replaceState(null, '', 'questions.html?q=' + d.id);
-                    showThread(d.id, { unit, lesson, status: 'waiting' }, d.messages, true);
+                    showThread(d.id, general ? { unit: 0, lesson: 0, status: 'waiting', label: 'General question · سؤال خارج المنهج' } : { unit, lesson, status: 'waiting' }, d.messages, true);
                 }
             });
             App.reveal();
@@ -167,9 +182,20 @@
             const pq = new URLSearchParams(location.search), pu = parseInt(pq.get('unit'), 10), pl = parseInt(pq.get('lesson'), 10);
             if (pu >= 1 && pu <= K.UNITS) { $('unitPills').querySelector(`[data-u="${pu}"]`).click(); if (pl >= 1 && pl <= K.LESSONS) $('lessonPills').querySelector(`[data-l="${pl}"]`).click(); }
         }
+        // "سؤال خارج المنهج": straight to the message box
+        $('generalBtn').addEventListener('click', () => {
+            general = true; unit = null; lesson = null;
+            $('generalBtn').classList.add('on');
+            $('unitPills').querySelectorAll('button').forEach(x => x.classList.remove('on'));
+            $('lessonStep').hidden = true; $('askStep').hidden = false;
+            $('askStep').querySelector('h2').textContent = '2. Your question';
+            $('askStep').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => newComposer.focus(), 350);
+        });
         $('unitPills').addEventListener('click', (e) => {
             const b = e.target.closest('[data-u]'); if (!b) return;
-            unit = Number(b.dataset.u); lesson = null;
+            unit = Number(b.dataset.u); lesson = null; general = false; $('generalBtn').classList.remove('on');
+            $('askStep').querySelector('h2').textContent = '3. Your question';
             $('unitPills').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
             $('lessonHint').textContent = `Unit ${unit}`;
             $('lessonPills').innerHTML = Array.from({ length: K.LESSONS }, (_, i) => `<button type="button" data-l="${i + 1}">Lesson ${i + 1}</button>`).join('');
@@ -196,13 +222,14 @@
         function showThread(id, q, messages, justAsked) {
             show('threadView');
             current = { id, q, count: messages.length };
-            $('threadTitle').textContent = `Unit ${q.unit} · Lesson ${q.lesson}`;
-            $('threadSub').innerHTML = `<span class="st ${q.status}">${q.status === 'waiting' ? 'Waiting for an answer' : q.status === 'resolved' ? 'Answered ✓' : 'Answered'}</span>`;
+            $('threadTitle').textContent = q.unit ? `Unit ${q.unit} · Lesson ${q.lesson}` : (q.label || 'Question');
+            const mmChat = q.origin === 'staff' || q.origin === 'broadcast';
+            $('threadSub').innerHTML = mmChat ? '<span class="small muted">Reply here — it goes straight to Miss Marwa</span>' : `<span class="st ${q.status}">${q.status === 'waiting' ? 'Waiting for an answer' : q.status === 'resolved' ? 'Answered ✓' : 'Answered'}</span>`;
             renderThread(messages, justAsked);
             $('resolvedNote').hidden = q.status !== 'resolved';
             $('resolvedNote').textContent = 'Marked as answered. Still not clear? Write below and it goes back to Miss Marwa.';
             if (!replyComposer) replyComposer = K.composer($('replyComposer'), {
-                placeholder: 'Write a follow-up…', sendLabel: 'Send', icon, toast,
+                placeholder: 'Write a message…', sendLabel: 'Send', icon, toast,
                 onSend: async ({ text, image, audio }) => {
                     const d = await api('/api/ask?action=reply', { method: 'POST', body: { id: current.id, text, image, audio } });
                     current.q.status = 'waiting';

@@ -57,6 +57,23 @@
         .grade-tabs { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; }
         .grade-tabs button { white-space: nowrap; }
         .grade-tabs .cnt { margin-inline-start: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 800; display: inline-grid; place-items: center; }
+        /* New message (18 Nov 2026) */
+        .to-seg { margin-bottom: 12px; }
+        .to-pane { margin-bottom: 12px; }
+        .to-results { max-height: 240px; overflow-y: auto; margin-top: 8px; display: grid; gap: 4px; }
+        .to-results button { display: flex; justify-content: space-between; gap: 10px; align-items: center; width: 100%; text-align: start; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+        .to-results button.on { border-color: var(--primary); background: var(--primary-soft); }
+        .to-results small { color: var(--muted); }
+        .to-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+        .to-pills button { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+        .to-pills button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .to-sum { margin: 10px 0 0; font-weight: 700; }
+        .sent-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); cursor: pointer; background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; text-align: start; font: inherit; color: inherit; }
+        .sent-row:last-child { border-bottom: 0; }
+        .sent-row .ic { font-size: 22px; }
+        .sent-row .pv { color: var(--muted); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sent-row .st { text-align: end; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+        .more-menu { position: relative; }
         /* Question bank */
         .pick-grid { display: grid; gap: 8px; }
         .pick-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
@@ -102,7 +119,10 @@
         <div class="container" style="max-width:1400px">
             <div class="page-head">
                 <div><h1>Questions · <span class="ar">أسئلتي</span></h1><p id="headLine">Students' questions — oldest waiting first.</p></div>
-                <div class="segmented" id="viewSeg"><button data-value="inbox">Inbox</button><button data-value="bank">Question bank · PDF</button></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <button class="btn btn-primary" id="newMsgBtn"><span data-icon="send" style="display:contents"></span>New message</button>
+                    <div class="segmented" id="viewSeg"><button data-value="inbox">Inbox</button><button data-value="sent">Sent</button><button data-value="bank">Question bank · PDF</button></div>
+                </div>
             </div>
 
             <!-- ========== Inbox ========== -->
@@ -117,6 +137,11 @@
                         <div class="empty-state" style="margin:auto"><div class="bubble"><span data-icon="inbox" style="display:contents"></span></div><h3>Pick a question</h3><p>The student who has waited longest is at the top.</p></div>
                     </div>
                 </div>
+            </section>
+
+            <!-- ========== Sent (her broadcasts) ========== -->
+            <section id="sentView" hidden>
+                <div class="card" style="padding:0"><div id="sentList"></div></div>
             </section>
 
             <!-- ========== Question bank ========== -->
@@ -157,7 +182,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
-    <script src="/assets/ask.js"></script>
+    <script src="/assets/ask.js?v=20261118b"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -166,15 +191,16 @@
         // (No AI Assistant here on purpose: the Ask section is Miss Marwa's own — no AI involved.)
         const K = AskKit;
         const qs = new URLSearchParams(location.search);
-        let view = qs.get('view') === 'bank' ? 'bank' : 'inbox';
+        let view = ['bank', 'sent'].includes(qs.get('view')) ? qs.get('view') : 'inbox';
         let grade = A.store.get('inbox_grade', 'prep1'), status = 'waiting', items = [], waiting = {}, openId = parseInt(qs.get('q'), 10) || null, thread = null;
         const toast = (m, t) => Site.toast(m, t);
 
         A.segmented($('viewSeg'), view, (v) => { view = v; showView(); });
         function showView() {
-            $('inboxView').hidden = view !== 'inbox'; $('bankView').hidden = view !== 'bank';
-            history.replaceState(null, '', location.pathname + (view === 'bank' ? '?view=bank' : openId ? '?q=' + openId : ''));
+            $('inboxView').hidden = view !== 'inbox'; $('bankView').hidden = view !== 'bank'; $('sentView').hidden = view !== 'sent';
+            history.replaceState(null, '', location.pathname + (view === 'bank' ? '?view=bank' : view === 'sent' ? '?view=sent' : openId ? '?q=' + openId : ''));
             if (view === 'bank') { loadBank(); loadStorage(); }
+            if (view === 'sent') loadSent();
         }
 
         // ================= Inbox =================
@@ -204,7 +230,7 @@
                 return `<button class="qi ${q.id === openId ? 'on' : ''}" data-id="${q.id}">
                     <span class="avatar">${A.initials({ firstName: q.firstName })}</span>
                     <span style="min-width:0"><b dir="auto">${esc(q.firstName)} ${esc(q.lastName)}</b><span class="pv" dir="auto">${q.lastSender === 'staff' ? 'You: ' : ''}${pv}</span></span>
-                    <span class="side"><span class="ul-tag">U${q.unit} · L${q.lesson}</span>${q.bankHidden ? '<span class="nb-tag" title="Not important — left out of the Question bank">Not important</span>' : ''}
+                    <span class="side"><span class="ul-tag">${q.unit ? `U${q.unit} · L${q.lesson}` : q.origin === 'broadcast' ? '📣 Reply' : q.origin === 'staff' ? 'Chat' : 'General'}</span>${q.bankHidden ? '<span class="nb-tag" title="Not important — left out of the Question bank">Not important</span>' : ''}
                         ${q.status === 'waiting' ? `<span class="wait ${hrs >= 24 ? 'long' : ''}">Waiting ${w}</span>` : `<span class="small muted">${q.status === 'resolved' ? 'Resolved' : 'Answered'}</span>`}
                         ${q.unread ? '<span class="udot" title="New message"></span>' : ''}</span></button>`;
             }).join('');
@@ -233,11 +259,11 @@
                     <button class="icon-btn" id="backList" aria-label="Back to the list" style="display:none">${icon('arrowLeft')}</button>
                     <div class="who"><a href="/admin/student.html?id=${encodeURIComponent(s.studentId)}"><b dir="auto" style="font-size:17px">${esc(s.firstName)} ${esc(s.lastName)}</b></a>
                         <div class="small muted">${esc(s.studentId)} · ${esc(A.GRADES[s.grade] || s.grade)}${s.branch ? ' · ' + A.BRANCHES[s.branch] : ''} · <span class="pill ${eg.tone}">${eg.label} · ${eg.n}</span></div></div>
-                    <span class="ul-tag" style="font-size:13px">Unit ${q.unit} · Lesson ${q.lesson}</span>
+                    <span class="ul-tag" style="font-size:13px">${esc(q.label || `Unit ${q.unit} · Lesson ${q.lesson}`)}</span>
                     ${q.status === 'resolved'
                         ? `<button class="btn btn-ghost btn-sm" id="reopenBtn">${icon('refresh', 'sm')}Reopen</button>`
                         : `<button class="btn btn-soft btn-sm" id="resolveBtn">${icon('check', 'sm')}Mark resolved</button>`}
-                    <button class="btn btn-ghost btn-sm bank-tg" id="bankToggle"></button>
+                    ${q.unit ? `<button class="icon-btn" id="moreBtn" aria-label="More options" title="More options">${icon('more')}</button>` : ''}
                 </div>
                 <div class="tbody"><div class="ask-thread" id="msgs">${messages.map(m => K.bubble(m, 'staff', icon)).join('')}</div></div>
                 <div class="tfoot"><div id="composer"></div>
@@ -256,21 +282,20 @@
             });
             $('resolveBtn')?.addEventListener('click', async () => { await api('/api/ask?action=resolve', { body: { id: q.id, resolved: true } }); q.status = 'resolved'; renderThread(); loadList(true); toast(status === 'waiting' ? 'Marked resolved — find it under Answered or All' : 'Marked resolved', 'success'); });
             $('reopenBtn')?.addEventListener('click', async () => { await api('/api/ask?action=resolve', { body: { id: q.id, resolved: false } }); q.status = 'waiting'; renderThread(); loadList(true); });
-            const paintToggle = () => {
-                const b = $('bankToggle'), h = !!q.bankHidden;
-                b.classList.toggle('on', h); b.setAttribute('aria-pressed', h ? 'true' : 'false');
-                b.title = h ? 'Left out of the Question bank & PDFs — tap to put it back' : 'Leave this question out of the Question bank & PDFs (the chat stays as it is)';
-                b.innerHTML = h ? `${icon('eyeOff', 'sm')}Not important · <span class="ar">مستبعد</span> — Restore` : `${icon('eyeOff', 'sm')}Not important · <span class="ar">استبعاد من بنك الأسئلة</span>`;
-            };
-            paintToggle();
-            $('bankToggle').addEventListener('click', async () => {
-                const hidden = !q.bankHidden;
-                try { await api('/api/ask?action=bank-edit', { body: { id: q.id, hidden } }); } catch (e) { return toast(e.message, 'error'); }
-                q.bankHidden = hidden;
-                const it = items.find(x => x.id === q.id); if (it) { it.bankHidden = hidden; renderList(); }
-                const b = bank.find(x => x.id === q.id); if (b) b.hidden = hidden;
-                paintToggle();
-                toast(hidden ? 'Marked not important — it won\'t appear in the Question bank or PDFs' : 'Back in the Question bank', 'success');
+            // Extra options live behind "⋯" (18 Nov 2026): the Question bank switch isn't needed for most answers
+            $('moreBtn')?.addEventListener('click', () => {
+                const h = !!q.bankHidden;
+                Site.sheet({ iconName: 'more', title: 'More options', subtitle: `${s.firstName} ${s.lastName} · ${q.label || ''}`,
+                    html: `<p class="muted" style="margin:0">${h ? 'This question is left out of the Question bank & PDFs.' : 'This question is in the Question bank (revision PDFs).'}</p>`,
+                    actions: [{ label: h ? 'Put it back in the Question bank' : 'Not important — leave out of the Question bank · استبعاد', icon: 'eyeOff', cls: 'btn-soft', onClick: async (close) => {
+                        close();
+                        const hidden = !q.bankHidden;
+                        try { await api('/api/ask?action=bank-edit', { body: { id: q.id, hidden } }); } catch (e) { return toast(e.message, 'error'); }
+                        q.bankHidden = hidden;
+                        const it = items.find(x => x.id === q.id); if (it) { it.bankHidden = hidden; renderList(); }
+                        const b = bank.find(x => x.id === q.id); if (b) b.hidden = hidden;
+                        toast(hidden ? 'Marked not important — it won\'t appear in the Question bank or PDFs' : 'Back in the Question bank', 'success');
+                    } }, { label: 'Close', cls: 'btn-ghost' }] });
             });
             $('nextBtn')?.addEventListener('click', () => { const next = items.find(x => x.id !== q.id && x.status === 'waiting'); if (next) openThread(next.id); else toast('No one else is waiting 🎉', 'success'); });
             if (scroll) { const b = $('tpane').querySelector('.tbody'); b.scrollTop = b.scrollHeight; if (matchMedia('(max-width: 999px)').matches) window.scrollTo(0, 0); }
@@ -283,6 +308,89 @@
                 try { const d = await api(`/api/ask?action=staff-thread&id=${openId}`); if (d.messages.length !== thread.messages.length) { thread = d; renderThread(true); } } catch (e) { }
             }
         }, 30000);
+
+
+        // ================= New message: one student · a grade (Center / Private) · a group (18 Nov 2026) =================
+        let TARGETS = null;
+        async function targets() { if (!TARGETS) TARGETS = await api('/api/ask?action=compose-targets'); return TARGETS; }
+        const nrm = (t) => String(t || '').toLowerCase().replace(/[ً-ٰٟـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+        $('newMsgBtn').addEventListener('click', () => openCompose());
+        async function openCompose(preset = {}) {
+            let T; try { T = await targets(); } catch (e) { return toast(e.message, 'error'); }
+            let mode = preset.mode || 'student', pick = preset.studentId ? T.students.find(x => x.id === preset.studentId) || null : null, g = grade, br = 'all', grp = null;
+            const close = Site.sheet({ iconName: 'send', title: 'New message', subtitle: 'Text, a photo or a voice note — like WhatsApp.',
+                html: `<div class="segmented to-seg" id="toSeg"><button data-value="student">One student</button><button data-value="grade">A whole grade</button>${T.groups.length ? '<button data-value="group">A group</button>' : ''}</div>
+                    <div class="to-pane" id="toPane"></div><div id="toSum" class="to-sum small"></div><div id="sendComposer" style="margin-top:10px"></div>` });
+            const sheetEl = document.querySelector('.overlay:last-of-type .sheet');
+            const q$ = (id) => sheetEl.querySelector('#' + id);
+            const count = () => mode === 'grade' ? T.students.filter(x => x.grade === g && (br === 'all' || x.branch === br)).length : mode === 'group' ? (grp ? grp.students : 0) : (pick ? 1 : 0);
+            const summary = () => {
+                const n = count();
+                q$('toSum').innerHTML = mode === 'student' ? (pick ? `To: <b dir="auto">${esc(pick.name)}</b> · ${esc(A.GRADES[pick.grade] || '')}` : '<span class="muted">Search for the student above</span>')
+                    : mode === 'grade' ? `📣 To <b>${n}</b> student${n === 1 ? '' : 's'} · ${esc(A.GRADES[g])}${br !== 'all' ? ' · ' + A.BRANCHES[br] : ''} <span class="muted">— each gets it in their own chat</span>`
+                        : grp ? `📣 To <b>${n}</b> student${n === 1 ? '' : 's'} · ${esc(grp.name)}` : '<span class="muted">Pick a group</span>';
+            };
+            const paneStudent = () => {
+                q$('toPane').innerHTML = `<div class="input"><input class="plain" id="toSearch" placeholder="Search by name or code (Arabic or English)…" autocomplete="off" value="${pick ? esc(pick.name) : ''}"></div><div class="to-results" id="toRes"></div>`;
+                const res = () => {
+                    const v = nrm(q$('toSearch').value.trim());
+                    const list = v ? T.students.filter(x => nrm(x.name).includes(v) || x.id.toLowerCase().includes(v)).slice(0, 30) : [];
+                    q$('toRes').innerHTML = list.map(x => `<button type="button" data-sid="${esc(x.id)}" class="${pick && pick.id === x.id ? 'on' : ''}"><b dir="auto">${esc(x.name)}</b><small>${esc(A.GRADES[x.grade] || x.grade)}${x.branch ? ' · ' + A.BRANCHES[x.branch] : ''} · ${esc(x.id)}</small></button>`).join('') || (v ? '<p class="small muted" style="margin:6px 2px">No student matches.</p>' : '');
+                };
+                q$('toSearch').addEventListener('input', () => { pick = null; summary(); res(); });
+                q$('toRes').addEventListener('click', (e) => { const b = e.target.closest('[data-sid]'); if (!b) return; pick = T.students.find(x => x.id === b.dataset.sid); q$('toSearch').value = pick.name; res(); summary(); });
+                res(); setTimeout(() => q$('toSearch')?.focus(), 250);
+            };
+            const paneGrade = () => {
+                q$('toPane').innerHTML = `<div class="to-pills" id="toGrades">${Object.entries(A.GRADES).map(([k, l]) => `<button type="button" data-g="${k}" class="${k === g ? 'on' : ''}">${l}</button>`).join('')}</div>
+                    <div class="to-pills" id="toBr" style="margin-top:8px">${[['all', 'Everyone'], ['center', 'Center'], ['private', 'Private']].map(([k, l]) => `<button type="button" data-b="${k}" class="${k === br ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+                q$('toGrades').addEventListener('click', (e) => { const b = e.target.closest('[data-g]'); if (!b) return; g = b.dataset.g; paneGrade(); summary(); });
+                q$('toBr').addEventListener('click', (e) => { const b = e.target.closest('[data-b]'); if (!b) return; br = b.dataset.b; paneGrade(); summary(); });
+            };
+            const paneGroup = () => {
+                q$('toPane').innerHTML = `<div class="to-results">${T.groups.map(x => `<button type="button" data-gid="${esc(x.id)}" class="${grp && grp.id === x.id ? 'on' : ''}"><b dir="auto">${esc(x.name)}</b><small>${esc(A.GRADES[x.grade] || x.grade)} · ${A.BRANCHES[x.branch] || ''} · ${x.students} students</small></button>`).join('')}</div>`;
+                q$('toPane').addEventListener('click', (e) => { const b = e.target.closest('[data-gid]'); if (!b) return; grp = T.groups.find(x => String(x.id) === b.dataset.gid); paneGroup(); summary(); });
+            };
+            const pane = () => { (mode === 'student' ? paneStudent : mode === 'grade' ? paneGrade : paneGroup)(); summary(); };
+            A.segmented(q$('toSeg'), mode, (v) => { mode = v; pane(); });
+            pane();
+            K.composer(q$('sendComposer'), {
+                placeholder: 'Write your message… (or a photo / voice note)', sendLabel: 'Send', icon, toast,
+                onSend: async ({ text, image, audio }) => {
+                    const target = mode === 'student' ? (pick ? { kind: 'student', studentId: pick.id } : null) : mode === 'grade' ? { kind: 'grade', grade: g, branch: br } : grp ? { kind: 'group', groupId: grp.id } : null;
+                    if (!target) throw new Error(mode === 'student' ? 'Pick the student first' : 'Pick a group first');
+                    const n = count();
+                    if (target.kind !== 'student' && n > 1 && !confirm(`Send this to ${n} students?`)) throw new Error('Not sent');
+                    const d = await api('/api/ask?action=staff-send', { body: { target, text, image, audio } });
+                    close();
+                    toast(d.kind === 'student' ? 'Sent ✅ — they get a notification' : `Sent to ${d.recipients} students ✅ — each in their own chat`, 'success');
+                    if (d.kind === 'student') {
+                        if (view !== 'inbox') $('viewSeg').querySelector('[data-value="inbox"]').click();
+                                                if (status !== 'all') $('statusSeg').querySelector('[data-value="all"]').click();
+                        await loadList(true); openThread(d.id);
+                    }
+                    else if (view === 'sent') loadSent();
+                }
+            });
+        }
+        // ================= Sent: her broadcasts (seen / replied) =================
+        async function loadSent() {
+            $('sentList').innerHTML = '<div class="skel" style="height:200px;border-radius:14px;margin:14px"></div>';
+            let d; try { d = await api('/api/ask?action=broadcasts'); } catch (e) { $('sentList').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
+            $('sentList').innerHTML = d.items.length ? d.items.map(b => `<button class="sent-row" data-b="${b.id}">
+                    <span class="ic">📣</span>
+                    <span style="min-width:0"><b>${esc(b.groupId ? b.label : (A.GRADES[b.grade] || b.grade) + (b.branch ? ' · ' + A.BRANCHES[b.branch] : ''))}</b>
+                        <div class="pv" dir="auto">${b.text ? esc(b.text) : b.kind === 'image' ? '📷 Photo' : b.hasAudio ? '🎤 Voice note' : ''}</div></span>
+                    <span class="st">${esc(A.fmtDate ? A.fmtDate(b.at) : String(b.at).slice(0, 10))}<br>👁 ${b.seen}/${b.recipients} · 💬 ${b.replied}</span></button>`).join('')
+                : `<div class="empty-state" style="padding:30px 10px"><div class="bubble">${icon('send', 'lg')}</div><h3>Nothing sent yet</h3><p>Tap <b>New message</b> to send to a grade, a group or one student.</p></div>`;
+        }
+        $('sentList').addEventListener('click', async (e) => {
+            const b = e.target.closest('[data-b]'); if (!b) return;
+            let d; try { d = await api('/api/ask?action=broadcast&id=' + b.dataset.b); } catch (x) { return toast(x.message, 'error'); }
+            Site.sheet({ iconName: 'send', title: 'Who saw it', subtitle: `${d.items.filter(x => x.seen).length} of ${d.items.length} opened · ${d.items.filter(x => x.replies).length} replied`,
+                html: `<div class="to-results" style="max-height:60vh">${d.items.map(x => `<button type="button" data-q="${x.questionId}"><b dir="auto">${esc(x.name)}</b><small>${x.replies ? `💬 ${x.replies} repl${x.replies === 1 ? 'y' : 'ies'}` : x.seen ? '👁 Seen' : 'Not opened yet'}</small></button>`).join('')}</div>` });
+            document.querySelector('.overlay:last-of-type').addEventListener('click', (ev) => { const r = ev.target.closest('[data-q]'); if (!r) return; location.href = '/admin/inbox.html?q=' + r.dataset.q; });
+        });
 
         // ================= Question bank =================
         let bank = [], bankGrade = grade, picks = new Set(), showExcluded = false;   // "u-0" = whole unit, "u-l" = one lesson

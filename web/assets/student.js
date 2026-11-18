@@ -367,8 +367,12 @@
                 OneSignal.Notifications.addEventListener('permissionChange', updateBell);
                 // Tag the device with the grade so new-content pushes only reach the right students
                 if (!isAdmin && session.grade) await OneSignal.User.addTag('grade', String(session.grade).toUpperCase());
-                // so a reply from Miss Marwa can be pushed to this student only
-                if (!isAdmin && session.id) await OneSignal.User.addTag('sid', String(session.id));
+                // so a reply from Miss Marwa can be pushed to this student only — on EVERY device they use (18 Nov 2026):
+                // the device signs in as "student-<code>"; the old "sid" tag stays for devices the server reaches by tag
+                if (!isAdmin && session.id) {
+                    try { if (OneSignal.User.externalId !== 'student-' + session.id) await OneSignal.login('student-' + String(session.id)); } catch (e) { }
+                    await OneSignal.User.addTag('sid', String(session.id));
+                }
             } catch (e) { /* notifications are optional */ }
             updateBell();
         });
@@ -385,7 +389,15 @@
     function bellClick() {
         const p = notifPermission();
         if (p === 'granted') {
-            sheet({ iconName: 'bell', tone: 'success', title: 'Notifications are on', subtitle: "You'll be notified about new lessons and exams.", actions: [{ label: 'Great', cls: 'btn-soft' }] });
+            sheet({ iconName: 'bell', tone: 'success', title: 'Notifications are on', subtitle: "You'll be notified about new lessons, exams and Miss Marwa's messages.",
+                actions: [{ label: 'Send me a test', icon: 'bell', cls: 'btn-soft', onClick: async (close) => {
+                    close();
+                    try {
+                        const r = await api('/api/ask?action=push-test', { method: 'POST', body: {} });
+                        if (r.sent || r.viaTag) toast('Test sent — it should arrive in a few seconds 🔔', 'success');
+                        else toast(r.configured === false ? 'Notifications are not set up on the server yet.' : 'This device isn\'t registered yet — reload the page and try again.', 'error');
+                    } catch (e) { toast(e.message, 'error'); }
+                } }, { label: 'Great', cls: 'btn-ghost' }] });
             return;
         }
         if (p === 'denied') {
@@ -458,7 +470,7 @@
             actions: [
                 {
                     label: 'Sign out', cls: 'btn-danger', onClick: () => {
-                        (window.OneSignalDeferred || []).push?.(async (OneSignal) => { try { await OneSignal.User.removeTag('grade'); } catch (e) { } });
+                        (window.OneSignalDeferred || []).push?.(async (OneSignal) => { try { await OneSignal.User.removeTag('grade'); await OneSignal.User.removeTag('sid'); await OneSignal.logout(); } catch (e) { } });
                         if (isAdmin) {
                             sessionStorage.removeItem('staff_preview');
                             sessionStorage.removeItem('preview_grade');
@@ -538,12 +550,19 @@
         const askBadge = () => { const my = ++askSeq; return api('/api/ask?action=unread').then(d => {
             if (my !== askSeq) return;
             document.querySelectorAll('[data-ask-link] .nav-badge').forEach(b => b.remove());
-            if (!d || !d.unread) return;
+            if (!d || !d.unread) { window.dispatchEvent(new CustomEvent('ask-unread', { detail: 0 })); return; }
             document.querySelectorAll('[data-ask-link]').forEach(a => a.insertAdjacentHTML('beforeend', `<span class="nav-badge" aria-label="${d.unread} new replies">${d.unread}</span>`));
             window.dispatchEvent(new CustomEvent('ask-unread', { detail: d.unread }));
         }).catch(() => { }); };
         window.App.refreshAskBadge = askBadge;
-        if (!isAdmin) askBadge();
+        if (!isAdmin) {
+            askBadge();
+            // keep it live: every minute while the page is open, and when the app comes back to the front
+            setInterval(() => { if (!document.hidden) askBadge(); }, 60000);
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) askBadge(); });
+        }
+        // the installed app's icon shows the number too (where the phone supports it)
+        window.addEventListener('ask-unread', (e) => { try { if (navigator.setAppBadge) navigator.setAppBadge(e.detail || 0); } catch (x) { } });
 
         document.addEventListener('click', (e) => {
             const s = e.target.closest('[data-soon]');

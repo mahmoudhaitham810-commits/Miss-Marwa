@@ -1,4 +1,5 @@
 import { requireStaff, audit, auditStmt, ensureAppSchema, requireStudent, verifyStudentRequest, verifyAdminRequest } from './admin-auth.js';
+import { pushToGrade } from './push.js';
 
 // ── Timing rules shared by submit, review and reports ──
 // Late submit grace: the timer length + 5 min, or 60 min when there is no timer.
@@ -82,42 +83,10 @@ function getDb(env) {
 // بتبعت إشعار Push للطلاب المشتركين. لو معانا "grade"، بتستهدف بس الطلاب
 // المتعلّمين بتاج المرحلة دي (مش كل الطلاب)؛ لو مفيش، بتبعت للكل كحل احتياطي.
 // لو الإرسال فشل لأي سبب، بترجع بس من غير ما توقف نشر الامتحان نفسه.
+// New content → everyone in that grade (shared helper: both OneSignal key styles, result kept for "Send a test")
 async function sendPushNotification(env, { title, message, grade }) {
-    const appId = env.ONESIGNAL_APP_ID;
-    const apiKey = env.ONESIGNAL_REST_API_KEY;
-
-    if (!appId || !apiKey) {
-        console.log('OneSignal غير مفعّل: ONESIGNAL_APP_ID أو ONESIGNAL_REST_API_KEY مش متسجلين كـ Environment Variables');
-        return;
-    }
-
-    const body = {
-        app_id: appId,
-        target_channel: 'push',
-        headings: { en: title, ar: title },
-        contents: { en: message, ar: message }
-    };
-
-    if (grade) {
-        body.filters = [
-            { field: 'tag', key: 'grade', relation: '=', value: grade.toUpperCase() }
-        ];
-    } else {
-        body.included_segments = ['Subscribed Users'];
-    }
-
-    try {
-        await fetch('https://api.onesignal.com/notifications', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json; charset=utf-8',
-                'Authorization': `Key ${apiKey}`
-            },
-            body: JSON.stringify(body)
-        });
-    } catch (err) {
-        console.log('فشل إرسال إشعار Push:', err.message);
-    }
+    const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
+    return pushToGrade(env, db, grade, { title, message });
 }
 
 export async function onRequestGet(context) {

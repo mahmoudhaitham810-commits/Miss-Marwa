@@ -1,6 +1,9 @@
 // =============================================================
 // Ask Miss Marwa (أسئلتي)
-// Students ask a question tagged with Unit + Lesson (text, a photo and/or a voice note).
+// Students ask a question tagged with Unit + Lesson — or "سؤال خارج المنهج" (unit 0, lesson 0) — with text, a photo and/or a voice note.
+// Miss Marwa can also START a chat (18 Nov 2026): one student (her direct chat, origin 'staff'), or a broadcast to a
+// whole grade / a group (each student gets their own copy, origin 'broadcast' — like a WhatsApp broadcast list;
+// replies come back to her one by one). Pushes go both ways (push.js).
 // Miss Marwa and the assistants answer from the staff portal (oldest waiting first).
 // Every question is also a Question-bank item for revision sheets.
 //
@@ -10,9 +13,11 @@
 // =============================================================
 import { requireStaff, requireStudent, ensureAppSchema, auditStmt } from './admin-auth.js';
 import { putMedia, mediaInfo, mediaResponse, deleteMedia, migrateToR2, mediaStats, registerLegacy } from './media-store.js';
+import { pushTo, students as pushStudents, staffList, inboxStaffIds, background, pushConfigured, CLIENT_APP_ID, studentAlias, staffAlias } from './push.js';
 
 function getDb(env) { return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function'); }
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
+const GRADE_EN = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
 export const ASK_UNITS = 6, ASK_LESSONS = 6;
 const MAX_TEXT = 2000;
 const MAX_MEDIA_BYTES = 700 * 1024;          // after compression in the browser
@@ -118,23 +123,12 @@ async function saveMedia(env, db, studentId, media) {
 }
 const cleanText = (t) => String(t || '').replace(/\r/g, '').trim().slice(0, MAX_TEXT);
 
-// ---- push notification to one student (OneSignal tag "sid", set by the student portal) ----
-async function pushToStudent(env, origin, studentId, title, message) {
-    const appId = env.ONESIGNAL_APP_ID, apiKey = env.ONESIGNAL_REST_API_KEY;
-    if (!appId || !apiKey) return;
-    try {
-        await fetch('https://api.onesignal.com/notifications', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Key ${apiKey}` },
-            body: JSON.stringify({
-                app_id: appId, target_channel: 'push',
-                headings: { en: title, ar: title }, contents: { en: message, ar: message },
-                filters: [{ field: 'tag', key: 'sid', relation: '=', value: studentId }],
-                url: origin + '/questions.html'
-            })
-        });
-    } catch (e) { /* notifications are optional */ }
+// ---- push notifications (push.js): to one student / to every staff member who answers questions ----
+const pushStudent = (env, db, origin, studentId, title, message, q) => pushTo(env, db, pushStudents([studentId]), { title, message, url: origin + '/questions.html' + (q ? '?q=' + q : '') });
+async function pushStaff(env, db, origin, title, message, q) {
+    return pushTo(env, db, staffList(await inboxStaffIds(db)), { title, message, url: origin + '/admin/inbox.html' + (q ? '?q=' + q : '') });
 }
+const topicLabel = (q) => (q.unit ? `Unit ${q.unit} · Lesson ${q.lesson}` : q.origin === 'staff' || q.origin === 'broadcast' ? 'Message from Miss Marwa' : 'General question · سؤال خارج المنهج');
 
 const msgOut = (m) => {
     const image = m.media_kind === 'image' && m.media_id ? m.media_id : null;
@@ -176,14 +170,19 @@ export async function onRequest(context) {
             const staff = await requireStaff(request, env, 'inbox.reply');
             if (staff.error) {
                 const who = await requireStudent(request, env, db, null);
-                if (who.error || who.id !== row.student_id) return new Response('Forbidden', { status: 403 });
+                if (who.error) return new Response('Forbidden', { status: 403 });
+                if (who.id !== row.student_id) {       // a file Miss Marwa sent to many students (broadcast) is stored once
+                    const mine = await db.prepare(`SELECT 1 as ok FROM ask_messages m JOIN ask_questions q ON q.id = m.question_id
+                        WHERE (m.media_id = ? OR m.audio_id = ?) AND q.student_id = ? LIMIT 1`).bind(id, id, who.id).first();
+                    if (!mine) return new Response('Forbidden', { status: 403 });
+                }
             }
             const res = await mediaResponse(env, db, row);
             return res || new Response('Not found', { status: 404 });
         }
 
         // ================= Staff =================
-        const STAFF_ACTIONS = ['counts', 'inbox', 'staff-thread', 'staff-reply', 'resolve', 'bank', 'bank-edit', 'bank-clear', 'engagement', 'storage'];
+        const STAFF_ACTIONS = ['counts', 'inbox', 'staff-thread', 'staff-reply', 'resolve', 'bank', 'bank-edit', 'bank-clear', 'engagement', 'storage', 'compose-targets', 'staff-send', 'broadcasts', 'broadcast', 'staff-push-test'];
         if (STAFF_ACTIONS.includes(action)) {
             const auth = await requireStaff(request, env, 'inbox.reply');
             if (auth.error) return auth.error;
@@ -193,7 +192,12 @@ export async function onRequest(context) {
             if (action === 'counts') {
                 const { results } = await db.prepare("SELECT grade, COUNT(*) as c FROM ask_questions WHERE status = 'waiting' GROUP BY grade").all();
                 const waiting = Object.fromEntries(GRADES.map(g => [g, ((results || []).find(c => c.grade === g) || {}).c || 0]));
-                return json({ waiting, total: Object.values(waiting).reduce((a, b) => a + b, 0) });
+                const last = await db.prepare(`SELECT m.id, m.question_id as q, m.text, m.media_kind as kind, s.first_name as f, s.last_name as l, q.grade
+                    FROM ask_messages m JOIN ask_questions q ON q.id = m.question_id LEFT JOIN students s ON s.student_id = q.student_id
+                    WHERE m.sender = 'student' ORDER BY m.id DESC LIMIT 1`).first();
+                const unread = await db.prepare('SELECT COALESCE(SUM(staff_unread), 0) as c FROM ask_questions').first();
+                return json({ waiting, total: Object.values(waiting).reduce((a, b) => a + b, 0), unread: (unread && unread.c) || 0,
+                    latest: last ? { id: last.id, questionId: last.q, name: `${last.f || ''} ${last.l || ''}`.trim(), grade: last.grade, text: String(last.text || (last.kind === 'image' ? '📷 Photo' : last.kind === 'audio' ? '🎤 Voice note' : '')).slice(0, 90) } : null });
             }
 
             // Queue: per grade, oldest waiting first (FIFO)
@@ -212,7 +216,9 @@ export async function onRequest(context) {
                         (SELECT text FROM ask_messages m WHERE m.question_id = q.id AND m.sender != 'auto' ORDER BY m.id DESC LIMIT 1) as last_text,
                         (SELECT sender FROM ask_messages m WHERE m.question_id = q.id AND m.sender != 'auto' ORDER BY m.id DESC LIMIT 1) as last_sender
                      FROM ask_questions q LEFT JOIN students s ON s.student_id = q.student_id
-                     WHERE q.grade = ? AND ${where} ORDER BY ${order} LIMIT 300`
+                     WHERE q.grade = ? AND ${where}
+                       AND (q.origin IS NULL OR q.origin <> 'broadcast' OR EXISTS (SELECT 1 FROM ask_messages x WHERE x.question_id = q.id AND x.sender = 'student'))
+                     ORDER BY ${order} LIMIT 300`
                 ).bind(grade).all();
                 const { results: counts } = await db.prepare("SELECT grade, COUNT(*) as c FROM ask_questions WHERE status = 'waiting' GROUP BY grade").all();
                 return json({
@@ -221,7 +227,7 @@ export async function onRequest(context) {
                     items: (results || []).map(q => ({
                         id: q.id, studentId: q.student_id, firstName: q.first_name || '?', lastName: q.last_name || '', gender: q.gender, branch: q.branch,
                         unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, updatedAt: q.updated_at, bankHidden: !!q.bank_hidden,
-                        unread: q.staff_unread, preview: q.last_text || q.first_text || '', lastKind: q.last_kind, lastSender: q.last_sender
+                        unread: q.staff_unread, preview: q.last_text || q.first_text || '', lastKind: q.last_kind, lastSender: q.last_sender, origin: q.origin || 'student'
                     }))
                 });
             }
@@ -235,7 +241,7 @@ export async function onRequest(context) {
                 if (q.staff_unread) await db.prepare('UPDATE ask_questions SET staff_unread = 0 WHERE id = ?').bind(id).run();
                 const asked = await db.prepare('SELECT COUNT(*) as c FROM ask_questions WHERE student_id = ?').bind(q.student_id).first();
                 return json({
-                    question: { id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, resolvedBy: q.resolved_by, grade: q.grade, bankHidden: !!q.bank_hidden },
+                    question: { id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, resolvedBy: q.resolved_by, grade: q.grade, bankHidden: !!q.bank_hidden, origin: q.origin || 'student', broadcastId: q.broadcast_id || null, label: topicLabel(q) },
                     student: { studentId: q.student_id, firstName: q.first_name || '?', lastName: q.last_name || '', gender: q.gender, branch: q.branch, grade: q.grade, questionsAsked: (asked && asked.c) || 0 },
                     messages: await messagesOf(db, id)
                 });
@@ -255,9 +261,96 @@ export async function onRequest(context) {
                     insertMsg(db, id, 'staff', staff.name, text, cols),
                     db.prepare("UPDATE ask_questions SET status = 'answered', waiting_since = NULL, student_unread = student_unread + 1, staff_unread = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(id)
                 ]);
-                const push = pushToStudent(env, url.origin, q.student_id, 'Miss Marwa replied 💬', 'مس مروة ردّت على سؤالك — افتح التطبيق وشوف الرد');
-                if (context.waitUntil) context.waitUntil(push); else await push;
+                await background(context, pushStudent(env, db, url.origin, q.student_id, 'Miss Marwa 💬', text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتتلك رسالة — افتح التطبيق وشوفها', id));
                 return json({ ok: true, messages: await messagesOf(db, id) });
+            }
+
+            // ---------- Miss Marwa starts a chat: who can she send to? ----------
+            if (action === 'compose-targets') {
+                const { results: st } = await db.prepare(`SELECT student_id as id, first_name as f, last_name as l, grade, branch, group_id as g FROM students ORDER BY first_name, last_name`).all();
+                const { results: gr } = await db.prepare(`SELECT id, grade, branch, name FROM student_groups WHERE active = 1 ORDER BY grade, name`).all().catch(() => ({ results: [] }));
+                const counts = {}; (st || []).forEach(x => { const k = `${x.grade}|${x.branch || ''}`; counts[k] = (counts[k] || 0) + 1; const g = `g|${x.g}`; if (x.g) counts[g] = (counts[g] || 0) + 1; });
+                return json({ students: (st || []).map(x => ({ id: x.id, name: `${x.f || ''} ${x.l || ''}`.trim(), grade: String(x.grade || '').toLowerCase(), branch: x.branch || null })),
+                    groups: (gr || []).map(g => ({ id: g.id, grade: g.grade, branch: g.branch, name: g.name, students: counts[`g|${g.id}`] || 0 })), counts });
+            }
+            // ---------- Miss Marwa sends: one student / a whole grade (+ Center / Private) / a group ----------
+            if (action === 'staff-send') {
+                if (!isPost) return bad('POST only', 405);
+                const text = cleanText(data.text);
+                const att = decodeAttachments(data);
+                if (att.error) return bad(att.error);
+                if (!text && !hasAtt(att)) return bad('اكتبي الرسالة أو ابعتي صورة / رسالة صوتية');
+                const t = data.target || {};
+                if (t.kind === 'student') {
+                    const st = await db.prepare('SELECT student_id, grade, first_name FROM students WHERE student_id = ?').bind(String(t.studentId || '')).first();
+                    if (!st) return bad('الطالب غير موجود', 404);
+                    // her direct chat with this student (one continuing chat, like WhatsApp)
+                    let q = await db.prepare(`SELECT id FROM ask_questions WHERE student_id = ? AND origin = 'staff' ORDER BY id DESC LIMIT 1`).bind(st.student_id).first();
+                    let qid = q && q.id;
+                    if (!qid) {
+                        const r = await db.prepare(`INSERT INTO ask_questions (student_id, grade, unit, lesson, status, waiting_since, student_unread, staff_unread, origin) VALUES (?, ?, 0, 0, 'answered', NULL, 0, 0, 'staff')`).bind(st.student_id, String(st.grade || '').toLowerCase()).run();
+                        qid = Number(r.meta.last_row_id);
+                    }
+                    const cols = await saveAttachments(env, db, st.student_id, att);
+                    await db.batch([
+                        insertMsg(db, qid, 'staff', staff.name, text, cols),
+                        db.prepare("UPDATE ask_questions SET status = 'answered', waiting_since = NULL, student_unread = student_unread + 1, staff_unread = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(qid)
+                    ]);
+                    await background(context, pushStudent(env, db, url.origin, st.student_id, 'Miss Marwa 💬', text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتتلك رسالة — افتح التطبيق وشوفها', qid));
+                    return json({ ok: true, kind: 'student', id: qid, recipients: 1 });
+                }
+                // a broadcast: one copy per student (their own chat), the files stored once
+                let where = '', binds = [], label = '', grade = null, branch = null, groupId = null;
+                if (t.kind === 'grade' && GRADES.includes(t.grade)) {
+                    grade = t.grade; where = 'LOWER(grade) = ?'; binds = [grade];
+                    if (['center', 'private'].includes(t.branch)) { branch = t.branch; where += ' AND branch = ?'; binds.push(branch); }
+                    label = `${grade}${branch ? ' · ' + branch : ''}`;
+                } else if (t.kind === 'group' && t.groupId) {
+                    const g = await db.prepare('SELECT id, grade, branch, name FROM student_groups WHERE id = ?').bind(String(t.groupId)).first().catch(() => null);
+                    if (!g) return bad('المجموعة غير موجودة', 404);
+                    groupId = g.id; grade = g.grade; branch = g.branch; where = 'group_id = ?'; binds = [g.id]; label = g.name;
+                } else return bad('اختاري طالب أو صف أو مجموعة');
+                const { results: rec } = await db.prepare(`SELECT student_id FROM students WHERE ${where}`).bind(...binds).all();
+                const ids = (rec || []).map(r => r.student_id);
+                if (!ids.length) return bad('مفيش طلبة في الاختيار ده');
+                const img = att.image ? await saveMedia(env, db, 'broadcast', att.image) : null;
+                const aud = att.audio ? await saveMedia(env, db, 'broadcast', att.audio) : null;
+                const cols = img ? { media_id: img, media_kind: 'image', media_seconds: null, audio_id: aud, audio_seconds: aud ? att.audio.seconds : null }
+                    : aud ? { media_id: aud, media_kind: 'audio', media_seconds: att.audio.seconds, audio_id: null, audio_seconds: null }
+                        : { media_id: null, media_kind: null, media_seconds: null, audio_id: null, audio_seconds: null };
+                const b = await db.prepare(`INSERT INTO ask_broadcasts (grade, branch, group_id, label, staff_name, text, media_id, media_kind, media_seconds, audio_id, audio_seconds, recipients)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(grade, branch, groupId, label, staff.name, text || null, cols.media_id, cols.media_kind, cols.media_seconds, cols.audio_id, cols.audio_seconds, ids.length).run();
+                const bid = Number(b.meta.last_row_id);
+                await db.batch([
+                    db.prepare(`INSERT INTO ask_questions (student_id, grade, unit, lesson, status, waiting_since, student_unread, staff_unread, origin, broadcast_id)
+                        SELECT student_id, LOWER(grade), 0, 0, 'answered', NULL, 1, 0, 'broadcast', ? FROM students WHERE ${where}`).bind(bid, ...binds),
+                    db.prepare(`INSERT INTO ask_messages (question_id, sender, staff_name, text, media_id, media_kind, media_seconds, audio_id, audio_seconds)
+                        SELECT id, 'staff', ?, ?, ?, ?, ?, ?, ? FROM ask_questions WHERE broadcast_id = ?`).bind(staff.name, text || null, cols.media_id, cols.media_kind, cols.media_seconds, cols.audio_id, cols.audio_seconds, bid)
+                ]);
+                await auditStmt(db, request, staff, 'ask.broadcast', String(bid), { label, recipients: ids.length }).run();
+                await background(context, pushTo(env, db, pushStudents(ids), { title: 'Miss Marwa 📣', message: text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتت رسالة جديدة — افتح التطبيق وشوفها', url: url.origin + '/questions.html' }));
+                return json({ ok: true, kind: 'broadcast', broadcastId: bid, recipients: ids.length });
+            }
+            // Her broadcasts: who saw it, who replied
+            if (action === 'broadcasts') {
+                const { results } = await db.prepare(`SELECT b.*,
+                        (SELECT COUNT(*) FROM ask_questions q WHERE q.broadcast_id = b.id AND q.student_unread = 0) as seen,
+                        (SELECT COUNT(DISTINCT q.id) FROM ask_questions q JOIN ask_messages m ON m.question_id = q.id AND m.sender = 'student' WHERE q.broadcast_id = b.id) as replied
+                    FROM ask_broadcasts b ORDER BY b.id DESC LIMIT 50`).all();
+                return json({ items: (results || []).map(b => ({ id: b.id, grade: b.grade, branch: b.branch, groupId: b.group_id, label: b.label, staffName: b.staff_name, text: b.text || '', kind: b.media_kind || null, hasAudio: !!(b.audio_id || b.media_kind === 'audio'), recipients: b.recipients, seen: b.seen, replied: b.replied, at: b.created_at })) });
+            }
+            if (action === 'broadcast') {
+                const bid = parseInt(url.searchParams.get('id'), 10);
+                const { results } = await db.prepare(`SELECT q.id, q.student_id, q.student_unread, s.first_name as f, s.last_name as l,
+                        (SELECT COUNT(*) FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'student') as replies
+                    FROM ask_questions q LEFT JOIN students s ON s.student_id = q.student_id WHERE q.broadcast_id = ? ORDER BY replies DESC, s.first_name`).bind(bid || 0).all();
+                return json({ items: (results || []).map(r => ({ questionId: r.id, studentId: r.student_id, name: `${r.f || ''} ${r.l || ''}`.trim(), seen: !r.student_unread, replies: r.replies })) });
+            }
+            // "Send me a test notification" (her own devices) — shows exactly what OneSignal answered
+            if (action === 'staff-push-test') {
+                if (!isPost) return bad('POST only', 405);
+                const r = await pushTo(env, db, staffList([staff.id]), { title: 'Science Academy 🔔', message: 'تجربة: الإشعارات شغالة على الجهاز ده ✅', url: url.origin + '/admin/inbox.html' });
+                return json({ ...r, configured: pushConfigured(env), appIdMatches: env.ONESIGNAL_APP_ID ? String(env.ONESIGNAL_APP_ID).trim() === CLIENT_APP_ID : null, alias: staffAlias(staff.id) });
             }
 
             if (action === 'resolve') {
@@ -361,6 +454,11 @@ export async function onRequest(context) {
         if (who.error) return who.error;
         const sid = who.id;
 
+        if (action === 'push-test') {
+            if (!isPost) return bad('POST only', 405);
+            const r = await pushTo(env, db, pushStudents([sid]), { title: 'Science Academy 🔔', message: 'تجربة: الإشعارات شغالة على الجهاز ده ✅', url: url.origin + '/questions.html' });
+            return json({ ok: r.ok, sent: r.sent, viaTag: r.viaTag, reason: r.reason || null, configured: pushConfigured(env) });
+        }
         if (action === 'unread') {
             const r = await db.prepare('SELECT COALESCE(SUM(student_unread), 0) as c FROM ask_questions WHERE student_id = ?').bind(sid).first();
             return json({ unread: (r && r.c) || 0 });
@@ -370,12 +468,14 @@ export async function onRequest(context) {
             const { results } = await db.prepare(
                 `SELECT q.*, (SELECT text FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'student' ORDER BY m.id LIMIT 1) as first_text,
                     (SELECT media_kind FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'student' ORDER BY m.id LIMIT 1) as first_kind,
-                    (SELECT COUNT(*) FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'staff') as replies
-                 FROM ask_questions q WHERE q.student_id = ? ORDER BY q.unit, q.lesson, q.id DESC`
+                    (SELECT COUNT(*) FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'staff') as replies,
+                    (SELECT text FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'staff' ORDER BY m.id DESC LIMIT 1) as staff_text,
+                    (SELECT media_kind FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'staff' ORDER BY m.id DESC LIMIT 1) as staff_kind
+                 FROM ask_questions q WHERE q.student_id = ? ORDER BY q.unit, q.lesson, q.updated_at DESC, q.id DESC`
             ).bind(sid).all();
             return json({
                 units: ASK_UNITS, lessons: ASK_LESSONS,
-                items: (results || []).map(q => ({ id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, unread: q.student_unread, replies: q.replies, text: q.first_text || '', kind: q.first_kind, createdAt: q.created_at, updatedAt: q.updated_at }))
+                items: (results || []).map(q => ({ id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, unread: q.student_unread, replies: q.replies, text: q.first_text || q.staff_text || '', kind: q.first_kind || q.staff_kind, createdAt: q.created_at, updatedAt: q.updated_at, origin: q.origin || 'student', label: topicLabel(q) }))
             });
         }
 
@@ -384,7 +484,7 @@ export async function onRequest(context) {
             const q = id ? await db.prepare('SELECT * FROM ask_questions WHERE id = ? AND student_id = ?').bind(id, sid).first() : null;
             if (!q) return bad('السؤال غير موجود', 404);
             if (q.student_unread) await db.prepare('UPDATE ask_questions SET student_unread = 0 WHERE id = ?').bind(id).run();
-            return json({ question: { id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, createdAt: q.created_at }, messages: await messagesOf(db, id) });
+            return json({ question: { id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, createdAt: q.created_at, origin: q.origin || 'student', label: topicLabel(q) }, messages: await messagesOf(db, id) });
         }
 
         if (action === 'ask' || action === 'reply') {
@@ -400,8 +500,10 @@ export async function onRequest(context) {
             if (today && today.m >= MAX_MESSAGES_PER_DAY) return bad('وصلت لأقصى عدد رسائل النهارده — كمّل بكرة', 429, { code: 'DAILY_LIMIT' });
 
             if (action === 'ask') {
-                const unit = intIn(data.unit, ASK_UNITS), lesson = intIn(data.lesson, ASK_LESSONS);
-                if (!unit || !lesson) return bad('اختار الوحدة والدرس الأول');
+                // "سؤال خارج المنهج" (e.g. "هناخد إيه بكرة؟") → unit 0 · lesson 0, no unit / lesson needed
+                const general = data.general === true;
+                const unit = general ? 0 : intIn(data.unit, ASK_UNITS), lesson = general ? 0 : intIn(data.lesson, ASK_LESSONS);
+                if (!general && (!unit || !lesson)) return bad('اختار الوحدة والدرس — أو "سؤال خارج المنهج"');
                 if (today && today.q >= MAX_QUESTIONS_PER_DAY) return bad(`أقصى عدد ${MAX_QUESTIONS_PER_DAY} سؤال في اليوم — كمّل بكرة`, 429, { code: 'DAILY_LIMIT' });
                 const cols = await saveAttachments(env, db, sid, att);      // files first: if saving fails, no empty question is left behind
                 const r = await db.prepare('INSERT INTO ask_questions (student_id, grade, unit, lesson) VALUES (?, ?, ?, ?)').bind(sid, who.grade, unit, lesson).run();
@@ -411,6 +513,7 @@ export async function onRequest(context) {
                     db.prepare('INSERT INTO ask_messages (question_id, sender, text) VALUES (?, ?, ?)').bind(qid, 'auto', AUTO_REPLY)
                 ]);
                 lazyPurge(context, db);
+                await background(context, pushStaff(env, db, url.origin, `سؤال جديد من ${who.firstName || ''} ${who.lastName || ''}`.trim() + ' 💬', `${GRADE_EN[who.grade] || who.grade} · ${general ? 'سؤال خارج المنهج' : `Unit ${unit} · Lesson ${lesson}`}${text ? ' — ' + text.slice(0, 100) : ''}`, qid));
                 return json({ ok: true, id: qid, messages: await messagesOf(db, qid) });
             }
 
@@ -419,6 +522,7 @@ export async function onRequest(context) {
             const q = id ? await db.prepare('SELECT id, status FROM ask_questions WHERE id = ? AND student_id = ?').bind(id, sid).first() : null;
             if (!q) return bad('السؤال غير موجود', 404);
             const cols = await saveAttachments(env, db, sid, att);
+            await background(context, pushStaff(env, db, url.origin, `رسالة من ${who.firstName || ''} ${who.lastName || ''}`.trim() + ' 💬', `${GRADE_EN[who.grade] || who.grade}${text ? ' — ' + text.slice(0, 100) : att.image ? ' — 📷 صورة' : ' — 🎤 رسالة صوتية'}`, id));
             await db.batch([
                 insertMsg(db, id, 'student', null, text, cols),
                 db.prepare(`UPDATE ask_questions SET status = 'waiting', waiting_since = CASE WHEN status = 'waiting' AND waiting_since IS NOT NULL THEN waiting_since ELSE CURRENT_TIMESTAMP END,

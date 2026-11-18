@@ -14,6 +14,7 @@
 // (daily free allowance used up → "queued", picked up after the reset).
 // =====================================================================
 import { runAI, parseJsonLoose, readPrompt, conceptPrompt, weaknessPrompt, assistPrompt, chatPrompt, writtenReadPrompt, AiQuotaError, AiUnavailableError, quotaHitToday, aiReady, textModel, visionModel } from './ai-engine.js';
+import { pushTo, students as pushStudents } from './push.js';
 import { mediaInfo, mediaResponse } from './media-store.js';
 
 export const RELEASE_KEY = 'hw_release_mode';            // 'confirm' (staff confirm first) | 'instant'
@@ -693,13 +694,7 @@ export async function purgeHomeworkMedia(env, db) {
 }
 // push to one student (OneSignal tag "sid", set by the student portal)
 export async function pushToStudent(env, origin, studentId, title, message, path = '/homework.html') {
-    const appId = env.ONESIGNAL_APP_ID, apiKey = env.ONESIGNAL_REST_API_KEY;
-    if (!appId || !apiKey || !studentId) return;
-    try {
-        await fetch('https://api.onesignal.com/notifications', {
-            method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8', 'Authorization': `Key ${apiKey}` },
-            body: JSON.stringify({ app_id: appId, target_channel: 'push', headings: { en: title, ar: title }, contents: { en: message, ar: message },
-                filters: [{ field: 'tag', key: 'sid', relation: '=', value: String(studentId) }], web_url: `${origin}${path}` })
-        });
-    } catch (e) { /* notifications are best-effort */ }
+    if (!studentId) return;
+    const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
+    return pushTo(env, db, pushStudents([String(studentId)]), { title, message, url: `${origin}${path}` }).catch(() => null);
 }

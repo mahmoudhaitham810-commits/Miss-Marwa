@@ -171,7 +171,7 @@ export async function ensureAppSchema(db) {
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, grade TEXT NOT NULL, unit INTEGER NOT NULL, lesson INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'waiting', waiting_since TEXT DEFAULT CURRENT_TIMESTAMP,
         student_unread INTEGER NOT NULL DEFAULT 0, staff_unread INTEGER NOT NULL DEFAULT 1,
-        bank_text TEXT, bank_hidden INTEGER NOT NULL DEFAULT 0, resolved_by TEXT, exported_at TEXT,
+        bank_text TEXT, bank_hidden INTEGER NOT NULL DEFAULT 0, resolved_by TEXT, exported_at TEXT, origin TEXT, broadcast_id INTEGER,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_grade ON ask_questions(grade, status, waiting_since)');
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_student ON ask_questions(student_id, updated_at)');
@@ -189,7 +189,16 @@ export async function ensureAppSchema(db) {
         let aq = [];
         try { const r = await db.prepare('PRAGMA table_info(ask_questions)').all(); aq = (r.results || []).map(c => c.name); } catch (e) { }
         if (aq.length && !aq.includes('exported_at')) steps.push('ALTER TABLE ask_questions ADD COLUMN exported_at TEXT');
+        // 18 Nov 2026: chats Miss Marwa starts (origin 'staff' = her direct chat with a student, 'broadcast' = one copy of
+        // a message to a grade / group); unit 0 + lesson 0 = not about a lesson ("سؤال خارج المنهج" or her messages)
+        if (aq.length && !aq.includes('origin')) steps.push('ALTER TABLE ask_questions ADD COLUMN origin TEXT');
+        if (aq.length && !aq.includes('broadcast_id')) steps.push('ALTER TABLE ask_questions ADD COLUMN broadcast_id INTEGER');
     }
+    steps.push(`CREATE TABLE IF NOT EXISTS ask_broadcasts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, grade TEXT, branch TEXT, group_id INTEGER, label TEXT, staff_name TEXT, text TEXT,
+        media_id INTEGER, media_kind TEXT, media_seconds REAL, audio_id INTEGER, audio_seconds REAL, recipients INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_bc ON ask_questions(broadcast_id)');
     // Small key/value store for housekeeping (e.g. when the 30-day media clean-up last ran)
     steps.push(`CREATE TABLE IF NOT EXISTS app_kv ("key" TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push(`CREATE TABLE IF NOT EXISTS ask_media (

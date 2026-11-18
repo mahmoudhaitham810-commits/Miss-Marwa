@@ -13,6 +13,7 @@
 // (closes_at, or a manual Close). Submissions arrive in Step 3.
 // =============================================================
 import { requireStaff, ensureAppSchema, auditStmt, can } from './admin-auth.js';
+import { pushToGrade as sharedPushToGrade } from './push.js';
 import { r2, mediaInfo, mediaResponse, deleteMedia } from './media-store.js';
 import { runAI, parseJsonLoose, solvePrompt, extractPrompt, keyReadPrompt, verifyPrompt, textModel, aiReady, usageToday, quotaHitToday, visionModel, VISION_MODELS, DAILY_FREE_NEURONS, AiQuotaError, AiUnavailableError } from './ai-engine.js';
 import { gradeStep, processQueue, resultOf, weaknessReport, releaseMode, RELEASE_KEY, loadKey, purgeHomeworkMedia, pushToStudent, ensureAssist } from './hw-grader.js';
@@ -133,21 +134,9 @@ function cleanAssignment(d) {
 
 // ---------- Push to the grade (OneSignal tag "grade", set by the student portal) ----------
 async function pushToGrade(env, origin, grade, title, message) {
-    const appId = env.ONESIGNAL_APP_ID, apiKey = env.ONESIGNAL_REST_API_KEY;
-    if (!appId || !apiKey) return { sent: false, reason: 'not-configured' };
-    try {
-        const r = await fetch('https://api.onesignal.com/notifications', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=utf-8', 'Authorization': `Key ${apiKey}` },
-            body: JSON.stringify({
-                app_id: appId, target_channel: 'push',
-                headings: { en: title, ar: title }, contents: { en: message, ar: message },
-                filters: [{ field: 'tag', key: 'grade', relation: '=', value: grade.toUpperCase() }],
-                web_url: `${origin}/exams.html?tab=homework`
-            })
-        });
-        return { sent: r.ok };
-    } catch (e) { return { sent: false, reason: e.message }; }
+    const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
+    const r = await sharedPushToGrade(env, db, grade, { title, message, url: `${origin}/exams.html?tab=homework` });
+    return { sent: !!r.ok, reason: r.reason };
 }
 function arDate(v) {
     try { return new Date(String(v).replace(' ', 'T') + 'Z').toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }); }

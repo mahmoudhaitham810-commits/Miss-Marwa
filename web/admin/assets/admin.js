@@ -22,6 +22,7 @@
         calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
         grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
         send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+        more: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
         mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
         refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
         settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
@@ -139,6 +140,7 @@
                 <div class="topbar-actions">
                     <button class="btn btn-soft btn-sm topbar-install" data-install title="Install the staff app">${icon('download', 'sm')}<span>Install app</span></button>
                     <button class="icon-btn theme-btn" data-theme-toggle aria-label="Switch light / dark mode" title="Light / dark mode">${icon('moon', 'moon')}${icon('sun', 'sun')}</button>
+                    ${can('inbox.reply') ? `<button class="icon-btn bell-btn" data-bell aria-label="Notifications" title="Notifications">${icon('bell')}<span class="dot"></span></button>` : ''}
                     <button class="icon-btn menu-trigger" aria-label="Menu" data-menu>${icon('menu')}</button>
                 </div></header>`;
         const bottom = `<nav class="bottomnav" aria-label="Staff navigation">
@@ -154,6 +156,7 @@
             if (s) { e.preventDefault(); Site.sheet({ iconName: 'sparkles', title: s.dataset.soon, subtitle: 'Coming soon', html: '<p class="muted" style="margin:0">This part of the portal is being built and will appear here soon.</p>', actions: [{ label: 'OK', cls: 'btn-ghost' }] }); return; }
             if (e.target.closest('[data-signout]')) { signOut(); return; }
             if (e.target.closest('[data-menu]')) { menu(); return; }
+            if (e.target.closest('[data-bell]')) { bellSheet(); return; }
         });
         const tb = document.querySelector('.topbar');
         const onScroll = () => tb.classList.toggle('scrolled', window.scrollY > 4);
@@ -164,7 +167,8 @@
             iconName: 'menu', title: STAFF.name, subtitle: STAFF.role === 'teacher' ? 'Miss Marwa · full access' : 'Assistant',
             html: `<div class="stack" style="gap:2px">${nav().map(n => n.soon
                 ? `<button class="list-btn" data-soon="${esc(n.label)}">${icon(n.icon)}${esc(n.label)}<span class="end soon-tag">Soon</span></button>`
-                : `<a class="list-btn" href="${n.href}">${icon(n.icon)}${esc(n.label)}</a>`).join('')}
+                : `<a class="list-btn" href="${n.href}">${icon(n.icon)}${esc(n.label)}${n.key === 'inbox' && ASK_COUNT ? `<span class="nav-badge end">${ASK_COUNT}</span>` : ''}</a>`).join('')}
+                ${can('inbox.reply') ? `<button class="list-btn" data-bell>${icon('bell')}Notifications</button>` : ''}
                 <button class="list-btn" data-install>${icon('download')}Install the staff app</button>
                 <button class="list-btn" data-theme-toggle>${icon('moon')}Light / dark mode</button>
                 <button class="list-btn danger" data-signout>${icon('logout')}Sign out</button></div>`
@@ -174,6 +178,73 @@
         await fetch('/api/admin-auth?action=logout', { method: 'POST', credentials: 'same-origin' }).catch(() => { });
         ['mm_students_db', 'mm_lessons_db', 'honorBoardData'].forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
         location.replace('/admin/login.html');
+    }
+
+
+    // ---------- Questions badge + "new message" pop-up (18 Nov 2026) ----------
+    let ASK_COUNT = 0;
+    async function askBadge() {
+        let d; try { d = await api('/api/ask?action=counts'); } catch (e) { return; }
+        const n = (d && d.total) || 0; ASK_COUNT = n;
+        document.querySelectorAll('.nav-badge[data-ask]').forEach(b => b.remove());
+        if (n) {
+            document.querySelectorAll('a[href="/admin/inbox.html"]').forEach(el => el.insertAdjacentHTML('beforeend', `<span class="nav-badge" data-ask title="Waiting for an answer">${n}</span>`));
+            document.querySelectorAll('.bottomnav [data-menu]').forEach(el => el.insertAdjacentHTML('beforeend', `<span class="nav-badge" data-ask title="Questions waiting">${n}</span>`));
+        }
+        try { if (navigator.setAppBadge) navigator.setAppBadge(n); } catch (e) { }
+        const latest = d && d.latest;
+        if (!latest) return;
+        const seen = Number(store.get('ask_seen_msg', 0)) || 0;
+        store.set('ask_seen_msg', latest.id);
+        if (!seen || latest.id <= seen || location.pathname === '/admin/inbox.html') return;   // first visit = baseline; the inbox page refreshes itself
+        document.querySelector('.msg-pop')?.remove();
+        document.body.insertAdjacentHTML('beforeend', `<a class="msg-pop" href="/admin/inbox.html?q=${latest.questionId}" role="status">
+            <span class="mp-ic">💬</span><span class="mp-tx"><b dir="auto">${esc(latest.name)}</b><small>${esc(GRADES[latest.grade] || latest.grade || '')} · New message</small><span dir="auto">${esc(latest.text || '')}</span></span>
+            <button class="mp-x" aria-label="Close" type="button">×</button></a>`);
+        const pop = document.querySelector('.msg-pop');
+        pop.querySelector('.mp-x').addEventListener('click', (e) => { e.preventDefault(); pop.remove(); });
+        requestAnimationFrame(() => pop.classList.add('show'));
+        setTimeout(() => pop.remove(), 15000);
+    }
+    // ---------- Push notifications on staff devices (OneSignal; the device signs in as "staff-<id>") ----------
+    const ONESIGNAL_APP_ID = 'a5d058a6-b45e-46a5-aa86-014309b7c7d2';
+    function loadOneSignal() {
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        if (!document.querySelector('script[data-onesignal]')) {
+            const sc = document.createElement('script');
+            sc.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js'; sc.defer = true; sc.dataset.onesignal = '1';
+            document.head.appendChild(sc);
+        }
+        OneSignalDeferred.push(async (OneSignal) => {
+            try {
+                await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton: { enable: false } });
+                if (OneSignal.User.externalId !== 'staff-' + STAFF.id) await OneSignal.login('staff-' + STAFF.id);
+                await OneSignal.User.addTag('staff', String(STAFF.id));
+                OneSignal.Notifications.addEventListener('permissionChange', paintBell);
+            } catch (e) { /* optional */ }
+            paintBell();
+        });
+    }
+    const notifPermission = () => (typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
+    function paintBell() { document.querySelectorAll('[data-bell]').forEach(b => b.classList.toggle('bell-off', notifPermission() !== 'granted')); }
+    function bellSheet() {
+        const p = notifPermission();
+        const test = async (close) => {
+            close();
+            let r; try { r = await api('/api/ask?action=staff-push-test', { body: {} }); } catch (e) { return Site.toast(e.message, 'error'); }
+            const why = !r.configured ? 'Notifications aren\'t set up on the server: add ONESIGNAL_APP_ID and ONESIGNAL_REST_API_KEY in Cloudflare.'
+                : r.appIdMatches === false ? 'The ONESIGNAL_APP_ID in Cloudflare is not this site\'s OneSignal app — fix it in Cloudflare (it must be a5d058a6-…c7d2).'
+                    : r.status === 401 || r.status === 403 ? 'OneSignal refused the key — copy the REST API key again into ONESIGNAL_REST_API_KEY in Cloudflare.'
+                        : !r.sent && !r.viaTag ? 'OneSignal has no device for you yet — tap "Turn on" first, then try again (on iPhone: install the app to the Home Screen first).' : '';
+            Site.sheet({ iconName: why ? 'alert' : 'checkCircle', tone: why ? 'danger' : 'success', title: why ? 'Test not delivered' : 'Test sent 🔔',
+                html: `<p class="muted" style="margin:0">${why ? esc(why) : `Sent to ${r.sent + r.viaTag} device group${r.sent + r.viaTag === 1 ? '' : 's'} — it should arrive in a few seconds.`}</p>${r.errors && r.errors.length ? `<pre class="small" style="white-space:pre-wrap;margin:10px 0 0">${esc(JSON.stringify(r.errors).slice(0, 400))}</pre>` : ''}`,
+                actions: [{ label: 'OK', cls: 'btn-ghost' }] });
+        };
+        if (p === 'granted') return Site.sheet({ iconName: 'bell', tone: 'success', title: 'Notifications are on', subtitle: 'You get a notification on this device when a student asks or replies.', actions: [{ label: 'Send me a test', icon: 'bell', onClick: test }, { label: 'Close', cls: 'btn-ghost' }] });
+        if (p === 'denied') return Site.sheet({ iconName: 'bell', tone: 'danger', title: 'Notifications are blocked', html: '<p class="muted" style="margin:0">Tap the lock icon next to the website address → <b>Notifications → Allow</b>, then reload. In the installed app: phone Settings → Apps → Science Academy → Notifications.</p>', actions: [{ label: 'OK', cls: 'btn-ghost' }] });
+        if (p === 'unsupported') return Site.sheet({ iconName: 'bell', title: 'Not supported here', html: '<p class="muted" style="margin:0">This browser can\'t show notifications. On iPhone: Share → <b>Add to Home Screen</b>, open the app from there, then turn notifications on.</p>', actions: [{ label: 'OK', cls: 'btn-ghost' }] });
+        Site.sheet({ iconName: 'bell', title: 'Turn on notifications', subtitle: 'Get a notification on this device whenever a student asks or replies.',
+            actions: [{ label: 'Turn on', icon: 'bell', onClick: (close) => { close(); (window.OneSignalDeferred = window.OneSignalDeferred || []).push(async (OneSignal) => { try { await OneSignal.Notifications.requestPermission(); } catch (e) { } paintBell(); }); } }, { label: 'Not now', cls: 'btn-ghost' }] });
     }
 
     async function boot({ active, title }) {
@@ -187,11 +258,9 @@
         shell({ active, title });
         hydrate(); // staff-only icons first (Site.init would fill them with blanks)
         Site.init();
-        // Red badge on Questions when students are waiting for an answer
-        if (can('inbox.reply')) api('/api/ask?action=counts').then(d => {
-            if (!d || !d.total) return;
-            document.querySelectorAll('a[href="/admin/inbox.html"]').forEach(el => el.insertAdjacentHTML('beforeend', `<span class="nav-badge" title="Waiting for an answer">${d.total}</span>`));
-        }).catch(() => { });
+        // Red badge on Questions (sidebar, phone "More" button and its menu) + a pop-up when a new message arrives
+        if (can('inbox.reply')) { askBadge(); setInterval(() => { if (!document.hidden) askBadge(); }, 45000); document.addEventListener('visibilitychange', () => { if (!document.hidden) askBadge(); }); }
+        if (can('inbox.reply')) loadOneSignal();
         // Native <select>s become portal-styled pickers (after the page has filled them in)
         setTimeout(() => {
             document.querySelectorAll('select.pick').forEach(enhanceSelect);
