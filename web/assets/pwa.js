@@ -22,7 +22,8 @@
     const isEdge = /edg\//i.test(ua);
     const standalone = () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true;
     const isStaff = () => location.pathname.startsWith('/admin');
-    const appName = () => (isStaff() ? 'Science Academy Staff' : 'Science Academy');
+    const isParent = () => location.pathname.startsWith('/parent');
+    const appName = () => (isStaff() ? 'Science Academy Staff' : isParent() ? 'Science Academy Parents' : 'Science Academy');
 
     function update() {
         root.classList.toggle('pwa-installed', standalone());

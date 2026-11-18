@@ -29,6 +29,11 @@
     <link rel="preload" as="image" href="/assets/img/logo-192.png">
     <link rel="stylesheet" href="/assets/student.css">
     <link rel="stylesheet" href="/assets/site.css">
+    <style>
+        .parent-link { flex-basis: 100%; display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); font-family: 'IBM Plex Sans Arabic', Inter, sans-serif; text-decoration: none; font-size: 15px; }
+        .parent-link b { color: var(--primary); } .parent-link:hover b { text-decoration: underline; }
+        .parent-entry .ar { font-family: 'IBM Plex Sans Arabic', sans-serif; }
+    </style>
     <script>
         // Opened from the installed app while already signed in → go straight to the dashboard
         try {
@@ -320,7 +325,7 @@
                     <p class="muted small" style="max-width:320px;margin:14px 0 0">Lessons, online exams and progress tracking for Prep 1 to Sec 1 students — with 15+ years of teaching behind every lesson.</p>
                 </div>
                 <div><h4>Platform</h4><div class="links"><a href="#grades">Grades</a><a href="#features">Features</a><a href="#how">How it works</a><a href="#faq">FAQ</a></div></div>
-                <div><h4>Account</h4><div class="links"><a href="/login.html">Sign in</a><a href="/signup.html">Create account</a><a href="#" data-install>Install the app</a></div></div>
+                <div><h4>Account</h4><div class="links"><a href="/login.html">Sign in</a><a href="/login.html?as=parent">Parents · ولي الأمر</a><a href="/signup.html">Create account</a><a href="#" data-install>Install the app</a></div></div>
                 <div><h4>Contact</h4><div class="links"><a id="waFoot" target="_blank" rel="noopener" data-icon="whatsapp">WhatsApp</a><a id="fbFoot" target="_blank" rel="noopener" data-icon="facebook">Facebook</a></div></div>
             </div>
             <div class="foot-bottom">
@@ -343,15 +348,16 @@
         const dash = session ? Site.homeUrl(session) : '';
         document.getElementById('headerActions').insertAdjacentHTML('beforeend', session
             ? `<a class="btn btn-primary btn-sm" href="${dash}">${icon('home', 'sm')}Dashboard</a>`
-            : `<a class="btn btn-ghost btn-sm hide-sm" href="/login.html">Sign in</a><a class="btn btn-primary btn-sm" href="/signup.html">Get started</a>`);
+            : `<a class="btn btn-ghost btn-sm hide-sm parent-entry" href="/login.html?as=parent">${icon('users', 'sm')}<span class="ar">ولي أمر</span></a><a class="btn btn-ghost btn-sm hide-sm" href="/login.html">Sign in</a><a class="btn btn-primary btn-sm" href="/signup.html">Get started</a>`);
         document.getElementById('menuAuth').innerHTML = session
             ? `<a class="btn btn-primary btn-block" href="${dash}">Go to my dashboard</a>`
-            : `<a class="btn btn-ghost btn-block" href="/login.html">Sign in</a><a class="btn btn-primary btn-block" href="/signup.html">Create free account</a>`;
+            : `<a class="btn btn-ghost btn-block" href="/login.html">Sign in</a><a class="btn btn-primary btn-block" href="/signup.html">Create free account</a><a class="btn btn-soft btn-block" href="/login.html?as=parent">${icon('users', 'sm')}بوابة ولي الأمر · Parents</a>`;
         document.getElementById('heroCta').innerHTML = session
             ? `<a class="btn btn-primary btn-lg btn-glow magnetic" href="${dash}">Continue learning, <span dir="auto">${esc(first)}</span>${icon('arrowRight', 'arrow')}</a>
                <a class="btn btn-ghost btn-lg" href="#features">See what's inside</a>`
             : `<a class="btn btn-primary btn-lg btn-glow magnetic" href="/signup.html">Create free account${icon('arrowRight', 'arrow')}</a>
-               <a class="btn btn-ghost btn-lg" href="/login.html">I have an account</a>`;
+               <a class="btn btn-ghost btn-lg" href="/login.html">I have an account</a>
+               <a class="parent-link" href="/login.html?as=parent">${icon('users', 'sm')}<span>ولي أمر؟ <b>ادخل بوابة ولي الأمر</b></span></a>`;
         document.getElementById('finalCta').innerHTML = session
             ? `<a class="btn btn-lg btn-white magnetic" href="${dash}">Go to my dashboard${icon('arrowRight', 'arrow')}</a>`
             : `<a class="btn btn-lg btn-white magnetic" href="/signup.html">Create free account${icon('arrowRight', 'arrow')}</a><a class="btn btn-lg btn-outline" href="/login.html">Sign in</a>`;

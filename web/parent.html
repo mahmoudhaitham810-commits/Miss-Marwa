@@ -3,102 +3,421 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#F4F7FC">
-    <meta name="robots" content="noindex, nofollow">
-    <meta name="referrer" content="no-referrer">
+    <meta name="theme-color" content="#0F2A5F">
+    <meta name="robots" content="noindex">
     <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
-    <title>متابعة الطالب · Science Academy</title>
+    <script>
+        // an old private report link (parent.html#<token>) → its own page
+        if (/^#[A-Za-z0-9_-]{32}$/.test(location.hash)) location.replace('/parent-link.html' + location.hash);
+    </script>
+    <script>/* Catch the browser's install offer as early as possible */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <title>بوابة ولي الأمر · Science Academy</title>
     <link rel="icon" href="/assets/img/logo-96.png">
+    <link rel="apple-touch-icon" href="/assets/img/logo-192.png">
+    <link rel="manifest" href="/parent.webmanifest">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="ولي الأمر">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/student.css">
     <link rel="stylesheet" href="/assets/site.css">
     <style>
-        body { background: var(--canvas, var(--bg)); font-family: var(--font-ar); }
-        .wrap { max-width: 760px; margin: 0 auto; padding: 18px 16px 48px; }
-        .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-        .top .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
-        .top .brand img { width: 42px; height: 42px; border-radius: 50%; background: #fff; }
-        .top .brand strong { display: block; font-size: 15px; }
-        .top .brand span { font-size: 12px; color: var(--muted); }
-        .hero { padding: 20px; border-radius: 22px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 16px; }
-        .hero h1 { margin: 0; font-size: 24px; }
-        .hero p { margin: 6px 0 0; color: var(--text-2); }
-        .avgs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-        .avg { padding: 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
-        .avg b { display: block; font-size: 30px; font-family: var(--font); letter-spacing: -.02em; }
-        .avg span { font-weight: 700; }
-        .avg small { display: block; color: var(--muted); margin-top: 2px; }
-        .sec { padding: 6px 16px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 16px; }
-        .sec h2 { font-size: 17px; margin: 12px 0 4px; }
-        .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
-        .sec h2 + .row { border-top: 0; }
-        .row b { display: block; overflow-wrap: anywhere; }
-        .row small { color: var(--muted); }
-        .sc { display: flex; align-items: center; gap: 8px; flex: none; font-family: var(--font); font-weight: 800; direction: ltr; }
-        .tag { font-family: var(--font-ar); font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
-        .tag.bad { background: var(--danger-soft); color: var(--danger); }
-        .ex { color: var(--success); } .gd { color: var(--primary); } .av { color: var(--warning); } .wk { color: var(--danger); }
-        .note { color: var(--muted); font-size: 13px; text-align: center; margin-top: 18px; line-height: 1.8; }
-        .msg { text-align: center; padding: 36px 20px; }
-        .msg h1 { font-size: 20px; }
-        .skel { background: var(--surface-2); border-radius: 18px; animation: pulse 1.2s ease-in-out infinite; }
-        @keyframes pulse { 50% { opacity: .55; } }
+        :root { --navy: #0F2A5F; --navy-2: #1E3F8A; }
+        body.pp { margin: 0; background: var(--canvas); color: var(--text); font-family: 'IBM Plex Sans Arabic', Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+        .en { font-family: Inter, 'IBM Plex Sans Arabic', sans-serif; }
+        .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+        /* top bar */
+        .pp-top { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--canvas) 86%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+        .pp-top .bar { display: flex; align-items: center; gap: 12px; height: 64px; }
+        .pp-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; min-width: 0; }
+        .pp-brand img { width: 38px; height: 38px; }
+        .pp-brand b { display: block; font-size: 15.5px; white-space: nowrap; }
+        .pp-brand small { display: block; color: var(--muted); font-size: 12px; }
+        .pp-actions { margin-inline-start: auto; display: flex; gap: 6px; align-items: center; }
+        .bell-btn { position: relative; }
+        .bell-btn .dot { position: absolute; top: 7px; left: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); display: none; }
+        .bell-btn.off .dot { display: block; }
+        /* child switch */
+        .kids { display: flex; gap: 8px; overflow-x: auto; padding: 14px 0 0; scrollbar-width: none; }
+        .kids::-webkit-scrollbar { display: none; }
+        .kid { display: flex; align-items: center; gap: 8px; padding: 7px 14px 7px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .kid .av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); font-weight: 800; font-size: 13px; }
+        .kid small { color: var(--muted); font-weight: 500; }
+        .kid.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+        .kid.on .av { background: rgba(255, 255, 255, .18); color: #fff; } .kid.on small { color: rgba(255, 255, 255, .75); }
+        /* urgent banner */
+        .urgent { margin-top: 16px; border-radius: 20px; padding: 16px 18px; color: #fff; background: linear-gradient(120deg, #B91C1C, #EA580C); display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; box-shadow: 0 16px 34px -18px rgba(185, 28, 28, .8); }
+        .urgent .ic { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: rgba(255, 255, 255, .18); font-size: 24px; }
+        .urgent b { display: block; font-size: 16px; }
+        .urgent span { font-size: 14px; opacity: .95; }
+        .urgent .more { display: block; margin-top: 4px; font-size: 13px; opacity: .9; }
+        /* hero */
+        .pp-hero { margin-top: 16px; border-radius: 26px; padding: 26px 24px; color: #fff; position: relative; overflow: hidden;
+            background: radial-gradient(120% 140% at 0% 0%, #2F5BEA 0%, transparent 55%), linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%); box-shadow: 0 26px 50px -30px rgba(15, 42, 95, .9); }
+        .pp-hero::after { content: ''; position: absolute; inset: auto -60px -80px auto; width: 260px; height: 260px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 0 0 40px rgba(255, 255, 255, .03), 0 0 0 80px rgba(255, 255, 255, .02); pointer-events: none; }
+        .pp-hgrid { display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; position: relative; z-index: 1; }
+        .pp-hero h1 { margin: 0; font-size: clamp(22px, 4.6vw, 32px); line-height: 1.3; }
+        .pp-hero .en-hello { margin: 4px 0 0; opacity: .8; font-size: 14.5px; text-align: right; }
+        .pp-hero .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+        .chip-w { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .16); font-size: 13px; font-weight: 600; }
+        .ring { position: relative; width: 132px; height: 132px; flex: none; }
+        .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .ring .lbl { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+        .ring .lbl b { font-size: 30px; font-family: Inter, sans-serif; line-height: 1; }
+        .ring .lbl small { font-size: 12.5px; opacity: .85; margin-top: 4px; }
+        /* KPI */
+        .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+        .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 16px; }
+        .kpi .top { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
+        .kpi .top .icon { width: 18px; height: 18px; }
+        .kpi .v { font-size: 26px; font-weight: 800; margin-top: 8px; font-family: Inter, sans-serif; }
+        .kpi .v small { font-size: 14px; color: var(--muted); font-weight: 600; }
+        .kpi .s { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+        .pbar { height: 7px; border-radius: 99px; background: var(--surface-3, rgba(15, 23, 42, .08)); overflow: hidden; margin-top: 10px; }
+        .pbar i { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+        /* sections */
+        .grid2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 16px; }
+        .card2 { background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 18px; }
+        .card2 h2 { margin: 0 0 12px; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+        .card2 h2 .icon { color: var(--primary); }
+        .card2 h2 .side { margin-inline-start: auto; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+        .legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-inline-end: 5px; vertical-align: -1px; }
+        .chart { width: 100%; height: 210px; direction: ltr; }
+        .chart .gl { stroke: var(--border); stroke-dasharray: 3 4; }
+        .chart text { fill: var(--muted); font-size: 10.5px; font-family: Inter, sans-serif; }
+        .ins { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+        .ins li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 10px 12px; border-radius: 14px; font-size: 14px; line-height: 1.6; }
+        .ins.good li { background: var(--success-soft); } .ins.bad li { background: var(--warning-soft); }
+        .ins li .e { font-size: 16px; }
+        .ins-h { font-size: 13px; font-weight: 700; margin: 12px 0 8px; color: var(--muted); }
+        .missed { display: flex; flex-wrap: wrap; gap: 8px; }
+        .mx { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 12px; background: var(--danger-soft); color: var(--danger); font-size: 13px; font-weight: 600; }
+        .mx small { color: var(--muted); font-weight: 500; }
+        .open-x { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--primary-soft); margin-top: 8px; font-size: 14px; }
+        /* history */
+        .tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2, rgba(15, 23, 42, .05)); border: 1px solid var(--border); }
+        .tabs button { padding: 8px 14px; border-radius: 10px; border: 0; background: transparent; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; }
+        .tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 4px 12px -8px rgba(15, 23, 42, .4); }
+        .hist { margin-top: 12px; display: grid; }
+        .hrow { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; padding: 12px 4px; border-bottom: 1px solid var(--border); align-items: center; }
+        .hrow:last-child { border-bottom: 0; }
+        .hrow .nm b { display: block; font-size: 14.5px; } .hrow .nm small { color: var(--muted); font-size: 12.5px; }
+        .hrow .sc { text-align: left; font-family: Inter, sans-serif; font-weight: 700; direction: ltr; }
+        .hrow .sc small { display: block; color: var(--muted); font-weight: 500; font-size: 12px; }
+        .hrow .pbar { grid-column: 1 / -1; margin-top: 0; height: 5px; }
+        .st { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+        .st.absent, .st.missed { background: var(--danger-soft); color: var(--danger); }
+        .st.opened { background: var(--warning-soft); color: var(--warning); }
+        .st.open { background: var(--primary-soft); color: var(--primary); }
+        /* messages */
+        .msg-item { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 12px 6px; border-bottom: 1px solid var(--border); cursor: pointer; background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; text-align: start; font: inherit; color: inherit; }
+        .msg-item:last-child { border-bottom: 0; }
+        .msg-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        .msg-item .pv { color: var(--muted); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .msg-item .nb { background: var(--danger); color: #fff; border-radius: 999px; font-size: 12px; font-weight: 700; padding: 2px 8px; }
+        .lessons a { display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); text-decoration: none; color: inherit; }
+        .lessons a:last-child { border-bottom: 0; } .lessons small { color: var(--muted); }
+        /* chat panel */
+        .chat { position: fixed; inset: 0; z-index: 60; background: rgba(15, 23, 42, .45); display: none; }
+        .chat.open { display: block; }
+        .chat .panel { position: absolute; inset: auto 0 0 0; height: min(86vh, 760px); background: var(--canvas); border-radius: 24px 24px 0 0; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+        @media (min-width: 900px) { .chat .panel { inset: 24px 24px 24px auto; width: 460px; height: auto; border-radius: 24px; } }
+        .chat .ph { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+        .chat .ph img { width: 40px; height: 40px; border-radius: 50%; }
+        .chat .ph b { display: block; } .chat .ph small { color: var(--muted); font-size: 12.5px; }
+        .chat .ph .x { margin-inline-start: auto; }
+        .chat .body { overflow-y: auto; padding: 16px; display: grid; gap: 10px; align-content: start; }
+        .chat .foot { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); }
+        /* floating WhatsApp + bottom nav */
+        .wa-fab { position: fixed; z-index: 40; left: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: #16A34A; color: #fff; box-shadow: 0 14px 28px -12px rgba(22, 163, 74, .8); text-decoration: none; }
+        .wa-fab .icon { width: 26px; height: 26px; }
+        .bnav { position: fixed; z-index: 35; inset: auto 0 0 0; display: grid; grid-template-columns: repeat(3, 1fr); background: var(--surface); border-top: 1px solid var(--border); padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
+        .bnav a { display: grid; justify-items: center; gap: 2px; padding: 6px; text-decoration: none; color: var(--muted); font-size: 12px; font-weight: 600; position: relative; }
+        .bnav a .icon { width: 22px; height: 22px; }
+        .bnav a .nb { position: absolute; top: 2px; left: calc(50% - 22px); background: var(--danger); color: #fff; font-size: 11px; font-weight: 800; border-radius: 999px; min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; }
+        @media (min-width: 900px) { .bnav { display: none; } body.pp { padding-bottom: 40px; } .wa-fab { bottom: 24px; } }
+        .install-cta { display: none; }
+        html.pwa-ready:not(.pwa-installed) .install-cta, html.ios:not(.pwa-installed) .install-cta { display: flex; }
+        .install-cta { margin-top: 16px; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 18px; border: 1px dashed var(--primary); background: var(--primary-soft); }
+        .install-cta b { display: block; } .install-cta small { color: var(--muted); }
+        .install-cta .btn { margin-inline-start: auto; }
+        .foot-note { text-align: center; color: var(--muted); font-size: 12.5px; margin: 26px 0 0; }
+        .sec { scroll-margin-top: 80px; }
+        .loading { display: grid; place-items: center; min-height: 60vh; color: var(--muted); }
+        @media (max-width: 899px) { .kpis { grid-template-columns: repeat(2, 1fr); } .grid2 { grid-template-columns: 1fr; } .pp-hero { padding: 22px 18px; } .ring { width: 104px; height: 104px; } .ring .lbl b { font-size: 24px; } }
+        @media (max-width: 420px) { .pp-hgrid { grid-template-columns: 1fr auto; gap: 12px; } .kpi .v { font-size: 22px; } .pp-brand small { display: none; } }
+        [data-theme="dark"] .kid.on { background: #2F5BEA; border-color: #2F5BEA; }
     </style>
 </head>
-<body>
-    <div class="wrap">
-        <div class="top">
-            <a class="brand" href="/"><img src="/assets/img/logo-96.png" alt=""><div><strong>Science Academy</strong><span>مس مروة</span></div></a>
+<body class="pp">
+    <header class="pp-top">
+        <div class="wrap bar">
+            <a class="pp-brand" href="/parent.html"><img src="/assets/img/logo-96.png" alt=""><span><b>بوابة ولي الأمر</b><small class="en">Science Academy · Miss Marwa</small></span></a>
+            <div class="pp-actions">
+                <button class="icon-btn" data-install title="ثبّت التطبيق" aria-label="ثبّت التطبيق"><span data-icon="download" style="display:contents"></span></button>
+                <button class="icon-btn bell-btn" id="bellBtn" aria-label="الإشعارات" title="الإشعارات"><span data-icon="bell" style="display:contents"></span><span class="dot"></span></button>
+                <button class="icon-btn theme-btn" data-theme-toggle aria-label="الوضع الليلي" title="الوضع الليلي"><span data-icon="moon" data-icon-class="moon" style="display:contents"></span><span data-icon="sun" data-icon-class="sun" style="display:contents"></span></button>
+                <button class="icon-btn" id="logoutBtn" aria-label="تسجيل خروج" title="تسجيل خروج"><span data-icon="logout" style="display:contents"></span></button>
+            </div>
         </div>
-        <div id="app"><div class="skel" style="height:110px;margin-bottom:16px"></div><div class="skel" style="height:300px"></div></div>
+    </header>
+
+    <main class="wrap" id="app"><div class="loading">جاري التحميل…</div></main>
+
+    <a class="wa-fab" id="waFab" href="#" target="_blank" rel="noopener" aria-label="كلّمنا على واتساب" title="محتاج مساعدة؟ كلّمنا على واتساب"><span data-icon="whatsapp" style="display:contents"></span></a>
+    <nav class="bnav" aria-label="الأقسام">
+        <a href="#top"><span data-icon="home" style="display:contents"></span>نظرة عامة</a>
+        <a href="#grades"><span data-icon="chart" style="display:contents"></span>الدرجات</a>
+        <a href="#messages" id="navMsg"><span data-icon="mail" style="display:contents"></span>الرسائل</a>
+    </nav>
+
+    <div class="chat" id="chat" aria-hidden="true">
+        <div class="panel" role="dialog" aria-label="رسائل مس مروة">
+            <div class="ph"><img src="/assets/img/marwa-160.png" alt=""><div><b>مس مروة</b><small id="chatSub"></small></div><button class="icon-btn x" id="chatClose" aria-label="إغلاق"><span data-icon="x" style="display:contents"></span></button></div>
+            <div class="body" id="chatBody"></div>
+            <div class="foot" id="chatFoot"></div>
+        </div>
     </div>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/assets/ask.js?v=20261118c"></script>
     <script>
     (function () {
         'use strict';
-        const GRADE = { prep1: 'الصف الأول الإعدادي', prep2: 'الصف الثاني الإعدادي', prep3: 'الصف الثالث الإعدادي', sec1: 'الصف الأول الثانوي' };
-        const BR = { center: 'سنتر', private: 'خاص' };
-        const WA = 'https://wa.me/201003021917';
-        const app = document.getElementById('app');
-        const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        const pct = (v) => v === null || v === undefined ? '—' : Math.round(v) + '%';
-        const cls = (v) => v === null || v === undefined ? '' : v >= 85 ? 'ex' : v >= 70 ? 'gd' : v >= 50 ? 'av' : 'wk';
-        const lvl = (v) => v === null || v === undefined ? '' : v >= 85 ? 'ممتاز' : v >= 70 ? 'جيد' : v >= 50 ? 'متوسط' : 'يحتاج متابعة';
-        const day = (d) => { if (!d) return ''; const t = new Date(String(d).length === 10 ? d + 'T12:00:00' : d); return isNaN(t) ? '' : t.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }); };
-        const token = location.hash.slice(1);
-        const fail = (title, text) => { app.innerHTML = `<div class="hero msg"><h1>${title}</h1><p>${text}</p><a class="btn btn-primary" href="${WA}" target="_blank" rel="noopener">تواصل مع مس مروة</a></div>`; };
-        if (!/^[A-Za-z0-9_-]{32}$/.test(token)) return fail('الرابط مش كامل', 'افتح الرابط من رسالة الواتساب زي ما هو، أو اطلب رابط جديد.');
+        const $ = (id) => document.getElementById(id);
+        const { esc, icon } = Site;
+        const K = window.AskKit;
+        Site.init();
+        if (/iphone|ipad|ipod/i.test(navigator.userAgent)) document.documentElement.classList.add('ios');
 
-        fetch('/api/parent?action=view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }), credentials: 'omit', referrerPolicy: 'no-referrer' })
-            .then(r => r.json().then(d => ({ ok: r.ok, d })))
-            .then(({ ok, d }) => {
-                if (!ok) return fail('الرابط ده مش شغال', esc(d.error || 'اطلب رابط جديد من مس مروة.'));
-                render(d);
-            })
-            .catch(() => fail('مفيش اتصال', 'اتأكد من الإنترنت وافتح الرابط تاني.'));
+        let ME = null, DATA = null, sid = null, tab = 'center', MSGS = [], openThreadId = null;
+        const api = async (url, body) => {
+            const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' });
+            const d = await r.json().catch(() => ({}));
+            if (r.status === 401) {     // signed out — or signed in on another phone
+                try { localStorage.removeItem('parent_signed_in'); } catch (e) { }
+                location.replace('/login.html?as=parent&reason=' + (d.code === 'REPLACED' ? 'replaced' : 'parent'));
+                throw new Error('signed out');
+            }
+            if (!r.ok) throw new Error(d.error || 'حصلت مشكلة');
+            return d;
+        };
+        const kidName = (c) => `${c.firstName} ${c.lastName}`.trim();
+        const g = (m, w) => (DATA && DATA.child.gender === 'female' ? w : m);
+        const P = (v) => (v === null || v === undefined ? '—' : Math.round(v) + '%');
+        const LEVEL = { excellent: 'ممتاز', good: 'كويس جداً', average: 'متوسط', weak: 'محتاج متابعة' };
+        const fmtD = (d) => { if (!d) return ''; const x = new Date(String(d).slice(0, 10) + 'T12:00:00Z'); return isNaN(x) ? d : x.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' }); };
+        const tone = (p) => (p === null ? 'var(--muted)' : p >= 85 ? 'var(--success)' : p >= 65 ? 'var(--primary)' : p >= 50 ? 'var(--warning)' : 'var(--danger)');
+        const waLink = () => Site.waLink(`السلام عليكم، أنا ولي أمر ${DATA ? kidName(DATA.child) + ' (' + DATA.child.gradeLabel + ' · ' + DATA.child.studentId + ')' : 'طالب'} ومحتاج أتواصل مع تيم مس مروة.`);
 
-        function row(r, online) {
-            const right = r.status === 'taken'
-                ? `<span class="${cls(r.pct)}">${pct(r.pct)}</span><span>${r.score}/${r.total}</span>`
-                : `<span class="tag bad">${r.status === 'absent' ? 'غياب' : 'لم يُحل'}</span>`;
-            return `<div class="row"><div style="min-width:0"><b dir="auto">${esc(r.name)}</b><small>${esc(day(r.date))}</small></div><div class="sc">${right}</div></div>`;
+        // ---------- load ----------
+        async function boot() {
+            ME = await api('/api/parent?action=me');
+            try { localStorage.setItem('parent_signed_in', '1'); } catch (e) { }
+            sid = ME.active;
+            loadOneSignal();
+            await loadChild();
+            setInterval(() => { if (!document.hidden) refreshUnread(); }, 60000);
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshUnread(); });
         }
-        function render(d) {
-            const s = d.student, m = d.summary, girl = s.gender === 'female';
-            document.title = `${s.firstName} ${s.lastName} · Science Academy`;
-            app.innerHTML = `
-                <div class="hero"><h1>${esc(s.firstName)} ${esc(s.lastName)}</h1>
-                    <p>${esc(GRADE[s.grade] || '')}${s.branch ? ' · ' + BR[s.branch] : ''}</p></div>
-                <div class="avgs">
-                    <div class="avg"><b class="${cls(m.centerPct)}">${pct(m.centerPct)}</b><span>امتحانات السنتر</span><small>${m.centerTaken} امتحان${m.centerAbsent ? ` · ${m.centerAbsent} غياب` : ''}${m.centerPct !== null ? ' · ' + lvl(m.centerPct) : ''}</small></div>
-                    <div class="avg"><b class="${cls(m.onlinePct)}">${pct(m.onlinePct)}</b><span>الامتحانات الأونلاين</span><small>${m.onlineTaken} امتحان${m.onlineMissed ? ` · ${m.onlineMissed} لم ${girl ? 'تحلها' : 'يحلها'}` : ''}${m.onlinePct !== null ? ' · ' + lvl(m.onlinePct) : ''}</small></div>
+        async function loadChild() {
+            DATA = await api('/api/parent?action=overview&sid=' + encodeURIComponent(sid));
+            MSGS = (await api('/api/parent?action=messages')).items;
+            render();
+            $('waFab').href = waLink();
+            if (location.hash === '#messages') setTimeout(() => $('messages')?.scrollIntoView({ behavior: 'smooth' }), 200);
+        }
+        async function refreshUnread() {
+            try { MSGS = (await api('/api/parent?action=messages')).items; paintMessages(); paintNavBadge(); } catch (e) { }
+        }
+
+        // ---------- render ----------
+        function render() {
+            const d = DATA, c = d.child, s = d.summary, first = c.firstName;
+            const others = ME.children.length > 1 ? `<div class="kids" role="tablist" aria-label="الأبناء">${ME.children.map(k => `<button class="kid ${k.studentId === sid ? 'on' : ''}" data-kid="${esc(k.studentId)}"><span class="av">${esc((k.firstName || '?').slice(0, 1))}</span>${esc(kidName(k))} <small class="en">${esc(k.gradeLabel)}</small></button>`).join('')}</div>` : '';
+            const urgent = d.alerts.closingSoon.length ? `<div class="urgent" role="alert"><div class="ic">⏰</div><div>
+                    <b>امتحان «<span dir="auto">${esc(d.alerts.closingSoon[0].name)}</span>» هيقفل خلال ${hrs(d.alerts.closingSoon[0].hoursLeft)} و${esc(first)} لسه ${g('ماحلّوش', 'ماحلّتهوش')}</b>
+                    <span>فكّر${g('ه', 'ها')} يحل${g('', 'ّ')} الامتحان من حساب${g('ه', 'ها')} قبل ما يقفل.</span>
+                    ${d.alerts.closingSoon.length > 1 ? `<span class="more">+ ${d.alerts.closingSoon.length - 1} امتحان تاني هيقفل خلال يوم</span>` : ''}</div></div>` : '';
+            const pct = s.overallPct, ringC = 2 * Math.PI * 52;
+            const rankTxt = s.ranked && s.rank ? `<span class="chip-w">🏅 الترتيب #${s.rank} من ${s.gradeSize}</span>` : `<span class="chip-w">🏅 لسه مش ${g('مترتب', 'مترتبة')} (${P(s.participation)} من الامتحانات)</span>`;
+            $('app').innerHTML = `<div id="top" class="sec"></div>${others}${urgent}
+                <section class="pp-hero">
+                    <div class="pp-hgrid">
+                        <div>
+                            <h1>أهلاً بيك يا ولي أمر ${esc(first)}! 👋</h1>
+                            <p class="en-hello en" dir="ltr">Welcome, ${esc(first)}'s parent</p>
+                            <div class="meta">
+                                <span class="chip-w en" dir="ltr">${esc(c.gradeLabel)}${c.branch ? ' · ' + (c.branch === 'center' ? 'Center' : 'Private') : ''}</span>
+                                ${rankTxt}
+                                <span class="chip-w en" dir="ltr" title="كود الطالب">${esc(c.studentId)}</span>
+                            </div>
+                        </div>
+                        <div class="ring" aria-label="المستوى العام ${P(pct)}">
+                            <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="10"/>
+                                <circle cx="60" cy="60" r="52" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-dasharray="${ringC}" stroke-dashoffset="${ringC * (1 - (pct || 0) / 100)}" style="transition:stroke-dashoffset 1s ease"/></svg>
+                            <div class="lbl"><b>${pct === null ? '—' : Math.round(pct) + '%'}</b><small>${s.level ? LEVEL[s.level] : 'المستوى العام'}</small></div>
+                        </div>
+                    </div>
+                </section>
+                <div class="install-cta"><span data-icon="download"></span><div><b>ثبّت بوابة ولي الأمر على موبايلك</b><small>عشان توصلك الإشعارات أول بأول — الدرجات، الامتحانات، ورسائل مس مروة.</small></div><button class="btn btn-primary btn-sm" data-install>تثبيت</button></div>
+
+                <div class="kpis">
+                    ${kpi('award', 'الترتيب على الصف', s.ranked && s.rank ? `#${s.rank} <small>من ${s.gradeSize}</small>` : '—', s.centerRank ? `#${s.centerRank} في امتحانات السنتر` : 'محتاج يحل 60% من الامتحانات'.replace('يحل', g('يحل', 'تحل')), null)}
+                    ${kpi('check', 'الحضور في السنتر', s.attendanceRate === null ? '—' : s.attendanceRate + '%', `${g('حضر', 'حضرت')} ${s.centerTaken} · ${g('غاب', 'غابت')} ${s.centerAbsent}`, s.attendanceRate)}
+                    ${kpi('building', 'امتحانات السنتر', P(s.centerPct), `متوسط ${s.centerTaken} امتحان`, s.centerPct)}
+                    ${kpi('clipboard', 'امتحانات الأونلاين', P(s.onlinePct), `${g('حل', 'حلت')} ${s.onlineTaken} · ${g('فاته', 'فاتها')} ${s.onlineMissed}`, s.onlinePct)}
                 </div>
-                <div class="sec"><h2>امتحانات السنتر</h2>${d.center.length ? d.center.map(r => row(r)).join('') : '<p class="row" style="color:var(--muted)">لسه مفيش درجات.</p>'}</div>
-                <div class="sec"><h2>الامتحانات الأونلاين</h2>${d.online.length ? d.online.map(r => row(r, true)).join('') : '<p class="row" style="color:var(--muted)">لسه مفيش امتحانات.</p>'}</div>
-                <p class="note">الصفحة دي بتتحدث لوحدها مع كل درجة جديدة — احفظ الرابط عندك.<br>الرابط ده خاص بيكم، يا ريت ما يتبعتش لحد تاني.</p>
-                <p style="text-align:center;margin-top:14px"><a class="btn btn-wa" href="${WA}" target="_blank" rel="noopener">عندك سؤال؟ كلّم مس مروة على واتساب</a></p>`;
+
+                <div class="grid2">
+                    <section class="card2"><h2>${icon('chart')}تطور المستوى<span class="side">كل امتحان بالترتيب</span></h2>
+                        <div class="legend"><span><i style="background:var(--primary)"></i>السنتر</span><span><i style="background:#F59E0B"></i>الأونلاين</span></div>
+                        ${chart(d.trend)}
+                    </section>
+                    <section class="card2"><h2>${icon('target')}الخلاصة</h2>
+                        ${d.insights.strengths.length ? `<div class="ins-h">نقاط القوة</div><ul class="ins good">${d.insights.strengths.map(t => `<li><span class="e">✅</span><span dir="auto">${esc(t)}</span></li>`).join('')}</ul>` : ''}
+                        ${d.insights.watch.length ? `<div class="ins-h">محتاج متابعة</div><ul class="ins bad">${d.insights.watch.map(t => `<li><span class="e">⚠️</span><span dir="auto">${esc(t)}</span></li>`).join('')}</ul>` : '<p class="muted" style="margin:6px 0 0">مفيش حاجة تقلق دلوقتي 👌</p>'}
+                    </section>
+                </div>
+
+                ${d.alerts.missed.length || d.alerts.open.length || d.alerts.closingSoon.length ? `<section class="card2" style="margin-top:16px">
+                    <h2>${icon('alert')}امتحانات ${g('فاتته', 'فاتتها')} أو لسه مفتوحة</h2>
+                    ${d.alerts.missed.length ? `<div class="missed">${d.alerts.missed.map(m => `<span class="mx">${m.kind === 'center' ? '🏫' : '💻'} <span dir="auto">${esc(m.name)}</span> <small>${m.why === 'absent' ? g('غاب', 'غابت') : m.why === 'opened' ? 'فتحه ومسلّمش' : g('ماحلّوش', 'ماحلّتهوش')} · ${fmtD(m.date)}</small></span>`).join('')}</div>` : ''}
+                    ${[...d.alerts.closingSoon, ...d.alerts.open].map(o => `<div class="open-x"><span>💻 <b dir="auto">${esc(o.name)}</b> — مفتوح ولسه ${g('ماحلّوش', 'ماحلّتهوش')}</span><span class="st ${o.hoursLeft <= 24 ? 'missed' : 'open'}">يقفل خلال ${hrs(o.hoursLeft)}</span></div>`).join('')}
+                </section>` : ''}
+
+                <section class="card2 sec" id="grades" style="margin-top:16px">
+                    <h2>${icon('clipboard')}كل الدرجات<span class="side"><div class="tabs" id="tabs"><button data-t="center" class="${tab === 'center' ? 'on' : ''}">السنتر (${d.center.length})</button><button data-t="online" class="${tab === 'online' ? 'on' : ''}">الأونلاين (${d.online.length})</button></div></span></h2>
+                    <div class="hist" id="hist"></div>
+                </section>
+
+                <div class="grid2">
+                    <section class="card2 sec" id="messages"><h2>${icon('mail')}رسائل مس مروة<span class="side"><button class="btn btn-primary btn-sm" id="newMsg">${icon('plus', 'sm')}رسالة جديدة</button></span></h2><div id="msgList"></div></section>
+                    <section class="card2"><h2>${icon('book')}الجديد على المنصة لـ <span class="en" dir="ltr">${esc(c.gradeLabel)}</span></h2>
+                        <div class="lessons">${d.lessons.length ? d.lessons.map(l => `<a href="${esc(/^https?:/.test(l.url || '') ? l.url : '#')}" target="_blank" rel="noopener"><span dir="auto">${l.category === 'videos' ? '🎬' : l.category === 'exams' ? '📝' : '📄'} ${esc(l.title)}</span><small>${fmtD(l.at)}</small></a>`).join('') : '<p class="muted" style="margin:0">لسه مفيش دروس جديدة.</p>'}</div>
+                    </section>
+                </div>
+                <p class="foot-note">آخر تحديث: ${new Date(d.updatedAt).toLocaleString('ar-EG', { hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short' })} · البيانات للمتابعة فقط</p>`;
+            Site.hydrateIcons && Site.hydrateIcons($('app'));
+            if (window.PWA && PWA.bind) PWA.bind($('app'));
+            paintHist(); paintMessages(); paintNavBadge();
         }
+        const hrs = (h) => (h < 1 ? 'أقل من ساعة' : h < 24 ? `${Math.round(h)} ساعة` : `${Math.round(h / 24)} يوم`);
+        const kpi = (ic, label, val, sub, bar) => `<div class="kpi"><div class="top">${icon(ic)}${label}</div><div class="v">${val}</div><div class="s">${sub}</div>${bar !== null && bar !== undefined ? `<div class="pbar"><i style="width:${Math.max(2, Math.min(100, bar))}%;background:${tone(bar)}"></i></div>` : ''}</div>`;
+        function chart(tr) {
+            const W = 560, H = 210, pl = 30, pr = 12, pt = 12, pb = 26;
+            const series = [['center', 'var(--primary)'], ['online', '#F59E0B']].filter(([k]) => tr[k].length);
+            if (!series.length) return '<p class="muted" style="margin:30px 0;text-align:center">الرسم هيظهر بعد أول امتحان.</p>';
+            const n = Math.max(...series.map(([k]) => tr[k].length));
+            const x = (i, len) => pl + (len <= 1 ? (W - pl - pr) / 2 : (i * (W - pl - pr)) / (len - 1));
+            const y = (p) => pt + (1 - p / 100) * (H - pt - pb);
+            let out = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="تطور الدرجات">`;
+            [0, 50, 100].forEach(v => { out += `<line class="gl" x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}"/><text x="2" y="${y(v) + 4}">${v}%</text>`; });
+            for (const [k, col] of series) {
+                const pts = tr[k].map((p, i) => [x(i, tr[k].length), y(Math.max(0, Math.min(100, p.pct)))]);
+                out += `<polyline fill="none" stroke="${col}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" points="${pts.map(p => p.join(',')).join(' ')}"/>`;
+                out += tr[k].map((p, i) => `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="4" fill="var(--surface)" stroke="${col}" stroke-width="2.4"><title>${esc(p.name)} — ${Math.round(p.pct)}%</title></circle>`).join('');
+            }
+            return out + `<text x="${pl}" y="${H - 6}">الأقدم</text><text x="${W - pr - 34}" y="${H - 6}">الأحدث</text></svg>`;
+        }
+        function paintHist() {
+            const d = DATA, rows = tab === 'center' ? d.center : d.online;
+            $('hist').innerHTML = rows.length ? rows.map(r => {
+                const st = r.status === 'taken' ? '' : r.status === 'absent' ? `<span class="st absent">${g('غاب', 'غابت')}</span>` : r.status === 'missed' ? `<span class="st missed">${g('ماحلّوش', 'ماحلّتهوش')}</span>` : r.status === 'opened' ? '<span class="st opened">فتحه ومسلّمش</span>' : '<span class="st open">لسه مفتوح</span>';
+                return `<div class="hrow"><div class="nm"><b dir="auto">${esc(r.name)}</b><small>${fmtD(r.date)}</small></div>
+                    <div class="sc">${r.status === 'taken' ? `${Math.round(r.pct)}%<small>${r.score} / ${r.total}</small>` : st}</div>
+                    ${r.status === 'taken' ? `<div class="pbar"><i style="width:${Math.max(2, r.pct)}%;background:${tone(r.pct)}"></i></div>` : ''}</div>`;
+            }).join('') : `<p class="muted" style="margin:10px 0">لسه مفيش امتحانات ${tab === 'center' ? 'سنتر' : 'أونلاين'}.</p>`;
+        }
+        function paintMessages() {
+            if (!$('msgList')) return;
+            const mine = MSGS.filter(m => m.studentId === sid);
+            $('msgList').innerHTML = mine.length ? mine.map(m => `<button class="msg-item" data-th="${m.id}"><img src="/assets/img/marwa-160.png" alt=""><span style="min-width:0"><b>${m.kind === 'announcement' ? '📣 إعلان من مس مروة' : 'مس مروة'}</b><div class="pv" dir="auto">${m.lastFromMe ? 'أنت: ' : ''}${esc(m.preview)}</div></span>${m.unread ? `<span class="nb">${m.unread}</span>` : `<small class="muted">${fmtD(m.at)}</small>`}</button>`).join('')
+                : `<p class="muted" style="margin:0 0 4px">مفيش رسائل لسه. تقدر تبعت لمس مروة أي استفسار بخصوص ${esc(DATA.child.firstName)}.</p>`;
+        }
+        function paintNavBadge() {
+            const n = MSGS.reduce((a, m) => a + (m.unread || 0), 0);
+            $('navMsg').querySelector('.nb')?.remove();
+            if (n) $('navMsg').insertAdjacentHTML('beforeend', `<span class="nb">${n}</span>`);
+            try { if (navigator.setAppBadge) navigator.setAppBadge(n); } catch (e) { }
+        }
+
+        // ---------- events ----------
+        $('app').addEventListener('click', async (e) => {
+            const k = e.target.closest('[data-kid]');
+            if (k && k.dataset.kid !== sid) { sid = k.dataset.kid; $('app').style.opacity = '.55'; try { await api('/api/parent?action=switch', { studentId: sid }); await loadChild(); } catch (x) { Site.toast(x.message, 'error'); } $('app').style.opacity = ''; return; }
+            const t = e.target.closest('[data-t]'); if (t) { tab = t.dataset.t; document.querySelectorAll('#tabs [data-t]').forEach(b => b.classList.toggle('on', b === t)); paintHist(); return; }
+            const th = e.target.closest('[data-th]'); if (th) return openChat(Number(th.dataset.th));
+            if (e.target.closest('#newMsg')) { const ch = MSGS.find(m => m.studentId === sid && m.kind === 'chat'); return openChat(ch ? ch.id : null); }   // continue the existing chat
+        });
+
+        // ---------- chat with Miss Marwa ----------
+        async function openChat(id) {
+            openThreadId = id;
+            $('chat').classList.add('open'); $('chat').setAttribute('aria-hidden', 'false');
+            $('chatSub').textContent = `بخصوص ${kidName(DATA.child)} · ${DATA.child.gradeLabel}`;
+            $('chatBody').innerHTML = '<p class="muted">جاري التحميل…</p>';
+            let msgs = [];
+            if (id) { try { msgs = (await api('/api/parent?action=thread&id=' + id)).messages; } catch (e) { msgs = []; } }
+            paintChat(msgs);
+            K.composer($('chatFoot'), {
+                placeholder: 'اكتب رسالتك لمس مروة…', sendLabel: 'إرسال', icon: Site.icon, toast: Site.toast,
+                onSend: async ({ text, image, audio }) => {
+                    const r = await api('/api/parent?action=send', { id: openThreadId, sid, text, image, audio });
+                    openThreadId = r.id; paintChat(r.messages); refreshUnread();
+                }
+            });
+            refreshUnread();
+        }
+        function paintChat(msgs) {
+            $('chatBody').innerHTML = msgs.length ? msgs.map(m => K.bubble(m, 'parent', Site.icon)).join('') : '<p class="muted" style="text-align:center;margin:30px 0">اكتب سؤالك أو استفسارك — هيوصل لمس مروة والتيم وهيردّوا عليك هنا.</p>';
+            $('chatBody').scrollTop = $('chatBody').scrollHeight;
+        }
+        const closeChat = () => { $('chat').classList.remove('open'); $('chat').setAttribute('aria-hidden', 'true'); };
+        $('chatClose').addEventListener('click', closeChat);
+        $('chat').addEventListener('click', (e) => { if (e.target === $('chat')) closeChat(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeChat(); });
+
+        // ---------- sign out ----------
+        $('logoutBtn').addEventListener('click', () => Site.sheet({ iconName: 'logout', title: 'تسجيل خروج؟', subtitle: 'هتحتاج رقمك ورقم الطالب عشان تدخل تاني.',
+            actions: [{ label: 'تسجيل خروج', cls: 'btn-danger', onClick: async (close) => { close(); try { await fetch('/api/parent?action=logout', { method: 'POST' }); } catch (e) { } try { localStorage.removeItem('parent_signed_in'); } catch (e) { }
+                (window.OneSignalDeferred || []).push(async (OS) => { try { await OS.logout(); } catch (e) { } }); setTimeout(() => location.replace('/login.html?as=parent'), 150); } }, { label: 'إلغاء', cls: 'btn-ghost' }] }));
+
+        // ---------- notifications (OneSignal: this phone = "parent-<number>", tagged with each child's grade) ----------
+        const permission = () => (typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
+        const paintBell = () => $('bellBtn').classList.toggle('off', permission() !== 'granted');
+        function loadOneSignal() {
+            window.OneSignalDeferred = window.OneSignalDeferred || [];
+            if (!document.querySelector('script[data-onesignal]')) { const sc = document.createElement('script'); sc.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js'; sc.defer = true; sc.dataset.onesignal = '1'; document.head.appendChild(sc); }
+            OneSignalDeferred.push(async (OS) => {
+                try {
+                    await OS.init({ appId: 'a5d058a6-b45e-46a5-aa86-014309b7c7d2', notifyButton: { enable: false } });
+                    if (OS.User.externalId !== ME.alias) await OS.login(ME.alias);
+                    const tags = { parent: ME.alias.replace('parent-', '') };
+                    ['prep1', 'prep2', 'prep3', 'sec1'].forEach(gr => { if (ME.grades.includes(gr)) tags['pg_' + gr] = '1'; });
+                    await OS.User.addTags(tags);
+                    const drop = ['prep1', 'prep2', 'prep3', 'sec1'].filter(gr => !ME.grades.includes(gr)).map(gr => 'pg_' + gr);
+                    if (drop.length) await OS.User.removeTags(drop);
+                    OS.Notifications.addEventListener('permissionChange', paintBell);
+                } catch (e) { }
+                paintBell();
+            });
+            paintBell();
+        }
+        $('bellBtn').addEventListener('click', () => {
+            const p = permission();
+            const test = async (close) => { close(); try { const r = await api('/api/parent?action=push-test', {}); Site.toast(r.sent || r.viaTag ? 'اتبعت إشعار تجربة — هيوصل خلال ثواني 🔔' : r.configured === false ? 'الإشعارات لسه مش متفعّلة على السيرفر.' : 'الموبايل ده لسه مش متسجّل — اعمل تحديث للصفحة وجرّب تاني.', r.sent || r.viaTag ? 'success' : 'error'); } catch (e) { Site.toast(e.message, 'error'); } };
+            if (p === 'granted') return Site.sheet({ iconName: 'bell', tone: 'success', title: 'الإشعارات شغالة ✅', subtitle: 'هيوصلك إشعار لما تنزل درجات، أو امتحان جديد، أو امتحان هيقفل قبل ما ابنك/بنتك يحله، أو رسالة من مس مروة.', actions: [{ label: 'ابعت إشعار تجربة', icon: 'bell', onClick: test }, { label: 'تمام', cls: 'btn-ghost' }] });
+            if (p === 'denied') return Site.sheet({ iconName: 'bell', tone: 'danger', title: 'الإشعارات مقفولة', html: '<p class="muted" style="margin:0;line-height:1.8">افتح إعدادات الموبايل ← التطبيقات ← المتصفح أو «ولي الأمر» ← الإشعارات ← سماح، وبعدين ارجع هنا.</p>', actions: [{ label: 'تمام', cls: 'btn-ghost' }] });
+            if (p === 'unsupported') return Site.sheet({ iconName: 'bell', title: 'ثبّت التطبيق الأول', html: '<p class="muted" style="margin:0;line-height:1.8">على الآيفون: من Safari دوس <b>مشاركة</b> ← <b>إضافة إلى الشاشة الرئيسية</b>، وافتح «ولي الأمر» من الشاشة الرئيسية، وبعدين فعّل الإشعارات.</p>', actions: [{ label: 'تمام', cls: 'btn-ghost' }] });
+            Site.sheet({ iconName: 'bell', title: 'فعّل الإشعارات', subtitle: 'عشان يوصلك أول ما الدرجات تنزل، أو امتحان هيقفل، أو مس مروة تبعتلك.',
+                actions: [{ label: 'تفعيل', icon: 'bell', onClick: (close) => { close(); (window.OneSignalDeferred = window.OneSignalDeferred || []).push(async (OS) => { try { await OS.Notifications.requestPermission(); } catch (e) { } paintBell(); }); } }, { label: 'مش دلوقتي', cls: 'btn-ghost' }] });
+        });
+
+        boot().catch(e => { if (e.message !== 'signed out') $('app').innerHTML = `<div class="loading"><div style="text-align:center"><p>${esc(e.message)}</p><button class="btn btn-primary" onclick="location.reload()">حاول تاني</button></div></div>`; });
     })();
     </script>
 </body>

@@ -99,9 +99,9 @@
         const today = new Date().toDateString() === d.toDateString();
         return d.toLocaleString('en-GB', today ? { hour: 'numeric', minute: '2-digit' } : { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
     }
-    // viewer: 'student' (own messages on the right) or 'staff' (staff messages on the right)
+    // viewer: 'student' / 'parent' (own messages on the right) or 'staff' (staff messages on the right)
     function bubble(m, viewer, icon) {
-        const mine = viewer === 'student' ? m.sender === 'student' : m.sender === 'staff';
+        const mine = viewer === 'student' ? m.sender === 'student' : viewer === 'parent' ? m.sender === 'parent' : m.sender === 'staff';
         const fromTeam = m.sender === 'staff' || m.sender === 'auto';
         // photo and/or voice note (older messages only have mediaId + mediaKind)
         const image = m.image || (m.mediaKind === 'image' ? m.mediaId : null);
@@ -109,7 +109,7 @@
         const media = (image ? `<a class="ask-img" href="${mediaUrl(image)}" target="_blank" rel="noopener"><img src="${mediaUrl(image)}" alt="Photo" loading="lazy"></a>` : '')
             + (m.removed || []).map(k => `<div class="ask-removed">${k === 'image' ? '📷 Photo' : '🎤 Voice note'} removed to save space</div>`).join('')
             + (audio ? `<div class="ask-audio">${icon ? icon('mic', 'sm') : ''}<audio controls preload="none" src="${mediaUrl(audio.id)}"></audio>${audio.seconds ? `<span class="ask-dur">${mmss(audio.seconds)}</span>` : ''}</div>` : '');
-        const who = m.sender === 'auto' ? 'Science Academy' : m.sender === 'staff' ? (m.staffName || 'Miss Marwa') : '';
+        const who = m.sender === 'auto' ? 'Science Academy' : m.sender === 'staff' ? (m.staffName || 'Miss Marwa') : m.sender === 'parent' && viewer === 'staff' ? 'Parent · ولي الأمر' : '';
         return `<div class="ask-row ${mine ? 'mine' : 'theirs'} ${m.sender}">
             ${!mine && fromTeam ? `<img class="ask-av" src="${m.sender === 'auto' ? '/assets/img/logo-96.png' : '/assets/img/marwa-160.png'}" alt="">` : ''}
             <div class="ask-bubble">

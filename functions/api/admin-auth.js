@@ -171,7 +171,7 @@ export async function ensureAppSchema(db) {
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_id TEXT NOT NULL, grade TEXT NOT NULL, unit INTEGER NOT NULL, lesson INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'waiting', waiting_since TEXT DEFAULT CURRENT_TIMESTAMP,
         student_unread INTEGER NOT NULL DEFAULT 0, staff_unread INTEGER NOT NULL DEFAULT 1,
-        bank_text TEXT, bank_hidden INTEGER NOT NULL DEFAULT 0, resolved_by TEXT, exported_at TEXT, origin TEXT, broadcast_id INTEGER,
+        bank_text TEXT, bank_hidden INTEGER NOT NULL DEFAULT 0, resolved_by TEXT, exported_at TEXT, origin TEXT, broadcast_id INTEGER, audience TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_grade ON ask_questions(grade, status, waiting_since)');
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_student ON ask_questions(student_id, updated_at)');
@@ -193,12 +193,23 @@ export async function ensureAppSchema(db) {
         // a message to a grade / group); unit 0 + lesson 0 = not about a lesson ("سؤال خارج المنهج" or her messages)
         if (aq.length && !aq.includes('origin')) steps.push('ALTER TABLE ask_questions ADD COLUMN origin TEXT');
         if (aq.length && !aq.includes('broadcast_id')) steps.push('ALTER TABLE ask_questions ADD COLUMN broadcast_id INTEGER');
+        // 18 Nov 2026: Parent Portal — chats with a student's PARENT live in the same tables, audience = 'parent'
+        // (students never see them; NULL = the student's own chats)
+        if (aq.length && !aq.includes('audience')) steps.push('ALTER TABLE ask_questions ADD COLUMN audience TEXT');
     }
     steps.push(`CREATE TABLE IF NOT EXISTS ask_broadcasts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, grade TEXT, branch TEXT, group_id INTEGER, label TEXT, staff_name TEXT, text TEXT,
         media_id INTEGER, media_kind TEXT, media_seconds REAL, audio_id INTEGER, audio_seconds REAL, recipients INTEGER NOT NULL DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_bc ON ask_questions(broadcast_id)');
+    steps.push("ALTER TABLE ask_broadcasts ADD COLUMN audience TEXT");
+    // Parent Portal (18 Nov 2026): one row per parent phone (last 10 digits). session_key changes on every sign-in,
+    // so only the newest device stays signed in.
+    steps.push(`CREATE TABLE IF NOT EXISTS parents (
+        phone TEXT PRIMARY KEY, session_key TEXT, active_student TEXT, device TEXT, last_login_at TEXT, logins INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    // "exam closes soon and not taken yet" reminders — sent once per exam per student
+    steps.push(`CREATE TABLE IF NOT EXISTS exam_reminders (exam_id TEXT NOT NULL, student_id TEXT NOT NULL, kind TEXT NOT NULL, sent_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (exam_id, student_id, kind))`);
     // Small key/value store for housekeeping (e.g. when the 30-day media clean-up last ran)
     steps.push(`CREATE TABLE IF NOT EXISTS app_kv ("key" TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
     steps.push(`CREATE TABLE IF NOT EXISTS ask_media (
@@ -390,6 +401,22 @@ export async function studentCookieFor(env, studentId, version, deviceId) {
     if (!secret) return null;
     const token = await createToken({ sid: studentId, v: version || 1, d: deviceId || undefined, iat: Date.now(), exp: Date.now() + STUDENT_DAYS * 864e5 }, secret);
     return `${STUDENT_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${STUDENT_DAYS * 86400}`;
+}
+// ---------- Parent sessions (Parent Portal, 18 Nov 2026) ----------
+// Signed HttpOnly cookie { pp: parent phone (last 10 digits), k: session key }. The key must match parents.session_key,
+// which is replaced on every sign-in → one device at a time.
+const PARENT_COOKIE = 'parent_session';
+const PARENT_DAYS = 90;
+const parentSecret = (env) => { const s = getTokenSecret(env); return s ? s + '|parent-session' : null; };
+export async function parentCookieFor(env, phone, key) {
+    const secret = parentSecret(env); if (!secret) return null;
+    const token = await createToken({ pp: phone, k: key, iat: Date.now(), exp: Date.now() + PARENT_DAYS * 864e5 }, secret);
+    return `${PARENT_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${PARENT_DAYS * 86400}`;
+}
+export const CLEAR_PARENT_COOKIE = `${PARENT_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
+export async function readParentCookie(request, env) {
+    const secret = parentSecret(env); if (!secret) return null;
+    return readToken(parseCookies(request.headers.get('Cookie'))[PARENT_COOKIE], secret);
 }
 export const CLEAR_STUDENT_COOKIE = `${STUDENT_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
 export function studentSessionsEnabled(env) { return !!studentSecret(env); }

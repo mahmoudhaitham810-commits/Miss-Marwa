@@ -1,4 +1,5 @@
 import { requireStaff, audit, auditStmt, ensureAppSchema } from './admin-auth.js';
+import { notifyGrades } from './parent-notify.js';
 
 // ============================================================
 // Center / private (paper) exams
@@ -227,6 +228,9 @@ export async function onRequestPost(context) {
             // Only changed cells are written and logged (old → new), all in one batch
             if (changes.length) statements.push(auditStmt(db, request, staff, 'offline.save-grades', examId, { examName: exam.exam_name, changes }));
             if (statements.length > 0) await db.batch(statements);
+            // Parent Portal: tell the parents of students who just got a mark / absence (once per exam per student)
+            const marked = changes.filter(c => c.to !== null && c.to !== '').map(c => c.s);
+            if (marked.length) notifyGrades(context, env, db, { examId, examName: exam.exam_name }, marked, new URL(request.url).origin);
 
             return Response.json({ success: true, changed: changes.length });
         }

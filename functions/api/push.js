@@ -74,7 +74,9 @@ export async function pushTo(env, db, who, { title, message, url, data = null })
 export async function pushToGrade(env, db, grade, { title, message, url }) {
     if (!pushConfigured(env)) return { ok: false, reason: 'NOT_CONFIGURED' };
     try {
-        const target = grade ? { filters: [{ field: 'tag', key: 'grade', relation: '=', value: String(grade).toUpperCase() }] } : { included_segments: ['Subscribed Users'] };
+        // students of that grade (tag grade = PREP1) + parents with a child in it (tag pg_prep1 = 1)
+        const g = String(grade || '').toLowerCase();
+        const target = grade ? { filters: [{ field: 'tag', key: 'grade', relation: '=', value: g.toUpperCase() }, { operator: 'OR' }, { field: 'tag', key: 'pg_' + g, relation: '=', value: '1' }] } : { included_segments: ['Subscribed Users'] };
         const r = await post(env, { headings: { en: title, ar: title }, contents: { en: message, ar: message }, ...(url ? { url } : {}), ...target });
         const out = { ok: r.status < 400, status: r.status, id: r.data && r.data.id || null, errors: r.data && r.data.errors || null };
         await remember(db, { ...out, title, grade });
@@ -82,6 +84,8 @@ export async function pushToGrade(env, db, grade, { title, message, url }) {
     } catch (e) { return { ok: false, reason: String(e && e.message || e) }; }
 }
 export const students = (ids) => ids.map(id => ({ alias: studentAlias(id), tag: ['sid', id] }));
+export const parentAlias = (phone) => `parent-${phone}`;
+export const parents = (phones) => phones.map(p => ({ alias: parentAlias(p), tag: ['parent', p] }));
 export const staffList = (ids) => ids.map(id => ({ alias: staffAlias(id), tag: ['staff', id] }));
 
 /** Every active staff member who answers questions (teacher + assistants) */

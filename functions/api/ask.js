@@ -11,9 +11,11 @@
 // voice ≈ 15 KB per 10 s) and stored through media-store.js: Cloudflare R2 (binding MEDIA) when connected,
 // otherwise D1. Older files (table ask_media) are moved into R2 in the background.
 // =============================================================
-import { requireStaff, requireStudent, ensureAppSchema, auditStmt } from './admin-auth.js';
+import { requireStaff, requireStudent, ensureAppSchema, auditStmt, normalizeEgyptPhone } from './admin-auth.js';
 import { putMedia, mediaInfo, mediaResponse, deleteMedia, migrateToR2, mediaStats, registerLegacy } from './media-store.js';
-import { pushTo, students as pushStudents, staffList, inboxStaffIds, background, pushConfigured, CLIENT_APP_ID, studentAlias, staffAlias } from './push.js';
+import { pushTo, students as pushStudents, staffList, parents as pushParents, inboxStaffIds, background, pushConfigured, CLIENT_APP_ID, studentAlias, staffAlias } from './push.js';
+import { parentFromRequest } from './parent-session.js';
+import { closingSweep } from './parent-notify.js';
 
 function getDb(env) { return [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function'); }
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
@@ -128,7 +130,15 @@ const pushStudent = (env, db, origin, studentId, title, message, q) => pushTo(en
 async function pushStaff(env, db, origin, title, message, q) {
     return pushTo(env, db, staffList(await inboxStaffIds(db)), { title, message, url: origin + '/admin/inbox.html' + (q ? '?q=' + q : '') });
 }
-const topicLabel = (q) => (q.unit ? `Unit ${q.unit} · Lesson ${q.lesson}` : q.origin === 'staff' || q.origin === 'broadcast' ? 'Message from Miss Marwa' : 'General question · سؤال خارج المنهج');
+// a message from Miss Marwa to a student's parent → the parent's devices
+async function pushParentOf(env, db, origin, studentId, text, q) {
+    const st = await db.prepare('SELECT first_name, parent_phone FROM students WHERE student_id = ?').bind(studentId).first();
+    const phone = st && normalizeEgyptPhone(st.parent_phone);
+    if (!phone) return null;
+    return pushTo(env, db, pushParents([phone]), { title: 'Miss Marwa 💬', message: text ? `مس مروة: ${text.slice(0, 120)}` : `مس مروة بعتتلك رسالة بخصوص ${st.first_name || 'ابنك'}`, url: origin + '/parent.html#messages' });
+}
+export { decodeAttachments, saveAttachments, insertMsg, messagesOf, cleanText, hasAtt, pushStaff, lazyPurge };
+const topicLabel = (q) => (q.audience === 'parent' ? 'Parent chat · ولي الأمر' : q.unit ? `Unit ${q.unit} · Lesson ${q.lesson}` : q.origin === 'staff' || q.origin === 'broadcast' ? 'Message from Miss Marwa' : 'General question · سؤال خارج المنهج');
 
 const msgOut = (m) => {
     const image = m.media_kind === 'image' && m.media_id ? m.media_id : null;
@@ -168,12 +178,18 @@ export async function onRequest(context) {
             const row = id ? await mediaInfo(db, id) : null;
             if (!row || row.kind !== 'ask') return new Response('Not found', { status: 404 });
             const staff = await requireStaff(request, env, 'inbox.reply');
-            if (staff.error) {
+            const parent = staff.error ? await parentFromRequest(request, env, db) : null;
+            if (parent) {      // a parent: only files in the parent chats of THEIR children
+                const kids = parent.children.map(c => c.studentId);
+                const ok = kids.length && await db.prepare(`SELECT 1 as ok FROM ask_messages m JOIN ask_questions q ON q.id = m.question_id
+                    WHERE (m.media_id = ? OR m.audio_id = ?) AND q.audience = 'parent' AND q.student_id IN (${kids.map(() => '?').join(',')}) LIMIT 1`).bind(id, id, ...kids).first();
+                if (!ok) return new Response('Forbidden', { status: 403 });
+            } else if (staff.error) {
                 const who = await requireStudent(request, env, db, null);
                 if (who.error) return new Response('Forbidden', { status: 403 });
                 if (who.id !== row.student_id) {       // a file Miss Marwa sent to many students (broadcast) is stored once
                     const mine = await db.prepare(`SELECT 1 as ok FROM ask_messages m JOIN ask_questions q ON q.id = m.question_id
-                        WHERE (m.media_id = ? OR m.audio_id = ?) AND q.student_id = ? LIMIT 1`).bind(id, id, who.id).first();
+                        WHERE (m.media_id = ? OR m.audio_id = ?) AND q.student_id = ? AND q.audience IS NULL LIMIT 1`).bind(id, id, who.id).first();
                     if (!mine) return new Response('Forbidden', { status: 403 });
                 }
             }
@@ -190,14 +206,15 @@ export async function onRequest(context) {
 
             // Waiting questions per grade (menu badge)
             if (action === 'counts') {
+                closingSweep(context, env, db, url.origin);   // staff portal polls this → keeps the "closes soon" reminders going
                 const { results } = await db.prepare("SELECT grade, COUNT(*) as c FROM ask_questions WHERE status = 'waiting' GROUP BY grade").all();
                 const waiting = Object.fromEntries(GRADES.map(g => [g, ((results || []).find(c => c.grade === g) || {}).c || 0]));
-                const last = await db.prepare(`SELECT m.id, m.question_id as q, m.text, m.media_kind as kind, s.first_name as f, s.last_name as l, q.grade
+                const last = await db.prepare(`SELECT m.id, m.question_id as q, m.text, m.media_kind as kind, m.sender, s.first_name as f, s.last_name as l, q.grade
                     FROM ask_messages m JOIN ask_questions q ON q.id = m.question_id LEFT JOIN students s ON s.student_id = q.student_id
-                    WHERE m.sender = 'student' ORDER BY m.id DESC LIMIT 1`).first();
+                    WHERE m.sender IN ('student', 'parent') ORDER BY m.id DESC LIMIT 1`).first();
                 const unread = await db.prepare('SELECT COALESCE(SUM(staff_unread), 0) as c FROM ask_questions').first();
                 return json({ waiting, total: Object.values(waiting).reduce((a, b) => a + b, 0), unread: (unread && unread.c) || 0,
-                    latest: last ? { id: last.id, questionId: last.q, name: `${last.f || ''} ${last.l || ''}`.trim(), grade: last.grade, text: String(last.text || (last.kind === 'image' ? '📷 Photo' : last.kind === 'audio' ? '🎤 Voice note' : '')).slice(0, 90) } : null });
+                    latest: last ? { id: last.id, questionId: last.q, name: (last.sender === 'parent' ? 'ولي أمر ' : '') + `${last.f || ''} ${last.l || ''}`.trim(), parent: last.sender === 'parent', grade: last.grade, text: String(last.text || (last.kind === 'image' ? '📷 Photo' : last.kind === 'audio' ? '🎤 Voice note' : '')).slice(0, 90) } : null });
             }
 
             // Queue: per grade, oldest waiting first (FIFO)
@@ -206,28 +223,32 @@ export async function onRequest(context) {
                 const grade = GRADES.includes(url.searchParams.get('grade')) ? url.searchParams.get('grade') : 'prep1';
                 const status = ['waiting', 'answered', 'all'].includes(url.searchParams.get('status')) ? url.searchParams.get('status') : 'waiting';
                 const where = status === 'waiting' ? "q.status = 'waiting'" : status === 'answered' ? "q.status IN ('answered','resolved')" : '1=1';
+                const audience = url.searchParams.get('audience') === 'parent' ? 'parent' : 'student';      // Students | Parents
+                const AUD = audience === 'parent' ? "q.audience = 'parent'" : 'q.audience IS NULL';
                 const order = status === 'waiting' ? 'q.waiting_since ASC, q.id ASC'
                     : status === 'answered' ? 'q.updated_at DESC, q.id DESC'
                         : "CASE WHEN q.status = 'waiting' THEN 0 ELSE 1 END, CASE WHEN q.status = 'waiting' THEN q.waiting_since END ASC, q.updated_at DESC";
                 const { results } = await db.prepare(
                     `SELECT q.*, s.first_name, s.last_name, s.gender, s.branch,
-                        (SELECT text FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'student' ORDER BY m.id LIMIT 1) as first_text,
+                        (SELECT text FROM ask_messages m WHERE m.question_id = q.id AND m.sender IN ('student', 'parent') ORDER BY m.id LIMIT 1) as first_text,
                         (SELECT media_kind FROM ask_messages m WHERE m.question_id = q.id AND m.sender != 'auto' ORDER BY m.id DESC LIMIT 1) as last_kind,
                         (SELECT text FROM ask_messages m WHERE m.question_id = q.id AND m.sender != 'auto' ORDER BY m.id DESC LIMIT 1) as last_text,
                         (SELECT sender FROM ask_messages m WHERE m.question_id = q.id AND m.sender != 'auto' ORDER BY m.id DESC LIMIT 1) as last_sender
                      FROM ask_questions q LEFT JOIN students s ON s.student_id = q.student_id
-                     WHERE q.grade = ? AND ${where}
-                       AND (q.origin IS NULL OR q.origin <> 'broadcast' OR EXISTS (SELECT 1 FROM ask_messages x WHERE x.question_id = q.id AND x.sender = 'student'))
+                     WHERE q.grade = ? AND ${where} AND ${AUD}
+                       AND (q.origin IS NULL OR q.origin <> 'broadcast' OR EXISTS (SELECT 1 FROM ask_messages x WHERE x.question_id = q.id AND x.sender IN ('student', 'parent')))
                      ORDER BY ${order} LIMIT 300`
                 ).bind(grade).all();
-                const { results: counts } = await db.prepare("SELECT grade, COUNT(*) as c FROM ask_questions WHERE status = 'waiting' GROUP BY grade").all();
+                const { results: counts } = await db.prepare(`SELECT grade, COUNT(*) as c FROM ask_questions q WHERE status = 'waiting' AND ${AUD} GROUP BY grade`).all();
+                const pw = await db.prepare("SELECT COUNT(*) as c FROM ask_questions WHERE status = 'waiting' AND audience = 'parent'").first();
+                const sw = await db.prepare("SELECT COUNT(*) as c FROM ask_questions WHERE status = 'waiting' AND audience IS NULL").first();
                 return json({
-                    grade, status,
+                    grade, status, audience, waitingBy: { students: (sw && sw.c) || 0, parents: (pw && pw.c) || 0 },
                     waiting: Object.fromEntries(GRADES.map(g => [g, ((counts || []).find(c => c.grade === g) || {}).c || 0])),
                     items: (results || []).map(q => ({
                         id: q.id, studentId: q.student_id, firstName: q.first_name || '?', lastName: q.last_name || '', gender: q.gender, branch: q.branch,
                         unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, updatedAt: q.updated_at, bankHidden: !!q.bank_hidden,
-                        unread: q.staff_unread, preview: q.last_text || q.first_text || '', lastKind: q.last_kind, lastSender: q.last_sender, origin: q.origin || 'student'
+                        unread: q.staff_unread, preview: q.last_text || q.first_text || '', lastKind: q.last_kind, lastSender: q.last_sender, origin: q.origin || 'student', audience: q.audience || 'student'
                     }))
                 });
             }
@@ -241,8 +262,8 @@ export async function onRequest(context) {
                 if (q.staff_unread) await db.prepare('UPDATE ask_questions SET staff_unread = 0 WHERE id = ?').bind(id).run();
                 const asked = await db.prepare('SELECT COUNT(*) as c FROM ask_questions WHERE student_id = ?').bind(q.student_id).first();
                 return json({
-                    question: { id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, resolvedBy: q.resolved_by, grade: q.grade, bankHidden: !!q.bank_hidden, origin: q.origin || 'student', broadcastId: q.broadcast_id || null, label: topicLabel(q) },
-                    student: { studentId: q.student_id, firstName: q.first_name || '?', lastName: q.last_name || '', gender: q.gender, branch: q.branch, grade: q.grade, questionsAsked: (asked && asked.c) || 0 },
+                    question: { id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, waitingSince: q.waiting_since, createdAt: q.created_at, resolvedBy: q.resolved_by, grade: q.grade, bankHidden: !!q.bank_hidden, origin: q.origin || 'student', broadcastId: q.broadcast_id || null, label: topicLabel(q), audience: q.audience || 'student' },
+                    student: { studentId: q.student_id, firstName: q.first_name || '?', lastName: q.last_name || '', gender: q.gender, branch: q.branch, grade: q.grade, questionsAsked: (asked && asked.c) || 0, parentPhone: q.audience === 'parent' ? (q.parent_phone || null) : undefined },
                     messages: await messagesOf(db, id)
                 });
             }
@@ -250,7 +271,7 @@ export async function onRequest(context) {
             if (action === 'staff-reply') {
                 if (!isPost) return bad('POST only', 405);
                 const id = parseInt(data.id, 10);
-                const q = id ? await db.prepare('SELECT id, student_id FROM ask_questions WHERE id = ?').bind(id).first() : null;
+                const q = id ? await db.prepare('SELECT id, student_id, audience FROM ask_questions WHERE id = ?').bind(id).first() : null;
                 if (!q) return bad('السؤال غير موجود', 404);
                 const text = cleanText(data.text);
                 const att = decodeAttachments(data);
@@ -261,16 +282,17 @@ export async function onRequest(context) {
                     insertMsg(db, id, 'staff', staff.name, text, cols),
                     db.prepare("UPDATE ask_questions SET status = 'answered', waiting_since = NULL, student_unread = student_unread + 1, staff_unread = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(id)
                 ]);
-                await background(context, pushStudent(env, db, url.origin, q.student_id, 'Miss Marwa 💬', text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتتلك رسالة — افتح التطبيق وشوفها', id));
+                if (q.audience === 'parent') await background(context, pushParentOf(env, db, url.origin, q.student_id, text, id));
+                else await background(context, pushStudent(env, db, url.origin, q.student_id, 'Miss Marwa 💬', text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتتلك رسالة — افتح التطبيق وشوفها', id));
                 return json({ ok: true, messages: await messagesOf(db, id) });
             }
 
             // ---------- Miss Marwa starts a chat: who can she send to? ----------
             if (action === 'compose-targets') {
-                const { results: st } = await db.prepare(`SELECT student_id as id, first_name as f, last_name as l, grade, branch, group_id as g FROM students ORDER BY first_name, last_name`).all();
+                const { results: st } = await db.prepare(`SELECT student_id as id, first_name as f, last_name as l, grade, branch, group_id as g, parent_phone as pp FROM students ORDER BY first_name, last_name`).all();
                 const { results: gr } = await db.prepare(`SELECT id, grade, branch, name FROM student_groups WHERE active = 1 ORDER BY grade, name`).all().catch(() => ({ results: [] }));
                 const counts = {}; (st || []).forEach(x => { const k = `${x.grade}|${x.branch || ''}`; counts[k] = (counts[k] || 0) + 1; const g = `g|${x.g}`; if (x.g) counts[g] = (counts[g] || 0) + 1; });
-                return json({ students: (st || []).map(x => ({ id: x.id, name: `${x.f || ''} ${x.l || ''}`.trim(), grade: String(x.grade || '').toLowerCase(), branch: x.branch || null })),
+                return json({ students: (st || []).map(x => ({ id: x.id, name: `${x.f || ''} ${x.l || ''}`.trim(), grade: String(x.grade || '').toLowerCase(), branch: x.branch || null, hasParent: !!normalizeEgyptPhone(x.pp) })),
                     groups: (gr || []).map(g => ({ id: g.id, grade: g.grade, branch: g.branch, name: g.name, students: counts[`g|${g.id}`] || 0 })), counts });
             }
             // ---------- Miss Marwa sends: one student / a whole grade (+ Center / Private) / a group ----------
@@ -281,23 +303,28 @@ export async function onRequest(context) {
                 if (att.error) return bad(att.error);
                 if (!text && !hasAtt(att)) return bad('اكتبي الرسالة أو ابعتي صورة / رسالة صوتية');
                 const t = data.target || {};
+                const toParents = data.audience === 'parent';      // the students' PARENTS (Parent Portal)
+                const AUDV = toParents ? 'parent' : null;
                 if (t.kind === 'student') {
                     const st = await db.prepare('SELECT student_id, grade, first_name FROM students WHERE student_id = ?').bind(String(t.studentId || '')).first();
                     if (!st) return bad('الطالب غير موجود', 404);
                     // her direct chat with this student (one continuing chat, like WhatsApp)
-                    let q = await db.prepare(`SELECT id FROM ask_questions WHERE student_id = ? AND origin = 'staff' ORDER BY id DESC LIMIT 1`).bind(st.student_id).first();
+                    let q = toParents
+                        ? await db.prepare(`SELECT id FROM ask_questions WHERE student_id = ? AND audience = 'parent' AND origin IN ('staff', 'parent') ORDER BY id DESC LIMIT 1`).bind(st.student_id).first()
+                        : await db.prepare(`SELECT id FROM ask_questions WHERE student_id = ? AND origin = 'staff' AND audience IS NULL ORDER BY id DESC LIMIT 1`).bind(st.student_id).first();
                     let qid = q && q.id;
                     if (!qid) {
-                        const r = await db.prepare(`INSERT INTO ask_questions (student_id, grade, unit, lesson, status, waiting_since, student_unread, staff_unread, origin) VALUES (?, ?, 0, 0, 'answered', NULL, 0, 0, 'staff')`).bind(st.student_id, String(st.grade || '').toLowerCase()).run();
+                        const r = await db.prepare(`INSERT INTO ask_questions (student_id, grade, unit, lesson, status, waiting_since, student_unread, staff_unread, origin, audience) VALUES (?, ?, 0, 0, 'answered', NULL, 0, 0, 'staff', ?)`).bind(st.student_id, String(st.grade || '').toLowerCase(), AUDV).run();
                         qid = Number(r.meta.last_row_id);
                     }
-                    const cols = await saveAttachments(env, db, st.student_id, att);
+                    const cols = await saveAttachments(env, db, toParents ? 'parent-files' : st.student_id, att);
                     await db.batch([
                         insertMsg(db, qid, 'staff', staff.name, text, cols),
                         db.prepare("UPDATE ask_questions SET status = 'answered', waiting_since = NULL, student_unread = student_unread + 1, staff_unread = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(qid)
                     ]);
-                    await background(context, pushStudent(env, db, url.origin, st.student_id, 'Miss Marwa 💬', text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتتلك رسالة — افتح التطبيق وشوفها', qid));
-                    return json({ ok: true, kind: 'student', id: qid, recipients: 1 });
+                    if (toParents) await background(context, pushParentOf(env, db, url.origin, st.student_id, text, qid));
+                    else await background(context, pushStudent(env, db, url.origin, st.student_id, 'Miss Marwa 💬', text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتتلك رسالة — افتح التطبيق وشوفها', qid));
+                    return json({ ok: true, kind: 'student', id: qid, recipients: 1, audience: toParents ? 'parent' : 'student' });
                 }
                 // a broadcast: one copy per student (their own chat), the files stored once
                 let where = '', binds = [], label = '', grade = null, branch = null, groupId = null;
@@ -318,31 +345,35 @@ export async function onRequest(context) {
                 const cols = img ? { media_id: img, media_kind: 'image', media_seconds: null, audio_id: aud, audio_seconds: aud ? att.audio.seconds : null }
                     : aud ? { media_id: aud, media_kind: 'audio', media_seconds: att.audio.seconds, audio_id: null, audio_seconds: null }
                         : { media_id: null, media_kind: null, media_seconds: null, audio_id: null, audio_seconds: null };
-                const b = await db.prepare(`INSERT INTO ask_broadcasts (grade, branch, group_id, label, staff_name, text, media_id, media_kind, media_seconds, audio_id, audio_seconds, recipients)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(grade, branch, groupId, label, staff.name, text || null, cols.media_id, cols.media_kind, cols.media_seconds, cols.audio_id, cols.audio_seconds, ids.length).run();
+                const b = await db.prepare(`INSERT INTO ask_broadcasts (grade, branch, group_id, label, staff_name, text, media_id, media_kind, media_seconds, audio_id, audio_seconds, recipients, audience)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(grade, branch, groupId, label, staff.name, text || null, cols.media_id, cols.media_kind, cols.media_seconds, cols.audio_id, cols.audio_seconds, ids.length, AUDV).run();
                 const bid = Number(b.meta.last_row_id);
                 await db.batch([
-                    db.prepare(`INSERT INTO ask_questions (student_id, grade, unit, lesson, status, waiting_since, student_unread, staff_unread, origin, broadcast_id)
-                        SELECT student_id, LOWER(grade), 0, 0, 'answered', NULL, 1, 0, 'broadcast', ? FROM students WHERE ${where}`).bind(bid, ...binds),
+                    db.prepare(`INSERT INTO ask_questions (student_id, grade, unit, lesson, status, waiting_since, student_unread, staff_unread, origin, broadcast_id, audience)
+                        SELECT student_id, LOWER(grade), 0, 0, 'answered', NULL, 1, 0, 'broadcast', ?, ? FROM students WHERE ${where}`).bind(bid, AUDV, ...binds),
                     db.prepare(`INSERT INTO ask_messages (question_id, sender, staff_name, text, media_id, media_kind, media_seconds, audio_id, audio_seconds)
                         SELECT id, 'staff', ?, ?, ?, ?, ?, ?, ? FROM ask_questions WHERE broadcast_id = ?`).bind(staff.name, text || null, cols.media_id, cols.media_kind, cols.media_seconds, cols.audio_id, cols.audio_seconds, bid)
                 ]);
-                await auditStmt(db, request, staff, 'ask.broadcast', String(bid), { label, recipients: ids.length }).run();
-                await background(context, pushTo(env, db, pushStudents(ids), { title: 'Miss Marwa 📣', message: text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتت رسالة جديدة — افتح التطبيق وشوفها', url: url.origin + '/questions.html' }));
-                return json({ ok: true, kind: 'broadcast', broadcastId: bid, recipients: ids.length });
+                await auditStmt(db, request, staff, 'ask.broadcast', String(bid), { label, recipients: ids.length, audience: AUDV || 'students' }).run();
+                if (toParents) {
+                    const { results: pp } = await db.prepare(`SELECT DISTINCT parent_phone FROM students WHERE ${where}`).bind(...binds).all();
+                    const phones = [...new Set((pp || []).map(r => normalizeEgyptPhone(r.parent_phone)).filter(Boolean))];
+                    await background(context, pushTo(env, db, pushParents(phones), { title: 'Miss Marwa 📣', message: text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتت رسالة جديدة لأولياء الأمور', url: url.origin + '/parent.html#messages' }));
+                } else await background(context, pushTo(env, db, pushStudents(ids), { title: 'Miss Marwa 📣', message: text ? `مس مروة: ${text.slice(0, 120)}` : 'مس مروة بعتت رسالة جديدة — افتح التطبيق وشوفها', url: url.origin + '/questions.html' }));
+                return json({ ok: true, kind: 'broadcast', broadcastId: bid, recipients: ids.length, audience: AUDV || 'student' });
             }
             // Her broadcasts: who saw it, who replied
             if (action === 'broadcasts') {
                 const { results } = await db.prepare(`SELECT b.*,
                         (SELECT COUNT(*) FROM ask_questions q WHERE q.broadcast_id = b.id AND q.student_unread = 0) as seen,
-                        (SELECT COUNT(DISTINCT q.id) FROM ask_questions q JOIN ask_messages m ON m.question_id = q.id AND m.sender = 'student' WHERE q.broadcast_id = b.id) as replied
+                        (SELECT COUNT(DISTINCT q.id) FROM ask_questions q JOIN ask_messages m ON m.question_id = q.id AND m.sender IN ('student', 'parent') WHERE q.broadcast_id = b.id) as replied
                     FROM ask_broadcasts b ORDER BY b.id DESC LIMIT 50`).all();
-                return json({ items: (results || []).map(b => ({ id: b.id, grade: b.grade, branch: b.branch, groupId: b.group_id, label: b.label, staffName: b.staff_name, text: b.text || '', kind: b.media_kind || null, hasAudio: !!(b.audio_id || b.media_kind === 'audio'), recipients: b.recipients, seen: b.seen, replied: b.replied, at: b.created_at })) });
+                return json({ items: (results || []).map(b => ({ id: b.id, grade: b.grade, branch: b.branch, groupId: b.group_id, label: b.label, staffName: b.staff_name, text: b.text || '', kind: b.media_kind || null, hasAudio: !!(b.audio_id || b.media_kind === 'audio'), recipients: b.recipients, seen: b.seen, replied: b.replied, at: b.created_at, audience: b.audience || 'student' })) });
             }
             if (action === 'broadcast') {
                 const bid = parseInt(url.searchParams.get('id'), 10);
                 const { results } = await db.prepare(`SELECT q.id, q.student_id, q.student_unread, s.first_name as f, s.last_name as l,
-                        (SELECT COUNT(*) FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'student') as replies
+                        (SELECT COUNT(*) FROM ask_messages m WHERE m.question_id = q.id AND m.sender IN ('student', 'parent')) as replies
                     FROM ask_questions q LEFT JOIN students s ON s.student_id = q.student_id WHERE q.broadcast_id = ? ORDER BY replies DESC, s.first_name`).bind(bid || 0).all();
                 return json({ items: (results || []).map(r => ({ questionId: r.id, studentId: r.student_id, name: `${r.f || ''} ${r.l || ''}`.trim(), seen: !r.student_unread, replies: r.replies })) });
             }
@@ -432,11 +463,11 @@ export async function onRequest(context) {
                 const sid = url.searchParams.get('studentId');
                 if (sid) {
                     const r = await db.prepare(`SELECT COUNT(*) as c, MAX(created_at) as last,
-                        SUM(CASE WHEN created_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) as recent FROM ask_questions WHERE student_id = ?`).bind(sid).first();
+                        SUM(CASE WHEN created_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) as recent FROM ask_questions WHERE student_id = ? AND audience IS NULL AND origin IS NULL`).bind(sid).first();
                     return json({ count: (r && r.c) || 0, last: r && r.last, recent30: (r && r.recent) || 0 });
                 }
                 const grade = GRADES.includes(url.searchParams.get('grade')) ? url.searchParams.get('grade') : 'prep1';
-                const { results } = await db.prepare('SELECT student_id, COUNT(*) as c FROM ask_questions WHERE grade = ? GROUP BY student_id').bind(grade).all();
+                const { results } = await db.prepare('SELECT student_id, COUNT(*) as c FROM ask_questions WHERE grade = ? AND audience IS NULL AND origin IS NULL GROUP BY student_id').bind(grade).all();
                 return json({ counts: Object.fromEntries((results || []).map(r => [r.student_id, r.c])) });
             }
 
@@ -460,7 +491,7 @@ export async function onRequest(context) {
             return json({ ok: r.ok, sent: r.sent, viaTag: r.viaTag, reason: r.reason || null, configured: pushConfigured(env) });
         }
         if (action === 'unread') {
-            const r = await db.prepare('SELECT COALESCE(SUM(student_unread), 0) as c FROM ask_questions WHERE student_id = ?').bind(sid).first();
+            const r = await db.prepare('SELECT COALESCE(SUM(student_unread), 0) as c FROM ask_questions WHERE student_id = ? AND audience IS NULL').bind(sid).first();
             return json({ unread: (r && r.c) || 0 });
         }
 
@@ -471,7 +502,7 @@ export async function onRequest(context) {
                     (SELECT COUNT(*) FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'staff') as replies,
                     (SELECT text FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'staff' ORDER BY m.id DESC LIMIT 1) as staff_text,
                     (SELECT media_kind FROM ask_messages m WHERE m.question_id = q.id AND m.sender = 'staff' ORDER BY m.id DESC LIMIT 1) as staff_kind
-                 FROM ask_questions q WHERE q.student_id = ? ORDER BY q.unit, q.lesson, q.updated_at DESC, q.id DESC`
+                 FROM ask_questions q WHERE q.student_id = ? AND q.audience IS NULL ORDER BY q.unit, q.lesson, q.updated_at DESC, q.id DESC`
             ).bind(sid).all();
             return json({
                 units: ASK_UNITS, lessons: ASK_LESSONS,
@@ -481,7 +512,7 @@ export async function onRequest(context) {
 
         if (action === 'thread') {
             const id = parseInt(url.searchParams.get('id'), 10);
-            const q = id ? await db.prepare('SELECT * FROM ask_questions WHERE id = ? AND student_id = ?').bind(id, sid).first() : null;
+            const q = id ? await db.prepare('SELECT * FROM ask_questions WHERE id = ? AND student_id = ? AND audience IS NULL').bind(id, sid).first() : null;
             if (!q) return bad('السؤال غير موجود', 404);
             if (q.student_unread) await db.prepare('UPDATE ask_questions SET student_unread = 0 WHERE id = ?').bind(id).run();
             return json({ question: { id: q.id, unit: q.unit, lesson: q.lesson, status: q.status, createdAt: q.created_at, origin: q.origin || 'student', label: topicLabel(q) }, messages: await messagesOf(db, id) });
@@ -494,7 +525,7 @@ export async function onRequest(context) {
             if (att.error) return bad(att.error);
             if (!text && !hasAtt(att)) return bad('اكتب سؤالك أو ابعت صورة أو رسالة صوتية');
             const today = await db.prepare(
-                `SELECT (SELECT COUNT(*) FROM ask_questions WHERE student_id = ? AND created_at >= datetime('now','-1 day')) as q,
+                `SELECT (SELECT COUNT(*) FROM ask_questions WHERE student_id = ? AND audience IS NULL AND origin IS NULL AND created_at >= datetime('now','-1 day')) as q,
                         (SELECT COUNT(*) FROM ask_messages m JOIN ask_questions q ON q.id = m.question_id WHERE q.student_id = ? AND m.sender = 'student' AND m.created_at >= datetime('now','-1 day')) as m`
             ).bind(sid, sid).first();
             if (today && today.m >= MAX_MESSAGES_PER_DAY) return bad('وصلت لأقصى عدد رسائل النهارده — كمّل بكرة', 429, { code: 'DAILY_LIMIT' });
@@ -519,7 +550,7 @@ export async function onRequest(context) {
 
             // follow-up in the same question
             const id = parseInt(data.id, 10);
-            const q = id ? await db.prepare('SELECT id, status FROM ask_questions WHERE id = ? AND student_id = ?').bind(id, sid).first() : null;
+            const q = id ? await db.prepare('SELECT id, status FROM ask_questions WHERE id = ? AND student_id = ? AND audience IS NULL').bind(id, sid).first() : null;
             if (!q) return bad('السؤال غير موجود', 404);
             const cols = await saveAttachments(env, db, sid, att);
             await background(context, pushStaff(env, db, url.origin, `رسالة من ${who.firstName || ''} ${who.lastName || ''}`.trim() + ' 💬', `${GRADE_EN[who.grade] || who.grade}${text ? ' — ' + text.slice(0, 100) : att.image ? ' — 📷 صورة' : ' — 🎤 رسالة صوتية'}`, id));

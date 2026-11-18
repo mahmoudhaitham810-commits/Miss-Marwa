@@ -74,6 +74,7 @@
         .sent-row .pv { color: var(--muted); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .sent-row .st { text-align: end; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
         .more-menu { position: relative; }
+        .aud-seg .cnt { margin-inline-start: 6px; background: var(--danger); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 800; padding: 1px 7px; }
         /* Question bank */
         .pick-grid { display: grid; gap: 8px; }
         .pick-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
@@ -128,6 +129,7 @@
             <!-- ========== Inbox ========== -->
             <section id="inboxView">
                 <div class="toolbar sticky-bar">
+                    <div class="segmented aud-seg" id="audSeg"><button data-value="student">Students</button><button data-value="parent">Parents · أولياء الأمور</button></div>
                     <div class="segmented grade-tabs" id="gradeTabs"></div>
                     <div class="segmented" id="statusSeg"><button data-value="waiting">Waiting</button><button data-value="all">All</button><button data-value="answered">Answered</button></div>
                 </div>
@@ -182,7 +184,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
-    <script src="/assets/ask.js?v=20261118b"></script>
+    <script src="/assets/ask.js?v=20261118c"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -192,6 +194,7 @@
         const K = AskKit;
         const qs = new URLSearchParams(location.search);
         let view = ['bank', 'sent'].includes(qs.get('view')) ? qs.get('view') : 'inbox';
+        let aud = qs.get('aud') === 'parent' ? 'parent' : 'student';      // Students | Parents (Parent Portal)
         let grade = A.store.get('inbox_grade', 'prep1'), status = 'waiting', items = [], waiting = {}, openId = parseInt(qs.get('q'), 10) || null, thread = null;
         const toast = (m, t) => Site.toast(m, t);
 
@@ -209,13 +212,16 @@
         }
         $('gradeTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-g]'); if (!b) return; grade = b.dataset.g; A.store.set('inbox_grade', grade); loadList(); });
         A.segmented($('statusSeg'), status, (v) => { status = v; loadList(); });
+        A.segmented($('audSeg'), aud, (v) => { aud = v; openId = null; $('split').classList.remove('thread-open'); $('tpane').innerHTML = ''; history.replaceState(null, '', location.pathname + (aud === 'parent' ? '?aud=parent' : '')); loadList(); });
 
         async function loadList(quiet) {
             if (!quiet) $('qlist').innerHTML = '<div class="skel" style="height:300px;border-radius:14px"></div>';
-            let d; try { d = await api(`/api/ask?action=inbox&grade=${grade}&status=${status}`); } catch (e) { $('qlist').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
+            let d; try { d = await api(`/api/ask?action=inbox&grade=${grade}&status=${status}&audience=${aud}`); } catch (e) { $('qlist').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
             items = d.items; waiting = d.waiting; gradeTabs();
             const total = Object.values(waiting).reduce((a, b) => a + b, 0);
-            $('headLine').innerHTML = total ? `<b>${total}</b> question${total === 1 ? '' : 's'} waiting · oldest first` : 'All caught up — no one is waiting 🎉';
+            $('headLine').innerHTML = total ? `<b>${total}</b> ${aud === 'parent' ? 'parent message' : 'question'}${total === 1 ? '' : 's'} waiting · oldest first` : 'All caught up — no one is waiting 🎉';
+            // waiting counts on the Students / Parents switch
+            $('audSeg').querySelectorAll('[data-value]').forEach(b => { b.querySelector('.cnt')?.remove(); const n = d.waitingBy && d.waitingBy[b.dataset.value === 'parent' ? 'parents' : 'students']; if (n) b.insertAdjacentHTML('beforeend', `<span class="cnt">${n}</span>`); });
             renderList();
         }
         function renderList() {
@@ -229,8 +235,8 @@
                 const pv = q.preview ? esc(q.preview) : q.lastKind === 'image' ? '📷 Photo' : q.lastKind === 'audio' ? '🎤 Voice note' : '';
                 return `<button class="qi ${q.id === openId ? 'on' : ''}" data-id="${q.id}">
                     <span class="avatar">${A.initials({ firstName: q.firstName })}</span>
-                    <span style="min-width:0"><b dir="auto">${esc(q.firstName)} ${esc(q.lastName)}</b><span class="pv" dir="auto">${q.lastSender === 'staff' ? 'You: ' : ''}${pv}</span></span>
-                    <span class="side"><span class="ul-tag">${q.unit ? `U${q.unit} · L${q.lesson}` : q.origin === 'broadcast' ? '📣 Reply' : q.origin === 'staff' ? 'Chat' : 'General'}</span>${q.bankHidden ? '<span class="nb-tag" title="Not important — left out of the Question bank">Not important</span>' : ''}
+                    <span style="min-width:0"><b dir="auto">${q.audience === 'parent' ? '👪 ولي أمر ' : ''}${esc(q.firstName)} ${esc(q.lastName)}</b><span class="pv" dir="auto">${q.lastSender === 'staff' ? 'You: ' : ''}${pv}</span></span>
+                    <span class="side"><span class="ul-tag">${q.audience === 'parent' ? (q.origin === 'broadcast' ? '📣 Reply' : 'Parent') : q.unit ? `U${q.unit} · L${q.lesson}` : q.origin === 'broadcast' ? '📣 Reply' : q.origin === 'staff' ? 'Chat' : 'General'}</span>${q.bankHidden ? '<span class="nb-tag" title="Not important — left out of the Question bank">Not important</span>' : ''}
                         ${q.status === 'waiting' ? `<span class="wait ${hrs >= 24 ? 'long' : ''}">Waiting ${w}</span>` : `<span class="small muted">${q.status === 'resolved' ? 'Resolved' : 'Answered'}</span>`}
                         ${q.unread ? '<span class="udot" title="New message"></span>' : ''}</span></button>`;
             }).join('');
@@ -247,6 +253,8 @@
             // A question opened from a link/notification may belong to another grade: switch the tabs to it,
             // so "Mark resolved" / Reopen updates the list you're actually looking at (it used to look like it vanished)
             const qg = thread.question && thread.question.grade;
+            const qa = thread.question && thread.question.audience === 'parent' ? 'parent' : 'student';
+            if (qa !== aud) { aud = qa; $('audSeg').querySelectorAll('[data-value]').forEach(b => b.classList.toggle('active', b.dataset.value === aud)); if (!(qg && qg !== grade)) loadList(true); }
             if (qg && qg !== grade && A.GRADES[qg]) { grade = qg; A.store.set('inbox_grade', grade); loadList(true); }
             const it = items.find(x => x.id === id); if (it) { it.unread = 0; renderList(); }
             renderThread(true);
@@ -257,8 +265,8 @@
             $('tpane').innerHTML = `
                 <div class="thead">
                     <button class="icon-btn" id="backList" aria-label="Back to the list" style="display:none">${icon('arrowLeft')}</button>
-                    <div class="who"><a href="/admin/student.html?id=${encodeURIComponent(s.studentId)}"><b dir="auto" style="font-size:17px">${esc(s.firstName)} ${esc(s.lastName)}</b></a>
-                        <div class="small muted">${esc(s.studentId)} · ${esc(A.GRADES[s.grade] || s.grade)}${s.branch ? ' · ' + A.BRANCHES[s.branch] : ''} · <span class="pill ${eg.tone}">${eg.label} · ${eg.n}</span></div></div>
+                    <div class="who"><a href="/admin/student.html?id=${encodeURIComponent(s.studentId)}"><b dir="auto" style="font-size:17px">${q.audience === 'parent' ? '👪 ولي أمر ' : ''}${esc(s.firstName)} ${esc(s.lastName)}</b></a>
+                        <div class="small muted">${esc(s.studentId)} · ${esc(A.GRADES[s.grade] || s.grade)}${s.branch ? ' · ' + A.BRANCHES[s.branch] : ''} · ${q.audience === 'parent' ? `<span class="pill">Parent Portal${s.parentPhone ? ' · ' + esc(s.parentPhone) : ''}</span>` : `<span class="pill ${eg.tone}">${eg.label} · ${eg.n}</span>`}</div></div>
                     <span class="ul-tag" style="font-size:13px">${esc(q.label || `Unit ${q.unit} · Lesson ${q.lesson}`)}</span>
                     ${q.status === 'resolved'
                         ? `<button class="btn btn-ghost btn-sm" id="reopenBtn">${icon('refresh', 'sm')}Reopen</button>`
@@ -276,7 +284,7 @@
                     const d = await api('/api/ask?action=staff-reply', { body: { id: q.id, text, image, audio } });
                     thread.messages = d.messages; q.status = 'answered';
                     renderThread(true);
-                    toast('Reply sent — the student gets a notification ✅', 'success');
+                    toast(q.audience === 'parent' ? 'Reply sent — the parent gets a notification ✅' : 'Reply sent — the student gets a notification ✅', 'success');
                     loadList(true);
                 }
             });
@@ -317,18 +325,20 @@
         $('newMsgBtn').addEventListener('click', () => openCompose());
         async function openCompose(preset = {}) {
             let T; try { T = await targets(); } catch (e) { return toast(e.message, 'error'); }
-            let mode = preset.mode || 'student', pick = preset.studentId ? T.students.find(x => x.id === preset.studentId) || null : null, g = grade, br = 'all', grp = null;
+            let mode = preset.mode || 'student', pick = preset.studentId ? T.students.find(x => x.id === preset.studentId) || null : null, g = grade, br = 'all', grp = null, who = preset.audience || aud;
             const close = Site.sheet({ iconName: 'send', title: 'New message', subtitle: 'Text, a photo or a voice note — like WhatsApp.',
-                html: `<div class="segmented to-seg" id="toSeg"><button data-value="student">One student</button><button data-value="grade">A whole grade</button>${T.groups.length ? '<button data-value="group">A group</button>' : ''}</div>
+                html: `<div class="segmented to-seg" id="toWho"><button data-value="student">To students</button><button data-value="parent">To parents · أولياء الأمور</button></div>
+                    <div class="segmented to-seg" id="toSeg"><button data-value="student">One student</button><button data-value="grade">A whole grade</button>${T.groups.length ? '<button data-value="group">A group</button>' : ''}</div>
                     <div class="to-pane" id="toPane"></div><div id="toSum" class="to-sum small"></div><div id="sendComposer" style="margin-top:10px"></div>` });
             const sheetEl = document.querySelector('.overlay:last-of-type .sheet');
             const q$ = (id) => sheetEl.querySelector('#' + id);
-            const count = () => mode === 'grade' ? T.students.filter(x => x.grade === g && (br === 'all' || x.branch === br)).length : mode === 'group' ? (grp ? grp.students : 0) : (pick ? 1 : 0);
+            const count = () => mode === 'grade' ? T.students.filter(x => x.grade === g && (br === 'all' || x.branch === br) && (who !== 'parent' || x.hasParent)).length : mode === 'group' ? (grp ? grp.students : 0) : (pick ? 1 : 0);
             const summary = () => {
                 const n = count();
-                q$('toSum').innerHTML = mode === 'student' ? (pick ? `To: <b dir="auto">${esc(pick.name)}</b> · ${esc(A.GRADES[pick.grade] || '')}` : '<span class="muted">Search for the student above</span>')
-                    : mode === 'grade' ? `📣 To <b>${n}</b> student${n === 1 ? '' : 's'} · ${esc(A.GRADES[g])}${br !== 'all' ? ' · ' + A.BRANCHES[br] : ''} <span class="muted">— each gets it in their own chat</span>`
-                        : grp ? `📣 To <b>${n}</b> student${n === 1 ? '' : 's'} · ${esc(grp.name)}` : '<span class="muted">Pick a group</span>';
+                const P = who === 'parent';
+                q$('toSum').innerHTML = mode === 'student' ? (pick ? `To: <b dir="auto">${P ? 'ولي أمر ' : ''}${esc(pick.name)}</b> · ${esc(A.GRADES[pick.grade] || '')}${P && !pick.hasParent ? ' <span class="pill danger">no parent phone</span>' : ''}` : '<span class="muted">Search for the student above</span>')
+                    : mode === 'grade' ? `📣 To <b>${n}</b> ${P ? 'parent' : 'student'}${n === 1 ? '' : 's'} · ${esc(A.GRADES[g])}${br !== 'all' ? ' · ' + A.BRANCHES[br] : ''} <span class="muted">— each gets it in their own chat${P ? ' (Parent Portal)' : ''}</span>`
+                        : grp ? `📣 To <b>${n}</b> ${P ? 'parent' : 'student'}${n === 1 ? '' : 's'} · ${esc(grp.name)}` : '<span class="muted">Pick a group</span>';
             };
             const paneStudent = () => {
                 q$('toPane').innerHTML = `<div class="input"><input class="plain" id="toSearch" placeholder="Search by name or code (Arabic or English)…" autocomplete="off" value="${pick ? esc(pick.name) : ''}"></div><div class="to-results" id="toRes"></div>`;
@@ -353,6 +363,7 @@
             };
             const pane = () => { (mode === 'student' ? paneStudent : mode === 'grade' ? paneGrade : paneGroup)(); summary(); };
             A.segmented(q$('toSeg'), mode, (v) => { mode = v; pane(); });
+            A.segmented(q$('toWho'), who, (v) => { who = v; summary(); });
             pane();
             K.composer(q$('sendComposer'), {
                 placeholder: 'Write your message… (or a photo / voice note)', sendLabel: 'Send', icon, toast,
@@ -361,10 +372,11 @@
                     if (!target) throw new Error(mode === 'student' ? 'Pick the student first' : 'Pick a group first');
                     const n = count();
                     if (target.kind !== 'student' && n > 1 && !confirm(`Send this to ${n} students?`)) throw new Error('Not sent');
-                    const d = await api('/api/ask?action=staff-send', { body: { target, text, image, audio } });
+                    const d = await api('/api/ask?action=staff-send', { body: { target, text, image, audio, audience: who } });
                     close();
-                    toast(d.kind === 'student' ? 'Sent ✅ — they get a notification' : `Sent to ${d.recipients} students ✅ — each in their own chat`, 'success');
+                    toast(d.kind === 'student' ? 'Sent ✅ — they get a notification' : `Sent to ${d.recipients} ${who === 'parent' ? 'parents' : 'students'} ✅ — each in their own chat`, 'success');
                     if (d.kind === 'student') {
+                        if (aud !== who) $('audSeg').querySelector(`[data-value="${who}"]`).click();
                         if (view !== 'inbox') $('viewSeg').querySelector('[data-value="inbox"]').click();
                                                 if (status !== 'all') $('statusSeg').querySelector('[data-value="all"]').click();
                         await loadList(true); openThread(d.id);
@@ -379,7 +391,7 @@
             let d; try { d = await api('/api/ask?action=broadcasts'); } catch (e) { $('sentList').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
             $('sentList').innerHTML = d.items.length ? d.items.map(b => `<button class="sent-row" data-b="${b.id}">
                     <span class="ic">📣</span>
-                    <span style="min-width:0"><b>${esc(b.groupId ? b.label : (A.GRADES[b.grade] || b.grade) + (b.branch ? ' · ' + A.BRANCHES[b.branch] : ''))}</b>
+                    <span style="min-width:0"><b>${b.audience === 'parent' ? '👪 Parents · ' : ''}${esc(b.groupId ? b.label : (A.GRADES[b.grade] || b.grade) + (b.branch ? ' · ' + A.BRANCHES[b.branch] : ''))}</b>
                         <div class="pv" dir="auto">${b.text ? esc(b.text) : b.kind === 'image' ? '📷 Photo' : b.hasAudio ? '🎤 Voice note' : ''}</div></span>
                     <span class="st">${esc(A.fmtDate ? A.fmtDate(b.at) : String(b.at).slice(0, 10))}<br>👁 ${b.seen}/${b.recipients} · 💬 ${b.replied}</span></button>`).join('')
                 : `<div class="empty-state" style="padding:30px 10px"><div class="bubble">${icon('send', 'lg')}</div><h3>Nothing sent yet</h3><p>Tap <b>New message</b> to send to a grade, a group or one student.</p></div>`;

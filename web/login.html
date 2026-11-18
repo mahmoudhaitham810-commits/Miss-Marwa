@@ -9,7 +9,8 @@
         try {
             var s = JSON.parse(localStorage.getItem('student_session') || 'null');
             if (s && (s.role === 'admin' || s.grade === 'all' || String(s.id).toUpperCase() === 'MM-ADMIN')) localStorage.removeItem('student_session');
-            else if (s && s.id) location.replace('/home.html');
+            else if (s && s.id && !/[?&]as=parent/.test(location.search)) location.replace('/home.html');
+            if (localStorage.getItem('parent_signed_in') === '1' && /[?&]as=parent/.test(location.search) && !/[?&]reason=/.test(location.search)) location.replace('/parent.html');
         } catch (e) { }
     </script>
     <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
@@ -23,6 +24,21 @@
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/student.css">
     <link rel="stylesheet" href="/assets/site.css">
+    <style>
+        .role-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 6px; border-radius: 18px; background: var(--surface-2, rgba(47, 91, 234, .06)); border: 1px solid var(--border); margin-bottom: 22px; }
+        .role-switch button { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 11px 10px; border-radius: 13px; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; transition: .2s; }
+        .role-switch button span:last-child { display: grid; text-align: start; line-height: 1.15; }
+        .role-switch button b { font-size: 15px; } .role-switch button small { font-size: 12.5px; }
+        .role-switch button[aria-selected="true"] { background: var(--surface); color: var(--primary); box-shadow: 0 6px 18px -10px rgba(15, 23, 42, .35); }
+        .role-switch .icon { width: 22px; height: 22px; }
+        #parentPane { font-family: 'IBM Plex Sans Arabic', Inter, sans-serif; }
+        .pp-title { margin: 0 0 6px; }
+        .pp-hint { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); margin: 4px 0 16px; line-height: 1.6; }
+        .pp-hint .icon { flex: none; margin-top: 3px; color: var(--success, #16a34a); }
+        .pp-wa { margin-top: 12px; }
+        .pp-wa.pulse { animation: ppPulse 1.4s ease 2; }
+        @keyframes ppPulse { 50% { transform: scale(1.03); box-shadow: 0 0 0 6px rgba(37, 211, 102, .18); } }
+    </style>
 </head>
 <body class="site">
     <div class="auth">
@@ -51,6 +67,12 @@
             </div>
 
             <div class="auth-card">
+                <!-- Who's signing in? (18 Nov 2026) -->
+                <div class="role-switch reveal" id="roleSwitch" role="tablist" aria-label="Who is signing in">
+                    <button type="button" role="tab" data-role="student" aria-selected="true"><span data-icon="graduation" style="display:contents"></span><span><b>Student</b><small class="ar">طالب</small></span></button>
+                    <button type="button" role="tab" data-role="parent" aria-selected="false"><span data-icon="users" style="display:contents"></span><span><b>Parent</b><small class="ar">ولي أمر</small></span></button>
+                </div>
+                <div id="studentPane">
                 <h1 class="reveal">Sign in</h1>
                 <p class="sub reveal">Use the student code you got when you signed up.</p>
 
@@ -80,6 +102,34 @@
 
                 <p class="auth-foot reveal">New here? <a href="/signup.html">Create a free account</a></p>
                 <p class="auth-foot reveal" style="margin-top:8px;font-size:14px"><a href="#" id="waHelp" style="font-weight:600;color:var(--muted)" target="_blank" rel="noopener">Need help? Message us on WhatsApp</a></p>
+                </div>
+
+                <!-- ===== Parent Portal sign-in ===== -->
+                <div id="parentPane" hidden dir="rtl" lang="ar">
+                    <h1 class="pp-title">بوابة ولي الأمر</h1>
+                    <p class="sub">تابع درجات ابنك أو بنتك، الحضور، والامتحانات أول بأول — من غير باسورد.</p>
+                    <div class="notice danger form-error" id="pError" role="alert"><span data-icon="alert"></span><span id="pErrorText"></span></div>
+                    <form id="parentForm" novalidate>
+                        <div class="field" id="fPP">
+                            <label for="pPhone">رقم موبايلك <small class="muted">(رقم ولي الأمر)</small></label>
+                            <div class="input"><span data-icon="phone" style="display:contents"></span>
+                                <input id="pPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx" maxlength="16" dir="ltr">
+                            </div>
+                            <span class="msg"></span>
+                        </div>
+                        <div class="field" id="fSP">
+                            <label for="sPhone">رقم موبايل الطالب</label>
+                            <div class="input"><span data-icon="user" style="display:contents"></span>
+                                <input id="sPhone" type="tel" inputmode="tel" autocomplete="off" placeholder="01xxxxxxxxx" maxlength="16" dir="ltr">
+                            </div>
+                            <span class="msg"></span>
+                        </div>
+                        <p class="pp-hint"><span data-icon="shield" data-icon-class="sm" style="display:contents"></span>نفس الأرقام اللي الطالب سجّل بيها على المنصة. الحساب بيشتغل على موبايل واحد بس للخصوصية.</p>
+                        <button class="btn btn-primary btn-lg btn-block btn-glow" id="pSubmit" type="submit">دخول</button>
+                    </form>
+                    <a class="btn btn-wa btn-block pp-wa" id="pWa" href="#" target="_blank" rel="noopener"><span data-icon="whatsapp" style="display:contents"></span>محتاج مساعدة؟ كلّمنا على واتساب</a>
+                    <p class="auth-foot" style="margin-top:10px">طالب؟ <a href="#" data-role-link="student">ادخل من هنا</a></p>
+                </div>
             </div>
         </main>
     </div>
@@ -90,6 +140,41 @@
     (function () {
         const $ = (id) => document.getElementById(id);
         Site.init();
+        // ---- Student / Parent switch ----
+        const setRole = (r, push) => {
+            document.querySelectorAll('#roleSwitch [data-role]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.role === r)));
+            $('studentPane').hidden = r !== 'student'; $('parentPane').hidden = r !== 'parent';
+            document.title = r === 'parent' ? 'بوابة ولي الأمر · Science Academy' : 'Sign in · Science Academy';
+            if (push) history.replaceState(null, '', r === 'parent' ? '?as=parent' : location.pathname);
+            setTimeout(() => (r === 'parent' ? $('pPhone') : (code.value ? pass : code)).focus({ preventScroll: true }), 60);
+        };
+        $('roleSwitch').addEventListener('click', (e) => { const b = e.target.closest('[data-role]'); if (b) setRole(b.dataset.role, true); });
+        document.querySelector('[data-role-link]').addEventListener('click', (e) => { e.preventDefault(); setRole('student', true); });
+        // ---- Parent sign-in: their phone + the child's phone ----
+        const pPhone = $('pPhone'), sPhone = $('sPhone'), pBtn = $('pSubmit'), pBtnHtml = pBtn.innerHTML;
+        const waText = () => `السلام عليكم، أنا ولي أمر طالب في Science Academy ومحتاج مساعدة في الدخول لبوابة ولي الأمر.\nرقمي: ${pPhone.value || '—'}\nرقم الطالب: ${sPhone.value || '—'}`;
+        const paintWa = () => { $('pWa').href = Site.waLink(waText()); };
+        try { const last = localStorage.getItem('parent_last_phone'); if (last) pPhone.value = last; } catch (e) { }
+        [pPhone, sPhone].forEach(i => i.addEventListener('input', () => { i.value = Site.normalizeDigits(i.value).replace(/[^\d+ ]/g, ''); i.closest('.field').classList.remove('err'); $('pError').classList.remove('show'); paintWa(); }));
+        paintWa();
+        const pErr = (msg) => { const b = $('pError'); b.classList.remove('show'); void b.offsetWidth; $('pErrorText').textContent = msg; b.classList.add('show'); $('pWa').classList.add('pulse'); };
+        const okPhone = (v) => /^01\d{9}$/.test(v.replace(/\D/g, '').replace(/^(0020|20)(?=1\d{9}$)/, '0').replace(/^(?=1\d{9}$)/, '0'));
+        $('parentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            let ok = true;
+            if (!okPhone(pPhone.value)) { $('fPP').classList.add('err'); $('fPP').querySelector('.msg').textContent = 'اكتب رقمك صح (11 رقم يبدأ بـ 01)'; ok = false; }
+            if (!okPhone(sPhone.value)) { $('fSP').classList.add('err'); $('fSP').querySelector('.msg').textContent = 'اكتب رقم الطالب صح (11 رقم يبدأ بـ 01)'; ok = false; }
+            if (!ok) return;
+            pBtn.disabled = true; pBtn.innerHTML = '<span class="spinner"></span>جاري الدخول…';
+            try {
+                const res = await fetch('/api/parent?action=login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parentPhone: pPhone.value, studentPhone: sPhone.value }) });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok || !d.ok) { pErr(d.error || 'حصلت مشكلة — جرّب تاني.'); pBtn.disabled = false; pBtn.innerHTML = pBtnHtml; return; }
+                try { localStorage.setItem('parent_last_phone', pPhone.value); localStorage.setItem('parent_signed_in', '1'); } catch (x) { }
+                pBtn.innerHTML = `${Site.icon('checkCircle')}أهلاً بيك!`;
+                setTimeout(() => location.replace('/parent.html'), 300);
+            } catch (x) { pErr('مفيش إنترنت — اتأكد من الاتصال وجرّب تاني.'); pBtn.disabled = false; pBtn.innerHTML = pBtnHtml; }
+        });
         Site.particles($('sideCanvas'), { density: .8, light: true, lineAlpha: .22 });
         $('waHelp').href = Site.waLink('Hello Miss Marwa, I need help signing in to Science Academy.');
         $('forgotBtn').addEventListener('click', Site.forgotPassword);
@@ -111,10 +196,13 @@
             actions: [{ label: 'Message the team on WhatsApp', icon: 'whatsapp', cls: 'btn-wa', href: 'https://wa.me/201003021917', external: true }, { label: 'OK', cls: 'btn-ghost' }]
         });
         if (qs.get('reason') === 'devices') setTimeout(() => deviceLimit(), 80);
+        if (qs.get('as') === 'parent') setRole('parent', false);
+        if (qs.get('reason') === 'replaced') setTimeout(() => pErr('اتعمل تسجيل دخول من موبايل تاني — بوابة ولي الأمر بتشتغل على جهاز واحد بس. لو ده موبايلك سجّل دخول تاني.'), 60);
+        if (qs.get('reason') === 'parent') setTimeout(() => pErr('سجّل دخول تاني من فضلك.'), 60);
         if (qs.get('reason') === 'session') {
             setTimeout(() => formError('For your security, please sign in again. · من فضلك سجّل دخول تاني.'), 50);
         }
-        (code.value ? pass : code).focus({ preventScroll: true });
+        if (qs.get('as') !== 'parent') (code.value ? pass : code).focus({ preventScroll: true });
 
         // Show / hide password
         $('eyeBtn').addEventListener('click', () => {

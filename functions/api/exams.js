@@ -1,4 +1,5 @@
 import { requireStaff, audit, auditStmt, ensureAppSchema, requireStudent, verifyStudentRequest, verifyAdminRequest } from './admin-auth.js';
+import { notifyOnlineResult, closingSweep } from './parent-notify.js';
 import { pushToGrade } from './push.js';
 
 // ── Timing rules shared by submit, review and reports ──
@@ -99,6 +100,7 @@ export async function onRequestGet(context) {
         if (db) await ensureAppSchema(db); // adds new columns once (cheap after the first call)
         // === تستخدمها لوحة الأدمن عشان تجيب كل الامتحانات ===
         if (action === 'list') {
+            closingSweep(context, env, db, url.origin);   // "exam closes soon, not taken" reminders (at most every 20 min)
             // ── حماية: أدمن بس ──
             const auth = await requireStaff(request, env, 'exams.view');
             if (auth.error) return auth.error;
@@ -116,6 +118,7 @@ export async function onRequestGet(context) {
         // === تستخدمها صفحة الطالب عشان تعرض الامتحانات المتاحة لمرحلته ===
         // بترجع بيانات الامتحان من غير الإجابات الصح، وبتقول حالة كل امتحان بالنسبالله
         if (action === 'list-for-student') {
+            closingSweep(context, env, db, url.origin);
             // The signed-in student sees their own grade with their own statuses.
             // Staff (Preview as student) may look at any grade, without statuses.
             let grade = (url.searchParams.get('grade') || '').toLowerCase();
@@ -632,7 +635,7 @@ export async function onRequestPost(context) {
             }
 
             const exam = await db.prepare(
-                "SELECT questions, expires_at, time_limit_minutes as timeLimitMinutes FROM exams WHERE id = ?"
+                "SELECT title, questions, expires_at, time_limit_minutes as timeLimitMinutes FROM exams WHERE id = ?"
             ).bind(examId).first();
             if (!exam) {
                 return Response.json({ error: 'الامتحان غير موجود' }, { status: 404 });
@@ -672,6 +675,7 @@ export async function onRequestPost(context) {
                 return Response.json({ error: 'الامتحان ده اتسلم قبل كده، مينفعش تسلمي مرتين' }, { status: 403 });
             }
 
+            notifyOnlineResult(context, env, db, { studentId, examTitle: exam.title || examId, score: correctCount, total: questions.length }, new URL(request.url).origin);   // the parent's phone
             return Response.json({ success: true, score: correctCount, total: questions.length, reviewUnlocksAt: new Date(reviewUnlockMs(exam)).toISOString() });
         }
 
