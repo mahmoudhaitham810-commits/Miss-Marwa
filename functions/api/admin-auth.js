@@ -110,6 +110,19 @@ function nearMissNames(env) {
     } catch (e) { return []; }
 }
 
+// ---------- Login fields typed / pasted on phones ----------
+// WhatsApp copy-paste brings invisible direction marks (LRM/RLM…) and Arabic keyboards type ٠-٩ / ۰-۹.
+// trim() doesn't remove those marks, so "5407" pasted from WhatsApp never matched. Used for codes and passwords.
+const INVISIBLE = /[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g;
+export function cleanCredential(v) {
+    return String(v ?? '')
+        .replace(INVISIBLE, '')
+        .replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+        .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0))
+        .trim();
+}
+
 // ---------- Schema (created automatically, never touches existing tables) ----------
 let schemaReady = false;
 export async function ensureStaffSchema(db) {

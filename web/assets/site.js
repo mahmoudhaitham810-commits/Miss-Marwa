@@ -325,6 +325,11 @@
     function normalizeDigits(s) {
         return String(s || '').replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660)).replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0));
     }
+    // Codes / passwords pasted from WhatsApp carry invisible direction marks that trim() keeps → remove them
+    function cleanCredential(s) {
+        return normalizeDigits(String(s ?? '').replace(/[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, '')
+            .replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ')).trim();
+    }
 
     function forgotPassword() {
         sheet({
@@ -346,7 +351,7 @@
     }
 
     window.Site = {
-        CONTACT, ICONS, waLink, esc, icon, hydrateIcons, getSession, saveSession, homeUrl,
+        CONTACT, ICONS, waLink, esc, icon, hydrateIcons, getSession, saveSession, homeUrl, cleanCredential,
         setTheme, currentTheme, toast, sheet, reveal, particles, normalizeDigits, forgotPassword, install, init, reduced, finePointer
     };
 })();

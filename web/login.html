@@ -162,7 +162,7 @@
     </div>
 
     <script src="/assets/pwa.js"></script>
-    <script src="/assets/site.js"></script>
+    <script src="/assets/site.js?v=20261118e"></script>
     <script>
     (function () {
         const $ = (id) => document.getElementById(id);
@@ -264,14 +264,14 @@
         // Normalise the code as the student types: Arabic digits → English, uppercase
         code.addEventListener('input', () => {
             const pos = code.selectionStart;
-            code.value = Site.normalizeDigits(code.value).toUpperCase().replace(/\s+/g, '');
+            code.value = Site.cleanCredential(code.value).toUpperCase().replace(/\s+/g, '');
             try { code.setSelectionRange(pos, pos); } catch (e) { }
             clearErr('fCode');
         });
         pass.addEventListener('input', () => clearErr('fPass'));
 
         function normalizeCode(v) {
-            v = Site.normalizeDigits(v).toUpperCase().replace(/\s+/g, '');
+            v = Site.cleanCredential(v).toUpperCase().replace(/\s+/g, '');
             if (/^\d{4,}$/.test(v)) v = 'MM-' + v;         // typed only the numbers
             if (/^MM\d+$/.test(v)) v = 'MM-' + v.slice(2);  // forgot the dash
             return v;
@@ -287,7 +287,7 @@
         $('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const id = normalizeCode(code.value);
-            const password = pass.value;
+            const password = Site.cleanCredential(pass.value);     // WhatsApp copy-paste marks / Arabic digits
             code.value = id;
             let ok = true;
             if (!id) { setErr('fCode', 'Enter your student code'); ok = false; }

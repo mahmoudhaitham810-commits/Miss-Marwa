@@ -1,4 +1,4 @@
-import { requireStaff, auditStmt, ensureAppSchema, normalizeEgyptPhone, nameKey, maxDevices } from './admin-auth.js';
+import { requireStaff, auditStmt, ensureAppSchema, normalizeEgyptPhone, nameKey, maxDevices, cleanCredential } from './admin-auth.js';
 
 // Students list for the staff portal. Passwords are never sent back to the browser.
 const STUDENT_COLUMNS = `student_id, first_name, last_name, gender, branch, phone, parent_phone, grade, role, created_at`;
@@ -120,8 +120,9 @@ export async function onRequestPost(context) {
         if (action === 'reset-password') {
             const auth = await requireStaff(request, env, 'students.reset-password');
             if (auth.error) return auth.error;
-            const { studentId, password } = await request.json();
-            if (!studentId || typeof password !== 'string' || password.trim().length < 4) {
+            const body = await request.json();
+            const studentId = String(body.studentId || ''), password = cleanCredential(body.password);
+            if (!studentId || password.length < 4) {
                 return Response.json({ error: 'كلمة المرور يجب ألا تقل عن 4 خانات' }, { status: 400 });
             }
             const exists = await db.prepare('SELECT student_id FROM students WHERE student_id = ?').bind(studentId).first();
@@ -129,9 +130,11 @@ export async function onRequestPost(context) {
             await ensureAppSchema(db);
             await db.batch([
                 // session_version + 1 signs the student out on every device that used the old password
-                db.prepare('UPDATE students SET password = ?, session_version = COALESCE(session_version, 1) + 1 WHERE student_id = ?').bind(password.trim(), studentId),
+                db.prepare('UPDATE students SET password = ?, session_version = COALESCE(session_version, 1) + 1 WHERE student_id = ?').bind(password, studentId),
                 auditStmt(db, request, auth.staff, 'students.reset-password', studentId, null)
             ]);
+            // the new password works straight away: clear the "too many wrong tries" lock on this student's code
+            await db.prepare('DELETE FROM auth_throttle WHERE "key" = ?').bind('student:' + studentId).run().catch(() => null);
             return Response.json({ success: true });
         }
 

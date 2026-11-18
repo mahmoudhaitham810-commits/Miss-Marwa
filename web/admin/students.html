@@ -41,7 +41,7 @@
     </main>
 
     <script src="/assets/pwa.js"></script>
-    <script src="/assets/site.js"></script>
+    <script src="/assets/site.js?v=20261118e"></script>
     <script src="/admin/assets/admin.js"></script>
     <script src="/admin/assets/messages.js"></script>
     <script>
@@ -141,12 +141,13 @@
                 iconName: 'lock', title: `New password for ${s.first_name}`, subtitle: 'They are signed out on every device and must use the new password.',
                 html: `<div class="field" style="margin:0"><label for="npw">New password</label><div class="input"><input class="plain" id="npw" value="${suggested}" autocomplete="off"></div></div>`,
                 actions: [{ label: 'Set password', onClick: async (close) => {
-                    const pw = A.normalizeDigits(document.getElementById('npw').value).trim();
+                    const pw = Site.cleanCredential(document.getElementById('npw').value);
                     if (pw.length < 4) return Site.toast('At least 4 characters', 'error');
                     try {
                         await api('/api/students?action=reset-password', { body: { studentId: s.student_id, password: pw } });
                         close();
-                        const text = `السلام عليكم — تيم مس مروة 👋\nالطالب/ة: \u200E${s.first_name} ${s.last_name}\u200E\nكلمة السر الجديدة لحسابك على Science Academy: \u200E${pw}\u200E\nكود الطالب: \u200E${s.student_id}\u200E`;
+                        // code + password each on their own line, with NO invisible marks — so copy-paste into the login works
+                        const text = `السلام عليكم — تيم مس مروة 👋\nالطالب/ة: \u200E${s.first_name} ${s.last_name}\u200E\nبيانات الدخول الجديدة لحسابك على Science Academy:\n\nكود الطالب:\n${s.student_id}\n\nكلمة السر:\n${pw}\n\nبرجاء المتابعة.`;
                         setTimeout(() => Site.sheet({
                             iconName: 'checkCircle', title: 'Password changed', subtitle: `${s.student_id} · new password: ${pw}`,
                             actions: [

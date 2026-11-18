@@ -1,5 +1,5 @@
 import { ensureAppSchema, ensureStaffSchema, normalizeEgyptPhone, studentCookieFor, CLEAR_STUDENT_COOKIE, verifyStudentRequest, requireStudent, legacyStudentsAllowed, throttleState, recordFail,
-    deviceIdFrom, newDeviceId, deviceCookie, claimDevice, DEVICE_LIMIT_MESSAGE, STUDENT_REFUSAL } from './admin-auth.js';
+    deviceIdFrom, newDeviceId, deviceCookie, claimDevice, DEVICE_LIMIT_MESSAGE, STUDENT_REFUSAL, cleanCredential } from './admin-auth.js';
 // Several Set-Cookie headers on one response
 const withCookies = (cookies) => { const h = new Headers(); cookies.filter(Boolean).forEach(c => h.append('Set-Cookie', c)); return { headers: h }; };
 
@@ -85,8 +85,10 @@ export async function onRequestPost(context) {
         if (action === 'login') {
             const body = await request.json();
             // الكود بيتحول لحروف كبيرة، عشان الطالب اللي يكتب mm-123456 يدخل عادي
-            const studentId = String(body.studentId || '').trim().toUpperCase();
-            const password = String(body.password || '');
+            // invisible marks from WhatsApp copy-paste and Arabic digits (٥٤٠٧) are cleaned on both fields
+            const studentId = cleanCredential(body.studentId).toUpperCase().replace(/\s+/g, '');
+            const rawPassword = String(body.password || '');
+            const password = cleanCredential(rawPassword);
             if (!studentId || !password) {
                 return Response.json({ error: 'يرجى إدخال الكود وكلمة المرور' }, { status: 400 });
             }
@@ -108,8 +110,10 @@ export async function onRequestPost(context) {
                 return Response.json({ error: `محاولات غلط كتير — جرّب تاني بعد ${mins} دقيقة`, code: 'LOCKED' }, { status: 429 });
             }
 
-            const stmt = db.prepare("SELECT * FROM students WHERE student_id = ? AND password = ?").bind(studentId, password);
-            const user = await stmt.first();
+            // Compare cleaned with cleaned (older accounts may have been saved with Arabic digits or stray marks);
+            // the exact old comparison still works too.
+            const row = await db.prepare("SELECT * FROM students WHERE student_id = ?").bind(studentId).first();
+            const user = row && (String(row.password) === rawPassword || cleanCredential(row.password) === password) ? row : null;
 
             if (user) {
                 await db.prepare('DELETE FROM auth_throttle WHERE key = ?').bind(codeKey).run();
@@ -164,7 +168,7 @@ export async function onRequestPost(context) {
             const phone = normalizeEgyptPhone(data.phone);
             const parentPhone = normalizeEgyptPhone(data.parentPhone);
             const grade = String(data.grade || '').trim().toLowerCase();
-            const password = String(data.password || '');
+            const password = cleanCredential(data.password);
             const NAME_RE = /^[؀-ۿa-zA-Z\s'\-.]{2,40}$/;
             const PHONE_RE = /^01[0125][0-9]{8}$/;
 
