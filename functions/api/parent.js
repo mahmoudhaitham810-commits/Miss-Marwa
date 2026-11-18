@@ -266,6 +266,11 @@ async function overview(db, child) {
     const open = online.filter(o => ['not-yet', 'in-progress'].includes(o.status) && toMs(o.expiresAt) > now)
         .map(o => ({ ...o, hoursLeft: Math.max(0, Math.round((toMs(o.expiresAt) - now) / 360000) / 10) })).sort((a, b) => a.hoursLeft - b.hoursLeft);
     const closingSoon = open.filter(o => o.hoursLeft <= 24);
+    // every online exam still open for the grade (taken or not) → the first card on the dashboard, with a live countdown
+    const activeExams = online.filter(o => toMs(o.expiresAt) > now).map(o => ({
+        id: o.id, name: o.name, closesAt: toMs(o.expiresAt), status: o.status,
+        score: o.status === 'taken' ? o.score : null, total: o.total, pct: o.status === 'taken' ? o.pct : null, submittedAt: o.status === 'taken' ? o.submittedAt : null
+    })).sort((a, b) => ((a.status === 'taken') - (b.status === 'taken')) || (a.closesAt - b.closesAt));
     const missed = [
         ...center.filter(c => c.status === 'absent').map(c => ({ kind: 'center', name: c.name, date: c.date, why: 'absent' })),
         ...online.filter(o => ['missed', 'opened'].includes(o.status)).map(o => ({ kind: 'online', name: o.name, date: o.date, why: o.status }))
@@ -306,6 +311,7 @@ async function overview(db, child) {
             onlineRate: sm.onlineTaken + sm.onlineMissed ? r0((sm.onlineTaken / (sm.onlineTaken + sm.onlineMissed)) * 100) : null
         },
         alerts: { closingSoon, open: open.filter(o => o.hoursLeft > 24), missed: missed.slice(0, 12) },
+        activeExams, serverNow: now,
         insights: { strengths, watch },
         trend, center: center.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))), online: online.filter(o => o.status !== 'not-yet' || toMs(o.expiresAt) > now),
         lessons: (lessons || []).map(l => ({ title: l.title, category: l.category, url: l.url, at: l.at })),

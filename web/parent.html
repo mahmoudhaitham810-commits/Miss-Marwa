@@ -46,12 +46,39 @@
         .kid small { color: var(--muted); font-weight: 500; }
         .kid.on { background: var(--navy); color: #fff; border-color: var(--navy); }
         .kid.on .av { background: rgba(255, 255, 255, .18); color: #fff; } .kid.on small { color: rgba(255, 255, 255, .75); }
-        /* urgent banner */
-        .urgent { margin-top: 16px; border-radius: 20px; padding: 16px 18px; color: #fff; background: linear-gradient(120deg, #B91C1C, #EA580C); display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; box-shadow: 0 16px 34px -18px rgba(185, 28, 28, .8); }
-        .urgent .ic { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: rgba(255, 255, 255, .18); font-size: 24px; }
-        .urgent b { display: block; font-size: 16px; }
-        .urgent span { font-size: 14px; opacity: .95; }
-        .urgent .more { display: block; margin-top: 4px; font-size: 13px; opacity: .9; }
+        /* greeting + open exams (always first) */
+        .greet { margin-top: 18px; }
+        .greet h1 { margin: 0; font-size: clamp(22px, 4.6vw, 30px); line-height: 1.35; color: var(--text); }
+        .greet .en-hello { margin: 2px 0 0; color: var(--muted); font-size: 14.5px; text-align: right; }
+        .xs { margin-top: 14px; display: grid; gap: 12px; }
+        .xs-h { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; color: var(--text); margin: 0; }
+        .xs-h .n { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); }
+        .xc { border-radius: 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm); display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; position: relative; overflow: hidden; }
+        .xc::before { content: ''; position: absolute; inset: 0 0 0 auto; width: 5px; background: var(--primary); }
+        .xc .ic { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 22px; background: var(--primary-soft); }
+        .xc .t { font-weight: 800; font-size: 16px; line-height: 1.4; margin: 0; }
+        .xc .dl { color: var(--muted); font-size: 13px; margin-top: 2px; }
+        .xc .why { display: inline-block; margin-top: 8px; padding: 5px 12px; border-radius: 14px; line-height: 1.6; font-size: 13px; font-weight: 700; }
+        .xc .cd { text-align: center; min-width: 118px; padding: 10px 12px; border-radius: 16px; background: var(--primary-soft); color: var(--primary); }
+        .xc .cd b { display: block; font-size: 15px; line-height: 1.35; }
+        .xc .cd small { display: block; font-family: Inter, sans-serif; font-size: 12px; opacity: .85; margin-top: 2px; white-space: nowrap; }
+        .xc.todo { border-color: var(--danger-line); background: linear-gradient(120deg, var(--danger-soft), var(--surface) 70%); }
+        .xc.todo::before { background: var(--danger); }
+        .xc.todo .ic { background: var(--danger); color: #fff; }
+        .xc.todo .why { background: var(--danger); color: #fff; }
+        .xc.todo .cd { background: var(--danger); color: #fff; }
+        .xc.todo.soon { animation: xpulse 2.4s ease-in-out infinite; }
+        @keyframes xpulse { 50% { box-shadow: 0 0 0 4px var(--danger-soft), var(--shadow-sm); } }
+        .xc.prog { border-color: var(--warning); }
+        .xc.prog::before, .xc.prog .ic { background: var(--warning); color: #fff; }
+        .xc.prog .why { background: var(--warning-soft); color: var(--warning); }
+        .xc.done::before { background: var(--success); }
+        .xc.done .ic { background: var(--success-soft); }
+        .xc.done .why { background: var(--success-soft); color: var(--success); }
+        .xc.done .cd { background: var(--canvas); color: var(--muted); }
+        .xc.gone { opacity: .6; }
+        @media (max-width: 600px) { .xc { grid-template-columns: auto 1fr; } .xc .cd { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: right; } .xc .cd small { margin: 0; } }
+        @media (prefers-reduced-motion: reduce) { .xc.todo.soon { animation: none; } }
         /* hero */
         .pp-hero { margin-top: 16px; border-radius: 26px; padding: 26px 24px; color: #fff; position: relative; overflow: hidden;
             background: radial-gradient(120% 140% at 0% 0%, #2F5BEA 0%, transparent 55%), linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%); box-shadow: 0 26px 50px -30px rgba(15, 42, 95, .9); }
@@ -252,18 +279,20 @@
         function render() {
             const d = DATA, c = d.child, s = d.summary, first = c.firstName;
             const others = ME.children.length > 1 ? `<div class="kids" role="tablist" aria-label="الأبناء">${ME.children.map(k => `<button class="kid ${k.studentId === sid ? 'on' : ''}" data-kid="${esc(k.studentId)}"><span class="av">${esc((k.firstName || '?').slice(0, 1))}</span>${esc(kidName(k))} <small class="en">${esc(k.gradeLabel)}</small></button>`).join('')}</div>` : '';
-            const urgent = d.alerts.closingSoon.length ? `<div class="urgent" role="alert"><div class="ic">⏰</div><div>
-                    <b>امتحان «<span dir="auto">${esc(d.alerts.closingSoon[0].name)}</span>» هيقفل خلال ${hrs(d.alerts.closingSoon[0].hoursLeft)} و${esc(first)} لسه ${g('ماحلّوش', 'ماحلّتهوش')}</b>
-                    <span>فكّر${g('ه', 'ها')} يحل${g('', 'ّ')} الامتحان من حساب${g('ه', 'ها')} قبل ما يقفل.</span>
-                    ${d.alerts.closingSoon.length > 1 ? `<span class="more">+ ${d.alerts.closingSoon.length - 1} امتحان تاني هيقفل خلال يوم</span>` : ''}</div></div>` : '';
             const pct = s.overallPct, ringC = 2 * Math.PI * 52;
             const rankTxt = s.ranked && s.rank ? `<span class="chip-w">🏅 الترتيب #${s.rank} من ${s.gradeSize}</span>` : `<span class="chip-w">🏅 لسه مش ${g('مترتب', 'مترتبة')} (<bdi dir="ltr">${P(s.participation)}</bdi> من الامتحانات)</span>`;
-            $('app').innerHTML = `<div id="top" class="sec"></div>${others}${urgent}<div id="msgAlert"></div>
+            $('app').innerHTML = `<div id="top" class="sec"></div>${others}
+                <header class="greet">
+                    <h1>أهلاً بيك يا ولي أمر ${esc(first)}! 👋</h1>
+                    <p class="en-hello en" dir="ltr">Welcome, ${esc(first)}'s parent</p>
+                </header>
+                <section class="xs" id="exams" ${d.activeExams.length ? '' : 'hidden'} aria-label="امتحانات مفتوحة دلوقتي"></section>
+                <div id="msgAlert"></div>
                 <section class="pp-hero">
                     <div class="pp-hgrid">
                         <div>
-                            <h1>أهلاً بيك يا ولي أمر ${esc(first)}! 👋</h1>
-                            <p class="en-hello en" dir="ltr">Welcome, ${esc(first)}'s parent</p>
+                            <h1>مستوى <bdi>${esc(first)}</bdi> العام</h1>
+                            <p class="en-hello en" dir="ltr">${esc(first)}'s overall level</p>
                             <div class="meta">
                                 <span class="chip-w en" dir="ltr">${esc(c.gradeLabel)}${c.branch ? ' · ' + (c.branch === 'center' ? 'Center' : 'Private') : ''}</span>
                                 ${rankTxt}
@@ -297,10 +326,9 @@
                     </section>
                 </div>
 
-                ${d.alerts.missed.length || d.alerts.open.length || d.alerts.closingSoon.length ? `<section class="card2" style="margin-top:16px">
-                    <h2>${icon('alert')}امتحانات ${g('فاتته', 'فاتتها')} أو لسه مفتوحة</h2>
+                ${d.alerts.missed.length ? `<section class="card2" style="margin-top:16px">
+                    <h2>${icon('alert')}امتحانات ${g('فاتته', 'فاتتها')}</h2>
                     ${d.alerts.missed.length ? `<div class="missed">${d.alerts.missed.map(m => `<span class="mx">${m.kind === 'center' ? '🏫' : '💻'} <span dir="auto">${esc(m.name)}</span> <small>${m.why === 'absent' ? g('غاب', 'غابت') : m.why === 'opened' ? 'فتحه ومسلّمش' : g('ماحلّوش', 'ماحلّتهوش')} · ${fmtD(m.date)}</small></span>`).join('')}</div>` : ''}
-                    ${[...d.alerts.closingSoon, ...d.alerts.open].map(o => `<div class="open-x"><span>💻 <b dir="auto">${esc(o.name)}</b> — مفتوح ولسه ${g('ماحلّوش', 'ماحلّتهوش')}</span><span class="st ${o.hoursLeft <= 24 ? 'missed' : 'open'}">يقفل خلال ${hrs(o.hoursLeft)}</span></div>`).join('')}
                 </section>` : ''}
 
                 <section class="card2 sec" id="grades" style="margin-top:16px">
@@ -318,6 +346,59 @@
             Site.hydrateIcons && Site.hydrateIcons($('app'));
             if (window.PWA && PWA.bind) PWA.bind($('app'));
             paintHist(); paintMessages(); paintNavBadge();
+            SKEW = (d.serverNow || Date.now()) - Date.now();
+            paintExams();
+        }
+
+        // ---------- open exams: first card, live countdown ----------
+        let SKEW = 0, examTimer = null, reloading = false;
+        const nowMs = () => Date.now() + SKEW;
+        const arN = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`);
+        function left(ms) {
+            const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mi = m % 60;
+            const D = arN(d, 'يوم', 'يومين', 'أيام', 'يوم'), H = arN(h, 'ساعة', 'ساعتين', 'ساعات', 'ساعة'), M = arN(mi, 'دقيقة', 'دقيقتين', 'دقايق', 'دقيقة');
+            if (ms < 60000) { const sec = Math.max(0, Math.ceil(ms / 1000)); return { ar: `أقل من دقيقة (${sec} ث)`, en: `Closes in ${sec}s` }; }
+            if (d) return { ar: h ? `${D} و${H}` : D, en: `Closes in ${d}d${h ? ' ' + h + 'h' : ''}` };
+            if (h) return { ar: mi ? `${H} و${M}` : H, en: `Closes in ${h}h${mi ? ' ' + mi + 'm' : ''}` };
+            return { ar: M, en: `Closes in ${mi}m` };
+        }
+        const fmtDeadline = (ms) => new Date(ms).toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
+        function paintExams() {
+            const box = $('exams'); if (!box || !DATA) return;
+            const list = DATA.activeExams || [], first = DATA.child.firstName;
+            clearInterval(examTimer);
+            if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+            box.hidden = false;
+            const todo = list.filter(e => e.status !== 'taken').length;
+            box.innerHTML = `<h2 class="xs-h">💻 امتحانات أونلاين مفتوحة دلوقتي<span class="n">${list.length}</span>${todo ? `<span class="n" style="background:var(--danger);color:#fff">${todo} لسه ${g('ماحلّهاش', 'ماحلّتهاش')}</span>` : ''}</h2>` + list.map(e => {
+                const done = e.status === 'taken', prog = e.status === 'in-progress';
+                const cls = done ? 'done' : prog ? 'prog' : 'todo';
+                const why = done ? `✅ ${g('حلّه', 'حلّته')}${e.score !== null && e.score !== undefined ? ` — الدرجة <bdi dir="ltr">${e.score}/${e.total}${e.pct !== null ? ' · ' + Math.round(e.pct) + '%' : ''}</bdi>` : ''}`
+                    : prog ? `⏳ ${g('بدأه', 'بدأته')} ولسه ${g('ماسلّموش', 'ماسلّمتهوش')} — فكّر${g('ه', 'ها')} ${g('يكمّل', 'تكمّل')} ${g('ويسلّم', 'وتسلّم')}`
+                    : `⚠️ ${esc(first)} لسه ${g('ماحلّوش', 'ماحلّتهوش')} — فكّر${g('ه', 'ها')} ${g('يحلّه', 'تحلّه')} قبل ما يقفل`;
+                return `<article class="xc ${cls}" data-x="${e.closesAt}" data-done="${done ? 1 : 0}">
+                    <div class="ic">${done ? '✅' : prog ? '⏳' : '📝'}</div>
+                    <div><p class="t"><bdi>${esc(e.name)}</bdi></p>
+                        <div class="dl">بيقفل ${esc(fmtDeadline(e.closesAt))}</div>
+                        <span class="why">${why}</span></div>
+                    <div class="cd" aria-live="off"><b class="cd-ar"></b><small class="cd-en" dir="ltr"></small></div>
+                </article>`;
+            }).join('');
+            tickExams();
+            examTimer = setInterval(tickExams, 1000);
+        }
+        function tickExams() {
+            const now = nowMs(); let ended = false;
+            document.querySelectorAll('#exams .xc').forEach(el => {
+                const ms = Number(el.dataset.x) - now, done = el.dataset.done === '1';
+                const ar = el.querySelector('.cd-ar'), en = el.querySelector('.cd-en');
+                if (ms <= 0) { el.classList.add('gone'); ar.textContent = 'الامتحان قفل'; en.textContent = 'Closed'; ended = true; return; }
+                const t = left(ms), txt = `فاضل ${t.ar} ويقفل`;
+                if (ar.textContent !== txt) ar.textContent = txt;
+                if (en.textContent !== t.en) en.textContent = t.en;
+                el.classList.toggle('soon', !done && ms <= 24 * 3600000);
+            });
+            if (ended && !reloading) { reloading = true; setTimeout(() => { reloading = false; loadChild().catch(() => { }); }, 4000); }
         }
         const hrs = (h) => (h < 1 ? 'أقل من ساعة' : h < 24 ? `${Math.round(h)} ساعة` : `${Math.round(h / 24)} يوم`);
         const kpi = (ic, label, val, sub, bar) => `<div class="kpi"><div class="top">${icon(ic)}${label}</div><div class="v">${val}</div><div class="s">${sub}</div>${bar !== null && bar !== undefined ? `<div class="pbar"><i style="width:${Math.max(2, Math.min(100, bar))}%;background:${tone(bar)}"></i></div>` : ''}</div>`;
