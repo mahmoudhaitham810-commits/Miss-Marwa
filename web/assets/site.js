@@ -313,7 +313,9 @@
     // ---------- Install as app (PWA) — the logic lives in /assets/pwa.js ----------
     function install() { return window.PWA ? PWA.install({ showHelp: PWA.showHelp }) : null; }
     if (window.PWA) {
-        PWA.showHelp = (title, html) => sheet({ iconName: 'download', title, subtitle: 'Opens straight from your home screen or desktop, full screen, like a normal app.', html, actions: [{ label: 'Got it', cls: 'btn-soft' }] });
+        PWA.showHelp = (title, html) => location.pathname.startsWith('/parent')
+            ? sheet({ iconName: 'download', title, subtitle: 'هتفتح البوابة من الشاشة الرئيسية زي أي تطبيق، وتوصلك الإشعارات أول بأول.', html, actions: [{ label: 'تمام', cls: 'btn-soft' }] })
+            : sheet({ iconName: 'download', title, subtitle: 'Opens straight from your home screen or desktop, full screen, like a normal app.', html, actions: [{ label: 'Got it', cls: 'btn-soft' }] });
         PWA.setNotify((msg) => toast(msg, 'success'));
     } else if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => navigator.serviceWorker.register('/OneSignalSDKWorker.js').catch(() => { }));

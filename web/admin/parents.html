@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <title>Parents · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        .orow { grid-template-columns: 40px minmax(0, 1fr) auto auto auto; }
+        .orow > span:last-child { display: none; }
+        @media (min-width: 760px) { .orow { grid-template-columns: 40px minmax(0, 1fr) 70px 110px auto; } }
+        @media (max-width: 480px) { .orow { grid-template-columns: 40px minmax(0, 1fr) auto; } .orow > span:nth-child(4) { display: none; } }
+        .prow .avatar { font-size: 19px; background: var(--primary-soft); }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>Parents · أولياء الأمور</h1><p id="countLine">Who has signed in to the Parent Portal, and whose parents haven't yet.</p></div>
+                <button class="btn btn-wa" id="inviteAll" hidden><span data-icon="whatsapp" style="display:contents"></span><span id="inviteAllTxt">Invite</span></button>
+            </div>
+            <div id="kpis"></div>
+            <div class="toolbar sticky-bar">
+                <div class="input" style="flex:1;min-width:220px"><span data-icon="search" style="display:contents"></span>
+                    <input id="q" placeholder="Search name, code or phone…" autocomplete="off" style="height:44px"></div>
+                <select class="pick" id="gradePick" aria-label="Grade" data-ui="pills"></select>
+                <div class="segmented" id="viewSeg" aria-label="Show">
+                    <button data-value="in">Signed in</button><button data-value="out">Not signed in yet</button>
+                </div>
+            </div>
+            <div id="list"></div>
+        </div>
+    </main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/admin/assets/messages.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'parents', title: 'Parents' });
+        A.hydrate();
+        const qs = new URLSearchParams(location.search);
+        let grade = qs.get('grade') || 'all', view = qs.get('view') === 'out' ? 'out' : 'in';
+        let D = { parents: [], students: [] };
+        const LIMIT_STEP = 60; let limit = LIMIT_STEP;
+        const WEEK = 7 * 86400000;
+
+        A.gradeSelect($('gradePick'), grade, (v) => { grade = v; limit = LIMIT_STEP; sync(); render(); }, { all: true });
+        A.segmented($('viewSeg'), view, (v) => { view = v; limit = LIMIT_STEP; sync(); render(); });
+        $('q').addEventListener('input', () => { limit = LIMIT_STEP; render(); });
+        const sync = () => { const u = new URL(location.href); u.searchParams.set('grade', grade); u.searchParams.set('view', view); history.replaceState(null, '', u); };
+
+        const ago = (v) => {
+            const ms = A.toMs(v); if (isNaN(ms)) return '—';
+            const d = Date.now() - ms, m = Math.round(d / 60000), h = Math.round(d / 3600000), days = Math.floor(d / 86400000);
+            if (m < 2) return 'just now'; if (m < 60) return `${m} min ago`; if (h < 24) return `${h} h ago`;
+            if (days === 1) return 'yesterday'; if (days < 14) return `${days} days ago`; return A.fmtDate(v);
+        };
+        const kidName = (k) => `${k.firstName} ${k.lastName}`.trim();
+        const stud = (s) => ({ studentId: s.studentId, firstName: s.firstName, lastName: s.lastName, gender: s.gender, branch: s.branch, grade: s.grade, parentPhone: s.parentPhone });
+        const portal = location.origin + '/login.html?as=parent';
+        const invite = (s) => {
+            const f = s.gender === 'female';
+            return `السلام عليكم — تيم مس مروة 👋\nبقى عند حضرتك دلوقتي «بوابة ولي الأمر» لمتابعة ${f ? 'بنتك' : 'ابنك'} ‎${s.firstName} ${s.lastName}‎ أول بأول: الدرجات، الحضور، الامتحانات المفتوحة، ورسايل مس مروة.\nالدخول برقم موبايل حضرتك ورقم موبايل ${f ? 'الطالبة' : 'الطالب'} بس — من غير باسورد:\n${portal}\nبرجاء المتابعة.`;
+        };
+
+        async function load() {
+            $('list').innerHTML = '<div class="skel" style="height:300px;border-radius:18px"></div>';
+            try { D = await api('/api/students?action=parents'); }
+            catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            D.parents.forEach(p => { p._q = (p.phone + ' ' + p.children.map(k => `${kidName(k)} ${k.studentId}`).join(' ')).toLowerCase(); });
+            D.students.forEach(s => { s._q = `${kidName(s)} ${s.studentId} ${s.parentPhone}`.toLowerCase(); });
+            render();
+        }
+        const inGrade = (s) => grade === 'all' || s.grade === grade;
+        function render() {
+            const q = A.normalizeDigits($('q').value).trim().toLowerCase();
+            const pars = D.parents.filter(p => grade === 'all' || p.children.some(inGrade));
+            const studs = D.students.filter(inGrade);
+            const covered = studs.filter(s => s.parentSignedIn).length;
+            const outList = studs.filter(s => !s.parentSignedIn);
+            const noPhone = outList.filter(s => !s.validPhone).length;
+            const active7 = pars.filter(p => Date.now() - A.toMs(p.lastSeenAt) < WEEK).length;
+            const pct = studs.length ? Math.round(covered / studs.length * 100) : 0;
+            const gl = grade === 'all' ? 'all grades' : (A.GRADES[grade] || grade);
+            $('kpis').innerHTML = `<div class="kpis">
+                <div class="kpi fade-up" style="--i:0"><b class="num">${pars.length}</b><span>Parents signed in</span><small>${esc(gl)} · ${D.parentPhones} parent numbers on file</small></div>
+                <div class="kpi fade-up" style="--i:1"><b class="num">${active7}</b><span>Active this week</span><small>opened the portal in the last 7 days</small></div>
+                <div class="kpi fade-up" style="--i:2"><b class="num">${pct}%</b><span>Students covered</span><small>${covered} of ${studs.length} students' parents signed in</small></div>
+                <div class="kpi fade-up" style="--i:3"><b class="num" style="color:var(--warning)">${outList.length}</b><span>Not signed in yet</span><small>${noPhone ? `${noPhone} without a valid parent phone` : 'all have a parent phone'}</small></div></div>`;
+            $('countLine').innerHTML = `<b>${pars.length}</b> parents signed in · <b>${covered}</b> of ${studs.length} students covered (${pct}%) · ${esc(gl)}`;
+            const invitable = outList.filter(s => s.validPhone);
+            $('inviteAll').hidden = !(view === 'out' && invitable.length);
+            const nP = new Set(invitable.map(s => s.parentPhone)).size;
+            $('inviteAllTxt').textContent = `Invite ${nP} parent${nP === 1 ? '' : 's'} on WhatsApp`;
+
+            if (view === 'in') {
+                const list = pars.filter(p => !q || p._q.includes(q));
+                if (!list.length) { $('list').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('users', 'lg')}</div><h3>${q ? 'No parents match' : 'No parents have signed in yet'}</h3><p>${q ? 'Try another search or grade.' : 'Send them the portal link from “Not signed in yet”.'}</p></div>`; return; }
+                $('list').innerHTML = `<div class="card" style="padding:6px 10px"><div class="srows">${list.slice(0, limit).map((p, i) => {
+                    const kids = p.children.filter(inGrade).concat(p.children.filter(k => !inGrade(k)));
+                    const fresh = Date.now() - A.toMs(p.lastSeenAt) < WEEK;
+                    return `<button class="srow prow fade-up" style="--i:${Math.min(i, 14)}" data-phone="${esc(p.phone)}">
+                        <span class="avatar" aria-hidden="true">👪</span>
+                        <span class="sname"><b dir="auto">${kids.length ? kids.map(k => esc(kidName(k))).join(' · ') : '<span class="muted">No student on this number now</span>'}</b>
+                            <small class="num muted">${esc(p.phone)}${p.device ? ' · ' + esc(p.device) : ''} · ${p.logins} sign-in${p.logins === 1 ? '' : 's'}</small></span>
+                        <span class="sgrade">${[...new Set(kids.map(k => A.GRADES[k.grade] || k.grade))].map(esc).join(', ')}</span>
+                        <span>${p.signedInNow ? `<span class="pill ${fresh ? 'success' : 'muted'}">${fresh ? 'Active' : 'Signed in'}</span>` : '<span class="pill muted">Signed out</span>'}</span>
+                        <span class="sdate small muted" title="Last active">${esc(ago(p.lastSeenAt))}</span>
+                        <span class="muted">${icon('chevronRight', 'sm')}</span></button>`;
+                }).join('')}</div>${more(list.length)}</div>`;
+            } else {
+                const list = outList.filter(s => !q || s._q.includes(q)).sort((a, b) => (b.validPhone - a.validPhone) || a.grade.localeCompare(b.grade) || kidName(a).localeCompare(kidName(b)));
+                if (!list.length) { $('list').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('check', 'lg')}</div><h3>${q ? 'No students match' : 'Every parent has signed in 🎉'}</h3><p>${q ? 'Try another search or grade.' : esc(gl)}</p></div>`; return; }
+                $('list').innerHTML = `<div class="card" style="padding:6px 10px"><div class="srows">${list.slice(0, limit).map((s, i) => `
+                    <div class="srow orow fade-up" style="--i:${Math.min(i, 14)}">
+                        <span class="avatar">${A.initials({ firstName: s.firstName })}</span>
+                        <span class="sname"><b dir="auto">${esc(kidName(s))}</b><small class="num muted">${esc(s.studentId)} · parent ${s.validPhone ? esc(s.parentPhone) : `<span style="color:var(--danger)">${s.parentPhone ? esc(s.parentPhone) + ' (not a valid number)' : 'no number'}</span>`}</small></span>
+                        <span class="sgrade">${esc(A.GRADES[s.grade] || s.grade)}</span>
+                        <span><span class="pill legacy">Not signed in</span></span>
+                        <span>${s.validPhone ? `<button class="btn btn-wa btn-sm" data-invite="${esc(s.studentId)}">${icon('whatsapp', 'sm')}Invite</button>` : `<a class="btn btn-ghost btn-sm" href="/admin/students.html?open=${encodeURIComponent(s.studentId)}">Fix number</a>`}</span>
+                        <span></span></div>`).join('')}</div>${more(list.length)}</div>`;
+            }
+            $('moreBtn')?.addEventListener('click', () => { limit += LIMIT_STEP; render(); });
+        }
+        const more = (n) => n > limit ? `<button class="btn btn-ghost btn-block" id="moreBtn" style="margin:8px 0">Show ${Math.min(LIMIT_STEP, n - limit)} more (${n - limit} left)</button>` : '';
+
+        $('list').addEventListener('click', (e) => {
+            const inv = e.target.closest('[data-invite]');
+            if (inv) { const s = D.students.find(x => x.studentId === inv.dataset.invite); if (s) A.preview(stud(s), invite(s), 'Invite the parent'); return; }
+            const r = e.target.closest('[data-phone]'); if (r) openParent(r.dataset.phone);
+        });
+        $('inviteAll').addEventListener('click', () => {
+            const list = D.students.filter(s => inGrade(s) && !s.parentSignedIn && s.validPhone);
+            const seen = new Set(), one = list.filter(s => (seen.has(s.parentPhone) ? false : seen.add(s.parentPhone)));   // one message per parent number
+            A.queue(one.map(stud), (st) => invite(st), { title: 'Invite parents to the portal' });
+        });
+
+        function openParent(phone) {
+            const p = D.parents.find(x => x.phone === phone); if (!p) return;
+            const first = p.children[0];
+            Site.sheet({
+                iconName: 'users', title: p.children.length ? `Parent of ${p.children.map(k => k.firstName).join(' & ')}` : 'Parent', subtitle: `${p.phone} · Parent Portal`,
+                html: `<div class="kv">
+                        <div><span>Parent phone</span><b class="num">${esc(p.phone)}</b></div>
+                        <div><span>Status</span><b>${p.signedInNow ? 'Signed in' : 'Signed out'}</b></div>
+                        <div><span>Last active</span><b>${esc(A.fmtDate(p.lastSeenAt, true))}</b></div>
+                        <div><span>Last sign-in</span><b>${esc(A.fmtDate(p.lastLoginAt, true))}</b></div>
+                        <div><span>First sign-in</span><b>${esc(A.fmtDate(p.firstLoginAt, true))}</b></div>
+                        <div><span>Device · sign-ins</span><b>${esc(p.device || '—')} · ${p.logins}</b></div></div>
+                    <h4 style="margin:16px 0 8px">Children on this number</h4>
+                    <div class="srows">${p.children.map(k => `<a class="srow" style="grid-template-columns:40px minmax(0,1fr) auto 16px" href="/admin/student.html?id=${encodeURIComponent(k.studentId)}">
+                        <span class="avatar">${A.initials({ firstName: k.firstName })}</span><span class="sname"><b dir="auto">${esc(kidName(k))}</b><small class="num muted">${esc(k.studentId)}</small></span>
+                        <span class="sgrade">${esc(A.GRADES[k.grade] || k.grade)}</span><span class="muted">${icon('chevronRight', 'sm')}</span></a>`).join('') || '<p class="muted">None.</p>'}</div>`,
+                actions: first ? [{ label: 'WhatsApp the parent', icon: 'whatsapp', cls: 'btn-wa', onClick: (close) => { close(); setTimeout(() => A.preview(stud({ ...first, parentPhone: p.phone }), `السلام عليكم — تيم مس مروة 👋\n`, 'Message the parent'), 240); } }, { label: 'Close', cls: 'btn-ghost' }] : [{ label: 'Close', cls: 'btn-ghost' }]
+            });
+        }
+        load();
+    })();
+    </script>
+</body>
+</html>

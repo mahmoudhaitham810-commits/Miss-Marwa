@@ -179,8 +179,8 @@
         .bnav a .icon { width: 22px; height: 22px; }
         .bnav a .nb { position: absolute; top: 2px; left: calc(50% - 22px); background: var(--danger); color: #fff; font-size: 11px; font-weight: 800; border-radius: 999px; min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; }
         @media (min-width: 900px) { .bnav { display: none; } body.pp { padding-bottom: 40px; } .wa-fab { bottom: 24px; } }
-        .install-cta { display: none; }
-        html.pwa-ready:not(.pwa-installed) .install-cta, html.ios:not(.pwa-installed) .install-cta { display: flex; }
+        .install-cta { display: flex; }
+        html.pwa-installed .install-cta { display: none; }
         .install-cta { margin-top: 16px; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 18px; border: 1px dashed var(--primary); background: var(--primary-soft); }
         .install-cta b { display: block; } .install-cta small { color: var(--muted); }
         .install-cta .btn { margin-inline-start: auto; }
@@ -222,7 +222,7 @@
         </div>
     </div>
 
-    <script src="/assets/pwa.js"></script>
+    <script src="/assets/pwa.js?v=20261118d"></script>
     <script src="/assets/site.js?v=20261118d"></script>
     <script src="/assets/ask.js?v=20261118c"></script>
     <script>

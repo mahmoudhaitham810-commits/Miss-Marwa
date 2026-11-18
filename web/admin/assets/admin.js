@@ -105,6 +105,7 @@
         return [
             { key: 'today', short: 'Today', label: 'Today', icon: 'home', href: '/admin/' },
             { key: 'students', short: 'Students', label: 'Students', icon: 'users', href: '/admin/students.html' },
+            { key: 'parents', label: 'Parents · أولياء الأمور', icon: 'users', href: '/admin/parents.html' },
             { key: 'content', label: 'Lessons & files', icon: 'book', href: '/admin/content.html' },
             { key: 'exams', label: 'Online exams', icon: 'clipboard', href: '/admin/exams.html' },
             { key: 'results', label: 'Online results', icon: 'checkCircle', href: '/admin/results.html' },

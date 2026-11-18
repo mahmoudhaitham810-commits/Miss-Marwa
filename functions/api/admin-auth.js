@@ -208,6 +208,7 @@ export async function ensureAppSchema(db) {
     steps.push(`CREATE TABLE IF NOT EXISTS parents (
         phone TEXT PRIMARY KEY, session_key TEXT, active_student TEXT, device TEXT, last_login_at TEXT, logins INTEGER NOT NULL DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+    steps.push('ALTER TABLE parents ADD COLUMN last_seen_at TEXT');          // last time the portal was opened (staff "Parents" page)
     // "exam closes soon and not taken yet" reminders — sent once per exam per student
     steps.push(`CREATE TABLE IF NOT EXISTS exam_reminders (exam_id TEXT NOT NULL, student_id TEXT NOT NULL, kind TEXT NOT NULL, sent_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (exam_id, student_id, kind))`);
     // Small key/value store for housekeeping (e.g. when the 30-day media clean-up last ran)

@@ -57,6 +57,31 @@ async function findDuplicates(db) {
     return pairs;
 }
 
+// ── Parent Portal overview (staff) ──
+// A parent account = one parent phone (as written on the student's sign-up, any format). "Signed in" = has a row in
+// `parents` (created on their first Parent Portal sign-in). Read-only.
+async function parentsOverview(db) {
+    const { results: st } = await db.prepare('SELECT student_id, first_name, last_name, gender, grade, branch, parent_phone FROM students').all();
+    const { results: pr } = await db.prepare('SELECT phone, session_key, device, last_login_at, last_seen_at, logins, created_at FROM parents').all();
+    const P = new Map((pr || []).map(r => [r.phone, r]));
+    const kidsOf = new Map(), students = [];
+    for (const s of st || []) {
+        const pp = normalizeEgyptPhone(s.parent_phone), valid = /^01\d{9}$/.test(pp);
+        const row = { studentId: s.student_id, firstName: s.first_name || '', lastName: s.last_name || '', gender: s.gender, grade: String(s.grade || '').toLowerCase(), branch: s.branch || null,
+            parentPhone: valid ? pp : (s.parent_phone || ''), validPhone: valid, parentSignedIn: valid && P.has(pp) };
+        students.push(row);
+        if (valid) { if (!kidsOf.has(pp)) kidsOf.set(pp, []); kidsOf.get(pp).push(row); }
+    }
+    const parents = [];
+    for (const [phone, r] of P) {
+        const kids = kidsOf.get(phone) || [];
+        parents.push({ phone, signedInNow: !!r.session_key, device: r.device || null, firstLoginAt: r.created_at, lastLoginAt: r.last_login_at, lastSeenAt: r.last_seen_at || r.last_login_at, logins: r.logins || 0,
+            children: kids.map(k => ({ studentId: k.studentId, firstName: k.firstName, lastName: k.lastName, grade: k.grade, branch: k.branch, gender: k.gender })) });
+    }
+    parents.sort((a, b) => String(b.lastSeenAt || '').localeCompare(String(a.lastSeenAt || '')));
+    return { parents, students, parentPhones: kidsOf.size };
+}
+
 export async function onRequestGet(context) {
     const auth = await requireStaff(context.request, context.env, 'students.view');
     if (auth.error) return auth.error;
@@ -69,6 +94,8 @@ export async function onRequestGet(context) {
             return Response.json({ pairs: await findDuplicates(db) });
         }
         await ensureAppSchema(db);
+        // Parent Portal: which parents have signed in, and which students' parents haven't yet
+        if (action === 'parents') return Response.json(await parentsOverview(db));
         // The devices a student is signed in on (max 2)
         if (action === 'devices') {
             const studentId = new URL(context.request.url).searchParams.get('studentId') || '';

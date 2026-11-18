@@ -3,6 +3,7 @@
    portal and the staff portal. Each part has its own manifest:
      /manifest.json               → "Science Academy" (students)
      /admin/admin-manifest.json   → "Science Academy Staff"
+     /parent.webmanifest          → "Science Academy Parents"
    Any element with [data-install] becomes an install button. It's
    hidden automatically when the page is already running as the app.
    window.PWA
@@ -30,7 +31,21 @@
         root.classList.toggle('pwa-ready', !!getPrompt());
     }
     // Same listener as in <head>, for any page that doesn't have the early one
-    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__deferredInstallPrompt = e; update(); });
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__deferredInstallPrompt = e; update(); offerArrived(); });
+    // Chrome only sends its one-tap offer after a tap + ~30 s on the site. If someone pressed "Install" before that,
+    // the help sheet stays open and turns into a one-tap button the moment the offer arrives.
+    let pendingTap = 0;
+    function offerArrived() {
+        document.querySelectorAll('[data-install-now-box]').forEach(b => { b.hidden = false; });
+        document.querySelectorAll('[data-install-wait]').forEach(b => { b.hidden = true; });
+        const ua = navigator.userActivation;
+        if (pendingTap && Date.now() - pendingTap < 4500 && (!ua || ua.isActive)) {
+            pendingTap = 0;
+            const box = document.querySelector('[data-install-now-box]'), ov = box && box.closest('.overlay');
+            if (ov) { const x = ov.querySelector('[data-close]'); if (x) x.click(); }       // the help sheet isn't needed any more
+            install({ showHelp: window.PWA && window.PWA.showHelp });
+        }
+    }
     window.addEventListener('appinstalled', () => { clearPrompt(); update(); notify(`${appName()} is installed — open it from your home screen or apps.`); });
     try { matchMedia('(display-mode: standalone)').addEventListener('change', update); } catch (e) { }
     update();
@@ -44,6 +59,12 @@
     // Step-by-step help for browsers without a one-tap install
     function steps() {
         const name = appName();
+        if (isParent()) {                                                     // parents: Arabic
+            if (isIOS) return [`اضغط زرار <b>المشاركة</b> <span aria-hidden="true">(□↑)</span> تحت في Safari.`, `انزل واختار <b>إضافة إلى الشاشة الرئيسية</b> (Add to Home Screen).`, `اضغط <b>إضافة</b> — هتلاقي «ولي الأمر» على الشاشة الرئيسية.`];
+            if (isSamsung) return [`اضغط القائمة <b>≡</b> تحت.`, `اختار <b>إضافة الصفحة إلى</b> ← <b>الشاشة الرئيسية</b>.`];
+            if (isAndroid) return [`اضغط قائمة المتصفح <b>⋮</b> (فوق على اليمين).`, `اختار <b>تثبيت التطبيق</b> أو <b>إضافة إلى الشاشة الرئيسية</b>.`, `اضغط <b>تثبيت</b>.`];
+            return [`اضغط علامة التثبيت <span aria-hidden="true">⊕</span> في آخر شريط العنوان، أو من القائمة <b>⋮</b> اختار <b>تثبيت</b>.`, `اضغط <b>تثبيت</b> — البوابة هتفتح في نافذة لوحدها.`];
+        }
         if (isIOS) {
             const notSafari = /crios|fxios|edgios/i.test(ua);
             return [
@@ -65,9 +86,17 @@
     let notify = (msg) => { try { (window.Site && Site.toast) ? Site.toast(msg, 'success') : null; } catch (e) { } };
 
     // showHelp(title, html) lets each part of the site use its own sheet design
+    const chromiumAndroid = () => isAndroid && !isFirefox && !isIOS;
     async function install({ showHelp } = {}) {
-        if (standalone()) { notify('You are already using the app 👍'); return 'installed'; }
-        const p = getPrompt();
+        if (standalone()) { notify(isParent() ? 'إنت فاتح التطبيق بالفعل 👍' : 'You are already using the app 👍'); return 'installed'; }
+        let p = getPrompt();
+        if (!p && chromiumAndroid()) {                                        // the offer sometimes lands a moment late
+            const tap = pendingTap = Date.now();
+            await new Promise(r => setTimeout(r, 900));
+            if (pendingTap !== tap) return 'prompted';                         // the offer arrived meanwhile and was shown
+            p = getPrompt();
+            if (p) pendingTap = 0;
+        }
         if (p) {
             // Called straight from the click, so the browser shows its own one-click install dialog
             try { p.prompt(); } catch (e) { clearPrompt(); update(); return showSteps(showHelp); }
@@ -77,13 +106,27 @@
         return showSteps(showHelp);
     }
     function showSteps(showHelp) {
-        const html = `<ol class="install-steps">${steps().map(s => `<li>${s}</li>`).join('')}</ol>`;
-        if (showHelp) showHelp(`Install ${appName()}`, html);
+        const ar = isParent(), live = chromiumAndroid() || (!isIOS && !isFirefox && !isAndroid);
+        const now = live ? `<div data-install-now-box hidden style="margin-bottom:12px"><button type="button" class="btn btn-primary btn-block" data-install-now>${ar ? '📲 ثبّت الآن بضغطة واحدة' : '📲 Install now — one tap'}</button></div>
+            <p data-install-wait class="small muted" style="margin:0 0 10px">${ar ? '⏳ المتصفح بيجهّز التثبيت بضغطة واحدة — خلّي الصفحة مفتوحة ثواني وهيظهر زرار «ثبّت الآن»، أو ثبّت يدويًا:' : '⏳ Your browser is getting the one-tap install ready — keep this open a few seconds, or install by hand:'}</p>` : '';
+        const note = ar && isAndroid ? `<p class="small muted" style="margin:10px 0 0">لو تطبيق الطالب «Science Academy» متثبّت على نفس الموبايل، كروم بيعتبر البوابة جزء منه ومش بيعرض التثبيت — استخدم الخطوات اللي فوق، أو افتح البوابة من موبايل حضرتك.</p>` : '';
+        const html = `${now}<ol class="install-steps">${steps().map(s => `<li>${s}</li>`).join('')}</ol>${note}`;
+        if (showHelp) showHelp(ar ? 'ثبّت بوابة ولي الأمر' : `Install ${appName()}`, html);
+        if (getPrompt()) offerArrived();
         else alert(steps().map(s => s.replace(/<[^>]+>/g, '')).join('\n'));
         return 'help';
     }
 
     document.addEventListener('click', (e) => {
+        const n = e.target.closest && e.target.closest('[data-install-now]');
+        if (n) {
+            e.preventDefault();
+            const p = getPrompt(); if (!p) return;
+            try { p.prompt(); } catch (err) { return; }
+            clearPrompt(); update();
+            const ov = n.closest('.overlay'); if (ov) { const x = ov.querySelector('[data-close]'); if (x) x.click(); }
+            return;
+        }
         const b = e.target.closest && e.target.closest('[data-install]');
         if (!b || b.dataset.installManual !== undefined) return;
         e.preventDefault();

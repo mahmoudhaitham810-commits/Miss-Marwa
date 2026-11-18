@@ -228,6 +228,8 @@ export async function onRequestGet(context) {
             const child = pickChild(parent, url.searchParams.get('sid'));
             if (!child) return pj({ error: 'الطالب ده مش مسجّل برقمك' }, 403);
             closingSweep(context, env, db, url.origin);
+            // last activity for the staff "Parents" page (written at most every 5 minutes)
+            await db.prepare(`UPDATE parents SET last_seen_at = CURRENT_TIMESTAMP WHERE phone = ? AND (last_seen_at IS NULL OR last_seen_at < datetime('now', '-5 minutes'))`).bind(parent.phone).run().catch(() => null);
             return pj(await overview(db, child));
         }
         if (action === 'messages') {
