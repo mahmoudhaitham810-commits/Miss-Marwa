@@ -116,7 +116,21 @@
         .msg-item:last-child { border-bottom: 0; }
         .msg-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
         .msg-item .pv { color: var(--muted); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .msg-item .nb { background: var(--danger); color: #fff; border-radius: 999px; font-size: 12px; font-weight: 700; padding: 2px 8px; }
+        .msg-item .nb { background: var(--danger); color: #fff; border-radius: 999px; font-size: 12px; font-weight: 700; padding: 3px 10px; white-space: nowrap; }
+        .msg-item.is-new { background: var(--primary-soft); border-radius: 14px; padding-inline: 10px; }
+        .msg-item.is-new b { color: var(--primary); }
+        .msg-item.is-new .pv { color: var(--text); font-weight: 600; }
+        #messages.has-unread { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft), 0 18px 36px -24px rgba(47, 91, 234, .7); }
+        .unread-pill { background: var(--danger); color: #fff; border-radius: 999px; font-size: 12px; font-weight: 700; padding: 3px 10px; animation: pillIn .4s ease; }
+        @keyframes pillIn { from { transform: scale(.6); opacity: 0; } }
+        .msg-alert { margin-top: 12px; width: 100%; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; text-align: start; padding: 12px 14px; border-radius: 18px;
+            border: 1.5px solid var(--primary); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; box-shadow: 0 14px 30px -20px rgba(47, 91, 234, .8); }
+        .msg-alert img { width: 42px; height: 42px; border-radius: 50%; }
+        .msg-alert b { display: block; font-size: 15px; } .msg-alert span span { display: block; color: var(--muted); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .msg-alert > span:nth-child(2) { min-width: 0; }
+        .msg-alert .go { background: var(--primary); color: #fff; border-radius: 12px; padding: 8px 12px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+        .kid { position: relative; } .kdot { position: absolute; top: 2px; left: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); border: 2px solid var(--canvas); }
+        [data-theme="dark"] .msg-alert .go, [data-theme="dark"] .unread-pill { color: #fff; }
         .lessons a { display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); text-decoration: none; color: inherit; }
         .lessons a:last-child { border-bottom: 0; } .lessons small { color: var(--muted); }
         /* chat panel */
@@ -243,8 +257,8 @@
                     <span>فكّر${g('ه', 'ها')} يحل${g('', 'ّ')} الامتحان من حساب${g('ه', 'ها')} قبل ما يقفل.</span>
                     ${d.alerts.closingSoon.length > 1 ? `<span class="more">+ ${d.alerts.closingSoon.length - 1} امتحان تاني هيقفل خلال يوم</span>` : ''}</div></div>` : '';
             const pct = s.overallPct, ringC = 2 * Math.PI * 52;
-            const rankTxt = s.ranked && s.rank ? `<span class="chip-w">🏅 الترتيب #${s.rank} من ${s.gradeSize}</span>` : `<span class="chip-w">🏅 لسه مش ${g('مترتب', 'مترتبة')} (${P(s.participation)} من الامتحانات)</span>`;
-            $('app').innerHTML = `<div id="top" class="sec"></div>${others}${urgent}
+            const rankTxt = s.ranked && s.rank ? `<span class="chip-w">🏅 الترتيب #${s.rank} من ${s.gradeSize}</span>` : `<span class="chip-w">🏅 لسه مش ${g('مترتب', 'مترتبة')} (<bdi dir="ltr">${P(s.participation)}</bdi> من الامتحانات)</span>`;
+            $('app').innerHTML = `<div id="top" class="sec"></div>${others}${urgent}<div id="msgAlert"></div>
                 <section class="pp-hero">
                     <div class="pp-hgrid">
                         <div>
@@ -295,7 +309,7 @@
                 </section>
 
                 <div class="grid2">
-                    <section class="card2 sec" id="messages"><h2>${icon('mail')}رسائل مس مروة<span class="side"><button class="btn btn-primary btn-sm" id="newMsg">${icon('plus', 'sm')}رسالة جديدة</button></span></h2><div id="msgList"></div></section>
+                    <section class="card2 sec" id="messages"><h2>${icon('mail')}رسائل مس مروة<span class="unread-pill" id="msgPill" hidden></span><span class="side"><button class="btn btn-primary btn-sm" id="newMsg">${icon('plus', 'sm')}رسالة جديدة</button></span></h2><div id="msgList"></div></section>
                     <section class="card2"><h2>${icon('book')}الجديد على المنصة لـ <span class="en" dir="ltr">${esc(c.gradeLabel)}</span></h2>
                         <div class="lessons">${d.lessons.length ? d.lessons.map(l => `<a href="${esc(/^https?:/.test(l.url || '') ? l.url : '#')}" target="_blank" rel="noopener"><span dir="auto">${l.category === 'videos' ? '🎬' : l.category === 'exams' ? '📝' : '📄'} ${esc(l.title)}</span><small>${fmtD(l.at)}</small></a>`).join('') : '<p class="muted" style="margin:0">لسه مفيش دروس جديدة.</p>'}</div>
                     </section>
@@ -332,11 +346,21 @@
                     ${r.status === 'taken' ? `<div class="pbar"><i style="width:${Math.max(2, r.pct)}%;background:${tone(r.pct)}"></i></div>` : ''}</div>`;
             }).join('') : `<p class="muted" style="margin:10px 0">لسه مفيش امتحانات ${tab === 'center' ? 'سنتر' : 'أونلاين'}.</p>`;
         }
+        // Unread messages from Miss Marwa (18 Nov 2026): badge + highlighted card + an alert at the top + dots on siblings
         function paintMessages() {
             if (!$('msgList')) return;
             const mine = MSGS.filter(m => m.studentId === sid);
-            $('msgList').innerHTML = mine.length ? mine.map(m => `<button class="msg-item" data-th="${m.id}"><img src="/assets/img/marwa-160.png" alt=""><span style="min-width:0"><b>${m.kind === 'announcement' ? '📣 إعلان من مس مروة' : 'مس مروة'}</b><div class="pv" dir="auto">${m.lastFromMe ? 'أنت: ' : ''}${esc(m.preview)}</div></span>${m.unread ? `<span class="nb">${m.unread}</span>` : `<small class="muted">${fmtD(m.at)}</small>`}</button>`).join('')
+            const unread = mine.reduce((a, m) => a + (m.unread || 0), 0);
+            $('msgList').innerHTML = mine.length ? mine.map(m => `<button class="msg-item ${m.unread ? 'is-new' : ''}" data-th="${m.id}"><img src="/assets/img/marwa-160.png" alt=""><span style="min-width:0"><b>${m.kind === 'announcement' ? '📣 إعلان من مس مروة' : 'مس مروة'}</b><div class="pv" dir="auto">${m.lastFromMe ? 'أنت: ' : ''}${esc(m.preview)}</div></span>${m.unread ? `<span class="nb">${m.unread} جديدة</span>` : `<small class="muted">${fmtD(m.at)}</small>`}</button>`).join('')
                 : `<p class="muted" style="margin:0 0 4px">مفيش رسائل لسه. تقدر تبعت لمس مروة أي استفسار بخصوص ${esc(DATA.child.firstName)}.</p>`;
+            $('messages').classList.toggle('has-unread', unread > 0);
+            $('msgPill').hidden = !unread; $('msgPill').textContent = unread ? `${unread} ${unread === 1 ? 'رسالة جديدة' : 'رسائل جديدة'}` : '';
+            const first = mine.find(m => m.unread);
+            $('msgAlert').innerHTML = first ? `<button class="msg-alert" data-th="${first.id}" role="status"><img src="/assets/img/marwa-160.png" alt="">
+                <span><b>${first.kind === 'announcement' ? '📣 إعلان جديد من مس مروة' : '💬 مس مروة بعتتلك رسالة جديدة'}</b><span dir="auto">${esc(first.preview || '')}</span></span>
+                <span class="go">افتح الرسالة</span></button>` : '';
+            // a brother / sister has unread messages → a dot on their chip
+            document.querySelectorAll('.kid[data-kid]').forEach(k => { k.querySelector('.kdot')?.remove(); if (k.dataset.kid !== sid && MSGS.some(m => m.studentId === k.dataset.kid && m.unread)) k.insertAdjacentHTML('beforeend', '<span class="kdot" title="رسالة جديدة"></span>'); });
         }
         function paintNavBadge() {
             const n = MSGS.reduce((a, m) => a + (m.unread || 0), 0);

@@ -25,12 +25,13 @@
     <link rel="stylesheet" href="/assets/student.css">
     <link rel="stylesheet" href="/assets/site.css">
     <style>
-        .role-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 6px; border-radius: 18px; background: var(--surface-2, rgba(47, 91, 234, .06)); border: 1px solid var(--border); margin-bottom: 22px; }
+        .role-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 6px; border-radius: 18px; background: var(--surface-2, rgba(47, 91, 234, .06)); border: 1px solid var(--border); margin-bottom: 22px; }
         .role-switch button { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 11px 10px; border-radius: 13px; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; transition: .2s; }
         .role-switch button span:last-child { display: grid; text-align: start; line-height: 1.15; }
         .role-switch button b { font-size: 15px; } .role-switch button small { font-size: 12.5px; }
         .role-switch button[aria-selected="true"] { background: var(--surface); color: var(--primary); box-shadow: 0 6px 18px -10px rgba(15, 23, 42, .35); }
         .role-switch .icon { width: 22px; height: 22px; }
+        @media (max-width: 420px) { .role-switch button { flex-direction: column; gap: 4px; padding: 9px 4px; } .role-switch button span:last-child { text-align: center; } .role-switch button b { font-size: 14px; } }
         #parentPane { font-family: 'IBM Plex Sans Arabic', Inter, sans-serif; }
         .pp-title { margin: 0 0 6px; }
         .pp-hint { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); margin: 4px 0 16px; line-height: 1.6; }
@@ -71,6 +72,7 @@
                 <div class="role-switch reveal" id="roleSwitch" role="tablist" aria-label="Who is signing in">
                     <button type="button" role="tab" data-role="student" aria-selected="true"><span data-icon="graduation" style="display:contents"></span><span><b>Student</b><small class="ar">طالب</small></span></button>
                     <button type="button" role="tab" data-role="parent" aria-selected="false"><span data-icon="users" style="display:contents"></span><span><b>Parent</b><small class="ar">ولي أمر</small></span></button>
+                    <button type="button" role="tab" data-role="staff" aria-selected="false"><span data-icon="shield" style="display:contents"></span><span><b>Assistant</b><small class="ar">مساعد</small></span></button>
                 </div>
                 <div id="studentPane">
                 <h1 class="reveal">Sign in</h1>
@@ -102,6 +104,31 @@
 
                 <p class="auth-foot reveal">New here? <a href="/signup.html">Create a free account</a></p>
                 <p class="auth-foot reveal" style="margin-top:8px;font-size:14px"><a href="#" id="waHelp" style="font-weight:600;color:var(--muted)" target="_blank" rel="noopener">Need help? Message us on WhatsApp</a></p>
+                </div>
+
+                <!-- ===== Assistant / staff sign-in (no sign-up: Miss Marwa creates these accounts in the staff portal) ===== -->
+                <div id="staffPane" hidden>
+                    <h1>Assistant sign in</h1>
+                    <p class="sub">Use the username and password Miss Marwa created for you. <span class="ar">الحساب بيتعمل من مس مروة بس.</span></p>
+                    <div class="notice danger form-error" id="aError" role="alert"><span data-icon="alert"></span><span id="aErrorText" dir="auto"></span></div>
+                    <form id="staffForm" novalidate>
+                        <div class="field" id="fAU">
+                            <label for="aUser">Username</label>
+                            <div class="input"><span data-icon="user" style="display:contents"></span>
+                                <input id="aUser" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="e.g. ahmed" maxlength="64" dir="ltr">
+                            </div>
+                            <span class="msg"></span>
+                        </div>
+                        <div class="field" id="fAP">
+                            <label for="aPass">Password</label>
+                            <div class="input"><span data-icon="lock" style="display:contents"></span>
+                                <input id="aPass" type="password" autocomplete="current-password" placeholder="Your password" maxlength="128">
+                            </div>
+                            <span class="msg"></span>
+                        </div>
+                        <button class="btn btn-primary btn-lg btn-block btn-glow" id="aSubmit" type="submit">Sign in to the staff portal</button>
+                    </form>
+                    <p class="auth-foot" style="font-size:14px">No account? Ask Miss Marwa to add you — assistants can't sign up here.</p>
                 </div>
 
                 <!-- ===== Parent Portal sign-in ===== -->
@@ -143,13 +170,34 @@
         // ---- Student / Parent switch ----
         const setRole = (r, push) => {
             document.querySelectorAll('#roleSwitch [data-role]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.role === r)));
-            $('studentPane').hidden = r !== 'student'; $('parentPane').hidden = r !== 'parent';
-            document.title = r === 'parent' ? 'بوابة ولي الأمر · Science Academy' : 'Sign in · Science Academy';
-            if (push) history.replaceState(null, '', r === 'parent' ? '?as=parent' : location.pathname);
-            setTimeout(() => (r === 'parent' ? $('pPhone') : (code.value ? pass : code)).focus({ preventScroll: true }), 60);
+            $('studentPane').hidden = r !== 'student'; $('parentPane').hidden = r !== 'parent'; $('staffPane').hidden = r !== 'staff';
+            document.title = r === 'parent' ? 'بوابة ولي الأمر · Science Academy' : r === 'staff' ? 'Assistant sign in · Science Academy' : 'Sign in · Science Academy';
+            if (push) history.replaceState(null, '', r === 'parent' ? '?as=parent' : r === 'staff' ? '?as=assistant' : location.pathname);
+            setTimeout(() => (r === 'parent' ? $('pPhone') : r === 'staff' ? ($('aUser').value ? $('aPass') : $('aUser')) : (code.value ? pass : code)).focus({ preventScroll: true }), 60);
         };
         $('roleSwitch').addEventListener('click', (e) => { const b = e.target.closest('[data-role]'); if (b) setRole(b.dataset.role, true); });
         document.querySelector('[data-role-link]').addEventListener('click', (e) => { e.preventDefault(); setRole('student', true); });
+        // ---- Assistant sign-in → the staff portal (same login as /admin/login.html) ----
+        try { const u = localStorage.getItem('staff_last_user'); if (u) $('aUser').value = u; } catch (e) { }
+        const aErr = (msg) => { const b = $('aError'); b.classList.remove('show'); void b.offsetWidth; $('aErrorText').textContent = msg; b.classList.add('show'); };
+        ['aUser', 'aPass'].forEach(id => $(id).addEventListener('input', () => { $(id).closest('.field').classList.remove('err'); $('aError').classList.remove('show'); }));
+        $('staffForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = $('aUser').value.trim().toLowerCase(), password = $('aPass').value;
+            if (!username) { $('fAU').classList.add('err'); $('fAU').querySelector('.msg').textContent = 'Enter your username'; }
+            if (!password) { $('fAP').classList.add('err'); $('fAP').querySelector('.msg').textContent = 'Enter your password'; }
+            if (!username || !password) return;
+            const b = $('aSubmit'), html = b.innerHTML;
+            b.disabled = true; b.innerHTML = '<span class="spinner"></span>Signing in…';
+            try {
+                const res = await fetch('/api/admin-auth?action=login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username, password }) });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok || !d.success) { aErr(d.error || 'Wrong username or password.'); b.disabled = false; b.innerHTML = html; $('aPass').select(); return; }
+                try { localStorage.setItem('staff_last_user', username); } catch (x) { }
+                b.innerHTML = `${Site.icon('checkCircle')}Welcome!`;
+                setTimeout(() => location.replace('/admin/'), 300);
+            } catch (x) { aErr('No internet connection.'); b.disabled = false; b.innerHTML = html; }
+        });
         // ---- Parent sign-in: their phone + the child's phone ----
         const pPhone = $('pPhone'), sPhone = $('sPhone'), pBtn = $('pSubmit'), pBtnHtml = pBtn.innerHTML;
         const waText = () => `السلام عليكم، أنا ولي أمر طالب في Science Academy ومحتاج مساعدة في الدخول لبوابة ولي الأمر.\nرقمي: ${pPhone.value || '—'}\nرقم الطالب: ${sPhone.value || '—'}`;
@@ -197,12 +245,13 @@
         });
         if (qs.get('reason') === 'devices') setTimeout(() => deviceLimit(), 80);
         if (qs.get('as') === 'parent') setRole('parent', false);
+        if (qs.get('as') === 'assistant' || qs.get('as') === 'staff') setRole('staff', false);
         if (qs.get('reason') === 'replaced') setTimeout(() => pErr('اتعمل تسجيل دخول من موبايل تاني — بوابة ولي الأمر بتشتغل على جهاز واحد بس. لو ده موبايلك سجّل دخول تاني.'), 60);
         if (qs.get('reason') === 'parent') setTimeout(() => pErr('سجّل دخول تاني من فضلك.'), 60);
         if (qs.get('reason') === 'session') {
             setTimeout(() => formError('For your security, please sign in again. · من فضلك سجّل دخول تاني.'), 50);
         }
-        if (qs.get('as') !== 'parent') (code.value ? pass : code).focus({ preventScroll: true });
+        if (!qs.get('as')) (code.value ? pass : code).focus({ preventScroll: true });
 
         // Show / hide password
         $('eyeBtn').addEventListener('click', () => {

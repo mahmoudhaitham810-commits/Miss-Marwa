@@ -348,7 +348,7 @@
         const dash = session ? Site.homeUrl(session) : '';
         document.getElementById('headerActions').insertAdjacentHTML('beforeend', session
             ? `<a class="btn btn-primary btn-sm" href="${dash}">${icon('home', 'sm')}Dashboard</a>`
-            : `<a class="btn btn-ghost btn-sm hide-sm parent-entry" href="/login.html?as=parent">${icon('users', 'sm')}<span class="ar">ولي أمر</span></a><a class="btn btn-ghost btn-sm hide-sm" href="/login.html">Sign in</a><a class="btn btn-primary btn-sm" href="/signup.html">Get started</a>`);
+            : `<a class="btn btn-ghost btn-sm hide-sm" href="/login.html">Sign in</a><a class="btn btn-primary btn-sm" href="/signup.html">Get started</a>`);
         document.getElementById('menuAuth').innerHTML = session
             ? `<a class="btn btn-primary btn-block" href="${dash}">Go to my dashboard</a>`
             : `<a class="btn btn-ghost btn-block" href="/login.html">Sign in</a><a class="btn btn-primary btn-block" href="/signup.html">Create free account</a><a class="btn btn-soft btn-block" href="/login.html?as=parent">${icon('users', 'sm')}بوابة ولي الأمر · Parents</a>`;
