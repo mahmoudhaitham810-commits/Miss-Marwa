@@ -19,6 +19,9 @@
     const waLink = (text) => `https://wa.me/${CONTACT.whatsapp}${text ? '?text=' + encodeURIComponent(text) : ''}`;
 
     const ICONS = {
+        image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+        mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
+        send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
         arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
         arrowLeft: '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
         check: '<path d="M20 6 9 17l-5-5"/>',
