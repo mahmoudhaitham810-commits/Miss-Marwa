@@ -72,6 +72,7 @@
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     ${A.copilotBtn('student:' + st.studentId)}
+                    <button class="btn btn-ghost" id="rankCheck">${icon('award', 'sm')}Rank check</button>
                     ${A.can('students.view') ? `<a class="btn btn-ghost" data-tutor-preview href="/admin/tutor-preview.html?id=${encodeURIComponent(st.studentId)}">${icon('bot', 'sm')}Student AI preview</a>` : ''}
                     ${st.parentPhone && A.can('reports.send') ? `<button class="btn btn-wa" id="centerRep">${icon('whatsapp', 'sm')}Center report</button><button class="btn btn-soft" id="onlineRep">${icon('whatsapp', 'sm')}Online report</button>` : ''}
                     ${A.can('reports.send') && A.feature('parentLinks') ? `<button class="btn btn-ghost" id="parentLink">${icon('link', 'sm')}Parent link</button>` : ''}
@@ -121,6 +122,7 @@
         // Signed-in devices (max 2) + Reset devices
         async function loadDevices() {
             let d; try { d = await api(`/api/students?action=devices&studentId=${encodeURIComponent(id)}`); } catch (e) { return; }
+            $('rankCheck')?.addEventListener('click', () => rankCheck(st.studentId));
             $('devicesCard').innerHTML = `<div class="card-head"><h2 class="card-title">${icon('lock')}Devices <span class="pill ${d.devices.length >= d.max ? 'danger' : ''}">${d.devices.length} of ${d.max}</span></h2>
                     ${A.can('students.reset-password') && d.devices.length ? `<button class="btn btn-ghost btn-sm danger-text" id="resetDevBtn">${icon('refresh', 'sm')}Reset devices · تصفير الأجهزة</button>` : ''}</div>
                 ${d.devices.length ? d.devices.map(x => `<div class="hrow"><div><b>${esc(x.label || 'Device')}</b><div class="small muted">first sign-in ${esc(A.fmtDate(x.firstSeen, true))}</div></div><span class="small muted">last seen ${esc(A.fmtDate(x.lastSeen, true))}</span></div>`).join('')
@@ -170,7 +172,32 @@
                 A.preview(st, ParentMessages.onlineReport(rep), 'Online report', 'online-report');
             } catch (err) { Site.toast(err.message, 'error'); }
         });
+
+        // Rank check: old site vs new site, exam by exam, plus anything in his records that pulls him down
+        async function rankCheck(id) {
+            let a; try { a = await api('/api/analytics?action=rank-audit&studentId=' + encodeURIComponent(id)); } catch (e) { return Site.toast(e.message, 'error'); }
+            const P = (v) => v === null || v === undefined ? '—' : `${Math.round(v * 10) / 10}%`;
+            const R = (r, of) => r ? `#${r} of ${of}` : 'not ranked';
+            const tone = { danger: 'danger', warn: 'warn', info: 'info' };
+            const rowCls = (t) => /→ 0|skipped/.test(t) ? 'danger-text' : /counted/.test(t) ? '' : 'muted';
+            Site.sheet({
+                iconName: 'award', title: `Rank check · ${a.student.name}`, subtitle: `${a.student.studentId} · ${A.GRADES[a.student.grade] || a.student.grade} · ${a.gradeSize} students`,
+                html: `<div class="rc">
+                    <table class="rc-t"><thead><tr><th></th><th>Old site<small>avg of each exam's %, center only, absences ignored</small></th><th>New site<small>marks earned ÷ possible, absent / missed = 0</small></th></tr></thead><tbody>
+                        <tr><td>Center exams</td><td><b>${P(a.oldSite.centerAvg)}</b><span>${R(a.oldSite.centerRank, a.oldSite.centerOf)}</span></td><td><b>${P(a.newSite.centerPct)}</b><span>${R(a.newSite.centerRank, a.newSite.centerOf)}</span></td></tr>
+                        <tr><td>Online exams</td><td><b>${P(a.oldSite.onlineAvg)}</b><span>${R(a.oldSite.onlineRank, a.oldSite.onlineOf)}</span></td><td><b>${P(a.newSite.onlinePct)}</b><span>missed = 0</span></td></tr>
+                        <tr><td>Combined</td><td class="muted">—</td><td><b>${P(a.newSite.combinedPct)}</b><span>${a.newSite.ranked ? R(a.newSite.combinedRank, a.newSite.combinedOf) : `not ranked (took ${a.newSite.participation}% of exams)`}</span></td></tr>
+                    </tbody></table>
+                    ${a.issues.length ? `<h4>What affects his rank</h4>${a.issues.map(x => `<div class="notice ${tone[x.level]}">${icon(x.level === 'info' ? 'info' : 'alert', 'sm')}<div dir="auto">${esc(x.text)}</div></div>`).join('')}` : '<p class="muted">Nothing unusual in his records.</p>'}
+                    ${a.ahead.length ? `<h4>Ahead of him now (combined)</h4><table class="rc-t sm"><thead><tr><th>#</th><th>Name</th><th>Combined</th><th>Center</th><th>Online</th><th>Old-site center</th></tr></thead><tbody>${a.ahead.map(x => `<tr><td>${x.rank}</td><td dir="auto">${esc(x.name)}</td><td>${P(x.combinedPct)}</td><td>${P(x.centerPct)}</td><td>${P(x.onlinePct)}</td><td>${P(x.oldCenterAvg)}</td></tr>`).join('')}</tbody></table>` : ''}
+                    <h4>Every exam</h4><table class="rc-t sm"><thead><tr><th>Exam</th><th>Mark</th><th>New site</th><th>Old site</th></tr></thead><tbody>
+                        ${a.exams.map(x => `<tr><td><span dir="auto">${esc(x.name)}</span><small>${x.kind === 'center' ? 'Center' : 'Online'}${x.group ? ' · ' + (A.BRANCHES[x.group] || x.group) : ''} · ${esc(x.date || '')}</small></td><td>${x.absent ? 'Absent' : x.score === null ? '—' : `${x.score}/${x.total}`}</td><td class="${rowCls(x.now)}">${esc(x.now)}</td><td class="muted">${esc(x.old)}</td></tr>`).join('')}
+                    </tbody></table></div>`,
+                actions: [{ label: 'Done', cls: 'btn-ghost' }]
+            });
+        }
     })();
-    </script>
+    
+</script>
 </body>
 </html>

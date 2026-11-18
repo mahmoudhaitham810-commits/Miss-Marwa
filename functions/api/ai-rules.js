@@ -73,6 +73,9 @@ export function isCapabilityQuestion(text) {
 // Words that are just chat, not science (so "hi", "how are you" never count as a science question)
 const CHAT_EN = new Set('mini assistant miss marwa pro argon bot chatgpt claude gemini hi hello hey hii thanks thank you thx ok okay yes no yeah yep nope how are you fine good great nice cool what who can do help me please pls sorry bye see later morning evening night the and for with this that is it its am im not really very much'.split(' '));
 const SCIENCE_AR = /(لخص|ملخص|فهمني|اشرح|اشرحي|اشرحلي|اشرحيلي|يعني ايه|يعني اية|معني|عرف|عرفي|تعريف|الفرق بين|قارن|ليه|علل|سبب|احسب|احسبي|حل|حلي|حللي|مساله|مسأله|قانون|معادله|وحده|وحدة|تجربه|ماذا يحدث|ايه اللي بيحصل|بيحصل ايه|صح ولا غلط|اختار|اكمل|كمل|سؤال|اسئله|امتحان|درس|ماده|عنصر|ذره|طاقه|قوه|سرعه|كثافه|كتله|خليه)/;
+// Questions about the PLATFORM itself (its content, students, marks, exams, groups) — never a science question
+const SITE = /(الموقع|المنصه|المنصة|ع الموقع|السيستم|الابلكيشن|التطبيق|website|\bsite\b|platform|\bapp\b|فيديو|فيديوهات|\bvideos?\b|(^|\s)(نزل|نزلت|اتنزل|اتنزلت|اترفع|اترفعت|رفعت)(\s|$)|uploaded|\bpdf\b|ملفات|\bfiles?\b|\bprep\s*-?\s*[123]\b|\bsec\s*-?\s*1\b|اعدادي|ثانوي|طالب|طالبه|طلبه|طلاب|\bstudents?\b|درجات|درجته|درجتها|نتيج|ترتيب|الاوائل|غياب|غايب|حضور|ولي امر|اولياء الامور|الجروب|السنتر|\bcenter\b|برايفت|\bprivate\b|امتحانات السنتر|امتحانات الاونلاين|\bonline exams?\b|whatsapp|واتساب)/i;
+export function isSiteQuestion(text) { return SITE.test(nrm(text)) || SITE.test(String(text || '')); }
 /** Is this a science / study question (→ the Pro note may follow a Mini Assistant answer)? */
 export function isScienceQuestion(text) {
     const raw = String(text || '');

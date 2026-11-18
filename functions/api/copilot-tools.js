@@ -21,6 +21,17 @@ export async function onRequest() { return new Response('Not found', { status: 4
 export const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
 export const GRADE_LABEL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
 const BR_LABEL = { center: 'Center', private: 'Private' };
+export const GRADE_AR = { prep1: 'أولى إعدادي', prep2: 'تانية إعدادي', prep3: 'تالتة إعدادي', sec1: 'أولى ثانوي' };
+// "اللي في تانية" / "التانية" / "2" — a grade said loosely, when she's answering "which one?"
+function looseGrade(t) {
+    const g = detectGrade(t); if (g) return g;
+    const s = norm(t);
+    if (/ثانوي|\bsec\b/.test(s)) return 'sec1';
+    if (/(^|\s)(ال)?(اولي|الاولي|1)(\s|$)/.test(s)) return 'prep1';
+    if (/(^|\s)(ال)?(تانيه|ثانيه|2)(\s|$)/.test(s)) return 'prep2';
+    if (/(^|\s)(ال)?(تالته|ثالثه|3)(\s|$)/.test(s)) return 'prep3';
+    return null;
+}
 const r1 = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Math.round(Number(v) * 10) / 10);
 const pctTxt = (v) => (v === null || v === undefined ? '—' : `${Math.round(v)}%`);
 const nm = (s) => `${s.firstName || ''} ${s.lastName || ''}`.trim();
@@ -84,7 +95,7 @@ const STUDENT_INTENT = /عامل|اخبار|مستوي|مستوا|درجات|د�
 // Arabic ↔ English name "sound key" for the AI Assistant (stricter than the duplicates check's nameKey):
 // keeps h (ح/ه), long و (ou/oo) and long ي (i/ee/y) so محمد/Mohamed ≠ أحمد/Ahmed ≠ محمود/Mahmoud and
 // عمر/Omar ≠ أميرة/Amira ≠ عمرو/Amr; ى and ة are vowels (مصطفى = Mostafa, سلمى = Salma).
-const AR_KEY = { 'ا': '', 'أ': '', 'إ': '', 'آ': '', 'ء': '', 'ؤ': 'w', 'ئ': 'y', 'ب': 'b', 'ت': 't', 'ة': '', 'ث': 's', 'ج': 'g', 'ح': 'h', 'خ': 'k', 'د': 'd', 'ذ': 'z', 'ر': 'r', 'ز': 'z', 'س': 's', 'ش': 's', 'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z', 'ع': '', 'غ': 'g', 'ف': 'f', 'ق': 'k', 'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n', 'ه': 'h', 'و': 'w', 'ى': '', 'ي': 'y' };
+const AR_KEY = { 'ا': '', 'أ': '', 'إ': '', 'آ': '', 'ء': '', 'ؤ': '', 'ئ': 'y', 'ب': 'b', 'ت': 't', 'ة': '', 'ث': 's', 'ج': 'g', 'ح': 'h', 'خ': 'k', 'د': 'd', 'ذ': 'z', 'ر': 'r', 'ز': 'z', 'س': 's', 'ش': 's', 'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z', 'ع': '', 'غ': 'g', 'ف': 'f', 'ق': 'k', 'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n', 'ه': 'h', 'و': 'w', 'ى': '', 'ي': 'y' };
 export function matchKey(word) {
     let w = String(word || '').toLowerCase().replace(/[ً-ٰٟـ]/g, '');
     if (/[؀-ۿ]/.test(w)) return w.replace(/^ال(?=..)/, '').split('').map(c => AR_KEY[c] ?? '').join('').replace(/(.)\1+/g, '$1');
@@ -96,14 +107,31 @@ export function matchKey(word) {
     return w.replace(/[aeiou]/g, '').replace(/(.)\1+/g, '$1');
 }
 
+// Two sound keys are the same name when they're equal, or equal without a final h
+// (شبانه = Shabana, صالح = Saleh, سارة = Sarah, عبدالله = Abdalla)
+// a final ى is a vowel (مصطفى = Mostafa) OR a ي (هانى = Hany) — try both
+export const matchKeys = (word) => { const k = matchKey(word); return /[؀-ۿ]/.test(word) && /ى$/.test(word) ? [k, k + 'y'] : [k]; };
+export const anySame = (as, bs) => as.some(a => bs.some(b => sameKey(a, b)));
+export const sameKey = (a, b) => !!a && !!b && a.length >= 2 && b.length >= 2 && (a === b || a.replace(/h$/, '') === b.replace(/h$/, ''));
+// Compound names are one name: "عبد الرحمن" = "Abdelrahman" = "Abdel Rahman"; "El Sayed" = "السيد"
+const JOIN_NEXT = /^(عبد|ابو|أبو|abd|abdel|abdul|abdal|abdl|abu|abou|el|al)$/i;
+export function nameWords(text) {
+    const w = String(text || '').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[^\p{L}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+    const out = [];
+    for (let i = 0; i < w.length; i++) { if (JOIN_NEXT.test(w[i]) && i + 1 < w.length && !STOP.has(norm(w[i + 1]))) { out.push(w[i] + w[i + 1]); i++; } else out.push(w[i]); }
+    return out;
+}
+
 let STU_CACHE = null;
 async function allStudents(db) {
     if (STU_CACHE && Date.now() - STU_CACHE.at < 60000) return STU_CACHE.rows;
     const { results } = await db.prepare(`SELECT student_id as studentId, first_name as firstName, last_name as lastName, grade, branch, gender FROM students`).all();
     const rows = (results || []).map(s => {
-        const first = norm(s.firstName).split(' ')[0] || '';
-        const last = norm(s.lastName).split(' ')[0] || '';
-        return { ...s, grade: String(s.grade || '').toLowerCase(), _f: first, _l: last, _fk: matchKey(first), _lk: matchKey(last) };
+        // first / last name as ONE name each (compound names joined), keys from the ORIGINAL spelling:
+        // norm() turns ة→ه and ى→ي, which made حبيبة ≠ Habiba and سلمى ≠ Salma before (18 Nov 2026)
+        const fw = nameWords(s.firstName), lw = nameWords(s.lastName);
+        const first = fw[0] || '', last = lw[0] || (fw[1] || '');
+        return { ...s, grade: String(s.grade || '').toLowerCase(), _f: norm(first), _l: norm(last), _fk: matchKeys(first), _lk: matchKeys(last) };
     });
     STU_CACHE = { at: Date.now(), rows };
     return rows;
@@ -116,21 +144,21 @@ export async function findStudents(db, text, grade = null) {
     const rows = await allStudents(db);
     if (idm) { const s = rows.find(r => r.studentId.toUpperCase() === idm[1].toUpperCase()); return s ? { matches: [s], strong: true } : { matches: [], strong: false, notFound: idm[1].toUpperCase() }; }
     // keep each word's original spelling for the sound key (norm() turns ى→ي and ة→ه, which would change it)
-    const raw = String(text).replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[^\p{L}\s]/gu, ' ').split(/\s+/).filter(Boolean)
+    const raw = nameWords(text)
         .map(w => (w.length > 3 && /^[وفلب]/.test(w) && !STOP.has(norm(w)) ? [w, w.slice(1)] : [w])).flat()
         .filter(w => !STOP.has(norm(w)));
     if (!raw.length) return { matches: [], strong: false };
-    const words = raw.map(norm), keys = raw.map(w => matchKey(w));
+    const words = raw.map(norm), keys = raw.map(w => matchKeys(w));
     const scored = [];
     for (const s of rows) {
         if (grade && s.grade !== grade) continue;
         let best = 0;
         for (let i = 0; i < words.length; i++) {
-            const fExact = s._f && words[i] === s._f, fKey = s._fk.length >= 2 && keys[i] === s._fk;
+            const fExact = s._f && words[i] === s._f, fKey = anySame(keys[i], s._fk);
             if (!fExact && !fKey) continue;
             let sc = fExact ? 3 : 2;
             const j = i + 1;
-            if (j < words.length && s._l && (words[j] === s._l || (s._lk.length >= 2 && keys[j] === s._lk))) sc += words[j] === s._l ? 4 : 3;
+            if (j < words.length && s._l && (words[j] === s._l || anySame(keys[j], s._lk))) sc += words[j] === s._l ? 4 : 3;
             best = Math.max(best, sc);
         }
         if (best) scored.push({ s, sc: best });
@@ -144,11 +172,14 @@ export async function findStudents(db, text, grade = null) {
     const intent = STUDENT_INTENT.test(norm(text));
     // A single first name only counts when she is clearly asking about a student (or spelled it exactly)
     if (!fullName && !intent) return { matches: [], strong: false };
-    return { matches: matches.slice(0, 12), strong: matches.length === 1 && (fullName || intent), total: matches.length };
+    const said = raw.find((w, i) => scored.some(x => (x.s._f && words[i] === x.s._f) || anySame(keys[i], x.s._fk))) || null;
+    return { matches: matches.slice(0, 12), strong: matches.length === 1 && (fullName || intent), total: matches.length, said };
 }
 
 // ---------- the router: which tool does this message need? ----------
 const RX = {
+    // the site's own content: latest videos / summaries / files (not "summarize this lesson")
+    lessons: /((فيديو|فيديوهات|video|videos|ملخص|ملخصات|summary|summaries|ملف|ملفات|file|files|pdf|شيت|شيتات|sheet|درس|دروس|lesson|lessons|محتوي)[^\n]{0,40}(نزل|نزلت|اتنزل|اتنزلت|نزلناه|رفع|اترفع|اترفعت|رفعناه|علي الموقع|ع الموقع|في الموقع|علي المنصه|uploaded|posted|on the (site|platform)|موجود))|((اخر|احدث|جديد|latest|newest|last|new)\s+(\S+\s+)?(فيديو|فيديوهات|video|videos|ملخص|ملخصات|summary|summaries|ملف|ملفات|file|files|pdf|شيت|دروس|lessons))/,
     brief: /ملخص (النهارده|انهارده|اليوم)|موجز|brief|صباح الخير|اخبار (النهارده|اليوم)|ايه الاخبار|عندي ايه النهارده|^today\b|morning/,
     inbox: /((اسئله|سؤال|questions?)\s.*(مستني|waiting|ماتردش|متردش|من غير رد|unanswered|اتسالت|الانبوكس))|inbox|الانبوكس|اسئله الطلبه|الاسئله المستنيه|questions waiting/,
     exams: /(امتحان|امتحانات|exam|quiz|كويز).*(نتيج|نتايج|result|درجات|حلو|محلش|ماحلش|مخلص|اتقفل|missed|taken|مين)|(محلش|ماحلش|محلوش|ماحلوش|حلوا|حلو|دخل|مدخلش|ماخدش).*(امتحان|exam|كويز)|(نتيج|نتايج|results?).*(امتحان|exam|كويز)|اخر امتحان|last exam/,
@@ -162,6 +193,17 @@ export async function route(db, text, focus = null) {
     const s = norm(text);
     const grade = detectGrade(text), branch = detectBranch(text);
     const listy = RX.top.test(s) || RX.attention.test(s) || RX.absent.test(s) || RX.inbox.test(s) || RX.exams.test(s) || RX.brief.test(s);
+    // 0) she's answering "which one?" — narrow the same list by grade or by name
+    if (focus && focus.type === 'pick' && Array.isArray(focus.matches)) {
+        const cands = (await allStudents(db)).filter(r => focus.matches.includes(r.studentId));
+        const g = looseGrade(text);
+        let left = g ? cands.filter(r => r.grade === g) : cands;
+        const ws = nameWords(text).filter(w => !STOP.has(norm(w))).map(w => ({ n: norm(w), k: matchKeys(w) }));
+        const byName = left.filter(r => ws.some(w => (r._l && w.n === r._l) || anySame(w.k, r._lk)));
+        if (byName.length) left = byName;
+        if (left.length === 1) return { tool: 'student', args: { id: left[0].studentId } };
+        if (left.length > 1 && left.length < cands.length) return { tool: 'pick', args: { matches: left.map(r => r.studentId), total: left.length, said: focus.said } };
+    }
     // 1) a student by ID / name
     const f = await findStudents(db, text, null);
     if (f.notFound) return { tool: 'note', args: { text: `مفيش طالب بالكود ${f.notFound} على السيستم — اتأكدي من الكود.`, facts: `No student with code ${f.notFound} exists on the platform. Tell her briefly.` } };
@@ -169,9 +211,13 @@ export async function route(db, text, focus = null) {
         if (f.matches.length === 1) return { tool: 'student', args: { id: f.matches[0].studentId } };
         const inGrade = grade ? f.matches.filter(m => m.grade === grade) : [];
         if (inGrade.length === 1) return { tool: 'student', args: { id: inGrade[0].studentId } };
-        return { tool: 'pick', args: { matches: (inGrade.length ? inGrade : f.matches).map(m => m.studentId), total: f.total } };
+        return { tool: 'pick', args: { matches: (inGrade.length ? inGrade : f.matches).map(m => m.studentId), total: inGrade.length || f.total, said: f.said } };
     }
     if (RX.brief.test(s)) return { tool: 'brief', args: {} };
+    if (RX.lessons.test(s) && !/(^|\s)(لخص|اشرح)|explain|summari[sz]e/.test(s)) {   // "لخصلي الدرس" is a science request (ملخص ≠ لخص)
+        const category = /فيديو|video/.test(s) ? 'videos' : /ملخص|summar|ملف|file|pdf|شيت|sheet/.test(s) ? 'summaries' : null;
+        return { tool: 'lessons', args: { grade, category } };
+    }
     if (RX.inbox.test(s)) return { tool: 'inbox', args: { grade } };
     if (RX.exams.test(s)) return { tool: 'exams', args: { grade: grade || (focus && focus.grade) || null } };
     if (RX.absent.test(s) && !(focus && focus.type === 'student' && !grade)) return { tool: 'absent', args: { grade: grade || (focus && focus.grade) || null, branch } };
@@ -191,6 +237,38 @@ export function planFromContext(c) {
     if (c.type === 'brief') return { tool: 'brief', args: {} };
     if (['attention', 'top', 'absent', 'exams'].includes(c.type)) return { tool: c.type, args: { grade: GRADES.includes(c.grade) ? c.grade : null, branch: ['center', 'private'].includes(c.branch) ? c.branch : 'all' } };
     return null;
+}
+
+
+// ---------- a student's standing, written by code (18 Nov 2026): same layout every time, exact numbers ----------
+const LEVEL_AR = { excellent: 'ممتاز 🌟', good: 'كويس جداً 👍', average: 'متوسط', weak: 'ضعيف ⚠️' };
+export function standingText(c) {
+    const st = c.student, sm = c.summary, f = st.gender === 'female';
+    const g = (m, w) => (f ? w : m);
+    const iso = (x) => `⁨${x}⁩`;
+    const P = (v) => (v === null || v === undefined ? '—' : `${Math.round(v)}%`);
+    const lines = [`**${iso(st.name)}** · ${st.gradeLabel}${st.branch ? ' · ' + st.branchLabel : ''}`];
+    if (sm.combinedRank) lines.push(`🏅 الترتيب: **#${sm.combinedRank} من ${sm.gradeSize}** في ${st.gradeLabel} (السنتر + الأونلاين)${sm.centerRank ? ` · **#${sm.centerRank}** في امتحانات السنتر` : ''}`);
+    else lines.push(`🏅 الترتيب: ${g('لسه مش مترتب', 'لسه مش مترتبة')} — ${g('حل', 'حلت')} ${P(sm.participation)} بس من الامتحانات (لازم 60%)${sm.centerRank ? ` · **#${sm.centerRank}** في امتحانات السنتر` : ''}`);
+    lines.push(`📊 المستوى العام: **${P(sm.combinedPct)}**${sm.level ? ' — ' + LEVEL_AR[sm.level] : ''}`, '');
+    const cParts = [`${g('حضر', 'حضرت')} ${sm.centerTaken}`]; if (sm.centerAbsent) cParts.push(`${g('غاب', 'غابت')} ${sm.centerAbsent}`);
+    const oParts = [`${g('حل', 'حلت')} ${sm.onlineTaken}`]; if (sm.onlineMissed) oParts.push(`${g('فاته', 'فاتها')} ${sm.onlineMissed}`);
+    lines.push(`- 📝 امتحانات السنتر: **${P(sm.centerPct)}** (${cParts.join(' · ')})`, `- 💻 امتحانات الأونلاين: **${P(sm.onlinePct)}** (${oParts.join(' · ')})`);
+    if (c.recent && c.recent.length) {
+        lines.push('', '🕒 آخر النتايج:');
+        for (const r of c.recent.slice(0, 3)) {
+            // Arabic first (every bullet reads right-to-left), the exam name and each number isolated so nothing swaps places
+            const res = r.status === 'taken' ? `**\u2066${P(r.pct)}\u2069** (\u2066${r.score}/${r.total}\u2069)` : r.status === 'absent' ? g('غاب', 'غابت') : g('ماحلّوش', 'ماحلّتهوش');
+            lines.push(`- ${r.kind === 'center' ? 'سنتر' : 'أونلاين'} · ${iso(r.name)}: ${res}`);
+        }
+    }
+    lines.push('');
+    if (c.reasons && c.reasons.length) lines.push(`⚠️ ${g('محتاج', 'محتاجة')} متابعة: ${c.reasons.map(r => iso(r.text)).join(' · ')}`);
+    else lines.push('✅ مفيش علامات قلق دلوقتي');
+    if (c.openNow && c.openNow.length) lines.push(`📲 عنده امتحان${c.openNow.length > 1 ? 'ات' : ''} مفتوح${c.openNow.length > 1 ? 'ة' : ''} لسه ${g('ماحلّهاش', 'ماحلّتهاش')}: ${c.openNow.map(o => iso(o.name)).join('، ')}`.replace('عنده', g('عنده', 'عندها')));
+    if (c.gap) lines.push(`🔎 الأونلاين أعلى من السنتر بـ ${Math.round(c.gap)} نقطة — تستاهل نظرة`);
+    if (c.questions && c.questions.total) lines.push(`💬 ${g('سأل', 'سألت')} ${c.questions.total} سؤال${c.questions.waiting ? ` (${c.questions.waiting} مستني رد)` : ''}`);
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 // ---------- tools ----------
@@ -244,14 +322,48 @@ const TOOLS = {
             flags.length ? `Exam integrity notes: ${flags.map(f => `${f.exam}: ${f.text}`).join('; ')}.` : '',
             `Questions asked: ${card.questions.total} (${card.questions.waiting} waiting).`
         ].filter(Boolean).join('\n');
-        return { cards: [card], facts, focus: { type: 'student', id: st.studentId, grade } };
+        return { cards: [card], facts, reply: standingText(card), focus: { type: 'student', id: st.studentId, grade } };
     },
 
     // Several students share that name → let her pick
-    async pick(ctx, { matches, total }) {
-        const rows = (await allStudents(ctx.db)).filter(s => matches.includes(s.studentId));
+    async pick(ctx, { matches, total, said }) {
+        const rows = (await allStudents(ctx.db)).filter(s => matches.includes(s.studentId))
+            .sort((a, b) => GRADES.indexOf(a.grade) - GRADES.indexOf(b.grade) || nm(a).localeCompare(nm(b)));
         const card = { type: 'pick', total: total || rows.length, rows: rows.map(s => ({ studentId: s.studentId, name: nm(s), grade: s.grade, gradeLabel: GRADE_LABEL[s.grade] || s.grade, branchLabel: BR_LABEL[s.branch] || '' })) };
-        return { cards: [card], facts: `Several students match this name (${card.total}): ${card.rows.map(r => `${r.name} (${r.gradeLabel})`).join(', ')}. Ask her which one she means — the list is shown under your reply.`, focus: null };
+        // the question itself is written by code — exact and short:
+        //   different grades → "تقصدي محمد اللي في أولى إعدادي ولا تانية إعدادي؟"
+        //   same grade       → "في اتنين محمد في تانية إعدادي: محمد عمر ومحمد حمود — تقصدي مين فيهم؟"
+        const first = said || (rows[0] ? String(rows[0].firstName || '').split(' ')[0] : '');
+        const grades = [...new Set(rows.map(r => r.grade))];
+        const N = { 2: 'اتنين', 3: 'تلاتة', 4: 'أربعة', 5: 'خمسة', 6: 'ستة', 7: 'سبعة', 8: 'تمنية', 9: 'تسعة', 10: 'عشرة' };
+        const joinAr = (xs) => xs.length <= 1 ? xs.join('') : xs.slice(0, -1).join('، ') + ' و' + xs[xs.length - 1];
+        const isoN = (x) => `\u2068${x}\u2069`;   // names stay in their own direction inside Arabic
+        let reply;
+        if (grades.length > 1) {
+            const parts = grades.map(g => { const n = rows.filter(r => r.grade === g).length; return `${GRADE_AR[g] || g}${n > 1 ? ` (${n})` : ''}`; });
+            reply = `فيه ${N[rows.length] || rows.length} طلبة اسمهم **${isoN(first)}** 👀 تقصدي ${isoN(first)} اللي في ${parts.length === 2 ? parts.join(' ولا ') : parts.slice(0, -1).join('، ') + ' ولا ' + parts[parts.length - 1]}؟`;
+        } else {
+            reply = `فيه ${N[rows.length] || rows.length} **${isoN(first)}** في ${GRADE_AR[grades[0]] || grades[0]}: ${joinAr(rows.map(r => `**${isoN(nm(r))}**`))} — تقصدي مين فيهم؟`;
+        }
+        return { cards: [card], reply, facts: reply, focus: { type: 'pick', matches: rows.map(r => r.studentId), said: first } };
+    },
+
+    // The site's own content: the latest videos / summaries / files for a grade (newest first, like the Lessons page)
+    async lessons(ctx, { grade, category }) {
+        const CAT = { videos: { en: 'Video', ar: 'فيديو', many: 'الفيديوهات' }, summaries: { en: 'Summary / file', ar: 'ملخص / ملف', many: 'الملخصات والملفات' }, exams: { en: 'Exam file', ar: 'ملف امتحان', many: 'ملفات الامتحانات' } };
+        let sql = 'SELECT id, title, grade, category, url, created_at as createdAt FROM lessons WHERE 1=1', args = [];
+        if (grade) { sql += " AND (LOWER(grade) = ? OR LOWER(grade) = 'all')"; args.push(grade); }
+        if (category) { sql += ' AND category = ?'; args.push(category); }
+        const { results } = await ctx.db.prepare(sql + ' ORDER BY rowid DESC LIMIT 6').bind(...args).all();
+        const rows = (results || []).map(l => ({ id: l.id, title: l.title, grade: String(l.grade || '').toLowerCase(), gradeLabel: GRADE_LABEL[String(l.grade || '').toLowerCase()] || 'All grades', category: l.category, kind: (CAT[l.category] || { en: l.category }).en, date: String(l.createdAt || '').slice(0, 10), url: l.url }));
+        const what = category ? CAT[category].ar : 'محتوى', whatMany = category ? CAT[category].many : 'الدروس والملفات';
+        const where = grade ? ` لـ ${GRADE_LABEL[grade]}` : '';
+        const dayAr = (d) => { if (!d) return ''; const t = new Date(d + 'T12:00:00Z'), now = new Date(); const days = Math.round((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())) / 86400000); return days === 0 ? 'النهارده' : days === 1 ? 'امبارح' : days < 7 ? `من ${days} أيام` : `يوم ${d}`; };
+        const reply = rows.length
+            ? `آخر ${what} نزل${where}: **\u2068${rows[0].title}\u2069**${!category ? ` (${rows[0].kind})` : ''} — ${dayAr(rows[0].date)} 📚${rows.length > 1 ? `\n\nواللي قبله:\n${rows.slice(1, 5).map(r => `- \u2068${r.title}\u2069${!grade ? ` · ${r.gradeLabel}` : ''} — ${dayAr(r.date)}`).join('\n')}` : ''}`
+            : `مفيش ${whatMany} متسجلة${where} على الموقع لسه.`;
+        const card = { type: 'lessons', title: `${category ? CAT[category].en + 's' : 'Lessons & files'}${grade ? ' · ' + GRADE_LABEL[grade] : ''}`, rows };
+        return { cards: rows.length ? [card] : [{ type: 'note', text: reply }], reply, facts: reply, focus: { tool: 'lessons', args: { grade, category }, grade } };
     },
 
     // Students who need attention (falling marks, missing exams, weak average, online≫center gap) + weakest

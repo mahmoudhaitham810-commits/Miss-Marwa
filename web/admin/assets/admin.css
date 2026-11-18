@@ -411,3 +411,13 @@ a.kpi:hover { transform: translateY(-2px); border-color: var(--primary-line); }
 /* ✨ Co-Pilot entry buttons (Miss Marwa only) */
 .btn-ai { background: linear-gradient(135deg, var(--primary), #8b5cf6 60%, #ec4899); color: #fff; border: 0; box-shadow: 0 8px 20px -10px color-mix(in srgb, #8b5cf6 70%, transparent); }
 .btn-ai:hover { filter: brightness(1.06); color: #fff; }
+
+/* Rank check sheet */
+.rc h4 { margin: 16px 0 8px; font-size: 14px; }
+.rc .notice { margin-bottom: 6px; }
+.rc-t { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.rc-t th, .rc-t td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.rc-t th { font-weight: 600; color: var(--muted); font-size: 12px; }
+.rc-t th small, .rc-t td small, .rc-t td span:not([dir]) { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.rc-t td b { font-size: 16px; }
+.rc-t.sm td { font-size: 12.5px; }

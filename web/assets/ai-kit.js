@@ -39,7 +39,13 @@
             const at = []; let flat = '';
             ch.forEach((x, k) => { for (let i = 0; i < x.c.length; i++) at.push(k); flat += x.c; });
             let m; RUN.lastIndex = 0;
-            while ((m = RUN.exec(flat))) { starts.add(at[m.index]); ends.add(at[m.index + m[0].length - 1]); }
+            while ((m = RUN.exec(flat))) {
+                // a bracket belongs to the English piece only when both halves are inside it: "(حضر 4)" keeps its ")" Arabic-side
+                let t = m[0];
+                const cnt = (re) => (t.match(re) || []).length;
+                while (t.length > 1 && /[)\]]$/.test(t) && cnt(/[)\]]/g) > cnt(/[(\[]/g)) t = t.slice(0, -1).replace(/\s+$/, '');
+                starts.add(at[m.index]); ends.add(at[m.index + t.length - 1]);
+            }
         }
         let html = '', b = false;
         ch.forEach((x, k) => {

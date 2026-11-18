@@ -1,4 +1,5 @@
 import { requireStaff, ensureAppSchema } from './admin-auth.js';
+import { nameWords, matchKeys, anySame } from './copilot-tools.js';   // Arabic ↔ English name keys (functions only — safe circular import)
 
 // ============================================================
 // Analytics API (staff only)
@@ -7,7 +8,8 @@ import { requireStaff, ensureAppSchema } from './admin-auth.js';
 // GET /api/analytics?action=student&studentId=MM-123456
 //
 // One rule for every percentage: marks earned ÷ marks possible (never an average of percentages).
-//   Center column  : a mark counts; "Absent" counts as 0; a cell not entered yet is skipped.
+//   Center column  : a mark counts (always — even in the other group's exam); "Absent" counts as 0;
+//                    a cell not entered yet is skipped; the other group's exam is skipped unless he has a mark in it.
 //                    A column with no marks at all yet is ignored (not graded yet).
 //   Online exam    : a submission counts; a CLOSED exam the student never submitted counts as 0
 //                    (only if they had an account before it closed); an open exam is skipped.
@@ -94,8 +96,10 @@ function standing(student, exams, marks, kind, skipKeys) {
     const joined = toMs(student.createdAt);
     for (const e of exams) {
         if (e.kind !== kind || (skipKeys && skipKeys.has(e.key)) || !e.total) continue;
-        if (e.kind === 'center' && e.branch && e.branch !== student.branch) continue; // the other branch's exam
         const m = marks[e.key][student.studentId];
+        // The other group's exam: skipped — unless he really has a mark in it (moved group later, never had a group,
+        // or sat that exam). A real mark always counts; it used to be dropped silently (18 Nov 2026 audit).
+        if (e.kind === 'center' && e.branch && e.branch !== student.branch && !(m && !m.absent)) continue;
         if (!m && joined && joined > e.at) continue; // joined after this exam (a mark, if any, still counts)
         const row = (status, score) => ({ key: e.key, name: e.name, date: e.date, kind, status, score, total: e.total, pct: score === null ? null : (score / e.total) * 100 });
         if (e.kind === 'online') {
@@ -205,6 +209,104 @@ export async function studentProfile(db, studentId) {
         },
         center, online,
         integrity: { gap, flaggedExams: flagged, notRecorded: online.filter(o => o.recorded === false).length }
+    };
+}
+
+// ---------- Rank check (18 Nov 2026): why is a student where he is? old site vs new site, exam by exam ----------
+// The old site (before 14 Nov 2026) ranked by the AVERAGE OF EACH EXAM'S % — center (paper) exams only — and ignored
+// absences and missed online exams. The new site uses marks earned ÷ marks possible, counts "Absent" and closed online
+// exams never submitted as 0, combines center + online, and ranks only students who took ≥ 60% of their exams.
+const nrmName = (t) => String(t || '').toLowerCase().replace(/[ً-ٰٟـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim();
+function oldWayAvg(student, data, kind) {   // the old site's formula
+    let sum = 0, n = 0;
+    for (const e of data.exams) {
+        if (e.kind !== kind || !e.total) continue;
+        const m = data.marks[e.key][student.studentId];
+        if (m && !m.absent && m.score !== null) { sum += (m.score / e.total) * 100; n++; }
+    }
+    return n ? sum / n : null;
+}
+function rankBy(rows) {   // standard competition ranking; rows: [{ id, v }] (v null = not ranked)
+    const sorted = rows.filter(r => r.v !== null).sort((a, b) => b.v - a.v);
+    const out = {}; let prev = null, rank = 0;
+    sorted.forEach((r, i) => { if (prev === null || Math.abs(r.v - prev) > 1e-9) rank = i + 1; out[r.id] = rank; prev = r.v; });
+    return { ranks: out, of: sorted.length };
+}
+export async function rankAudit(db, studentId) {
+    const st = await db.prepare(`SELECT student_id as studentId, first_name as firstName, last_name as lastName, grade, branch, phone,
+            parent_phone as parentPhone, created_at as createdAt FROM students WHERE student_id = ?`).bind(studentId).first();
+    if (!st) return null;
+    const grade = String(st.grade || '').toLowerCase();
+    const data = await loadGrade(db, grade);
+    const me = data.students.find(x => x.studentId === studentId) || st;
+    const all = data.students;
+    const nb = (x) => boardValue(x, data, 'center', null), nc = (x) => boardValue(x, data, 'combined', null);
+    const R = {
+        oldCenter: rankBy(all.map(x => ({ id: x.studentId, v: oldWayAvg(x, data, 'center') }))),
+        oldOnline: rankBy(all.map(x => ({ id: x.studentId, v: oldWayAvg(x, data, 'online') }))),
+        newCenter: rankBy(all.map(x => { const v = nb(x); return { id: x.studentId, v: v.ranked ? v.pct : null }; })),
+        newCombined: rankBy(all.map(x => { const v = nc(x); return { id: x.studentId, v: v.ranked ? v.pct : null }; }))
+    };
+    const myC = nb(me), myB = nc(me);
+    // every exam of his grade, and what each rule did with it
+    const joined = toMs(me.createdAt);
+    const exams = data.exams.map(e => {
+        const m = data.marks[e.key][studentId];
+        const otherGroup = e.kind === 'center' && e.branch && e.branch !== me.branch;
+        let now, old;
+        if (e.kind === 'center') {
+            if (m && !m.absent) { now = otherGroup ? 'counted (other group)' : 'counted'; old = 'counted'; }
+            else if (otherGroup) { now = 'skipped — other group'; old = 'not counted'; }
+            else if (!m && joined && joined > e.at) { now = 'skipped — before he joined'; old = 'not counted'; }
+            else if (m && m.absent) { now = 'absent → 0'; old = 'not counted'; }
+            else { now = 'not entered yet'; old = 'not counted'; }
+        } else {
+            if (m) { now = 'counted'; old = 'counted'; }
+            else if (!e.closed) { now = 'still open'; old = 'not counted'; }
+            else if (joined && joined > e.at) { now = 'skipped — before he joined'; old = 'not counted'; }
+            else { now = 'missed → 0'; old = 'not counted'; }
+        }
+        return { kind: e.kind, name: e.name, date: e.date, total: e.total, group: e.branch || null, score: m ? (m.absent ? null : m.score) : null, absent: !!(m && m.absent), pct: m && !m.absent && e.total ? r1((m.score / e.total) * 100) : null, now, old };
+    });
+    // records that can push a good student down
+    const issues = [];
+    const { results: subs } = await db.prepare(`SELECT s.exam_id as examId, s.status, s.score, e.title, e.questions, e.expires_at as expiresAt
+        FROM exam_submissions s JOIN exams e ON e.id = s.exam_id WHERE s.student_id = ?`).bind(studentId).all();
+    const opened = (subs || []).filter(x => x.status === 'started' && toMs(x.expiresAt) <= Date.now());
+    if (opened.length) issues.push({ code: 'opened-not-saved', level: 'danger', text: `${opened.length} online exam${opened.length > 1 ? 's' : ''} opened but never saved as submitted (counted as 0): ${opened.map(x => x.title).join(' · ')}` });
+    for (const x of subs || []) { let t = 0; try { t = JSON.parse(x.questions).length; } catch (e) { } if (x.status === 'submitted' && t && Number(x.score) > t) issues.push({ code: 'score-over-total', level: 'warn', text: `"${x.title}": score ${x.score} is more than the ${t} questions — questions were removed after he took it` }); }
+    const dupSubs = await db.prepare(`SELECT exam_id, COUNT(*) c FROM exam_submissions WHERE student_id = ? GROUP BY exam_id HAVING c > 1`).bind(studentId).all();
+    if ((dupSubs.results || []).length) issues.push({ code: 'double-submission', level: 'warn', text: `${dupSubs.results.length} online exam${dupSubs.results.length > 1 ? 's have' : ' has'} two attempts saved — only one counts` });
+    const dupMarks = await db.prepare(`SELECT exam_id, COUNT(*) c FROM offline_grades WHERE student_id = ? GROUP BY exam_id HAVING c > 1`).bind(studentId).all();
+    if ((dupMarks.results || []).length) issues.push({ code: 'double-mark', level: 'danger', text: `${dupMarks.results.length} center exam${dupMarks.results.length > 1 ? 's have' : ' has'} two marks saved for him — only one is used` });
+    const other = exams.filter(x => x.now === 'counted (other group)').length;
+    if (other) issues.push({ code: 'other-group-marks', level: 'info', text: `${other} mark${other > 1 ? 's' : ''} in the other group's exams — counted now (before 18 Nov they were silently left out)` });
+    if (!['center', 'private'].includes(me.branch)) issues.push({ code: 'no-group', level: 'warn', text: 'No group (Center / Private) yet — pick one so the right exams apply to him' });
+    const missed = exams.filter(x => x.now === 'missed → 0').length, absent = exams.filter(x => x.now === 'absent → 0').length;
+    if (missed) issues.push({ code: 'missed-online', level: 'info', text: `${missed} closed online exam${missed > 1 ? 's' : ''} never submitted → counted as 0 (the old site ignored them)` });
+    if (absent) issues.push({ code: 'absent', level: 'info', text: `${absent} center exam${absent > 1 ? 's' : ''} marked Absent → counted as 0 (the old site ignored them)` });
+    // the same person with another account (marks split between two accounts)
+    const { results: everyone } = await db.prepare('SELECT student_id as studentId, first_name as f, last_name as l, grade, phone, parent_phone as pp FROM students WHERE student_id <> ?').bind(studentId).all();
+    // same full name, or the same student phone (a shared PARENT phone is just siblings — not counted)
+    // (any spelling: "معتمن هانى" = "Motaman Hany")
+    const myName = nrmName(`${me.firstName} ${me.lastName}`);
+    const k2 = (f, l) => { const fw = nameWords(f), lw = nameWords(l); return [matchKeys(fw[0] || ''), matchKeys(lw[0] || fw[1] || '')]; };
+    const [mf, ml] = k2(me.firstName, me.lastName);
+    const dups = (everyone || []).filter(x => { const [xf, xl] = k2(x.f, x.l); return nrmName(`${x.f} ${x.l}`) === myName || (anySame(mf, xf) && anySame(ml, xl)) || (x.phone && st.phone && String(x.phone).trim() === String(st.phone).trim()); });
+    if (dups.length) issues.push({ code: 'other-account', level: 'danger', text: `Possible second account: ${dups.map(x => `${x.f} ${x.l} (${x.studentId}, ${x.grade})`).join(' · ')} — his marks may be split between them`, accounts: dups.map(x => x.studentId) });
+    return {
+        student: { studentId, name: `${me.firstName} ${me.lastName}`, grade, branch: me.branch || null, joined: String(st.createdAt || '').slice(0, 10) },
+        gradeSize: all.length,
+        oldSite: { centerAvg: r1(oldWayAvg(me, data, 'center')), centerRank: R.oldCenter.ranks[studentId] || null, centerOf: R.oldCenter.of,
+                   onlineAvg: r1(oldWayAvg(me, data, 'online')), onlineRank: R.oldOnline.ranks[studentId] || null, onlineOf: R.oldOnline.of },
+        newSite: { centerPct: r1(myC.pct), centerRank: R.newCenter.ranks[studentId] || null, centerOf: R.newCenter.of,
+                   onlinePct: r1(myB.online.pct), combinedPct: r1(myB.pct), combinedRank: R.newCombined.ranks[studentId] || null, combinedOf: R.newCombined.of,
+                   ranked: myB.ranked, participation: r1(myB.participation * 100) },
+        ahead: Object.entries(R.newCombined.ranks).filter(([id, r]) => r < (R.newCombined.ranks[studentId] || 1e9)).sort((a, b) => a[1] - b[1]).slice(0, 10).map(([id, r]) => {
+            const x = all.find(y => y.studentId === id), v = nc(x);
+            return { rank: r, name: `${x.firstName} ${x.lastName}`, combinedPct: r1(v.pct), centerPct: r1(v.center.pct), onlinePct: r1(v.online.pct), oldCenterAvg: r1(oldWayAvg(x, data, 'center')) };
+        }),
+        exams, issues
     };
 }
 
@@ -377,6 +479,12 @@ export async function onRequestGet(context) {
                 top10Center: top('center'), top10Combined: top('combined'), weakest20: weakest,
                 rules: { minParticipation: MIN_PARTICIPATION }
             });
+        }
+
+        if (action === 'rank-audit') {
+            const a = await rankAudit(db, url.searchParams.get('studentId') || '');
+            if (!a) return Response.json({ error: 'الطالب غير موجود' }, { status: 404 });
+            return Response.json(a);
         }
 
         // Student profile: every center + online exam with score, % and date, plus exam-integrity flags

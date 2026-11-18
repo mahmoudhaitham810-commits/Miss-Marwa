@@ -211,7 +211,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
-    <script src="/assets/ai-kit.js?v=20261117d"></script>
+    <script src="/assets/ai-kit.js?v=20261118a"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -321,6 +321,7 @@
                         ${st.parentPhone ? `<button class="btn btn-wa btn-sm" data-wa="parent" data-k="${k}">${icon('whatsapp', 'sm')}Parent</button>` : ''}
                         ${st.phone ? `<button class="btn btn-ghost btn-sm" data-wa="student" data-k="${k}">${icon('whatsapp', 'sm')}Student</button>` : ''}</div></div>`;
             },
+            lessons: (c) => `<div class="dc lcard"><h5>📚 ${esc(c.title)}</h5><div class="rows" style="margin-top:8px">${(c.rows || []).map(r => `<div class="row"><a class="nm" href="${esc(/^https?:\/\//.test(r.url || '') || /^\//.test(r.url || '') ? r.url : '/admin/content.html')}" target="_blank" rel="noopener"><b dir="auto">${esc(r.title)}</b><small>${esc(r.kind)} · ${esc(r.gradeLabel)} · ${esc(r.date)}</small></a>${icon('chevronRight', 'sm')}</div>`).join('')}</div><div class="acts"><a class="btn btn-ghost btn-sm" href="/admin/content.html">${icon('book', 'sm')}Lessons & files</a></div></div>`,
             pick: (c, k) => `<div class="dc pcard"><h5>👥 Which one?</h5><p class="sub">${c.total} students match — tap the one you mean</p><div class="rows" style="margin-top:8px">${c.rows.map(r => `<div class="row"><button class="nm" data-student="${esc(r.studentId)}"><b dir="auto">${esc(r.name)}</b><small>${esc(r.gradeLabel)}${r.branchLabel ? ' · ' + esc(r.branchLabel) : ''} · ${esc(r.studentId)}</small></button>${icon('chevronRight', 'sm')}</div>`).join('')}</div></div>`,
             list(c, k) {
                 const ic = { attention: '⚠️', top: '🏆', absent: '🚫' }[c.kind] || '📋';

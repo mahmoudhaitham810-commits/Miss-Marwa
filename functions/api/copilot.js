@@ -10,7 +10,7 @@ import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gate
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
-import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate, askKind, taskRules, dropAnswerLine, isScienceQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate, askKind, taskRules, dropAnswerLine, isScienceQuestion, isSiteQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const bad = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
@@ -149,11 +149,11 @@ export const STYLE_EXAMPLES = [
 const SMALLTALK = /^(شكرا|شكرًا|ميرسي|متشكره|متشكر|تسلم|تسلمي|تمام|اوك|اوكي|ok|okay|thanks|thank you|thx|hi|hello|hey|ازيك( يا [^\n]{1,30})?|صباح الخير|مساء الخير|السلام عليكم|اهلا|أهلا|ماشي|حلو|جميل|برافو|عظيم|perfect|great|nice)[\s!.,،؟?😊👌🙏❤️💪✨]*$|تقدر تعمل ايه|تقدر تعمل إيه|بتعمل ايه|بتعمل إيه|انت مين|إنت مين|what can you do|who are you|^help$|ساعدني ازاي/i;
 export const ARGON_NOTE = 'دي إجابة مبسّطة ومحدودة 🙂 — للأسئلة العلمية (شرح، أسئلة، نماذج إجابة) أنصحك تستخدمي **Miss Marwa Assistant Pro**.';
 export const IMAGE_NOTE = 'دي إجابة مبدئية من Mini Assistant 🙂 — لأدق حل وتحليل للصور جرب **Miss Marwa Assistant Pro**.';
-export function needsUpgradeNote(tier, text, hasData) { return tier === 'free' && !hasData && isScienceQuestion(text); }   // real science questions only
+export function needsUpgradeNote(tier, text, hasData) { return tier === 'free' && !hasData && isScienceQuestion(text) && !isSiteQuestion(text); }   // real science questions only — never questions about the site / students
 
 const threadOut = (t) => ({ id: t.id, title: t.title, createdAt: t.created_at, updatedAt: t.updated_at, last: t.last_text ? String(t.last_text).replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 90) : '', count: t.n || 0 });
 const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } };
-const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, neurons: m.neurons, costUsd: m.cost_usd, error: m.error || null, at: m.created_at, cards: parse(m.cards), imageId: m.image_id || null });
+const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, model: m.model || null, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, neurons: m.neurons, costUsd: m.cost_usd, error: m.error || null, at: m.created_at, cards: parse(m.cards), imageId: m.image_id || null });
 // What the chat bubble says when she taps a ✨ button (the lookup itself comes from the context)
 function contextText(plan, result) {
     const c = result && result.cards && result.cards[0];
@@ -274,6 +274,13 @@ export async function onRequest(context) {
             if (!img && !result && isCapabilityQuestion(text)) {
                 cards = null;
                 const saved = await saveReply({ text: capabilitiesForStaff(tier), model: 'built-in', ms: 0 });
+                return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });
+            }
+            // A lookup with a code-written answer (which student? / a student's standing / latest lessons) → no AI:
+            // always exact, same clear layout, no units. If she asks it to WRITE or EXPLAIN something, the AI answers from the data.
+            const wantsWriting = /ابعت|رساله|رسالة|اكتب|صيغ|صياغ|draft|message|write|ليه|ازاي|why|how come|نصيح|اقترح|suggest/i.test(text || '');
+            if (result && result.reply && (!wantsWriting || plan.tool === 'pick')) {
+                const saved = await saveReply({ text: result.reply, model: 'built-in', ms: 0 });
                 return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });
             }
             try {
