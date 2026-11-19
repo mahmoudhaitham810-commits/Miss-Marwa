@@ -17,6 +17,15 @@
     <link rel="stylesheet" href="/assets/student.css">
     <link rel="stylesheet" href="/assets/site.css">
     <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        .ai-tag { display: block; width: fit-content; max-width: 100%; margin-top: 6px; padding: 4px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; line-height: 1.4; }
+        .ai-tag.ok { background: var(--success-soft); color: var(--success); }
+        .ai-tag.scan { background: var(--warning-soft); color: var(--notice-warning-text, #92400e); }
+        .ai-tag.none { background: var(--surface-2); color: var(--muted); }
+        .pdf-pick { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1.5px dashed var(--border); border-radius: 14px; cursor: pointer; }
+        .pdf-pick input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+        .pdf-pick:focus-within { border-color: var(--primary); }
+    </style>
 </head>
 <body class="site staff">
     <main class="main" id="main">
@@ -47,7 +56,7 @@
         await A.boot({ active: 'content', title: 'Lessons & files' });
         A.hydrate();
         const qs = new URLSearchParams(location.search);
-        let grade = qs.get('grade') || 'all', cat = 'all', L = [];
+        let grade = qs.get('grade') || 'all', cat = 'all', L = [], PDF = {};
         const CAT = { videos: { label: 'Video', ic: 'video' }, summaries: { label: 'Summary', ic: 'book' }, exams: { label: 'Exam paper', ic: 'file' } };
 
         A.gradeSelect($('gradePick'), grade, (v) => { grade = v; render(); }, { all: true });
@@ -58,6 +67,7 @@
         async function load() {
             $('list').innerHTML = '<div class="skel" style="height:260px;border-radius:18px"></div>';
             try { L = await api('/api/lessons'); } catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            try { PDF = Object.fromEntries(((await api('/api/lesson-pdf?action=list')).files || []).map(f => [f.lessonId, f])); } catch (e) { PDF = {}; }
             L.forEach(l => { l.grade = String(l.grade || '').toLowerCase(); l.category = String(l.category || '').toLowerCase(); });
             // Newest upload first (server upload order; the ITEM-<time> id as a fallback)
             const key = (i) => Number(i._order) || Number(String(i.id || '').replace(/\D/g, '').slice(0, 15)) || 0;
@@ -80,15 +90,70 @@
                     <div class="lic">${icon(c.ic)}</div>
                     <div class="lbody"><b dir="auto">${esc(l.title)}</b>
                         <div class="small">${esc(A.GRADES[l.grade] || l.grade)} · ${esc(c.label)} · ${esc(A.fmtDate(l.created_at || l.createdAt))}</div>
-                        ${l.notes ? `<div class="small" dir="auto" style="margin-top:4px">${esc(l.notes)}</div>` : ''}</div>
+                        ${l.notes ? `<div class="small" dir="auto" style="margin-top:4px">${esc(l.notes)}</div>` : ''}
+                        ${aiTag(l)}</div>
                     <div class="lactions">
+                        ${l.category === 'summaries' && A.can('lessons.create') ? `<button class="icon-btn" data-pdf="${esc(l.id)}" title="${PDF[l.id] ? 'Replace the PDF' : 'Attach the PDF so Assistant Pro can summarize it'}" aria-label="Attach PDF">${icon('file', 'sm')}</button>` : ''}
                         <a class="icon-btn" href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener" title="Open link" aria-label="Open link">${icon('link', 'sm')}</a>
                         ${A.can('lessons.delete') ? `<button class="icon-btn danger-text" data-del="${esc(l.id)}" title="Delete" aria-label="Delete">${icon('trash', 'sm')}</button>` : ''}
                     </div></div>`;
             }).join('')}</div>`;
         }
+        // Assistant Pro can only summarize summaries whose PDF is on the platform (a Drive link can't be read)
+        function aiTag(l) {
+            if (l.category !== 'summaries') return '';
+            const f = PDF[l.id];
+            if (!f) return `<span class="ai-tag none" title="Attach the PDF (file button) so Assistant Pro can summarize it">No PDF — AI can't read it</span>`;
+            return f.readable ? `<span class="ai-tag ok" title="Assistant Pro can summarize this with the students">✨ AI ready · ${f.pages} page${f.pages === 1 ? '' : 's'}</span>`
+                : `<span class="ai-tag scan" title="This PDF is photos only — Assistant Pro can't read it">📷 Scanned — no text</span>`;
+        }
+        // ---------- PDF → text in this browser (pdf.js, free) + upload ----------
+        let pdfLib = null;
+        const loadPdf = () => pdfLib || (pdfLib = (window.__pdfjsLib ? Promise.resolve(window.__pdfjsLib) : import('/assets/vendor/pdfjs/pdf.min.js').then(m => { m.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js'; return m; })));
+        async function pdfPages(file, onStep) {
+            const lib = await loadPdf();
+            const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+            const pages = [];
+            for (let n = 1; n <= Math.min(doc.numPages, 400); n++) {
+                const tc = await (await doc.getPage(n)).getTextContent();
+                pages.push(tc.items.map(it => (it.str || '') + (it.hasEOL ? '\n' : ' ')).join('').replace(/ +\n/g, '\n').trim());
+                if (onStep) onStep(n, doc.numPages);
+            }
+            return pages;
+        }
+        async function uploadPdf(lessonId, file, onStep) {
+            if (!file || !/pdf$/i.test(file.type || file.name)) throw new Error('Choose a PDF file');
+            if (file.size > 30 * 1024 * 1024) throw new Error('The PDF must be smaller than 30 MB');
+            let pages = [];
+            try { pages = await pdfPages(file, (n, t) => onStep && onStep(`Reading page ${n} of ${t}…`)); } catch (e) { pages = []; }
+            if (onStep) onStep('Uploading…');
+            const fd = new FormData(); fd.append('lessonId', lessonId); fd.append('file', file, file.name); fd.append('text', JSON.stringify(pages));
+            const res = await fetch('/api/lesson-pdf?action=upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Upload failed');
+            return d;
+        }
+        function attachPdf(l) {
+            const has = !!PDF[l.id];
+            Site.sheet({
+                iconName: 'file', title: has ? 'Replace the PDF' : 'Attach the PDF', subtitle: `${l.title} — Assistant Pro will summarize it and answer questions from it.${has ? ' Old AI summaries of it are dropped.' : ''}`,
+                html: `<label class="pdf-pick" for="apf">${icon('file')}<span id="apfName">Choose the PDF…</span><input type="file" id="apf" accept="application/pdf,.pdf"></label>
+                    <p class="small muted" style="margin:8px 0 0">${l.url && !/lesson-pdf/.test(l.url) ? 'Students still open your current link; the PDF is only for Assistant Pro.' : ''}</p>
+                    <p class="small" id="apfMsg" style="margin:8px 0 0"></p>`,
+                actions: [{ label: 'Upload', icon: 'check', onClick: async (close) => {
+                    const btn = [...document.querySelectorAll('.overlay .sheet-actions [data-i="0"]')].pop();
+                    const f = document.getElementById('apf').files[0], msg = (t, bad) => { const m = document.getElementById('apfMsg'); m.textContent = t; m.style.color = bad ? 'var(--danger)' : ''; };
+                    if (!f) return msg('Choose a PDF first.', true);
+                    if (btn.disabled) return; btn.disabled = true;
+                    try { const d = await uploadPdf(l.id, f, (t) => msg(t)); close(); Site.toast(d.readable ? `PDF attached ✅ (${d.pages} pages)` : 'PDF attached — but it has no text (scanned), so Assistant Pro can\'t read it', d.readable ? 'success' : 'info'); load(); }
+                    catch (e) { msg(e.message, true); btn.disabled = false; }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+            document.getElementById('apf').addEventListener('change', (e) => { document.getElementById('apfName').textContent = e.target.files[0] ? e.target.files[0].name : 'Choose the PDF…'; });
+        }
         const safeUrl = (u) => /^https?:\/\//i.test(String(u || '').trim()) ? String(u).trim() : '#';
         $('list').addEventListener('click', (e) => {
+            const p = e.target.closest('[data-pdf]'); if (p) { const l = L.find(x => x.id === p.dataset.pdf); if (l) attachPdf(l); return; }
             const b = e.target.closest('[data-del]'); if (!b) return;
             const l = L.find(x => x.id === b.dataset.del); if (!l) return;
             Site.sheet({
@@ -101,6 +166,7 @@
         });
 
         function addLesson() {
+            let busy = false;
             Site.sheet({
                 iconName: 'book', title: 'Add a lesson', subtitle: 'Students of that grade get a notification.',
                 html: `<div class="form-grid">
@@ -108,20 +174,30 @@
                     <div class="field"><label for="lg">Grade</label><select class="pick" id="lg" style="width:100%">${Object.entries(A.GRADES).map(([k, v]) => `<option value="${k}" ${k === (grade === 'all' ? 'prep1' : grade) ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
                     <div class="field"><label for="lc">Type</label><select class="pick" id="lc" style="width:100%"><option value="videos">Video</option><option value="summaries">Summary</option><option value="exams">Exam paper</option></select></div>
                     <div class="field full"><label for="lu">Link <small>(YouTube, Google Drive…)</small></label><input class="fin" id="lu" type="url" inputmode="url" placeholder="https://"></div>
+                    <div class="field full" id="lpdfF" hidden><label for="lpdf">…or upload the PDF <small>(summaries — Assistant Pro can summarize it with the students)</small></label>
+                        <label class="pdf-pick" for="lpdf">${icon('file')}<span id="lpdfName">Choose a PDF…</span><input type="file" id="lpdf" accept="application/pdf,.pdf"></label></div>
                     <div class="field full"><label for="ln">Notes <small>(optional — unit, lesson…)</small></label><input class="fin" id="ln" dir="auto" maxlength="300"></div>
                     <p class="small full" id="lerr" style="color:var(--danger);margin:0"></p></div>`,
                 actions: [{ label: 'Publish', icon: 'check', onClick: async (close) => {
+                    if (busy) return;
                     const v = (id) => document.getElementById(id).value.trim();
                     const body = { id: 'ITEM-' + Date.now(), title: v('lt'), grade: v('lg'), category: v('lc'), url: v('lu'), notes: v('ln') };
-                    const err = (m) => { document.getElementById('lerr').textContent = m; };
+                    const err = (m, ok) => { const e = document.getElementById('lerr'); e.textContent = m; e.style.color = ok ? 'var(--muted)' : 'var(--danger)'; };
+                    const pdf = body.category === 'summaries' ? document.getElementById('lpdf').files[0] : null;
                     if (!body.title) return err('Write a title.');
-                    if (!/^https?:\/\/\S+$/i.test(body.url)) return err('The link must start with https://');
+                    if (!pdf && !/^https?:\/\/\S+$/i.test(body.url)) return err('The link must start with https:// — or upload the PDF.');
+                    busy = true;
                     try {
+                        if (pdf) { const d = await uploadPdf(body.id, pdf, (t) => err(t, true)); if (!body.url) body.url = d.url; }   // the file first: no broken link if it fails
                         await api('/api/lessons', { body });
                         close(); Site.toast('Published ✅', 'success'); load();
                     } catch (e) { err(e.message); }
+                    finally { busy = false; }
                 } }, { label: 'Cancel', cls: 'btn-ghost' }]
             });
+            const showPdf = () => { document.getElementById('lpdfF').hidden = document.getElementById('lc').value !== 'summaries'; };
+            document.getElementById('lc').addEventListener('change', showPdf); showPdf();
+            document.getElementById('lpdf').addEventListener('change', (e) => { document.getElementById('lpdfName').textContent = e.target.files[0] ? e.target.files[0].name : 'Choose a PDF…'; });
             setTimeout(() => document.getElementById('lt')?.focus(), 250);
         }
         await load();

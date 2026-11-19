@@ -44,6 +44,16 @@
         .units { display: flex; flex-direction: column; gap: 12px; }
         .hint { display: flex; align-items: center; gap: 12px; }
         .hint .ic { width: 40px; height: 40px; border-radius: 12px; background: var(--success-soft); color: var(--success); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        /* Miss Marwa: summarize a summary together (Assistant Pro) */
+        .ai-row { display: flex; justify-content: flex-end; padding: 0 10px 8px; direction: rtl; }
+        .sum-sheet .mb-panel { margin-top: 10px; }
+        .sum-me { display: flex; justify-content: flex-start; margin-top: 10px; direction: rtl; }
+        .sum-me span { max-width: 85%; background: var(--primary); color: #fff; padding: 9px 13px; border-radius: 18px 18px 18px 4px; font-size: 14.5px; line-height: 1.6; white-space: pre-wrap; }
+        .sum-ask { display: flex; gap: 8px; margin-top: 14px; direction: rtl; }
+        .sum-ask input { flex: 1; min-width: 0; height: 46px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 15px; }
+        .sum-ask input:focus { outline: none; border-color: var(--primary); }
+        .sum-ask button { flex: none; height: 46px; padding: 0 18px; border-radius: 999px; border: 0; background: var(--primary); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+        .sum-ask button[disabled] { opacity: .6; cursor: progress; }
     </style>
 </head>
 <body>
@@ -70,6 +80,8 @@
 
     <script src="/assets/pwa.js"></script>
     <script src="/assets/student.js?v=20261118c"></script>
+    <script src="/assets/ai-kit.js?v=20261118a"></script>
+    <script src="/assets/marwa-buddy.js?v=20261119a"></script>
     <script>
     (function () {
         if (!window.App) return;
@@ -126,8 +138,51 @@
                 <span class="ic ${cls}">${icon(ic)}</span>
                 <span class="t"><strong>${txt(it.title)}</strong><span class="sub">${unitOf(it.title) ? `Unit ${unitOf(it.title)} · ` : ''}${label}${it.notes ? ' · ' + txt(it.notes) : ''}${(() => { const d = App.fmtDate ? App.fmtDate(it.created_at || it.createdAt) : ''; return d ? ' · ' + d : ''; })()}</span></span>
                 ${viewed ? `<span class="done">${icon('check', 'sm')}<span class="hide-sm">Done</span></span>` : '<span class="new-tag">NEW</span>'}
-                <span class="btn btn-soft btn-sm go">${verb}</span></a>`;
+                <span class="btn btn-soft btn-sm go">${verb}</span></a>${t === 'summaries' && AI_IDS.has(String(it.id)) && aiShown() ? `<div class="ai-row">${MarwaBuddy.chip('تيجي نلخص الملخص ده سوا؟', `data-sum="${esc(it.id)}"`, { wave: true })}</div>` : ''}`;
         }
+
+        // ---------- Miss Marwa summarizes a summary PDF with the student (Assistant Pro, shared summary) ----------
+        let AI_IDS = new Set(), AI = null;
+        const aiShown = () => !!(AI && !['PRO_CLOSED', 'PAID_OFF', 'SIGNED_OUT'].includes(AI.code));
+        async function post(action, body) {
+            const res = await fetch('/api/study-ai?action=' + action, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok || !d.text) throw new Error(d.error || 'حصلت مشكلة — جرّب تاني 🙏');
+            return d;
+        }
+        function openSummary(it) {
+            App.sheet({ iconName: 'file', title: it.title, subtitle: 'مس مروة بتلخصهولك 📚',
+                html: `<div class="sum-sheet" dir="rtl"><div id="sumBox"></div>
+                    <form class="sum-ask" id="sumAsk" autocomplete="off"><input id="sumQ" maxlength="600" dir="auto" placeholder="اسأل مس مروة عن الملخص ده…"><button type="submit" id="sumSend">اسأل</button></form></div>` });
+            const box = document.getElementById('sumBox'), history = [];
+            const say = async (action, body, extra) => {
+                const P = MarwaBuddy.panel(box); P.think(action === 'summary' ? 'بلخّصلك الملخص…' : 'بدوّر في الملخص…');
+                P.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                try { const d = await post(action, body); P.say(AiKit.md(d.text), action === 'summary' ? 'التلخيص من ملخص مس مروة نفسه' : ''); if (extra) extra(d); }
+                catch (e) { P.error(e.message); }
+            };
+            say('summary', { lessonId: it.id }, (d) => history.push({ role: 'assistant', content: d.text }));
+            document.getElementById('sumAsk').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const inp = document.getElementById('sumQ'), btn = document.getElementById('sumSend'), q = inp.value.trim();
+                if (!q || btn.disabled) return;
+                inp.value = ''; btn.disabled = true;
+                const me = document.createElement('div'); me.className = 'sum-me'; me.innerHTML = `<span dir="auto">${esc(q)}</span>`; box.appendChild(me);
+                await say('ask', { lessonId: it.id, question: q, history: history.slice(-6) }, (d) => { history.push({ role: 'user', content: q }, { role: 'assistant', content: d.text }); });
+                btn.disabled = false; inp.focus();
+            });
+        }
+        Promise.all([
+            fetch('/api/lesson-pdf?action=ids&grade=' + encodeURIComponent(grade)).then(x => x.ok ? x.json() : { ids: [] }).catch(() => ({ ids: [] })),
+            fetch('/api/study-ai?action=status', { credentials: 'same-origin' }).then(x => x.ok ? x.json() : { code: x.status === 401 ? 'SIGNED_OUT' : 'PRO_CLOSED' }).catch(() => ({ code: 'PRO_CLOSED' }))
+        ]).then(([ids, st]) => {
+            AI_IDS = new Set((ids.ids || []).map(String)); AI = st;
+            if (!AI_IDS.size || !aiShown()) return;
+            if (items.length) render();
+            const newest = items.find(i => AI_IDS.has(String(i.id)));
+            MarwaBuddy.pop('تيجي نلخص الملخص ده سوا؟ 📚 دوس على صورتي جنب أي ملخص وأنا ألخّصهولك.', { key: 'sum_pop',
+                actions: newest ? [{ label: 'يلا بينا', primary: true, onClick: () => openSummary(newest) }, { label: 'بعدين' }] : [] });
+        });
 
         function render() {
             renderFilters();
@@ -171,6 +226,8 @@
         let t = null;
         document.getElementById('q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { query = e.target.value; render(); }, 150); });
         document.getElementById('units').addEventListener('click', (e) => {
+            const sm = e.target.closest('[data-sum]');
+            if (sm) { const it = items.find(i => String(i.id) === sm.dataset.sum); if (it) openSummary(it); return; }
             const head = e.target.closest('.unit-head');
             if (head) {
                 const card = head.closest('.unit'); const u = Number(card.dataset.u);

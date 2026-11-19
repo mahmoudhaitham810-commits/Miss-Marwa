@@ -3,10 +3,15 @@
 //
 //   GET  ?action=status                        → can this student use it? (+ how much of the month is left, as %)
 //   POST ?action=explain  { examId, q }        → explain ONE mistake of a finished online exam
+//   POST ?action=summary  { lessonId }         → summarize a study-summary PDF uploaded on the platform (shared)
+//   POST ?action=ask      { lessonId, question, history } → a question about that PDF (personal, not shared)
 //
 // Smart routing (no wasted lookups):
 //   • explain → uses ONLY the stored exam data (question, choices, Miss Marwa's official answer, the student's
 //     choice). No curriculum-book search — the material is already exact.
+//   • summary / ask → ONLY that PDF's own text (Miss Marwa's material). No curriculum-book search either.
+//     The PDF sits in its own prompt-cached block, so a summary + follow-up questions within 5 minutes pay
+//     the PDF's tokens at 10%.
 //
 // Cost:
 //   • answers are shared (ai-cache.js): the same question + same wrong choice is generated once and then served
@@ -22,6 +27,7 @@ import { chat, AiLimitError, claudeReady } from './ai-gateway.js';
 import { studentAccess, logUsage, ensureQuotaTables } from './ai-quota.js';
 import { getOrMake, sha256, CacheBusyError } from './ai-cache.js';
 import { LANGUAGE_SCHOOLS } from './ai-rules.js';
+import { lessonText, MIN_TEXT } from './lesson-pdf.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -29,6 +35,8 @@ const bad = (m, s = 400, extra = {}) => json({ error: m, ...extra }, s);
 export const GRADE_LABEL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const EXPLAIN_VERSION = 'v1';     // bump when EXPLAIN_SYSTEM changes → fresh explanations
+const SUMMARY_VERSION = 'v1';     // bump when the summary task changes → fresh summaries
+const MAX_Q = 600, MAX_HISTORY = 6;
 
 export const FRIENDLY = {
     PRO_CLOSED: 'الميزة دي هتفتح قريب جداً 🚀',
@@ -36,7 +44,8 @@ export const FRIENDLY = {
     STUDENT_CAP: 'خلص رصيد Assistant Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر الجاي.',
     CACHE_BUSY: 'الشرح بيتجهز دلوقتي ⏳ — جرّب تاني بعد ثواني.',
     PAID_OFF: 'Assistant Pro مش متاح دلوقتي — جرّب كمان شوية 🙏',
-    AI_ERROR: 'حصلت مشكلة وإحنا بنجهز الشرح 😅 — جرّب تاني.'
+    AI_ERROR: 'حصلت مشكلة وإحنا بنجهز الشرح 😅 — جرّب تاني.',
+    NO_TEXT: 'الملخص ده صور بس 📷 — لسه مقدرش أقراه، اسأل مس مروة عنه.'
 };
 const STATUS = { PRO_CLOSED: 403, STUDENT_OFF: 403, STUDENT_CAP: 429, CACHE_BUSY: 503, PAID_OFF: 503, DAILY_CAP: 429, MONTHLY_CAP: 429, AI_ERROR: 502 };
 
@@ -59,6 +68,36 @@ ${LANGUAGE_SCHOOLS}
 **ليه؟** 1–3 short lines with the science idea behind it.
 ❌ **ليه <the student's letter> غلط؟** 1–2 lines: the exact misunderstanding that leads to that choice. (If the student left it blank, skip this part.)
 💡 **تريكة:** one short way to remember it.`;
+
+/** Block 1 (prompt-cached, shared by "summarize" and "ask"): who we are + the rules + the PDF itself. */
+export function pdfBlock(lesson, file) {
+    return { type: 'text', cache_control: { type: 'ephemeral' }, text: `You are the teaching assistant of مس مروة (Miss Marwa), a science teacher in Egypt, on her online platform. Below is one of HER study summaries (a PDF uploaded on the platform), for ${GRADE_LABEL[lesson.grade] || lesson.grade} students.
+
+## Source of truth — strict
+- Use ONLY the text of this summary. It is Miss Marwa's own material and it is already at the right level.
+- Never add outside or advanced information that isn't in it. If something isn't in the summary, say so plainly ("الملخص ده مفيهوش الجزء ده") and suggest asking مس مروة.
+- If the text has broken pieces (from tables or pictures), skip them — never guess what a picture shows.
+
+## Language
+- Egyptian colloquial Arabic (عامية مصرية) — never فصحى.
+- EVERY science term, unit, symbol and formula stays in English and **bold**, exactly as written in the summary. Never translate science terms.
+${LANGUAGE_SCHOOLS}
+
+## The summary — "${String(lesson.title || '').slice(0, 150)}"
+${file.text}` };
+}
+export const SUMMARY_TASK = `## Your task: summarize it
+This summary is shown to MANY students → no name, no "يا بطل/يا بطلة", no masculine or feminine verbs ("يلا نلخص"، "خلّينا نفتكر").
+Make a short, organized revision sheet for a phone (max ~350 words):
+- a one-line intro that starts with: «يلا نلخص الملخص ده سوا 📚»
+- short headings (###) for the main parts, in the summary's order
+- under each: the key points as bullets — definitions, laws, formulas (with units), and examples in the summary
+- end with «🎯 **أهم حاجات للامتحان:**» — 3–5 bullets with what is most likely to be asked
+No greeting at the end, no sign-off.`;
+export const ASK_TASK = `## Your task: answer the student's question about this summary
+- Answer ONLY from the summary above, short and clear (max ~150 words), steps with units for problems.
+- If the summary doesn't cover it, say so in one line and suggest asking مس مروة — don't answer from outside knowledge.
+- Off-topic → one friendly line, then back to the summary.`;
 
 /** The question as text for the model, and the fingerprint of everything that decides the answer. */
 export async function explainInput(exam, qi, chosen) {
@@ -150,6 +189,49 @@ export async function onRequest(context) {
             if (out.cached) await logHit('explain');
             const after = W.preview ? null : await studentAccess(db, sid);
             return json({ text: out.text, cached: out.cached, leftPct: leftPct(after && after.quota) });
+        }
+        if (action === 'summary' || action === 'ask') {
+            const lessonId = String(data.lessonId || '');
+            const lesson = await db.prepare('SELECT id, title, grade, category FROM lessons WHERE id = ?').bind(lessonId).first();
+            if (!lesson) return bad('الملخص ده مش موجود', 404, { code: 'NO_LESSON' });
+            lesson.grade = String(lesson.grade || '').toLowerCase();
+            if (!W.preview && lesson.grade !== W.student.grade) return bad('الملخص ده مش لصفّك', 403, { code: 'OTHER_GRADE' });
+            const file = await lessonText(db, lessonId);
+            if (!file) return bad('مفيش PDF على الملخص ده', 404, { code: 'NO_PDF' });
+            if (file.chars < MIN_TEXT) return fail('NO_TEXT');
+            let question = '', history = [];
+            if (action === 'ask') {
+                question = String(data.question || '').replace(/\r/g, '').trim();
+                if (!question) return bad('اكتب سؤالك الأول 🙂', 400, { code: 'EMPTY' });
+                if (question.length > MAX_Q) return bad(`السؤال طويل شوية — خليه أقل من ${MAX_Q} حرف`, 400, { code: 'TOO_LONG' });
+                history = (Array.isArray(data.history) ? data.history : []).slice(-MAX_HISTORY)
+                    .map(m => ({ role: m && m.role === 'assistant' ? 'assistant' : 'user', content: String(m && m.content || '').slice(0, 2500) })).filter(m => m.content.trim());
+            }
+            const a = await access();
+            if (!a.ok) return fail(a.code, { leftPct: leftPct(a.quota) });
+            const system = [pdfBlock(lesson, file), { type: 'text', text: action === 'ask' ? ASK_TASK : SUMMARY_TASK }];
+            let out;
+            try {
+                if (action === 'summary') {
+                    out = await getOrMake(db, `sum:${SUMMARY_VERSION}:${lessonId}:${file.hash}`, {
+                        kind: 'summary', ref: lessonId, waitMs: 60000,
+                        make: async () => {
+                            const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'لخّصلي الملخص ده من فضلك 🙏' }], maxTokens: 1100, meter: meter('summary') });
+                            return { text: r.text, model: r.model, costUsd: r.costUsd };
+                        }
+                    });
+                    if (out.cached) await logHit('summary');
+                } else {
+                    const r = await chat(env, db, { tier: 'pro', system, messages: [...history, { role: 'user', content: question }], maxTokens: 700, meter: meter('ask') });
+                    out = { text: r.text, cached: false };
+                }
+            } catch (e) {
+                if (e instanceof CacheBusyError) return fail('CACHE_BUSY');
+                if (e instanceof AiLimitError) return fail(e.code, { leftPct: leftPct(e.quota || a.quota) });
+                throw e;
+            }
+            const after = W.preview ? null : await studentAccess(db, sid);
+            return json({ text: out.text, cached: !!out.cached, leftPct: leftPct(after && after.quota) });
         }
         return bad('Unknown action', 404);
     } catch (err) {

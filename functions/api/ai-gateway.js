@@ -161,6 +161,10 @@ function tidyTurns(messages) {
  */
 export async function chat(env, db, { tier = 'free', pool = 'staff', system = '', messages = [], maxTokens = 1200, temperature = 0.4, image = null, thinking = 0, bonus = false, meter = null }) {
     const turns = tidyTurns(messages);
+    // system may be a list of blocks (to prompt-cache a long PDF separately); the free models get it as plain text
+    const sysBlocks = Array.isArray(system) ? system : null;
+    if (sysBlocks && tier === 'free') system = sysBlocks.map(b => b.text || '').join('\n\n');
+    const sysChars = sysBlocks ? sysBlocks.reduce((t, b) => t + String(b.text || '').length, 0) : system.length;
     // image = { mime, b64 } → attached to the LAST user turn (the photo she/he just sent)
     const img = image && image.b64 && /^image\/(jpeg|png|webp)$/.test(image.mime || '') ? image : null;
     if (!turns.length) throw new AiLimitError('AI_ERROR', 'Nothing to send');
@@ -171,7 +175,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
         if (!aiReady(env)) throw new AiLimitError('FREE_OFF', 'The free model is not connected (Workers AI binding AI)');
         const cap = poolCap(env, pool), key = `ai_pool_${pool}_${day()}`;
         const used = await kvNum(db, key);
-        const chars = system.length + turns.reduce((t, m) => t + m.content.length, 0);
+        const chars = sysChars + turns.reduce((t, m) => t + m.content.length, 0);
         const guess = estimateNeurons(img ? model : freeTextModel(env), { prompt_tokens: Math.ceil(chars / 3.5) + (img ? 1600 : 0), completion_tokens: Math.min(maxTokens, 400) });
         const empty = () => new AiLimitError('POOL_EMPTY', `Today's free ${pool === 'staff' ? 'AI Assistant' : 'student'} allowance is used up — it resets at 2:00 am (Cairo).`, { used: Math.round(used), cap });
         if (await quotaHitToday(db)) throw empty();
@@ -238,7 +242,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
     const M = meter || {}, kind = M.kind || 'chat';
     let held = null;   // a student's reservation (ledger row) — settled with the real cost, or released if the call fails
     if (M.studentId) {
-        const chars = system.length + turns.reduce((t, m) => t + m.content.length, 0);
+        const chars = sysChars + turns.reduce((t, m) => t + m.content.length, 0);
         try { held = await reserve(db, { studentId: M.studentId, model, kind, usd: worstCaseUsd(model, { chars, images: img ? 1 : 0, maxTokens: maxTokens + (thinking > 0 ? thinking : 0) }) }); }
         catch (e) { if (e instanceof QuotaError) throw new AiLimitError(e.code, e.message, { quota: e.quota }); throw e; }
     }
