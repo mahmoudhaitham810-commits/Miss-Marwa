@@ -91,10 +91,37 @@ async function kvAdd(db, key, amount) {
     } catch (e) { /* meter only */ }
 }
 export const claudeCost = (model, usage) => {
-    const [pin, pout] = CLAUDE_PRICES[model] || CLAUDE_PRICES['claude-sonnet-5-5'];   // unknown model → priced like the expensive one (safe side)
+    let [pin, pout] = CLAUDE_PRICES[model] || CLAUDE_PRICES['claude-sonnet-5-5'];   // unknown model → priced like the expensive one (safe side)
+    const promptTok = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
+    if (/haiku-5-5/.test(model) && promptTok > 100000) { pin *= 5; pout *= 5; }   // Haiku 5.5: prompts over 100k tokens pay 5× (pricing page, 19 Nov 2026)
     const tin = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) * 1.25 + (usage.cache_read_input_tokens || 0) * 0.1;
     return (tin * pin + (usage.output_tokens || 0) * pout) / 1e6;
 };
+
+/**
+ * The Messages API body for Claude Haiku 5.5 (migration guide checked 19 Nov 2026):
+ *   • no temperature / top_p / top_k — the 5.x models reject them (400)
+ *   • thinking: the old { type: 'enabled', budget_tokens } is rejected → normal answers use { type: 'disabled' }
+ *     (cheapest, every token goes to the answer); the "thinking" reasoning mode uses { type: 'adaptive' }
+ *   • output_config.effort: CLAUDE_EFFORT (low | medium | high, default medium); thinking mode → high
+ *   • the system prompt is marked for prompt caching (cache_control) — re-sent prompts cost 10% for 5 minutes;
+ *     under the 512-token minimum the API just skips caching (no error)
+ *   • the conversation always ends with the student's/staff's turn (5.x rejects an assistant prefill)
+ */
+export function claudeBody(env, { model, system = '', turns, img = null, maxTokens = 1200, thinking = 0, cacheSystem = true }) {
+    const E = ['low', 'medium', 'high'].includes(env && env.CLAUDE_EFFORT) ? env.CLAUDE_EFFORT : 'medium';
+    const think = thinking > 0;
+    const last = turns[turns.length - 1];
+    const messages = img ? [...turns.slice(0, -1), { role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: img.mime, data: img.b64 } }, { type: 'text', text: last.content }] }] : turns.slice();
+    const sys = Array.isArray(system) ? system : system ? [{ type: 'text', text: system, ...(cacheSystem ? { cache_control: { type: 'ephemeral' } } : {}) }] : null;
+    return {
+        model, max_tokens: maxTokens + (think ? thinking : 0),
+        thinking: think ? { type: 'adaptive' } : { type: 'disabled' },
+        output_config: { effort: think ? 'high' : E },
+        ...(sys ? { system: sys } : {}),
+        messages
+    };
+}
 
 /** Today's / this month's meters (for the usage bar and Settings). */
 export async function usageSummary(env, db) {
@@ -223,9 +250,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
             const r = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST', signal: ctl.signal,
                 headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-                // thinking > 0 → Claude's extended thinking (the API needs the default temperature then)
-                body: JSON.stringify({ model, max_tokens: maxTokens + (thinking > 0 ? thinking : 0), ...(thinking > 0 ? { thinking: { type: 'enabled', budget_tokens: thinking } } : { temperature }), ...(system ? { system } : {}),
-                    messages: img ? [...turns.slice(0, -1), { role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: img.mime, data: img.b64 } }, { type: 'text', text: turns[turns.length - 1].content }] }] : turns })
+                body: JSON.stringify(claudeBody(env, { model, system, turns, img, maxTokens, thinking }))
             });
             body = await r.json().catch(() => null);
             if (r.ok) { res = body; break; }
@@ -233,7 +258,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
             lastErr = msg;
             if (r.status === 401 || r.status === 403) throw new AiLimitError('PAID_OFF', 'The Claude API key was refused — check the ANTHROPIC_API_KEY secret in Cloudflare.');
             if (thinking > 0 && r.status === 400 && /think/i.test(msg)) throw new AiLimitError('AI_ERROR', `This model doesn't accept "thinking" — use another reasoning mode. (${msg.slice(0, 160)})`);
-            if (r.status === 404 || /model/i.test(msg) && r.status === 400) throw new AiLimitError('AI_ERROR', `Model "${model}" isn't available — check CLAUDE_FAST_MODEL / CLAUDE_PRO_MODEL. (${msg.slice(0, 160)})`);
+            if (r.status === 404 || r.status === 400 && /model/i.test(msg) && /not.?found|does not exist|invalid model|unknown model|not available/i.test(msg)) throw new AiLimitError('AI_ERROR', `Model "${model}" isn't available — check CLAUDE_FAST_MODEL / CLAUDE_PRO_MODEL. (${msg.slice(0, 160)})`);
             if ([429, 500, 502, 503, 529].includes(r.status) && k === 0) { await new Promise(x => setTimeout(x, 1500)); continue; }
             break;
         } catch (e) {
@@ -241,6 +266,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
             lastErr = e.name === 'AbortError' ? 'took too long' : String(e.message || e);
         } finally { clearTimeout(timer); }
     }
+    if (!res && /deprecated|not supported|not allowed|unexpected|extra inputs/i.test(lastErr)) throw new AiLimitError('AI_ERROR', 'Claude refused a setting in the request — tell the developer: ' + String(lastErr).slice(0, 200));
     if (!res) throw new AiLimitError('AI_ERROR', 'Miss Marwa Assistant Pro did not answer — try again in a moment. (' + String(lastErr).slice(0, 160) + ')');
     const text = (res.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
     const usage = res.usage || {};

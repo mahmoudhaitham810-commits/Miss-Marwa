@@ -78,8 +78,9 @@ export async function studentQuota(db, studentId, S = null) {
 
 /** Worst-case cost of one call — what gets reserved before it runs. */
 export function worstCaseUsd(model, { chars = 0, images = 0, maxTokens = 1200 } = {}) {
-    const [pin, pout] = priceOf(model);
-    const inTok = Math.ceil(chars / 2.5) + images * 2500 + 500;     // Arabic ≈ 2–3 chars a token; +500 margin
+    let [pin, pout] = priceOf(model);
+    const inTok = Math.ceil(chars / 2.5) + images * 4000 + 500;     // Arabic ≈ 2–3 chars a token (Haiku 5.5 counts ~30% more than 4.5); +500 margin
+    if (inTok > 90000) { pin *= 5; pout *= 5; }                      // Haiku 5.5 long-prompt prices (over 100k tokens)
     return (inTok * pin * 1.25 + maxTokens * pout) / 1e6;            // ×1.25 = even if all of it is written to the prompt cache
 }
 
