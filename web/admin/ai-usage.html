@@ -46,6 +46,15 @@
         .rec th, .rec td { padding: 7px 6px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
         .rec th { color: var(--muted); font-weight: 600; }
         .rec-wrap { overflow-x: auto; }
+        /* grand totals: the whole platform (students + Miss Marwa + assistants) */
+        .grand { display: grid; gap: 12px; grid-template-columns: 1fr; margin-bottom: 14px; }
+        @media (min-width: 760px) { .grand { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        .gcard { position: relative; overflow: hidden; padding: 16px 18px; border-radius: 18px; color: #EAF6FF; background: linear-gradient(135deg, #0B1630, #123B66); box-shadow: 0 12px 30px -16px rgba(2, 6, 23, .6); }
+        .gcard::after { content: ''; position: absolute; inset: auto -30px -40px auto; width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, rgba(34, 211, 238, .35), transparent 70%); }
+        .gcard .gk { font-size: 12.5px; font-weight: 700; letter-spacing: .02em; color: #A5F3FC; text-transform: uppercase; }
+        .gcard .gv { font-size: 28px; font-weight: 900; letter-spacing: -.02em; margin-top: 4px; line-height: 1.1; }
+        .gcard .gu { font-size: 14px; font-weight: 700; color: #CFFAFE; margin-top: 2px; }
+        .gcard .gs { font-size: 12px; color: #BFD3EA; margin-top: 8px; line-height: 1.5; }
         .open-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 18px; }
         .open-card.is-open { border-color: var(--success-line, #86efac); background: var(--success-soft, #f0fdf4); }
         .sw.big .lbl { display: inline !important; min-width: 48px; }
@@ -57,6 +66,7 @@
             <div class="page-head">
                 <div><h1>AI usage · استهلاك الذكاء الاصطناعي</h1><p id="countLine">Assistant Pro: who it's switched on for, what it cost, and what's left of each student's budget.</p></div>
             </div>
+            <section class="grand" id="grand" aria-label="Total AI spend"></section>
             <div class="card open-card" id="openCard" style="margin-bottom:14px">
                 <div><b id="openTitle">Assistant Pro for students</b><p class="small muted" id="openSub" style="margin:4px 0 0"></p></div>
                 <label class="sw big" title="Open Assistant Pro to students"><input type="checkbox" id="openSw" aria-label="Open Assistant Pro to students"><span class="track"></span><span class="lbl" id="openLbl"></span></label>
@@ -133,7 +143,12 @@
         };
         function render() {
             if (!D) return;
-            const T = D.totals, list = shown();
+            const T = D.totals, list = shown(), G = D.grand;
+            if (G) {
+                const gc = (k, g, extra) => `<div class="gcard fade-up"><div class="gk">${k}</div><div class="gv num">${egp(toEgp(g.usd))}</div><div class="gu num">${usd(g.usd)}</div>
+                    <div class="gs num">Students ${egp(toEgp(g.studentsUsd))} · Staff ${egp(toEgp(g.staffUsd))}<br>${g.messages.toLocaleString()} AI message${g.messages === 1 ? '' : 's'}${extra || ''}</div></div>`;
+                $('grand').innerHTML = gc('Total today', G.today) + gc('Total this month', G.month, ` · ${esc(D.period)}`) + gc('Total all-time', G.allTime, G.allTime.since ? ` · since ${esc(A.fmtDate(G.allTime.since))}` : '');
+            }
             $('kpis').innerHTML = `<div class="kpis">
                 <div class="kpi fade-up" style="--i:0"><b class="num">${T.enabled}</b><span>Students with Pro ON</span><small>${egp(T.budgetEgp)} of budgets this month</small></div>
                 <div class="kpi fade-up" style="--i:1"><b class="num">${egp(toEgp(T.studentsUsd))}</b><span>Students' AI cost</span><small>${usd(T.studentsUsd)} · ${T.messages.toLocaleString()} messages this month</small></div>

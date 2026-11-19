@@ -92,7 +92,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/student.js?v=20261120a"></script>
     <script src="/assets/ai-kit.js?v=20261118a"></script>
-    <script src="/assets/marwa-buddy.js?v=20261119a"></script>
+    <script src="/assets/marwa-buddy.js?v=20261120a"></script>
     <script>
     (function () {
         if (!window.App) return;
@@ -208,11 +208,14 @@
                     return `<article class="card q reveal ${s === 'r' ? 'right' : s === 'w' ? 'wrong' : ''}" id="q${i + 1}" data-qi="${i}">
                         <div class="row between"><span class="chip">Question ${i + 1}</span>${chip}</div>
                         <p class="qtext" dir="auto">${esc(q.question)}</p><div class="opts">${opts}</div>
-                        ${s === 'w' ? `<div class="qai">${aiOn() ? MarwaBuddy.chip('اشرحيلي الغلطة دي يا مس', `data-explain="${i}"`, { wave: true }) : ''}${MarwaBuddy.chip('🔁 يلا نجرب السؤال ده تاني', `data-retry="${i}"`, { ghost: true, icon: false })}</div><div class="qpanel"></div>` : ''}
+                        ${s === 'w' ? `<div class="qai">${aiOn() ? MarwaBuddy.chip('اشرحلي الغلطة دي ✨', `data-explain="${i}"`) : ''}${MarwaBuddy.chip('🔁 يلا نجرب السؤال ده تاني', `data-retry="${i}"`, { ghost: true, icon: false })}</div><div class="qpanel"></div>` : ''}
                     </article>`;
                 }).join('');
                 box.innerHTML = html || `<div class="card"><div class="empty"><div class="bubble">${icon('trophy')}</div><h3>${filter === 'w' ? 'No mistakes!' : 'Nothing here'}</h3><p>${filter === 'w' ? 'You got every question right.' : ''}</p></div></div>`;
                 Object.keys(EXPL).forEach(i => showExpl(Number(i)));   // explanations stay open when the filter changes
+                // the Assistant Pro badge peeks out of each wrong question → opens its explanation
+                if (aiOn()) box.querySelectorAll('.q.wrong[data-qi]').forEach(art => MarwaBuddy.peek(art, { text: 'يلا نراجع غلطاتك سوا! 💡', label: 'Assistant Pro: اشرحلي الغلطة دي',
+                    onOpen: () => { const i = Number(art.dataset.qi); explain(i, art.querySelector('[data-explain]')); art.querySelector('.qpanel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }));
                 App.reveal(box);
             }
 
@@ -277,12 +280,17 @@
             if (!open && qs.length) {
                 fetch('/api/study-ai?action=status', { credentials: 'same-origin' }).then(x => x.ok ? x.json() : { code: x.status === 401 ? 'SIGNED_OUT' : 'PRO_CLOSED' }).catch(() => ({ code: 'PRO_CLOSED' }))
                     .then(st => { AI = st; if (aiOn()) drawQuestions(); });
-                const miss = wrong + blank;
-                if (miss) MarwaBuddy.pop(miss === 1 ? 'يلا نراجع غلطتك سوا 💪 سؤال واحد بس ونقفله!' : `يلا نراجع غلطاتك سوا 💪 عندك ${miss} أسئلة نجربها تاني!`, {
-                    key: 'rev_' + r.examId,
-                    actions: [{ label: 'يلا بينا', primary: true, onClick: () => { document.querySelector('#filt [data-f="w"]')?.click(); document.getElementById('qs').scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, { label: 'بعدين' }]
-                });
-                else MarwaBuddy.pop('إيه الحلاوة دي! 🎉 كل إجاباتك صح — كمّل كده!', { key: 'rev_' + r.examId });
+                // the badge peeks out of the result card: go over the mistakes (and explain the first one when Pro is on)
+                const miss = wrong + blank, hero = root.querySelector('section.card');
+                if (miss) MarwaBuddy.peek(hero, { text: 'يلا نراجع غلطاتك سوا! 💡', label: 'Assistant Pro: يلا نراجع غلطاتك',
+                    onOpen: () => {
+                        document.querySelector('#filt [data-f="w"]')?.click();
+                        const first = state.findIndex(x => x === 'w');
+                        const art = document.getElementById('q' + (first + 1));
+                        if (art) art.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        if (first >= 0 && aiOn()) explain(first, art && art.querySelector('[data-explain]'));
+                    } });
+                else MarwaBuddy.peek(hero, { text: 'إيه الحلاوة دي! 🎉 كل إجاباتك صح', onOpen: () => { } });
             }
             document.getElementById('filt')?.addEventListener('click', (e) => {
                 const b = e.target.closest('[data-f]'); if (!b) return;

@@ -15,6 +15,15 @@ const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === '
 const json = (d, s = 200) => Response.json(d, { status: s });
 const bad = (m, s = 400) => json({ error: m }, s);
 const money = (v) => Math.round((Number(v) || 0) * 1e6) / 1e6;
+// Midnight in Cairo as a UTC "YYYY-MM-DD HH:MM:SS" string (the ledger's created_at is UTC)
+export function cairoDayStart(now = new Date()) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+        .formatToParts(now).map(p => [p.type, p.value]));
+    const localAsUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+    const offset = localAsUtc - Math.floor(now.getTime() / 1000) * 1000;            // Cairo − UTC (2 or 3 hours)
+    const midnight = Date.UTC(+parts.year, +parts.month - 1, +parts.day) - offset;
+    return new Date(midnight).toISOString().replace('T', ' ').slice(0, 19);
+}
 const okAmount = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= 100000 ? Math.round(n * 100) / 100 : null; };
 
 export async function onRequest(context) {
@@ -43,6 +52,18 @@ export async function onRequest(context) {
                 FROM ai_usage u LEFT JOIN ai_student_plan p ON p.student_id = u.student_id
                 WHERE u.student_id IS NOT NULL GROUP BY u.student_id`).bind(per, per, per, per, per).all();
             const staffUse = await db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage WHERE student_id IS NULL AND period = ?`).bind(per).first();
+            // grand totals — everyone (students + Miss Marwa + assistants)
+            const day0 = cairoDayStart();
+            const G = await db.prepare(`SELECT
+                    COALESCE(SUM(CASE WHEN created_at >= ? THEN cost_usd ELSE 0 END), 0) AS d_usd, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS d_n,
+                    COALESCE(SUM(CASE WHEN created_at >= ? AND student_id IS NOT NULL THEN cost_usd ELSE 0 END), 0) AS d_st,
+                    COALESCE(SUM(CASE WHEN period = ? THEN cost_usd ELSE 0 END), 0) AS m_usd, SUM(CASE WHEN period = ? THEN 1 ELSE 0 END) AS m_n,
+                    COALESCE(SUM(cost_usd), 0) AS a_usd, COUNT(*) AS a_n, COALESCE(SUM(CASE WHEN student_id IS NOT NULL THEN cost_usd ELSE 0 END), 0) AS a_st,
+                    MIN(created_at) AS since
+                FROM ai_usage`).bind(day0, day0, day0, per, per).first();
+            // Claude spend from before this ledger existed (the gateway's monthly meters, kept since Pro was connected)
+            const kvAll = await db.prepare(`SELECT COALESCE(SUM(CAST(value AS REAL)), 0) AS usd FROM app_kv WHERE "key" LIKE 'ai_spend_%' AND length("key") = 16`).first();
+            const allUsd = Math.max(Number(G && G.a_usd) || 0, Number(kvAll && kvAll.usd) || 0);
             const P = new Map((plans || []).map(p => [p.student_id, p])), U = new Map((use || []).map(u => [u.student_id, u]));
             const students = (studs || []).map(s => {
                 const p = P.get(s.student_id) || {}, u = U.get(s.student_id) || {};
@@ -62,6 +83,11 @@ export async function onRequest(context) {
                     enabled: on.length, studentsUsd: money(students.reduce((t, s) => t + s.month.usd, 0)), staffUsd: money(staffUse && staffUse.usd), staffMessages: Number(staffUse && staffUse.n) || 0,
                     messages: students.reduce((t, s) => t + s.month.messages, 0), cached: students.reduce((t, s) => t + s.month.cached, 0),
                     budgetEgp: money(on.reduce((t, s) => t + s.budgetEgp, 0))
+                },
+                grand: {
+                    today: { usd: money(G && G.d_usd), messages: Number(G && G.d_n) || 0, studentsUsd: money(G && G.d_st), staffUsd: money((Number(G && G.d_usd) || 0) - (Number(G && G.d_st) || 0)) },
+                    month: { usd: money(G && G.m_usd), messages: Number(G && G.m_n) || 0, studentsUsd: money(students.reduce((t, s) => t + s.month.usd, 0)), staffUsd: money(staffUse && staffUse.usd) },
+                    allTime: { usd: money(allUsd), messages: Number(G && G.a_n) || 0, studentsUsd: money(G && G.a_st), staffUsd: money(allUsd - (Number(G && G.a_st) || 0)), since: (G && G.since) || null }
                 },
                 proOpenForStudents: S.open      // Miss Marwa's switch: until ON, students see "coming soon"
             });

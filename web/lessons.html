@@ -46,6 +46,7 @@
         .hint .ic { width: 40px; height: 40px; border-radius: 12px; background: var(--success-soft); color: var(--success); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         /* Miss Marwa: summarize a summary together (Assistant Pro) */
         .ai-row { display: flex; justify-content: flex-end; padding: 0 10px 8px; direction: rtl; }
+        .ai-item { border-radius: 14px; box-shadow: inset 0 0 0 1px rgba(34, 211, 238, .28); margin: 6px 0; }
         .sum-sheet .mb-panel { margin-top: 10px; }
         .sum-me { display: flex; justify-content: flex-start; margin-top: 10px; direction: rtl; }
         .sum-me span { max-width: 85%; background: var(--primary); color: #fff; padding: 9px 13px; border-radius: 18px 18px 18px 4px; font-size: 14.5px; line-height: 1.6; white-space: pre-wrap; }
@@ -81,7 +82,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/student.js?v=20261120a"></script>
     <script src="/assets/ai-kit.js?v=20261118a"></script>
-    <script src="/assets/marwa-buddy.js?v=20261119a"></script>
+    <script src="/assets/marwa-buddy.js?v=20261120a"></script>
     <script>
     (function () {
         if (!window.App) return;
@@ -134,11 +135,14 @@
             const t = typeOf(it.category);
             const [cls, ic, label, verb] = TYPE[t];
             const viewed = App.isViewed(it.id || it.url);
-            return `<a class="item" href="${esc(App.safeUrl(it.url))}" target="_blank" rel="noopener" data-id="${esc(it.id)}">
+            const row = `<a class="item" href="${esc(App.safeUrl(it.url))}" target="_blank" rel="noopener" data-id="${esc(it.id)}">
                 <span class="ic ${cls}">${icon(ic)}</span>
                 <span class="t"><strong>${txt(it.title)}</strong><span class="sub">${unitOf(it.title) ? `Unit ${unitOf(it.title)} · ` : ''}${label}${it.notes ? ' · ' + txt(it.notes) : ''}${(() => { const d = App.fmtDate ? App.fmtDate(it.created_at || it.createdAt) : ''; return d ? ' · ' + d : ''; })()}</span></span>
                 ${viewed ? `<span class="done">${icon('check', 'sm')}<span class="hide-sm">Done</span></span>` : '<span class="new-tag">NEW</span>'}
-                <span class="btn btn-soft btn-sm go">${verb}</span></a>${t === 'summaries' && AI_IDS.has(String(it.id)) && aiShown() ? `<div class="ai-row">${MarwaBuddy.chip('تيجي نلخص الملخص ده سوا؟', `data-sum="${esc(it.id)}"`, { wave: true })}</div>` : ''}`;
+                <span class="btn btn-soft btn-sm go">${verb}</span></a>`;
+            const ai = t === 'summaries' && AI_IDS.has(String(it.id)) && aiShown();
+            // "AI ready" summaries: wrapped so the Assistant Pro badge can peek out of the card's corner
+            return ai ? `<div class="ai-item" data-ai="${esc(it.id)}">${row}<div class="ai-row">${MarwaBuddy.chip('تعالى نلخص سوا الـ PDF ده ✨', `data-sum="${esc(it.id)}"`)}</div></div>` : row;
         }
 
         // ---------- Miss Marwa summarizes a summary PDF with the student (Assistant Pro, shared summary) ----------
@@ -151,14 +155,14 @@
             return d;
         }
         function openSummary(it) {
-            App.sheet({ iconName: 'file', title: it.title, subtitle: 'مس مروة بتلخصهولك 📚',
+            App.sheet({ iconName: 'file', title: it.title, subtitle: 'Assistant Pro بيلخّصهولك من الـ PDF 📚',
                 html: `<div class="sum-sheet" dir="rtl"><div id="sumBox"></div>
-                    <form class="sum-ask" id="sumAsk" autocomplete="off"><input id="sumQ" maxlength="600" dir="auto" placeholder="اسأل مس مروة عن الملخص ده…"><button type="submit" id="sumSend">اسأل</button></form></div>` });
+                    <form class="sum-ask" id="sumAsk" autocomplete="off"><input id="sumQ" maxlength="600" dir="auto" placeholder="اسأل Assistant Pro عن الملخص ده…"><button type="submit" id="sumSend">اسأل</button></form></div>` });
             const box = document.getElementById('sumBox'), history = [];
             const say = async (action, body, extra) => {
                 const P = MarwaBuddy.panel(box); P.think(action === 'summary' ? 'بلخّصلك الملخص…' : 'بدوّر في الملخص…');
                 P.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                try { const d = await post(action, body); P.say(AiKit.md(d.text), action === 'summary' ? 'التلخيص من ملخص مس مروة نفسه' : ''); if (extra) extra(d); }
+                try { const d = await post(action, body); P.say(AiKit.md(d.text), action === 'summary' ? 'التلخيص من ملخص مس مروة نفسه (الـ PDF)' : ''); if (extra) extra(d); }
                 catch (e) { P.error(e.message); }
             };
             say('summary', { lessonId: it.id }, (d) => history.push({ role: 'assistant', content: d.text }));
@@ -179,9 +183,6 @@
             AI_IDS = new Set((ids.ids || []).map(String)); AI = st;
             if (!AI_IDS.size || !aiShown()) return;
             if (items.length) render();
-            const newest = items.find(i => AI_IDS.has(String(i.id)));
-            MarwaBuddy.pop('تيجي نلخص الملخص ده سوا؟ 📚 دوس على صورتي جنب أي ملخص وأنا ألخّصهولك.', { key: 'sum_pop',
-                actions: newest ? [{ label: 'يلا بينا', primary: true, onClick: () => openSummary(newest) }, { label: 'بعدين' }] : [] });
         });
 
         function render() {
@@ -209,6 +210,8 @@
                 html += `<div class="card reveal"><div class="card-head"><h2 class="card-title">${icon(q ? 'search' : 'clock')}${q ? `${list.length} result${list.length === 1 ? '' : 's'}` : `Newest first · ${list.length}`}</h2></div>
                     <div class="unit-list" style="padding:0">${list.map(itemHtml).join('')}</div></div>`;
                 box.innerHTML = html;
+                box.querySelectorAll('.ai-item[data-ai]').forEach(w => { const it = items.find(i => String(i.id) === w.dataset.ai);
+                    if (it) MarwaBuddy.peek(w, { text: 'تعالى نلخص سوا الـ PDF ده! ✨', label: 'Assistant Pro: لخّصلي ' + it.title, onOpen: () => openSummary(it) }); });
                 App.reveal(box);
                 return;
             }
