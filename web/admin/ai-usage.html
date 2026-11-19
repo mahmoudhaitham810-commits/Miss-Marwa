@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <title>AI usage · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        .urow { grid-template-columns: 40px minmax(0, 1fr) auto auto 16px; align-items: center; }
+        .urow .use { display: none; }
+        @media (min-width: 760px) { .urow { grid-template-columns: 40px minmax(0, 1fr) 70px minmax(170px, 230px) auto 16px; } .urow .use { display: block; } }
+        @media (max-width: 480px) { .urow { grid-template-columns: 40px minmax(0, 1fr) auto 16px; } .urow .sgrade { display: none; } }
+        .use small { display: flex; justify-content: space-between; gap: 8px; margin-top: 5px; font-size: 12px; }
+        .bar.warn i { background: linear-gradient(90deg, #d97706, #f59e0b); }
+        .bar.full i { background: linear-gradient(90deg, #dc2626, #ef4444); }
+        .mini-use { font-size: 12px; margin-top: 3px; }
+        @media (min-width: 760px) { .mini-use { display: none; } }
+        /* on/off switch */
+        .sw { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; user-select: none; }
+        .sw input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+        .sw .track { width: 44px; height: 26px; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--border); position: relative; transition: background .18s, border-color .18s; flex: none; }
+        .sw .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(15, 23, 42, .3); transition: transform .18s; }
+        .sw input:checked + .track { background: var(--success, #16a34a); border-color: transparent; }
+        .sw input:checked + .track::after { transform: translateX(18px); }
+        .sw input:focus-visible + .track { box-shadow: 0 0 0 4px var(--primary-soft); }
+        .sw input:disabled + .track { opacity: .55; }
+        .sw .lbl { min-width: 24px; }
+        @media (max-width: 480px) { .sw .lbl { display: none; } }
+        .set-grid { display: grid; gap: 12px; grid-template-columns: 1fr; align-items: end; }
+        @media (min-width: 640px) { .set-grid { grid-template-columns: 1fr 1fr auto; } }
+        .set-grid label { display: block; font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+        .set-grid small { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
+        .rec { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .rec th, .rec td { padding: 7px 6px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+        .rec th { color: var(--muted); font-weight: 600; }
+        .rec-wrap { overflow-x: auto; }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>AI usage · استهلاك الذكاء الاصطناعي</h1><p id="countLine">Assistant Pro: who it's switched on for, what it cost, and what's left of each student's budget.</p></div>
+            </div>
+            <div class="notice" id="closedNote" style="margin-bottom:14px"><span>🔒 <b>Assistant Pro is still closed for students</b> — they see “coming soon”. Switch students ON here once they've paid; it opens for them in the pilot step. Staff use has <b>no limit</b>.</span></div>
+            <div id="kpis"></div>
+            <div class="card" style="margin:14px 0">
+                <div class="card-head"><h2 class="card-title"><span data-icon="settings" style="display:contents"></span>Budget settings</h2></div>
+                <div class="set-grid">
+                    <div><label for="rate">EGP per 1 USD</label><input class="fin num" id="rate" inputmode="decimal" autocomplete="off"><small>Used to show costs in EGP.</small></div>
+                    <div><label for="budget">Default budget per student (EGP / month)</label><input class="fin num" id="budget" inputmode="decimal" autocomplete="off"><small>Most AI cost a student can use in a month. Can be changed for one student.</small></div>
+                    <button class="btn btn-primary" id="saveSet">Save</button>
+                </div>
+            </div>
+            <div class="toolbar sticky-bar">
+                <div class="input" style="flex:1;min-width:220px"><span data-icon="search" style="display:contents"></span>
+                    <input id="q" placeholder="Search name or code…" autocomplete="off" style="height:44px"></div>
+                <select class="pick" id="gradePick" aria-label="Grade" data-ui="pills"></select>
+                <div class="segmented" id="viewSeg" aria-label="Show">
+                    <button data-value="all">All</button><button data-value="on">Pro ON</button><button data-value="off">Pro OFF</button>
+                </div>
+            </div>
+            <div class="row between" style="margin:2px 0 10px;gap:8px;flex-wrap:wrap">
+                <span class="small muted" id="shownLine"></span>
+                <span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" id="allOn">Switch shown ON</button><button class="btn btn-ghost btn-sm" id="allOff">Switch shown OFF</button></span>
+            </div>
+            <div id="list"></div>
+        </div>
+    </main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'aiusage', title: 'AI usage' });
+        A.hydrate();
+        if (!A.can('ai.manage')) { $('main').querySelector('.container').innerHTML = '<div class="card empty-state"><h3>This page is for Miss Marwa only</h3></div>'; return; }
+        const qs = new URLSearchParams(location.search);
+        let grade = qs.get('grade') || 'all', view = ['on', 'off'].includes(qs.get('view')) ? qs.get('view') : 'all';
+        let D = null; const LIMIT_STEP = 60; let limit = LIMIT_STEP;
+
+        A.gradeSelect($('gradePick'), grade, (v) => { grade = v; limit = LIMIT_STEP; sync(); render(); }, { all: true });
+        A.segmented($('viewSeg'), view, (v) => { view = v; limit = LIMIT_STEP; sync(); render(); });
+        $('q').addEventListener('input', () => { limit = LIMIT_STEP; render(); });
+        const sync = () => { const u = new URL(location.href); u.searchParams.set('grade', grade); u.searchParams.set('view', view); history.replaceState(null, '', u); };
+
+        const egp = (v) => `${(Math.round((Number(v) || 0) * 100) / 100).toLocaleString('en', { maximumFractionDigits: 2 })} EGP`;
+        const usd = (v) => { const n = Number(v) || 0; return '$' + (n === 0 ? '0' : n < 0.01 ? n.toFixed(4) : n.toFixed(2)); };
+        const toEgp = (u) => (Number(u) || 0) * D.settings.rate;
+        const name = (s) => `${s.firstName || ''} ${s.lastName || ''}`.trim();
+        const pct = (s) => s.budgetEgp > 0 ? Math.min(100, s.quota.usedEgp / s.budgetEgp * 100) : 0;
+        const barCls = (p) => p >= 100 ? 'full' : p >= 80 ? 'warn' : 'ok';
+
+        async function load() {
+            if (!D) $('list').innerHTML = '<div class="skel" style="height:300px;border-radius:18px"></div>';
+            try { D = await api('/api/ai-usage?action=overview'); }
+            catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            D.students.forEach(s => { s._q = `${name(s)} ${s.studentId}`.toLowerCase(); });
+            $('rate').value = D.settings.rate; $('budget').value = D.settings.budget;
+            $('closedNote').style.display = D.proOpenForStudents ? 'none' : '';
+            render();
+        }
+        const inGrade = (s) => grade === 'all' || s.grade === grade;
+        const shown = () => {
+            const q = A.normalizeDigits($('q').value).trim().toLowerCase();
+            return D.students.filter(s => inGrade(s) && (view === 'all' || (view === 'on') === s.enabled) && (!q || s._q.includes(q)))
+                .sort((a, b) => (b.enabled - a.enabled) || (b.quota.usedEgp - a.quota.usedEgp) || a.grade.localeCompare(b.grade) || name(a).localeCompare(name(b)));
+        };
+        function render() {
+            if (!D) return;
+            const T = D.totals, list = shown();
+            $('kpis').innerHTML = `<div class="kpis">
+                <div class="kpi fade-up" style="--i:0"><b class="num">${T.enabled}</b><span>Students with Pro ON</span><small>${egp(T.budgetEgp)} of budgets this month</small></div>
+                <div class="kpi fade-up" style="--i:1"><b class="num">${egp(toEgp(T.studentsUsd))}</b><span>Students' AI cost</span><small>${usd(T.studentsUsd)} · ${T.messages.toLocaleString()} messages this month</small></div>
+                <div class="kpi fade-up" style="--i:2"><b class="num">${egp(toEgp(T.staffUsd))}</b><span>Staff use (no limit)</span><small>${usd(T.staffUsd)} · ${T.staffMessages.toLocaleString()} messages this month</small></div>
+                <div class="kpi fade-up" style="--i:3"><b class="num" style="color:var(--success)">${T.cached.toLocaleString()}</b><span>Free repeat answers</span><small>served from saved answers, 0 cost</small></div></div>`;
+            $('countLine').innerHTML = `Month <b class="num">${esc(D.period)}</b> · rate <b class="num">${D.settings.rate}</b> EGP/$ · default budget <b class="num">${egp(D.settings.budget)}</b> per student`;
+            $('shownLine').textContent = `${list.length} student${list.length === 1 ? '' : 's'} shown · ${list.filter(s => s.enabled).length} with Pro ON`;
+            $('allOn').disabled = !list.some(s => !s.enabled); $('allOff').disabled = !list.some(s => s.enabled);
+            if (!list.length) { $('list').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('users', 'lg')}</div><h3>No students here</h3><p>Try another search, grade or filter.</p></div>`; return; }
+            $('list').innerHTML = `<div class="card" style="padding:6px 10px"><div class="srows">${list.slice(0, limit).map((s, i) => {
+                const p = pct(s);
+                return `<div class="srow urow fade-up" style="--i:${Math.min(i, 14)}" data-open="${esc(s.studentId)}" role="button" tabindex="0">
+                    <span class="avatar">${A.initials({ firstName: s.firstName })}</span>
+                    <span class="sname"><b dir="auto">${esc(name(s))}</b><small class="num muted">${esc(s.studentId)}${s.month.messages ? ` · ${s.month.messages} msg this month` : ''}</small>
+                        <span class="mini-use num muted">${egp(s.quota.usedEgp)} / ${egp(s.budgetEgp)}</span></span>
+                    <span class="sgrade">${esc(A.GRADES[s.grade] || s.grade)}</span>
+                    <span class="use"><span class="bar ${barCls(p)}" title="${Math.round(p)}% used"><i style="width:${p}%"></i></span>
+                        <small class="num muted"><span>${egp(s.quota.usedEgp)} used</span><span>${egp(s.quota.leftEgp)} left${s.customBudget ? ' ✎' : ''}</span></small></span>
+                    <label class="sw" title="Assistant Pro for this student"><input type="checkbox" data-sw="${esc(s.studentId)}" ${s.enabled ? 'checked' : ''} aria-label="Assistant Pro for ${esc(name(s))}"><span class="track"></span><span class="lbl">${s.enabled ? 'ON' : 'OFF'}</span></label>
+                    <span class="muted">${icon('chevronRight', 'sm')}</span></div>`;
+            }).join('')}</div>${list.length > limit ? `<button class="btn btn-ghost btn-block" id="moreBtn" style="margin:8px 0">Show ${Math.min(LIMIT_STEP, list.length - limit)} more (${list.length - limit} left)</button>` : ''}</div>`;
+            $('moreBtn')?.addEventListener('click', () => { limit += LIMIT_STEP; render(); });
+        }
+
+        async function setOne(id, body, msg) {
+            const r = await api('/api/ai-usage?action=set', { body: { studentId: id, ...body } });
+            const s = D.students.find(x => x.studentId === id);
+            if (s && r.quota) Object.assign(s, { enabled: r.quota.enabled, budgetEgp: r.quota.budgetEgp, customBudget: r.quota.customBudget, quota: { usedUsd: r.quota.usedUsd, usedEgp: r.quota.usedEgp, leftEgp: r.quota.leftEgp } });
+            if (msg) Site.toast(msg, 'success');
+        }
+        $('list').addEventListener('change', async (e) => {
+            const sw = e.target.closest('[data-sw]'); if (!sw) return;
+            sw.disabled = true;
+            const s = D.students.find(x => x.studentId === sw.dataset.sw);
+            try { await setOne(sw.dataset.sw, { enabled: sw.checked }, `Pro ${sw.checked ? 'ON' : 'OFF'} for ${s ? s.firstName : sw.dataset.sw}`); await load(); }
+            catch (err) { sw.checked = !sw.checked; sw.disabled = false; Site.toast(err.message, 'error'); }
+        });
+        $('list').addEventListener('click', (e) => {
+            if (e.target.closest('.sw')) return;
+            const r = e.target.closest('[data-open]'); if (r) openStudent(r.dataset.open);
+        });
+        $('list').addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-open]')) { e.preventDefault(); openStudent(e.target.dataset.open); } });
+
+        const bulk = (on) => {
+            const ids = shown().filter(s => s.enabled !== on).map(s => s.studentId);
+            if (!ids.length) return;
+            Site.sheet({ iconName: 'users', title: `Switch Pro ${on ? 'ON' : 'OFF'} for ${ids.length} student${ids.length === 1 ? '' : 's'}?`, subtitle: on ? 'Only for students who paid this month.' : 'They keep the free Mini Assistant.',
+                actions: [{ label: `Yes, switch ${on ? 'ON' : 'OFF'}`, cls: on ? 'btn-primary' : 'btn-danger', onClick: async (close) => {
+                    close();
+                    try { await api('/api/ai-usage?action=bulk', { body: { studentIds: ids, enabled: on } }); Site.toast(`Pro ${on ? 'ON' : 'OFF'} for ${ids.length} student${ids.length === 1 ? '' : 's'}`, 'success'); await load(); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }] });
+        };
+        $('allOn').addEventListener('click', () => bulk(true));
+        $('allOff').addEventListener('click', () => bulk(false));
+
+        $('saveSet').addEventListener('click', async () => {
+            const rate = A.normalizeDigits($('rate').value).trim(), budget = A.normalizeDigits($('budget').value).trim();
+            $('saveSet').disabled = true;
+            try { await api('/api/ai-usage?action=settings', { body: { rate, budget } }); Site.toast('Saved', 'success'); await load(); }
+            catch (err) { Site.toast(err.message, 'error'); }
+            finally { $('saveSet').disabled = false; }
+        });
+
+        const KIND = { chat: 'Question', explain: 'Exam explanation', summary: 'Summary', copilot: 'Staff assistant', bench: 'Benchmark' };
+        async function openStudent(id) {
+            const s = D.students.find(x => x.studentId === id); if (!s) return;
+            let det = { recent: [] };
+            try { det = await api('/api/ai-usage?action=student&id=' + encodeURIComponent(id)); } catch (e) { }
+            const p = pct(s);
+            const close = Site.sheet({
+                iconName: 'sparkles', title: name(s), subtitle: `${s.studentId} · ${A.GRADES[s.grade] || s.grade} · Assistant Pro ${s.enabled ? 'ON' : 'OFF'}`,
+                html: `<div class="kv">
+                        <div><span>Used this month</span><b class="num">${egp(s.quota.usedEgp)} · ${usd(s.quota.usedUsd)}</b></div>
+                        <div><span>Left this month</span><b class="num">${egp(s.quota.leftEgp)}</b></div>
+                        <div><span>Messages this month</span><b class="num">${s.month.messages}${s.month.cached ? ` (${s.month.cached} free repeats)` : ''}</b></div>
+                        <div><span>All time</span><b class="num">${s.allTime.messages} msg · ${usd(s.allTime.usd)} · ${(s.allTime.tokensIn + s.allTime.tokensOut).toLocaleString()} tokens</b></div>
+                        ${s.resetAt ? `<div><span>Budget restarted</span><b>${esc(A.fmtDate(s.resetAt, true))}</b></div>` : ''}</div>
+                    <div class="bar ${barCls(p)}" style="margin:12px 0 4px"><i style="width:${p}%"></i></div>
+                    <p class="small muted" style="margin:0 0 14px">${Math.round(p)}% of ${egp(s.budgetEgp)}${s.customBudget ? ' (own budget)' : ' (default)'}</p>
+                    <label for="ownB" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Budget for this student (EGP / month)</label>
+                    <div style="display:flex;gap:8px"><input class="fin num" id="ownB" inputmode="decimal" placeholder="${D.settings.budget} (default)" value="${s.customBudget ? s.budgetEgp : ''}"><button class="btn btn-primary" id="ownSave">Save</button></div>
+                    <p class="small muted" style="margin:6px 0 0">Leave empty to use the default (${egp(D.settings.budget)}).</p>
+                    <h4 style="margin:18px 0 8px">Latest Pro messages</h4>
+                    ${det.recent && det.recent.length ? `<div class="rec-wrap"><table class="rec"><thead><tr><th>When</th><th>What</th><th>Tokens in / out</th><th>Cost</th></tr></thead><tbody>${det.recent.map(r => `<tr>
+                        <td>${esc(A.fmtDate(r.created_at, true))}</td><td>${esc(KIND[r.kind] || r.kind || '')}${r.cached ? ' · saved answer' : ''}${r.pending ? ' · running' : ''}</td>
+                        <td class="num">${(r.input_tokens + r.cache_read + r.cache_write).toLocaleString()} / ${Number(r.output_tokens).toLocaleString()}</td><td class="num">${egp(toEgp(r.cost_usd))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">No Pro messages yet.</p>'}`,
+                actions: [
+                    { label: s.enabled ? 'Switch Pro OFF' : 'Switch Pro ON', cls: s.enabled ? 'btn-ghost' : 'btn-primary', onClick: async (c) => { c(); try { await setOne(id, { enabled: !s.enabled }, `Pro ${s.enabled ? 'OFF' : 'ON'} for ${s.firstName}`); await load(); } catch (err) { Site.toast(err.message, 'error'); } } },
+                    { label: 'Restart this month\'s budget', cls: 'btn-ghost', onClick: (c) => { c(); setTimeout(() => confirmReset(s), 240); } },
+                    { label: 'Close', cls: 'btn-ghost' }
+                ]
+            });
+            document.getElementById('ownSave')?.addEventListener('click', async () => {
+                const v = A.normalizeDigits(document.getElementById('ownB').value).trim();
+                try { await setOne(id, { budgetEgp: v === '' ? null : v }, v === '' ? 'Back to the default budget' : `Budget set to ${egp(v)}`); close(); await load(); }
+                catch (err) { Site.toast(err.message, 'error'); }
+            });
+        }
+        function confirmReset(s) {
+            Site.sheet({ iconName: 'info', title: `Restart ${s.firstName}'s budget?`, subtitle: `${egp(s.quota.usedEgp)} used so far this month. They get the full ${egp(s.budgetEgp)} again from now — this costs you money if they use it all.`,
+                actions: [{ label: 'Yes, restart', cls: 'btn-primary', onClick: async (c) => { c(); try { await api('/api/ai-usage?action=reset', { body: { studentId: s.studentId } }); Site.toast('Budget restarted', 'success'); await load(); } catch (err) { Site.toast(err.message, 'error'); } } },
+                    { label: 'Cancel', cls: 'btn-ghost' }] });
+        }
+        load();
+    })();
+    </script>
+</body>
+</html>

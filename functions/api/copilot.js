@@ -289,7 +289,7 @@ export async function onRequest(context) {
                 // Pro answering a science question / photo uses the reasoning mode picked on the Model test page (PRO_REASONING)
                 const R = tier === 'pro' && !result ? reasoning(env, proMode(env)) : reasoning(env, 'plain');
                 const maxTokens = (result ? (tier === 'free' ? 600 : 900) : img ? (tier === 'free' ? 800 : 2000) : (tier === 'pro' ? 3000 : 850)) + R.extraTokens;
-                const out = await chat(env, db, { tier, pool: 'staff', thinking: R.thinking, system: system + (img ? IMAGE_RULES : '') + R.system, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img });
+                const out = await chat(env, db, { tier, pool: 'staff', thinking: R.thinking, system: system + (img ? IMAGE_RULES : '') + R.system, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img, meter: { staffId: staff.id, kind: 'copilot' } });
                 const u = out.usage || {};
                 const clean = kind === 'exam' ? stripPrivate(out.text) : dropAnswerLine(stripPrivate(out.text));
                 const saved = await saveReply({ text: clean || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });

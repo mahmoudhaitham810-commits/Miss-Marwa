@@ -13,12 +13,14 @@
 //                 Nothing can ever go past the pools; when they're empty everything stops cleanly (no paid overage, ever).
 //   tier 'pro' → Claude Haiku   (env CLAUDE_FAST_MODEL, default claude-haiku-5-5)
 //   (Pro Max / Claude Sonnet was dropped on 17 Nov 2026 — too expensive; all effort goes into Pro)
-//                 Needs the Cloudflare secret ANTHROPIC_API_KEY. Every call's cost is
-//                 metered; daily / monthly caps (AI_DAILY_USD default 1, AI_MONTHLY_USD
-//                 default 15) stop paid calls before they overspend.
+//                 Needs the Cloudflare secret ANTHROPIC_API_KEY. Every call's cost is metered and written
+//                 to the ai_usage ledger (ai-quota.js). Students are limited by their OWN monthly budget
+//                 (switched on per student by Miss Marwa); staff have no limit (set by the user 19 Nov 2026).
+//                 Optional site-wide emergency ceilings: AI_DAILY_USD / AI_MONTHLY_USD — only if set in Cloudflare.
 //
 // Callers never see provider names — screens use the branded names below.
 // =====================================================================
+import { reserve, settle, release, logUsage, worstCaseUsd, QuotaError } from './ai-quota.js';
 import { aiReady, addUsage, estimateNeurons, markQuotaHit, quotaHitToday, textOf, usageToday, DAILY_FREE_NEURONS } from './ai-engine.js';
 
 export const BRANDS = {
@@ -72,8 +74,10 @@ const day = () => new Date().toISOString().slice(0, 10);
 const month = () => new Date().toISOString().slice(0, 7);
 const num = (v, d) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : d; };
 export const poolCap = (env, pool) => num(env && env[pool === 'student' ? 'AI_POOL_STUDENT' : 'AI_POOL_STAFF'], POOL_DEFAULTS[pool] || 0);
-export const dailyUsdCap = (env) => num(env && env.AI_DAILY_USD, 1);
-export const monthlyUsdCap = (env) => num(env && env.AI_MONTHLY_USD, 15);
+// Site-wide ceilings only when set in Cloudflare (no default since 19 Nov 2026 — staff unlimited, students have their own budget)
+export const dailyUsdCap = (env) => num(env && env.AI_DAILY_USD, Infinity);
+export const monthlyUsdCap = (env) => num(env && env.AI_MONTHLY_USD, Infinity);
+const capOrNull = (v) => Number.isFinite(v) ? v : null;
 export const claudeReady = (env) => !!(env && env.ANTHROPIC_API_KEY);
 export const modelFor = (env, tier) => tier === 'pro' ? (env.CLAUDE_FAST_MODEL || 'claude-haiku-5-5') : (env.COPILOT_FREE_MODEL || FREE_MODEL);
 
@@ -102,7 +106,7 @@ export async function usageSummary(env, db) {
     pools.student = { ...pools.student, ...SP };
     return {
         pools, freeQuotaHit: await quotaHitToday(db), freeReady: aiReady(env), paidReady: claudeReady(env),
-        spend: { today: await kvNum(db, `ai_spend_${day()}`), month: await kvNum(db, `ai_spend_${month()}`), dailyCap: dailyUsdCap(env), monthlyCap: monthlyUsdCap(env) },
+        spend: { today: await kvNum(db, `ai_spend_${day()}`), month: await kvNum(db, `ai_spend_${month()}`), dailyCap: capOrNull(dailyUsdCap(env)), monthlyCap: capOrNull(monthlyUsdCap(env)) },
         brands: BRANDS, resetsAt: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1)).toISOString()
     };
 }
@@ -121,11 +125,14 @@ function tidyTurns(messages) {
 }
 
 /**
- * chat(env, db, { tier, pool, system, messages, maxTokens, temperature })
+ * chat(env, db, { tier, pool, system, messages, maxTokens, temperature, meter })
+ *   meter = { studentId } → a student's Pro call: reserved against their budget first (QuotaError → STUDENT_OFF / STUDENT_CAP)
+ *   meter = { staffId }   → staff call: only written to the usage ledger
+ *   meter.kind            → what it was for ('chat', 'explain', 'summary', 'bench' …)
  * → { text, tier, brand, model, ms, neurons?, costUsd?, usage }
  * Throws AiLimitError with code: POOL_EMPTY | FREE_OFF | PAID_OFF | DAILY_CAP | MONTHLY_CAP | AI_ERROR
  */
-export async function chat(env, db, { tier = 'free', pool = 'staff', system = '', messages = [], maxTokens = 1200, temperature = 0.4, image = null, thinking = 0, bonus = false }) {
+export async function chat(env, db, { tier = 'free', pool = 'staff', system = '', messages = [], maxTokens = 1200, temperature = 0.4, image = null, thinking = 0, bonus = false, meter = null }) {
     const turns = tidyTurns(messages);
     // image = { mime, b64 } → attached to the LAST user turn (the photo she/he just sent)
     const img = image && image.b64 && /^image\/(jpeg|png|webp)$/.test(image.mime || '') ? image : null;
@@ -201,6 +208,14 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
     const spentDay = await kvNum(db, `ai_spend_${day()}`), spentMonth = await kvNum(db, `ai_spend_${month()}`);
     if (spentDay >= dailyUsdCap(env)) throw new AiLimitError('DAILY_CAP', `Today's paid AI budget ($${dailyUsdCap(env).toFixed(2)}) is used up — use Mini Assistant until tomorrow, or raise AI_DAILY_USD.`);
     if (spentMonth >= monthlyUsdCap(env)) throw new AiLimitError('MONTHLY_CAP', `This month's paid AI budget ($${monthlyUsdCap(env).toFixed(2)}) is used up — raise AI_MONTHLY_USD to continue.`);
+    const M = meter || {}, kind = M.kind || 'chat';
+    let held = null;   // a student's reservation (ledger row) — settled with the real cost, or released if the call fails
+    if (M.studentId) {
+        const chars = system.length + turns.reduce((t, m) => t + m.content.length, 0);
+        try { held = await reserve(db, { studentId: M.studentId, model, kind, usd: worstCaseUsd(model, { chars, images: img ? 1 : 0, maxTokens: maxTokens + (thinking > 0 ? thinking : 0) }) }); }
+        catch (e) { if (e instanceof QuotaError) throw new AiLimitError(e.code, e.message, { quota: e.quota }); throw e; }
+    }
+    try {
     let res = null, body = null, lastErr = '';
     for (let k = 0; k < 2 && !res; k++) {
         const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 90000);
@@ -232,7 +247,10 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
     const costUsd = claudeCost(model, usage);
     await kvAdd(db, `ai_spend_${day()}`, costUsd);
     await kvAdd(db, `ai_spend_${month()}`, costUsd);
+    if (held) { await settle(db, held, { usage, costUsd, model }); held = null; }
+    else await logUsage(db, { staffId: M.staffId ?? null, kind, model, usage, costUsd });
     return { text, tier, brand: BRANDS[tier].name, model, ms: Date.now() - t0, costUsd, usage };
+    } finally { if (held) await release(db, held); }
 }
 
 // shared module — not a page

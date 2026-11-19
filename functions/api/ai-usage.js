@@ -1,0 +1,132 @@
+// =====================================================================
+// /api/ai-usage — Miss Marwa's "AI usage" page (teacher only, permission ai.manage).
+//   GET  ?action=overview           → settings, this month's totals, every student's usage and budget
+//   GET  ?action=student&id=MM-…    → that student's latest Pro calls
+//   POST ?action=set      { studentId, enabled?, budgetEgp? }  (budgetEgp null → back to the default)
+//   POST ?action=bulk     { studentIds: [], enabled }
+//   POST ?action=reset    { studentId }   → this month's budget starts again from now
+//   POST ?action=settings { rate?, budget? }
+// Every change goes to the activity log.
+// =====================================================================
+import { requireStaff, ensureAppSchema, audit } from './admin-auth.js';
+import { ensureQuotaTables, quotaSettings, saveQuotaSettings, studentQuota, period } from './ai-quota.js';
+
+const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
+const json = (d, s = 200) => Response.json(d, { status: s });
+const bad = (m, s = 400) => json({ error: m }, s);
+const money = (v) => Math.round((Number(v) || 0) * 1e6) / 1e6;
+const okAmount = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= 100000 ? Math.round(n * 100) / 100 : null; };
+
+export async function onRequest(context) {
+    const { request, env } = context;
+    const url = new URL(request.url), action = url.searchParams.get('action') || '';
+    const db = getDb(env);
+    if (!db) return bad('Database not connected', 500);
+    try {
+        await ensureAppSchema(db);
+        const auth = await requireStaff(request, env, 'ai.manage');
+        if (auth.error) return auth.error;
+        await ensureQuotaTables(db);
+        const S = await quotaSettings(db), per = period();
+        const studentExists = async (id) => !!(id && await db.prepare('SELECT 1 FROM students WHERE student_id = ?').bind(id).first());
+
+        if (action === 'overview') {
+            const { results: studs } = await db.prepare('SELECT student_id, first_name, last_name, grade FROM students ORDER BY grade, first_name, last_name').all();
+            const { results: plans } = await db.prepare('SELECT * FROM ai_student_plan').all();
+            const { results: use } = await db.prepare(`SELECT u.student_id,
+                    COUNT(*) AS all_n, COALESCE(SUM(u.cost_usd), 0) AS all_usd,
+                    COALESCE(SUM(u.input_tokens + u.cache_read + u.cache_write), 0) AS all_in, COALESCE(SUM(u.output_tokens), 0) AS all_out,
+                    SUM(CASE WHEN u.period = ? THEN 1 ELSE 0 END) AS m_n,
+                    COALESCE(SUM(CASE WHEN u.period = ? THEN u.cost_usd ELSE 0 END), 0) AS m_usd,
+                    COALESCE(SUM(CASE WHEN u.period = ? AND u.created_at >= (CASE WHEN p.reset_period = ? THEN COALESCE(p.reset_at, '') ELSE '' END) THEN u.cost_usd ELSE 0 END), 0) AS q_usd,
+                    COALESCE(SUM(CASE WHEN u.period = ? THEN u.cached ELSE 0 END), 0) AS m_cached
+                FROM ai_usage u LEFT JOIN ai_student_plan p ON p.student_id = u.student_id
+                WHERE u.student_id IS NOT NULL GROUP BY u.student_id`).bind(per, per, per, per, per).all();
+            const staffUse = await db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage WHERE student_id IS NULL AND period = ?`).bind(per).first();
+            const P = new Map((plans || []).map(p => [p.student_id, p])), U = new Map((use || []).map(u => [u.student_id, u]));
+            const students = (studs || []).map(s => {
+                const p = P.get(s.student_id) || {}, u = U.get(s.student_id) || {};
+                const budgetEgp = p.budget_egp > 0 ? p.budget_egp : S.budget, usedUsd = Number(u.q_usd) || 0;
+                return {
+                    studentId: s.student_id, firstName: s.first_name, lastName: s.last_name, grade: String(s.grade || '').toLowerCase(),
+                    enabled: !!p.enabled, budgetEgp, customBudget: p.budget_egp > 0, resetAt: p.reset_period === per ? p.reset_at : null,
+                    month: { messages: Number(u.m_n) || 0, usd: money(u.m_usd), cached: Number(u.m_cached) || 0 },
+                    quota: { usedUsd: money(usedUsd), usedEgp: money(usedUsd * S.rate), leftEgp: money(Math.max(0, budgetEgp - usedUsd * S.rate)) },
+                    allTime: { messages: Number(u.all_n) || 0, usd: money(u.all_usd), tokensIn: Number(u.all_in) || 0, tokensOut: Number(u.all_out) || 0 }
+                };
+            });
+            const on = students.filter(s => s.enabled);
+            return json({
+                settings: S, period: per, students,
+                totals: {
+                    enabled: on.length, studentsUsd: money(students.reduce((t, s) => t + s.month.usd, 0)), staffUsd: money(staffUse && staffUse.usd), staffMessages: Number(staffUse && staffUse.n) || 0,
+                    messages: students.reduce((t, s) => t + s.month.messages, 0), cached: students.reduce((t, s) => t + s.month.cached, 0),
+                    budgetEgp: money(on.reduce((t, s) => t + s.budgetEgp, 0))
+                },
+                proOpenForStudents: false      // students still see "coming soon" — opens in the pilot phase
+            });
+        }
+        if (action === 'student') {
+            const id = (url.searchParams.get('id') || '').trim();
+            if (!await studentExists(id)) return bad('Student not found', 404);
+            const { results } = await db.prepare(`SELECT kind, model, input_tokens, output_tokens, cache_read, cache_write, cost_usd, cached, pending, created_at
+                FROM ai_usage WHERE student_id = ? ORDER BY id DESC LIMIT 50`).bind(id).all();
+            return json({ quota: await studentQuota(db, id, S), recent: results || [] });
+        }
+        if (request.method !== 'POST') return bad('POST only', 405);
+        const data = await request.json().catch(() => ({}));
+        const who = auth.staff.name || auth.staff.username || String(auth.staff.id);
+
+        if (action === 'set') {
+            const id = String(data.studentId || '').trim();
+            if (!await studentExists(id)) return bad('Student not found', 404);
+            const fields = {};
+            if (data.enabled !== undefined) fields.enabled = data.enabled ? 1 : 0;
+            if (data.budgetEgp !== undefined) {
+                if (data.budgetEgp === null || data.budgetEgp === '') fields.budget_egp = null;
+                else { const b = okAmount(data.budgetEgp); if (b == null) return bad('Budget must be a number above 0'); fields.budget_egp = b; }
+            }
+            if (!Object.keys(fields).length) return bad('Nothing to change');
+            await db.prepare('INSERT OR IGNORE INTO ai_student_plan (student_id) VALUES (?)').bind(id).run();
+            const cols = Object.keys(fields);
+            await db.prepare(`UPDATE ai_student_plan SET ${cols.map(c => c + ' = ?').join(', ')}, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE student_id = ?`)
+                .bind(...cols.map(c => fields[c]), who, id).run();
+            await audit(db, request, auth.staff, 'ai.student.set', id, fields);
+            return json({ ok: true, quota: await studentQuota(db, id, S) });
+        }
+        if (action === 'bulk') {
+            const ids = [...new Set((Array.isArray(data.studentIds) ? data.studentIds : []).map(x => String(x || '').trim()).filter(Boolean))].slice(0, 2000);
+            if (!ids.length) return bad('No students chosen');
+            const en = data.enabled ? 1 : 0, st = [];
+            for (const id of ids) {
+                st.push(db.prepare('INSERT OR IGNORE INTO ai_student_plan (student_id) SELECT student_id FROM students WHERE student_id = ?').bind(id));
+                st.push(db.prepare('UPDATE ai_student_plan SET enabled = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE student_id = ?').bind(en, who, id));
+            }
+            await db.batch(st);
+            await audit(db, request, auth.staff, 'ai.student.bulk', null, { enabled: en, count: ids.length, students: ids });
+            return json({ ok: true, count: ids.length });
+        }
+        if (action === 'reset') {
+            const id = String(data.studentId || '').trim();
+            if (!await studentExists(id)) return bad('Student not found', 404);
+            const before = await studentQuota(db, id, S);
+            await db.prepare('INSERT OR IGNORE INTO ai_student_plan (student_id) VALUES (?)').bind(id).run();
+            await db.prepare(`UPDATE ai_student_plan SET reset_at = strftime('%Y-%m-%d %H:%M:%f', 'now'), reset_period = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE student_id = ?`).bind(per, who, id).run();
+            await audit(db, request, auth.staff, 'ai.student.reset', id, { usedEgpBefore: money(before.usedEgp), period: per });
+            return json({ ok: true, quota: await studentQuota(db, id, S) });
+        }
+        if (action === 'settings') {
+            const next = {};
+            if (data.rate !== undefined) { const r = okAmount(data.rate); if (r == null || r > 1000) return bad('The EGP rate must be between 1 and 1000'); next.rate = r; }
+            if (data.budget !== undefined) { const b = okAmount(data.budget); if (b == null) return bad('The default budget must be a number above 0'); next.budget = b; }
+            if (!Object.keys(next).length) return bad('Nothing to change');
+            await saveQuotaSettings(db, next);
+            await audit(db, request, auth.staff, 'ai.settings', null, { before: S, after: { ...S, ...next } });
+            return json({ ok: true, settings: await quotaSettings(db) });
+        }
+        return bad('Unknown action', 404);
+    } catch (err) {
+        console.error('ai-usage error', err);
+        return bad('Something went wrong — try again', 500);
+    }
+}

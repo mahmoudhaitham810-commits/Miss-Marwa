@@ -241,7 +241,7 @@ export async function onRequest(context) {
             const R = reasoning(env, run.mode);
             let fields;
             try {
-                const out = await chat(env, db, { tier: 'pro', system: tutorPrompt(null, 'pro', { bench: { grade: set.grade } }) + taskRules('exam', 'pro') + R.system, messages: [{ role: 'user', content: askText(item) }], maxTokens: 1500 + R.extraTokens, temperature: 0.3, thinking: R.thinking });
+                const out = await chat(env, db, { tier: 'pro', system: tutorPrompt(null, 'pro', { bench: { grade: set.grade } }) + taskRules('exam', 'pro') + R.system, messages: [{ role: 'user', content: askText(item) }], maxTokens: 1500 + R.extraTokens, temperature: 0.3, thinking: R.thinking, meter: { staffId: auth.staff.id, kind: 'bench' } });
                 const text = stripPrivate(out.text);
                 const m = autoMark(item, text);
                 const u = out.usage || {};

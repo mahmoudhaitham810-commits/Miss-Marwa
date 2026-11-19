@@ -57,6 +57,7 @@ export const PERMISSIONS = {
     'homework.delete': TEACHER,  // full copy kept in the activity log
     'homework.review': BOTH,     // check / override marks (Step 4)
     'copilot.use': TEACHER,
+    'ai.manage': TEACHER,        // AI usage page: student Pro on/off, budgets, EGP rate
     'staff.manage': TEACHER,
     'audit.view': TEACHER,
     'settings.manage': TEACHER
