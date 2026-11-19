@@ -70,6 +70,16 @@
         .qmap a.w { background: var(--danger-soft); color: var(--danger); }
         .qs { display: flex; flex-direction: column; gap: 12px; }
         .q { scroll-margin-top: calc(var(--topbar-h) + 16px); }
+        /* Miss Marwa: explain a mistake / try it again */
+        .qai { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; direction: rtl; }
+        .q.retry .opt { cursor: pointer; transition: transform .12s, border-color .12s; }
+        .q.retry .opt:hover { border-color: var(--primary-line); transform: translateX(2px); }
+        .q.retry .opt.nope { background: var(--danger-soft); border-color: var(--danger-line); animation: shake .35s; }
+        .q.retry .opt.yes { background: var(--success-soft); border-color: var(--success-line); }
+        .q.retry .opt.yes .letter { background: var(--success); color: #fff; }
+        .retry-hint { font-size: 13px; font-weight: 700; color: var(--primary); margin: 0 0 8px; direction: rtl; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        @media (prefers-reduced-motion: reduce) { .q.retry .opt.nope { animation: none; } }
     </style>
 </head>
 <body class="notranslate" translate="no">
@@ -81,6 +91,8 @@
 
     <script src="/assets/pwa.js"></script>
     <script src="/assets/student.js?v=20261118c"></script>
+    <script src="/assets/ai-kit.js?v=20261118a"></script>
+    <script src="/assets/marwa-buddy.js?v=20261119a"></script>
     <script>
     (function () {
         if (!window.App) return;
@@ -193,16 +205,85 @@
                         else if (a === oi) { cls = open ? 'picked' : 'picked-wrong'; tag = open ? 'Your answer' : `${icon('x', 'sm')}Your answer`; }
                         return `<div class="opt ${cls}"><span class="letter">${LETTERS[oi] || oi + 1}</span><span class="otext" dir="auto">${esc(o)}</span>${tag ? `<span class="tag">${tag}</span>` : ''}</div>`;
                     }).join('');
-                    return `<article class="card q reveal ${s === 'r' ? 'right' : s === 'w' ? 'wrong' : ''}" id="q${i + 1}">
+                    return `<article class="card q reveal ${s === 'r' ? 'right' : s === 'w' ? 'wrong' : ''}" id="q${i + 1}" data-qi="${i}">
                         <div class="row between"><span class="chip">Question ${i + 1}</span>${chip}</div>
-                        <p class="qtext" dir="auto">${esc(q.question)}</p>${opts}
-                        ${s === 'w' ? `<button class="btn btn-soft btn-sm" style="margin-top:6px" data-soon="Explain this question with AI">${icon('sparkles', 'sm')}Explain this to me<span class="soon-tag">Soon</span></button>` : ''}
+                        <p class="qtext" dir="auto">${esc(q.question)}</p><div class="opts">${opts}</div>
+                        ${s === 'w' ? `<div class="qai">${aiOn() ? MarwaBuddy.chip('اشرحيلي الغلطة دي يا مس', `data-explain="${i}"`, { wave: true }) : ''}${MarwaBuddy.chip('🔁 يلا نجرب السؤال ده تاني', `data-retry="${i}"`, { ghost: true, icon: false })}</div><div class="qpanel"></div>` : ''}
                     </article>`;
                 }).join('');
                 box.innerHTML = html || `<div class="card"><div class="empty"><div class="bubble">${icon('trophy')}</div><h3>${filter === 'w' ? 'No mistakes!' : 'Nothing here'}</h3><p>${filter === 'w' ? 'You got every question right.' : ''}</p></div></div>`;
+                Object.keys(EXPL).forEach(i => showExpl(Number(i)));   // explanations stay open when the filter changes
                 App.reveal(box);
             }
+
+            // ---------- Miss Marwa explains a mistake (Assistant Pro, shared answers) ----------
+            const EXPL = {};                      // question index → { text } | { error }
+            let AI = null;                        // /api/study-ai status
+            const aiOn = () => !!(AI && AI.code !== 'PRO_CLOSED' && AI.code !== 'PAID_OFF' && AI.code !== 'SIGNED_OUT');
+            function showExpl(i) {
+                const art = document.querySelector(`#q${i + 1} .qpanel`); if (!art) return;
+                art.innerHTML = '';
+                const P = MarwaBuddy.panel(art), e = EXPL[i];
+                if (!e || e.loading) P.think();
+                else if (e.error) P.error(e.error);
+                else P.say(AiKit.md(e.text), 'الشرح مبني على الإجابة الرسمية في امتحان مس مروة');
+            }
+            async function explain(i, btn) {
+                if (EXPL[i] && !EXPL[i].error) return showExpl(i);
+                EXPL[i] = { loading: true }; showExpl(i); if (btn) btn.disabled = true;
+                try {
+                    const res = await fetch('/api/study-ai?action=explain', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examId: r.examId, q: i }) });
+                    const d = await res.json().catch(() => ({}));
+                    EXPL[i] = res.ok && d.text ? { text: d.text } : { error: d.error || 'حصلت مشكلة — جرّب تاني 🙏' };
+                } catch (err) { EXPL[i] = { error: 'النت فصل 😅 — جرّب تاني' }; }
+                if (btn) btn.disabled = false;
+                showExpl(i);
+            }
+            // ---------- try the question again (no AI, free) ----------
+            function retry(i) {
+                const art = document.getElementById('q' + (i + 1)); if (!art) return;
+                const q = qs[i]; let misses = 0;
+                art.classList.add('retry');
+                art.querySelector('.opts').innerHTML = `<p class="retry-hint">يلا نجرب تاني 💪 اختار الإجابة الصح:</p>` + (q.options || []).map((o, oi) =>
+                    `<div class="opt" role="button" tabindex="0" data-pick="${oi}"><span class="letter">${LETTERS[oi] || oi + 1}</span><span class="otext" dir="auto">${esc(o)}</span></div>`).join('');
+                const panel = art.querySelector('.qpanel'); panel.innerHTML = '';
+                const pick = (el) => {
+                    const oi = Number(el.dataset.pick);
+                    panel.innerHTML = ''; const P = MarwaBuddy.panel(panel);
+                    if (oi === Number(q.correctIndex)) {
+                        el.classList.add('yes'); art.querySelectorAll('[data-pick]').forEach(x => x.removeAttribute('role'));
+                        art.classList.remove('retry'); art.querySelector('.retry-hint')?.remove();
+                        P.say(`<p dir="rtl">${misses ? 'أيوه كده! 🎉 وصلتلها في الآخر — كده فهمتها.' : 'برافو عليك! 🎉 كده فهمتها صح.'}</p>`);
+                    } else {
+                        misses++; el.classList.remove('nope'); void el.offsetWidth; el.classList.add('nope');
+                        if (misses >= 2) { P.say(`<p dir="rtl">ولا يهمك 💪 الإجابة الصح هي <b>${LETTERS[q.correctIndex] || ''}</b> — ${aiOn() ? 'دوس «اشرحيلي الغلطة دي» وأنا أشرحهالك.' : 'راجعها تاني وهتثبت معاك.'}</p>`); art.querySelector(`[data-pick="${q.correctIndex}"]`)?.classList.add('yes'); art.classList.remove('retry'); }
+                        else P.say('<p dir="rtl">قربت! 😉 فكّر تاني وجرّب.</p>');
+                    }
+                };
+                art._pick = pick;    // one listener per card (set below), the latest round's state
+                if (!art.dataset.rl) {
+                    art.dataset.rl = '1';
+                    const box = art.querySelector('.opts');
+                    box.addEventListener('click', (e) => { const el = e.target.closest('[data-pick]'); if (el && art.classList.contains('retry')) art._pick(el); });
+                    box.addEventListener('keydown', (e) => { const el = e.target.closest('[data-pick]'); if (el && (e.key === 'Enter' || e.key === ' ') && art.classList.contains('retry')) { e.preventDefault(); art._pick(el); } });
+                }
+            }
+            document.getElementById('qs').addEventListener('click', (e) => {
+                const ex = e.target.closest('[data-explain]'); if (ex) return explain(Number(ex.dataset.explain), ex);
+                const rt = e.target.closest('[data-retry]'); if (rt) return retry(Number(rt.dataset.retry));
+            });
+
             drawQuestions();
+            if (!open && qs.length) {
+                fetch('/api/study-ai?action=status', { credentials: 'same-origin' }).then(x => x.ok ? x.json() : { code: x.status === 401 ? 'SIGNED_OUT' : 'PRO_CLOSED' }).catch(() => ({ code: 'PRO_CLOSED' }))
+                    .then(st => { AI = st; if (aiOn()) drawQuestions(); });
+                const miss = wrong + blank;
+                if (miss) MarwaBuddy.pop(miss === 1 ? 'يلا نراجع غلطتك سوا 💪 سؤال واحد بس ونقفله!' : `يلا نراجع غلطاتك سوا 💪 عندك ${miss} أسئلة نجربها تاني!`, {
+                    key: 'rev_' + r.examId,
+                    actions: [{ label: 'يلا بينا', primary: true, onClick: () => { document.querySelector('#filt [data-f="w"]')?.click(); document.getElementById('qs').scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, { label: 'بعدين' }]
+                });
+                else MarwaBuddy.pop('إيه الحلاوة دي! 🎉 كل إجاباتك صح — كمّل كده!', { key: 'rev_' + r.examId });
+            }
             document.getElementById('filt')?.addEventListener('click', (e) => {
                 const b = e.target.closest('[data-f]'); if (!b) return;
                 filter = b.dataset.f;

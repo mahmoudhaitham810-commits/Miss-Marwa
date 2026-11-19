@@ -63,7 +63,7 @@ export async function onRequest(context) {
                     messages: students.reduce((t, s) => t + s.month.messages, 0), cached: students.reduce((t, s) => t + s.month.cached, 0),
                     budgetEgp: money(on.reduce((t, s) => t + s.budgetEgp, 0))
                 },
-                proOpenForStudents: false      // students still see "coming soon" — opens in the pilot phase
+                proOpenForStudents: S.open      // Miss Marwa's switch: until ON, students see "coming soon"
             });
         }
         if (action === 'student') {
@@ -119,6 +119,7 @@ export async function onRequest(context) {
             const next = {};
             if (data.rate !== undefined) { const r = okAmount(data.rate); if (r == null || r > 1000) return bad('The EGP rate must be between 1 and 1000'); next.rate = r; }
             if (data.budget !== undefined) { const b = okAmount(data.budget); if (b == null) return bad('The default budget must be a number above 0'); next.budget = b; }
+            if (data.open !== undefined) next.open = !!data.open;
             if (!Object.keys(next).length) return bad('Nothing to change');
             await saveQuotaSettings(db, next);
             await audit(db, request, auth.staff, 'ai.settings', null, { before: S, after: { ...S, ...next } });

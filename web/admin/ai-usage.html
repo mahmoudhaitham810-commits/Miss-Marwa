@@ -46,6 +46,9 @@
         .rec th, .rec td { padding: 7px 6px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
         .rec th { color: var(--muted); font-weight: 600; }
         .rec-wrap { overflow-x: auto; }
+        .open-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 18px; }
+        .open-card.is-open { border-color: var(--success-line, #86efac); background: var(--success-soft, #f0fdf4); }
+        .sw.big .lbl { display: inline !important; min-width: 48px; }
     </style>
 </head>
 <body class="site staff">
@@ -54,7 +57,10 @@
             <div class="page-head">
                 <div><h1>AI usage · استهلاك الذكاء الاصطناعي</h1><p id="countLine">Assistant Pro: who it's switched on for, what it cost, and what's left of each student's budget.</p></div>
             </div>
-            <div class="notice" id="closedNote" style="margin-bottom:14px"><span>🔒 <b>Assistant Pro is still closed for students</b> — they see “coming soon”. Switch students ON here once they've paid; it opens for them in the pilot step. Staff use has <b>no limit</b>.</span></div>
+            <div class="card open-card" id="openCard" style="margin-bottom:14px">
+                <div><b id="openTitle">Assistant Pro for students</b><p class="small muted" id="openSub" style="margin:4px 0 0"></p></div>
+                <label class="sw big" title="Open Assistant Pro to students"><input type="checkbox" id="openSw" aria-label="Open Assistant Pro to students"><span class="track"></span><span class="lbl" id="openLbl"></span></label>
+            </div>
             <div id="kpis"></div>
             <div class="card" style="margin:14px 0">
                 <div class="card-head"><h2 class="card-title"><span data-icon="settings" style="display:contents"></span>Budget settings</h2></div>
@@ -112,7 +118,11 @@
             catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
             D.students.forEach(s => { s._q = `${name(s)} ${s.studentId}`.toLowerCase(); });
             $('rate').value = D.settings.rate; $('budget').value = D.settings.budget;
-            $('closedNote').style.display = D.proOpenForStudents ? 'none' : '';
+            const op = !!D.proOpenForStudents;
+            $('openSw').checked = op; $('openLbl').textContent = op ? 'Open' : 'Closed';
+            $('openCard').classList.toggle('is-open', op);
+            $('openSub').innerHTML = op ? '✅ <b>Open.</b> Students with Pro <b>ON</b> below can use it (exam explanations, summaries, questions) within their budget. Students with Pro OFF see “ask Miss Marwa to activate”.'
+                : '🔒 <b>Closed</b> — every student sees “coming soon”. Switch on the students who paid first, then open it here. Staff use has <b>no limit</b>.';
             render();
         }
         const inGrade = (s) => grade === 'all' || s.grade === grade;
@@ -180,6 +190,14 @@
         $('allOn').addEventListener('click', () => bulk(true));
         $('allOff').addEventListener('click', () => bulk(false));
 
+        $('openSw').addEventListener('change', () => {
+            const on = $('openSw').checked; $('openSw').checked = !on;
+            Site.sheet({ iconName: on ? 'sparkles' : 'lock', title: on ? 'Open Assistant Pro to students?' : 'Close Assistant Pro for students?',
+                subtitle: on ? `Only the ${D.totals.enabled} student${D.totals.enabled === 1 ? '' : 's'} with Pro ON can use it, each within their own budget.` : 'Every student will see “coming soon” again. Their budgets and usage are kept.',
+                actions: [{ label: on ? 'Yes, open it' : 'Yes, close it', cls: on ? 'btn-primary' : 'btn-danger', onClick: async (c) => { c();
+                    try { await api('/api/ai-usage?action=settings', { body: { open: on } }); Site.toast(on ? 'Assistant Pro is open for students' : 'Assistant Pro is closed for students', 'success'); await load(); }
+                    catch (err) { Site.toast(err.message, 'error'); } } }, { label: 'Cancel', cls: 'btn-ghost' }] });
+        });
         $('saveSet').addEventListener('click', async () => {
             const rate = A.normalizeDigits($('rate').value).trim(), budget = A.normalizeDigits($('budget').value).trim();
             $('saveSet').disabled = true;

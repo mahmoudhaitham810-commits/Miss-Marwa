@@ -42,17 +42,19 @@ export async function ensureQuotaTables(db) {
 }
 
 const posNum = (v, d) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : d; };
-/** { rate, budget } — EGP per USD and the default budget per student (EGP). */
+/** { rate, budget, open } — EGP per USD, the default budget per student (EGP), and whether Pro is open to
+ *  students at all (Miss Marwa's own switch on the AI usage page; closed until she opens the pilot). */
 export async function quotaSettings(db) {
-    const { results } = await db.prepare(`SELECT "key", value FROM app_kv WHERE "key" IN ('aiq_rate', 'aiq_budget')`).all();
+    const { results } = await db.prepare(`SELECT "key", value FROM app_kv WHERE "key" IN ('aiq_rate', 'aiq_budget', 'aiq_open')`).all();
     const m = Object.fromEntries((results || []).map(r => [r.key, r.value]));
-    return { rate: posNum(m.aiq_rate, RATE_DEFAULT), budget: posNum(m.aiq_budget, BUDGET_DEFAULT) };
+    return { rate: posNum(m.aiq_rate, RATE_DEFAULT), budget: posNum(m.aiq_budget, BUDGET_DEFAULT), open: m.aiq_open === '1' };
 }
-export async function saveQuotaSettings(db, { rate, budget }) {
+export async function saveQuotaSettings(db, { rate, budget, open }) {
     const st = [];
     const put = (k, v) => db.prepare(`INSERT INTO app_kv ("key", value) VALUES (?, ?) ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(k, String(v));
     if (rate !== undefined) st.push(put('aiq_rate', rate));
     if (budget !== undefined) st.push(put('aiq_budget', budget));
+    if (open !== undefined) st.push(put('aiq_open', open ? '1' : '0'));
     if (st.length) await db.batch(st);
 }
 
@@ -82,6 +84,18 @@ export function worstCaseUsd(model, { chars = 0, images = 0, maxTokens = 1200 } 
     const inTok = Math.ceil(chars / 2.5) + images * 4000 + 500;     // Arabic ≈ 2–3 chars a token (Haiku 5.5 counts ~30% more than 4.5); +500 margin
     if (inTok > 90000) { pin *= 5; pout *= 5; }                      // Haiku 5.5 long-prompt prices (over 100k tokens)
     return (inTok * pin * 1.25 + maxTokens * pout) / 1e6;            // ×1.25 = even if all of it is written to the prompt cache
+}
+
+/**
+ * Can this student use Pro right now?  → { ok, code?, message?, quota }
+ * code: PRO_CLOSED (not opened to students yet) | STUDENT_OFF (not switched on for them) | STUDENT_CAP (month used up)
+ */
+export async function studentAccess(db, studentId) {
+    const S = await quotaSettings(db), q = await studentQuota(db, studentId, S);
+    if (!S.open) return { ok: false, code: 'PRO_CLOSED', quota: q };
+    if (!q.enabled) return { ok: false, code: 'STUDENT_OFF', quota: q };
+    if (q.leftUsd <= 0.0005) return { ok: false, code: 'STUDENT_CAP', quota: q };
+    return { ok: true, quota: q };
 }
 
 /** Thrown when a student can't use Pro right now. */
