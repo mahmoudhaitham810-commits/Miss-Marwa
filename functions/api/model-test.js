@@ -12,6 +12,7 @@
 // =====================================================================
 import { requireStaff, ensureAppSchema } from './admin-auth.js';
 import { chat, AiLimitError, BRANDS, claudeReady, modelFor } from './ai-gateway.js';
+import { bookContext, bookRules } from './curriculum.js';
 import { tutorPrompt } from './tutor.js';
 import { reasoning, REASONING_MODES, stripPrivate, finalAnswers, taskRules } from './ai-rules.js';
 
@@ -241,7 +242,9 @@ export async function onRequest(context) {
             const R = reasoning(env, run.mode);
             let fields;
             try {
-                const out = await chat(env, db, { tier: 'pro', system: tutorPrompt(null, 'pro', { bench: { grade: set.grade } }) + taskRules('exam', 'pro') + R.system, messages: [{ role: 'user', content: askText(item) }], maxTokens: 1500 + R.extraTokens, temperature: 0.3, thinking: R.thinking, meter: { staffId: auth.staff.id, kind: 'bench' } });
+                // same curriculum-book grounding as a real student's Pro answer (their grade's book passages)
+                const bctx = await bookContext(db, String(set.grade || '').toLowerCase(), askText(item).slice(0, 600));
+                const out = await chat(env, db, { tier: 'pro', system: tutorPrompt(null, 'pro', { bench: { grade: set.grade }, books: !!bctx.text }) + taskRules('exam', 'pro') + (bctx.text ? bookRules(bctx, set.grade) : '') + R.system, messages: [{ role: 'user', content: askText(item) }], maxTokens: 1500 + R.extraTokens, temperature: 0.3, thinking: R.thinking, meter: { staffId: auth.staff.id, kind: 'bench' } });
                 const text = stripPrivate(out.text);
                 const m = autoMark(item, text);
                 const u = out.usage || {};

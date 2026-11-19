@@ -107,7 +107,7 @@
 
         root.innerHTML = `<div class="tc tc-pad"><div class="tc-head"><img src="${AVATAR}" alt=""><div class="t"><strong>Miss Marwa AI Assistant</strong><small id="tcSub">…</small></div><button class="nb" id="tcNew">+ New chat</button></div>
             <div id="tcBanner"></div><div class="tc-msgs" id="tcMsgs" aria-live="polite"></div>
-            <div class="tc-comp"><div id="tcComp"></div><p class="tc-hint">Mini Assistant ممكن يغلط — راجع المعلومة المهمة مع مس مروة 🙂</p></div></div>`;
+            <div class="tc-comp"><div id="tcComp"></div><p class="tc-hint" id="tcHint">Mini Assistant ممكن يغلط — راجع المعلومة المهمة مع مس مروة 🙂</p></div></div>`;
         const $ = (id) => root.querySelector('#' + id);
 
         // ---------- cards (exact data from the platform) ----------
@@ -129,7 +129,7 @@
                 const rows = c.lessons.slice(0, 5).map(l => `<div class="tc-row"><span class="e">${/video/i.test(l.category) ? '🎬' : '📄'}</span><div class="tx"><b dir="auto">${esc(l.title)}</b><small>${esc(l.category)} · ${esc(l.at)}</small></div></div>`).join('');
                 return `<div class="tc-card tc-lescard"><h5>📚 آخر الدروس في ${esc(c.gradeLabel)}</h5>${rows || '<p style="margin:0">مفيش دروس جديدة لسه</p>'}${rows ? '<a class="btn btn-soft btn-sm" style="margin-top:10px" href="/lessons.html">افتح الدروس</a>' : ''}</div>`;
             },
-            upgrade: (c) => `<div class="tc-card tc-up"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="pro" data-pro>✨ Pro · قريب</button></div>`
+            upgrade: (c) => `<div class="tc-card tc-up"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="pro" data-pro>${proReady() ? '✨ اسأل Pro' : '✨ Pro · قريب'}</button></div>`
         };
         const cardsHTML = (cards) => cards && cards.length ? `<div class="tc-cards">${cards.map(c => (CARD[c.type] || (() => ''))(c)).join('')}</div>` : '';
 
@@ -178,10 +178,11 @@
                 if (d.threadId) threadId = d.threadId;
                 if (d.today && ST) { ST.today = d.today; sub(); }
                 const limit = ['DAILY_LIMIT', 'IMAGE_LIMIT', 'POOL_EMPTY', 'BONUS_CLOSED'].includes(d.code);
+                const noRetry = ['EXAM_LOCK', 'PRO_LOCKED', 'STUDENT_OFF', 'STUDENT_CAP', 'FREE_CLOSED'].includes(d.code);
                 if (!d.user && !limit) { /* not saved → let them resend */ }
                 if (d.code === 'IMAGE_LIMIT' || d.code === 'DAILY_LIMIT' || (d.code === 'BONUS_CLOSED' && !d.threadId)) MSGS.pop();   // nothing was sent
-                MSGS.push({ role: 'error', text: e.message, retry: !limit && d.code !== 'EXAM_LOCK' && d.code !== 'PRO_LOCKED', last: { text, image },
-                    cards: limit ? [{ type: 'upgrade', text: d.code === 'IMAGE_LIMIT' ? 'عايز تبعت صور أكتر وتاخد حل أدق؟ **Miss Marwa Assistant Pro** جاي قريب 🚀' : 'عايز تسأل أكتر من كده؟ **Miss Marwa Assistant Pro** جاي قريب 🚀', tier: 'pro' }] : null });
+                MSGS.push({ role: 'error', text: e.message, retry: !limit && !noRetry, last: { text, image },
+                    cards: limit ? [{ type: 'upgrade', text: d.code === 'IMAGE_LIMIT' ? `عايز تبعت صور أكتر وتاخد حل أدق؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}` : `عايز تسأل أكتر من كده؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}`, tier: 'pro' }] : null });
                 if (d.code === 'EXAM_LOCK' && ST) { ST.inExam = true; sub(); }
             }
             sending = false; comp && comp.setBusy(false); render();
@@ -189,7 +190,13 @@
 
         $('tcMsgs').addEventListener('click', (e) => {
             const c = e.target.closest('[data-chip]'); if (c) { comp && comp.fill(c.dataset.chip.replace(/\s*[\u{1F300}-\u{1FAFF}\u2600-\u27BF]\uFE0F?$/u, '')); return; }
-            if (e.target.closest('[data-pro]')) { opt.toast('Miss Marwa Assistant Pro جاي قريب جداً 🚀', 'info'); return; }
+            if (e.target.closest('[data-pro]')) {
+                if (!proReady()) { opt.toast(proLockedMsg(), 'info'); return; }
+                comp && comp.setTier('pro'); hint();
+                const u = [...MSGS].reverse().find(m => m.role === 'user' && m.text && m.text !== '📷');      // ask the same question again on Pro
+                if (u && !sending) send(u.text, null); else opt.toast('اتحولت لـ Miss Marwa Assistant Pro ✨ — اسأل سؤالك', 'success');
+                return;
+            }
             const r = e.target.closest('[data-retry]');
             if (r) { const last = [...MSGS].reverse().find(m => m.role === 'error'); MSGS = MSGS.filter(m => m !== last); const u = MSGS.pop(); if (u && u.role === 'user') send(last.last.text, last.last.image); }
         });
@@ -198,22 +205,31 @@
         });
         async function loadMine() { try { MINE = (await api('mine')).cards; const w = root.querySelector('#tcMine'); if (w) w.innerHTML = cardsHTML(MINE); } catch (e) { } }
 
+        // ---------- Assistant Pro for this student ----------
+        const proM = () => (ST && ST.models || []).find(m => m.tier === 'pro') || {};
+        const proReady = () => !!proM().ready;
+        const proLockedMsg = () => ({ STUDENT_OFF: 'Miss Marwa Assistant Pro جزء من الاشتراك ✨ — كلّم مس مروة عشان تفعّله.', STUDENT_CAP: 'خلص رصيد Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر.' })[proM().code] || 'Miss Marwa Assistant Pro جاي قريب جداً 🚀';
+
+        const hint = () => { const h = root.querySelector('#tcHint'); if (h && comp) h.textContent = comp.tier === 'pro' ? 'Miss Marwa Assistant Pro بيجاوب من كتابك 📖 — ولو حاجة مش واضحة اسأل مس مروة 🙂' : 'Mini Assistant ممكن يغلط — راجع المعلومة المهمة مع مس مروة 🙂'; };
         // ---------- start ----------
         (async () => {
             try { ST = await api('status'); }
             catch (e) {
                 const d = e.data || {};
+                if (d.code === 'NOT_OPEN') { try { sessionStorage.setItem('ai_nav', JSON.stringify({ open: false, at: Date.now() })); } catch (x) { } }   // the menu's "AI Assistant" goes back to "Soon" at once
                 root.innerHTML = `<div class="tc-lock"><img src="${AVATAR}" alt=""><h2 dir="rtl" style="margin:10px 0 4px">${d.code === 'NOT_OPEN' ? 'مساعد مس مروة جاي قريب 🚀' : 'مش قادرين نفتح المساعد دلوقتي'}</h2><p class="muted" dir="rtl">${esc(d.code === 'NOT_OPEN' ? 'بنجهزه ليك على أكمل وجه — هيوصلك إشعار أول ما يفتح 🔔' : e.message)}</p>${d.code === 'NOT_OPEN' ? '<p class="muted" style="font-size:13px;margin-top:4px">Miss Marwa AI Assistant · Coming soon</p>' : ''}</div>`;
                 return;
             }
             sub();
             comp = composer($('tcComp'), {
-                models: ST.models.map(m => ({ tier: m.tier, name: m.name, ready: m.ready, locked: m.locked, note: m.tier === 'free' ? 'Free · مجاني' : 'قريب جداً 🚀' })),
-                tier: 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, voiceKey: 'tutor_voice', toast: opt.toast,
+                models: ST.models.map(m => ({ tier: m.tier, name: m.name, ready: m.ready, locked: m.locked, note: m.tier === 'free' ? (m.ready ? 'Free · مجاني' : 'قريب 🚀') : (m.note || 'قريب جداً 🚀') })),
+                tier: !ST.models[0].ready && proReady() ? 'pro' : 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, voiceKey: 'tutor_voice', toast: opt.toast,
                 onSend: ({ text, image }) => send(text, image),
-                onLocked: () => opt.toast('Miss Marwa Assistant Pro جاي قريب جداً 🚀', 'info'),
-                beforeAttach: () => (ST.today.images >= ST.today.limits.images ? `مسموح بصورة واحدة في اليوم على Mini Assistant 📷 — Miss Marwa Assistant Pro جاي قريب 🚀` : true)
+                onTier: () => hint(),
+                onLocked: (m) => opt.toast(m && m.tier === 'free' ? 'Mini Assistant جاي قريب 🚀' : proLockedMsg(), 'info'),
+                beforeAttach: () => (comp && comp.tier === 'free' && ST.today.images >= ST.today.limits.images ? `مسموح بصورة واحدة في اليوم على Mini Assistant 📷 — ${proReady() ? 'حوّل لـ Miss Marwa Assistant Pro وابعت صور براحتك ✨' : 'Miss Marwa Assistant Pro جاي قريب 🚀'}` : true)
             });
+            hint();
             try { const t = await api('thread'); threadId = t.thread ? t.thread.id : null; MSGS = t.messages || []; } catch (e) { }
             render(false); if (!MSGS.length) loadMine();
         })();

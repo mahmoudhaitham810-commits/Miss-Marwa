@@ -16,9 +16,16 @@
 //   • TUTOR_FREE_IMAGES photos per student per day (default 1)
 //   • while the student is IN an online exam, the assistant is closed (no help during exams)
 // Preview chats are kept apart from the student's own chats and have their own counters.
+//
+// Assistant Pro (19 Nov 2026): open to a student when Miss Marwa has opened Pro to students AND switched it ON for
+// them (AI usage page). Paid from the student's own monthly budget (no daily counters). Every science question is
+// answered from the student's own grade's curriculum book (curriculum.js — the best few passages, with pages).
+// A student with Pro can open the assistant even while the free Mini Assistant is still closed (TUTOR_OPEN).
 // =====================================================================
 import { requireStaff, ensureAppSchema, verifyStudentRequest } from './admin-auth.js';
-import { chat, usageSummary, bonusOpen, AiLimitError, BRANDS } from './ai-gateway.js';
+import { chat, usageSummary, bonusOpen, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
+import { studentAccess } from './ai-quota.js';
+import { bookContext, bookRules } from './curriculum.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
@@ -66,8 +73,9 @@ async function whoIs(request, env, db, url) {
     }
     const st = await verifyStudentRequest(request, env, db);
     if (!st) return { error: bad('Please sign in again.', 401, { code: 'STUDENT_SESSION_REQUIRED' }) };
-    if (!isOpen(env)) return { error: bad('Miss Marwa AI Assistant is coming soon 🚀', 403, { code: 'NOT_OPEN' }) };
-    return { preview: false, staff: null, student: st };
+    const pro = claudeReady(env) ? await studentAccess(db, st.id).catch(() => ({ ok: false })) : { ok: false };
+    if (!isOpen(env) && !pro.ok) return { error: bad('Miss Marwa AI Assistant is coming soon 🚀', 403, { code: 'NOT_OPEN' }) };
+    return { preview: false, staff: null, student: st, pro };
 }
 
 // ---------- this student's own data (and only theirs) ----------
@@ -166,7 +174,7 @@ ${tier === 'pro'
 - Use ONLY the "MY DATA" block below for anything about their grades, rank, exams, absences or lessons. Never invent a number, exam, lesson or date. If something isn't there, say you don't see it.
 - Cards with their exact numbers appear under your reply when they ask about their grades, open exams or new lessons — so keep that part short and fun, don't repeat every number.
 - You can ONLY see this student's own data. If they ask about another student's grades or anything private about someone else, say kindly that you can't see that 🙂.
-- Never guess what's inside a specific lesson of their book ("Unit 2 Lesson 3") — the books aren't connected yet; ask them to tell you the topic.
+${opts.books ? `- Passages from their own curriculum book for this question are at the end ("Curriculum book") — they are your source of truth for science content.` : `- Never guess what's inside a specific lesson of their book ("Unit 2 Lesson 3") — ${tier === 'pro' ? "no passage of their book was found for it" : "the books aren't connected yet"}; ask them to tell you the topic.`}
 - Stay on studies. Off-topic chat → one friendly line, then steer back to science. Keep everything appropriate for school students.
 - Never claim you did something on the platform (you can't submit, change marks or send anything).
 - If they ask what you can do, list (numbered) what you do on the platform — their level & grades, open exams & deadlines, new lessons, one photo question a day, quick Science help — then say honestly that you're a limited model and they shouldn't rely on you entirely for the academic content.
@@ -187,7 +195,15 @@ const EXAMPLES = [
 // ---------- messages ----------
 const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } };
 const msgOut = (m) => ({ id: m.id, role: m.role, text: m.text, tier: m.tier, model: m.model || null, brand: m.tier ? (BRANDS[m.tier] || {}).name : null, ms: m.ms, error: m.error || null, cards: parse(m.cards), imageId: m.image_id || null, at: m.created_at });
+const PRO_MSG = {
+    STUDENT_OFF: 'Miss Marwa Assistant Pro جزء من الاشتراك ✨ — كلّم مس مروة عشان تفعّله.',
+    STUDENT_CAP: 'خلص رصيد Miss Marwa Assistant Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر الجاي.',
+    PRO_CLOSED: 'Miss Marwa Assistant Pro جاي قريب جداً 🚀',
+    PAID_OFF: 'Miss Marwa Assistant Pro مش متاح دلوقتي 🙏'
+};
 const FRIENDLY = {
+    STUDENT_OFF: PRO_MSG.STUDENT_OFF, STUDENT_CAP: PRO_MSG.STUDENT_CAP, PAID_OFF: PRO_MSG.PAID_OFF,
+    DAILY_CAP: 'Miss Marwa Assistant Pro خد استراحة النهارده 🙏 — جرّب بكره.', MONTHLY_CAP: 'Miss Marwa Assistant Pro خد استراحة 🙏 — كلّم مس مروة.',
     POOL_EMPTY: 'Mini Assistant خد استراحة النهارده 😴 — بيرجع الساعة 2 بالليل. لو محتاج دلوقتي جرّب Miss Marwa Assistant Pro.',
     BONUS_CLOSED: 'خلصت رسايلك النهارده 😅 — رسايل زيادة بتفتح لما يكون فيه رصيد فاضي، جرّب كمان شوية أو بكره.',
     FREE_OFF: 'Mini Assistant مش متاح دلوقتي 🙏 جرّب كمان شوية.',
@@ -216,14 +232,20 @@ export async function onRequest(context) {
             WHERE s.student_id = ? AND s.status = 'started' AND julianday(e.expires_at) > julianday('now')
               AND (s.started_at IS NULL OR (julianday('now') - julianday(s.started_at)) * 1440 < COALESCE(NULLIF(e.time_limit_minutes, 0), 180)) LIMIT 1`).bind(sid).first().catch(() => null));
 
+        // Pro for this student right now? (Preview: always, paid as staff use)
+        const proNow = async () => !claudeReady(env) ? { ok: false, code: 'PAID_OFF' } : who.preview ? { ok: true } : await studentAccess(db, sid);
         if (action === 'status') {
             const u = await usageSummary(env, db);
+            const pa = await proNow();
+            const proModel = { tier: 'pro', name: BRANDS.pro.name, ready: !!pa.ok, locked: !pa.ok, code: pa.ok ? null : pa.code,
+                note: pa.ok ? 'من كتابك · From your book' : pa.code === 'STUDENT_CAP' ? 'خلص رصيد الشهر' : pa.code === 'STUDENT_OFF' ? 'اطلب تفعيله من مس مروة' : 'Coming soon',
+                leftPct: pa.quota && pa.quota.budgetUsd > 0 ? Math.max(0, Math.min(100, Math.round(pa.quota.leftUsd / pa.quota.budgetUsd * 100))) : null };
             return json({
                 preview: who.preview, open: isOpen(env), title: ME,
                 student: { id: sid, firstName: who.student.firstName, gender: who.student.gender, grade: who.student.grade },
                 models: [
-                    { tier: 'free', name: BRANDS.free.name, note: 'Free', ready: aiReady(env) },
-                    { tier: 'pro', name: BRANDS.pro.name, note: 'Coming soon', ready: false, locked: true }
+                    { tier: 'free', name: BRANDS.free.name, note: 'Free', ready: aiReady(env) && (who.preview || isOpen(env)) },
+                    proModel
                 ],
                 today: await today(), available: !u.freeQuotaHit && u.pools.student.left > 0, inExam: await inExam()   // no unit numbers on the student side
             });
@@ -249,7 +271,10 @@ export async function onRequest(context) {
 
         if (action === 'send') {
             const tier = data.tier === 'pro' ? 'pro' : 'free';
-            if (tier === 'pro') return bad(`${BRANDS.pro.name} جاي قريب جداً 🚀`, 403, { code: 'PRO_LOCKED' });
+            if (tier === 'pro') {
+                const pa = await proNow();
+                if (!pa.ok) return bad(PRO_MSG[pa.code] || `${BRANDS.pro.name} جاي قريب جداً 🚀`, pa.code === 'STUDENT_CAP' ? 429 : 403, { code: pa.code === 'PRO_CLOSED' || pa.code === 'PAID_OFF' ? 'PRO_LOCKED' : pa.code });
+            } else if (!who.preview && !isOpen(env)) return bad('Mini Assistant جاي قريب 🚀 — استخدم Miss Marwa Assistant Pro.', 403, { code: 'FREE_CLOSED' });
             let text = String(data.text || '').replace(/\r/g, '').trim();
             const img = readImage(data.image);
             if (img && img.error) return bad(img.error, 400);
@@ -260,10 +285,11 @@ export async function onRequest(context) {
             // "what can you do?" → a fixed, always-correct list (no AI, doesn't use a daily message)
             const cap = !img && isCapabilityQuestion(text);
             const t0 = await today();
-            const bonus = !cap && t0.messages >= L.messages;   // past their own daily messages → only from today's leftover
-            if (!cap && t0.messages >= L.max) return bad(`خلصت رسايل Mini Assistant بتاعة النهارده 😅 — بترجع بكره الساعة 2 بالليل، أو جرّب ${BRANDS.pro.name}.`, 429, { code: 'DAILY_LIMIT', today: t0 });
-            if (bonus && !(await bonusOpen(env, db))) return bad(`خلصت رسايلك النهارده (${L.messages}) 😅 — رسايل زيادة بتفتح لما يكون فيه رصيد فاضي، جرّب كمان شوية أو بكره.`, 429, { code: 'BONUS_CLOSED', today: t0 });
-            if (img && t0.images >= L.images) return bad(`مسموح بصورة واحدة في اليوم على Mini Assistant 📷 — لو عايز تبعت صور أكتر جرّب ${BRANDS.pro.name} 🚀`, 429, { code: 'IMAGE_LIMIT', today: t0 });
+            const free = tier === 'free';
+            const bonus = free && !cap && t0.messages >= L.messages;   // past their own daily messages → only from today's leftover
+            if (free && !cap && t0.messages >= L.max) return bad(`خلصت رسايل Mini Assistant بتاعة النهارده 😅 — بترجع بكره الساعة 2 بالليل، أو جرّب ${BRANDS.pro.name}.`, 429, { code: 'DAILY_LIMIT', today: t0 });
+            if (free && bonus && !(await bonusOpen(env, db))) return bad(`خلصت رسايلك النهارده (${L.messages}) 😅 — رسايل زيادة بتفتح لما يكون فيه رصيد فاضي، جرّب كمان شوية أو بكره.`, 429, { code: 'BONUS_CLOSED', today: t0 });
+            if (free && img && t0.images >= L.images) return bad(`مسموح بصورة واحدة في اليوم على Mini Assistant 📷 — لو عايز تبعت صور أكتر جرّب ${BRANDS.pro.name} 🚀`, 429, { code: 'IMAGE_LIMIT', today: t0 });
 
             let t = await ownThread(parseInt(data.threadId, 10));
             if (data.threadId && !t) return bad('Chat not found', 404);
@@ -287,21 +313,33 @@ export async function onRequest(context) {
             const cards = cardsFor(intents, d);
             const science = !intents.length && isScienceQuestion(text);   // the Pro note follows real science questions only
             const kind = img ? 'exam' : intents.length ? 'other' : askKind(text);   // ✅ answer line only on real exam questions
-            if (img) cards.push({ type: 'upgrade', text: NOTE_IMAGE, tier: 'pro' });
-            else if (science) cards.push({ type: 'upgrade', text: NOTE_TEXT, tier: 'pro' });
+            if (free && img) cards.push({ type: 'upgrade', text: NOTE_IMAGE, tier: 'pro' });
+            else if (free && science) cards.push({ type: 'upgrade', text: NOTE_TEXT, tier: 'pro' });
             const { results: hist } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
             const save = async (f) => {
-                const r = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, tier, model, ms, neurons, error, cards) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                    .bind(t.id, f.role || 'assistant', f.text, tier, f.model ?? null, f.ms ?? null, f.neurons ?? null, f.error ?? null, f.cards ?? null).run();
+                const r = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, tier, model, ms, neurons, cost_usd, error, cards) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                    .bind(t.id, f.role || 'assistant', f.text, tier, f.model ?? null, f.ms ?? null, f.neurons ?? null, f.cost ?? null, f.error ?? null, f.cards ?? null).run();
                 await db.prepare('UPDATE tutor_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
                 return db.prepare('SELECT * FROM tutor_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
             try {
-                const out = await chat(env, db, { tier: 'free', pool: 'student', system: tutorPrompt(d, 'free') + (img ? IMAGE_RULES : '') + (intents.length ? '' : taskRules(kind, 'free')), messages: [...EXAMPLES, ...messages], maxTokens: img ? 900 : 850, temperature: 0.5, image: img && !img.error ? img : null, bonus });
-                await kvAdd(db, counterKey(who, 'msgs'), 1);
-                if (img) await kvAdd(db, counterKey(who, 'imgs'), 1);
-                const saved = await save({ text: (kind === 'exam' ? out.text : dropAnswerLine(out.text)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cards: cards.length ? JSON.stringify(cards) : null });
+                let out;
+                if (free) {
+                    out = await chat(env, db, { tier: 'free', pool: 'student', system: tutorPrompt(d, 'free') + (img ? IMAGE_RULES : '') + (intents.length ? '' : taskRules(kind, 'free')), messages: [...EXAMPLES, ...messages], maxTokens: img ? 900 : 850, temperature: 0.5, image: img && !img.error ? img : null, bonus });
+                    await kvAdd(db, counterKey(who, 'msgs'), 1);
+                    if (img) await kvAdd(db, counterKey(who, 'imgs'), 1);
+                } else {
+                    // Pro: the student's own grade book is the source of truth for science (the question + the last one, for follow-ups)
+                    const prevQ = messages.filter(m => m.role === 'user').slice(-2, -1).map(m => m.content).join(' ');
+                    const ctx = intents.length ? null : await bookContext(db, who.student.grade, `${text} ${prevQ}`.slice(0, 600));
+                    const gl = GRADE_LABEL[who.student.grade] || who.student.grade;
+                    const books = intents.length ? '' : (ctx && ctx.text) || !img ? bookRules(ctx, gl) : '';
+                    out = await chat(env, db, { tier: 'pro', system: tutorPrompt(d, 'pro', { books: !!(ctx && ctx.text) }) + (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro')),
+                        messages: [...EXAMPLES, ...messages], maxTokens: img ? 1300 : 1100, image: img && !img.error ? img : null,
+                        meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
+                }
+                const saved = await save({ text: (kind === 'exam' ? out.text : dropAnswerLine(out.text)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cost: out.costUsd, cards: cards.length ? JSON.stringify(cards) : null });
                 return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today() });
             } catch (e) {
                 const code = e instanceof AiLimitError ? e.code : 'AI_ERROR';
@@ -312,7 +350,7 @@ export async function onRequest(context) {
                     return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), aiError: { code } });
                 }
                 await save({ role: 'error', text: FRIENDLY[code] || FRIENDLY.AI_ERROR, error: code });
-                return json({ error: FRIENDLY[code] || FRIENDLY.AI_ERROR, code, threadId: t.id, user: msgOut(userMsg), today: await today() }, ['POOL_EMPTY', 'BONUS_CLOSED'].includes(code) ? 429 : code === 'FREE_OFF' ? 503 : 502);
+                return json({ error: FRIENDLY[code] || FRIENDLY.AI_ERROR, code, threadId: t.id, user: msgOut(userMsg), today: await today() }, ['POOL_EMPTY', 'BONUS_CLOSED', 'STUDENT_CAP', 'DAILY_CAP', 'MONTHLY_CAP'].includes(code) ? 429 : code === 'STUDENT_OFF' ? 403 : ['FREE_OFF', 'PAID_OFF'].includes(code) ? 503 : 502);
             }
         }
         return bad('Unknown action', 404);

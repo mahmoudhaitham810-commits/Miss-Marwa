@@ -489,6 +489,23 @@
     }
 
     // ---------- Shell ----------
+    // "AI Assistant" in the menu: a real link once this student can use it (Mini Assistant open, or Assistant Pro
+    // switched on for them) — asked once and remembered for 10 minutes; "Soon" otherwise.
+    function aiNavOpen() {
+        try { const v = JSON.parse(sessionStorage.getItem('ai_nav') || 'null'); return !!(v && v.open); } catch (e) { return false; }
+    }
+    function refreshAiNav(active) {
+        if (isAdmin) return;
+        let v = null; try { v = JSON.parse(sessionStorage.getItem('ai_nav') || 'null'); } catch (e) { }
+        if (v && Date.now() - v.at < 600000) return;
+        fetch('/api/tutor?action=status', { credentials: 'same-origin' }).then(r => {
+            const open = r.ok;
+            try { sessionStorage.setItem('ai_nav', JSON.stringify({ open, at: Date.now() })); } catch (e) { }
+            const btn = document.querySelector('.side-nav [data-soon="AI Assistant"]'), link = document.querySelector('.side-nav a[href$="assistant.html"]');
+            if (open && btn) btn.outerHTML = `<a href="${url('assistant.html')}" class="${active === 'assistant' ? 'active' : ''}">${icon('bot')}AI Assistant</a>`;
+            else if (!open && link) link.outerHTML = `<button data-soon="AI Assistant">${icon('bot')}AI Assistant<span class="soon-tag">Soon</span></button>`;
+        }).catch(() => { });
+    }
     function shell({ active = 'home', title = '', notifications = true, bottomNav = true } = {}) {
         const first = session.firstName || 'Student';
         // Arabic first letters (like ا) look like a stray line in a tiny circle, so those get a person icon instead
@@ -499,7 +516,7 @@
             { key: 'lessons', label: 'Lessons', icon: 'book', href: url('lessons.html') },
             { key: 'exams', label: 'Exams', icon: 'clipboard', href: url('exams.html') },
             { key: 'results', label: 'Results', icon: 'chart', href: url('exam-results.html') },
-            { key: 'assistant', label: 'AI Assistant', icon: 'bot', soon: true },
+            { key: 'assistant', label: 'AI Assistant', icon: 'bot', soon: !aiNavOpen(), href: url('assistant.html') },
             { key: 'questions', label: 'Ask Miss Marwa', icon: 'help', href: url('questions.html') }
         ];
         const gradePicker = isAdmin
@@ -541,6 +558,7 @@
         </nav>`;
 
         document.body.insertAdjacentHTML('afterbegin', sidebar + topbar);
+        refreshAiNav(active);
         if (bottomNav) document.body.insertAdjacentHTML('beforeend', bottom);
         else document.body.classList.add('no-bottomnav');
         document.title = `${title ? title + ' · ' : ''}Science Academy`;

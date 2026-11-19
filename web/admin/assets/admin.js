@@ -119,6 +119,7 @@
             teacher ? { key: 'copilot', label: 'AI Assistant', icon: 'sparkles', href: '/admin/copilot.html' } : null,
             teacher ? { key: 'modeltest', label: 'Model test', icon: 'chart', href: '/admin/model-test.html' } : null,
             teacher ? { key: 'aiusage', label: 'AI usage · الاستهلاك', icon: 'chart', href: '/admin/ai-usage.html' } : null,
+            teacher ? { key: 'books', label: 'Curriculum books', icon: 'book', href: '/admin/books.html' } : null,
             { key: 'tutorpreview', label: 'Student AI · preview', icon: 'bot', href: '/admin/tutor-preview.html' },
             { key: 'settings', label: teacher ? 'Settings' : 'My password', icon: 'settings', href: '/admin/settings.html' }
         ].filter(Boolean);

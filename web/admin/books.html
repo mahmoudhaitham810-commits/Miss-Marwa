@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <title>Curriculum books · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        .books { display: grid; gap: 14px; grid-template-columns: 1fr; }
+        @media (min-width: 900px) { .books { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .book { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+        .book-top { display: flex; gap: 12px; align-items: flex-start; }
+        .book-ic { width: 46px; height: 46px; flex: none; border-radius: 14px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); }
+        .book-top b { display: block; font-size: 16px; }
+        .book-top small { color: var(--muted); }
+        .book .bar { height: 10px; }
+        .book-stats { display: flex; gap: 6px; flex-wrap: wrap; }
+        .book-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+        .book .msg { font-size: 13px; color: var(--muted); min-height: 18px; }
+        .pass { padding: 12px 14px; border-radius: 14px; background: var(--surface-2); margin-top: 10px; font-size: 13.5px; line-height: 1.7; white-space: pre-wrap; }
+        .pass b { display: block; font-size: 12px; color: var(--primary); margin-bottom: 4px; }
+        .try { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .try .fin { flex: 1; min-width: 200px; }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head">
+                <div><h1>Curriculum books · كتب المنهج</h1><p>Assistant Pro answers students' questions from these books — their own grade only, with the page number.</p></div>
+            </div>
+            <div id="note"></div>
+            <div id="books" class="books"><div class="skel" style="height:220px;border-radius:18px"></div></div>
+            <div class="card" style="margin-top:16px">
+                <div class="card-head"><h2 class="card-title"><span data-icon="search" style="display:contents"></span>Try it — what does Pro read for a question?</h2></div>
+                <div class="try"><select class="pick" id="tg" aria-label="Grade"></select><input class="fin" id="tq" dir="auto" placeholder="e.g. What is density? / يعني إيه الكثافة؟"><button class="btn btn-primary" id="tb">Search</button></div>
+                <div id="tr"></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'books', title: 'Curriculum books' });
+        A.hydrate();
+        if (!A.can('ai.manage')) { $('main').querySelector('.container').innerHTML = '<div class="card empty-state"><h3>This page is for Miss Marwa only</h3></div>'; return; }
+        let D = null; const busy = {};
+        $('tg').innerHTML = Object.entries(A.GRADES).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+        const mb = (n) => (n / 1024 / 1024).toFixed(1) + ' MB';
+
+        // ---------- pdf.js (bundled) ----------
+        let pdfLib = null;
+        const loadPdf = () => pdfLib || (pdfLib = (window.__pdfjsLib ? Promise.resolve(window.__pdfjsLib) : import('/assets/vendor/pdfjs/pdf.min.js').then(m => { m.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js'; return m; })));
+        const openBook = async (key) => (await loadPdf()).getDocument({ url: '/api/curriculum?action=pdf&key=' + encodeURIComponent(key), withCredentials: true, rangeChunkSize: 262144, disableAutoFetch: true, isEvalSupported: false }).promise;
+
+        async function load() {
+            try { D = await api('/api/curriculum?action=list'); }
+            catch (err) { $('books').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            $('note').innerHTML = !D.connected ? `<div class="notice warning" style="margin-bottom:14px"><span>⚠️ <b>The books bucket isn't connected.</b> Cloudflare → Workers &amp; Pages → this project → Settings → Bindings → add an <b>R2 bucket</b> binding named <code>CURRICULUM</code> → <code>curriculum-bucket</code>, then redeploy.</span></div>` : '';
+            render();
+        }
+        function render() {
+            if (!D.books.length) { $('books').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('book', 'lg')}</div><h3>No books found</h3><p>Upload the PDFs to the curriculum bucket, named prep1-science.pdf, prep2-science.pdf …</p></div>`; return; }
+            $('books').innerHTML = D.books.map(b => {
+                const t = b.totalPages, done = b.pagesDone, pct = t ? Math.min(100, Math.round(done / t * 100)) : 0, scan = b.scanned.length, B = busy[b.key];
+                const state = !done ? '<span class="pill muted">Not indexed</span>' : done < t ? `<span class="pill warning">Indexed ${done} / ${t} pages</span>` : `<span class="pill success">Indexed · ${t} pages</span>`;
+                return `<div class="card book" data-key="${esc(b.key)}">
+                    <div class="book-top"><span class="book-ic">${icon('book')}</span><div style="flex:1;min-width:0"><b>${esc(b.name)}</b><small class="num">${esc(b.key)} · ${b.inBucket ? mb(b.size) : 'not in the bucket any more'}${b.grade ? '' : ' · ⚠️ name must start with prep1- / prep2- / prep3- / sec1-'}</small></div></div>
+                    <div class="bar ${pct >= 100 ? 'ok' : ''}"><i style="width:${B ? B.pct : pct}%"></i></div>
+                    <div class="book-stats">${state}${done ? `<span class="pill muted">${b.textPages} pages with text</span>` : ''}${b.ocrPages ? `<span class="pill muted">${b.ocrPages} read by AI</span>` : ''}${scan ? `<span class="pill warning">📷 ${scan} scanned page${scan === 1 ? '' : 's'}</span>` : ''}</div>
+                    <div class="msg" data-msg>${B ? esc(B.msg) : ''}</div>
+                    <div class="book-acts">
+                        ${b.inBucket && b.grade ? `<button class="btn btn-primary btn-sm" data-index ${B ? 'disabled' : ''}>${done && done < t ? 'Continue indexing' : done ? 'Index again' : 'Index this book'}</button>` : ''}
+                        ${scan && b.inBucket ? `<button class="btn btn-soft btn-sm" data-ocr ${B || !D.aiReady ? 'disabled' : ''} title="About $${(scan * 0.0008).toFixed(2)} — once">${icon('sparkles', 'sm')}Read ${scan} scanned page${scan === 1 ? '' : 's'} with AI (≈ $${(scan * 0.0008).toFixed(2)})</button>` : ''}
+                        ${done ? `<button class="btn btn-ghost btn-sm" data-clear ${B ? 'disabled' : ''}>Clear</button>` : ''}
+                    </div></div>`;
+            }).join('');
+        }
+        const setMsg = (key, msg, pct) => { busy[key] = { msg, pct }; const el = document.querySelector(`.book[data-key="${CSS.escape(key)}"]`); if (el) { el.querySelector('[data-msg]').textContent = msg; if (pct != null) el.querySelector('.bar i').style.width = pct + '%'; } };
+
+        async function indexBook(b, from) {
+            busy[b.key] = { msg: 'Opening the book…', pct: 0 }; render();
+            try {
+                const doc = await openBook(b.key), total = doc.numPages;
+                let batch = [];
+                const send = async () => { if (!batch.length) return; await api('/api/curriculum?action=pages', { body: { key: b.key, total, pages: batch } }); batch = []; };
+                for (let n = from; n <= total; n++) {
+                    const tc = await (await doc.getPage(n)).getTextContent();
+                    batch.push({ n, text: tc.items.map(it => (it.str || '') + (it.hasEOL ? '\n' : ' ')).join('').replace(/ +\n/g, '\n').trim() });
+                    if (batch.length >= 10) await send();
+                    setMsg(b.key, `Reading page ${n} of ${total}…`, Math.round(n / total * 100));
+                }
+                await send();
+                Site.toast(`${b.name}: indexed ✅`, 'success');
+            } catch (err) { Site.toast(err.message || 'Indexing stopped — try "Continue"', 'error'); }
+            delete busy[b.key]; await load();
+        }
+        async function ocrBook(b) {
+            const pages = b.scanned.slice();
+            busy[b.key] = { msg: 'Opening the book…', pct: 0 }; render();
+            let spent = 0, ok = 0;
+            try {
+                const doc = await openBook(b.key);
+                for (let i = 0; i < pages.length; i++) {
+                    const n = pages[i], page = await doc.getPage(n);
+                    const v1 = page.getViewport({ scale: 1 }), k = 1500 / Math.max(v1.width, v1.height), vp = page.getViewport({ scale: k });   // ~1500 px: small print stays sharp, ≤ Claude's 1568 px limit
+                    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+                    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+                    await page.render({ canvasContext: g, viewport: vp }).promise;
+                    const b64 = c.toDataURL('image/jpeg', 0.85).split(',')[1];
+                    setMsg(b.key, `AI is reading page ${n} (${i + 1} of ${pages.length}) · $${spent.toFixed(3)} so far…`, Math.round((i + 1) / pages.length * 100));
+                    const r = await api('/api/curriculum?action=ocr', { body: { key: b.key, n, total: doc.numPages, image: { mime: 'image/jpeg', b64 } } });
+                    spent += r.costUsd || 0; ok++;
+                }
+                Site.toast(`${ok} page${ok === 1 ? '' : 's'} read by AI · $${spent.toFixed(3)}`, 'success');
+            } catch (err) { Site.toast((err.message || 'Stopped') + ` — ${ok} page${ok === 1 ? '' : 's'} done, press again to continue`, 'error'); }
+            delete busy[b.key]; await load();
+        }
+        $('books').addEventListener('click', (e) => {
+            const card = e.target.closest('.book'); if (!card) return;
+            const b = D.books.find(x => x.key === card.dataset.key); if (!b || busy[b.key]) return;
+            if (e.target.closest('[data-index]')) return indexBook(b, b.pagesDone && b.pagesDone < b.totalPages ? b.pagesDone + 1 : 1);
+            if (e.target.closest('[data-ocr]')) return Site.sheet({ iconName: 'sparkles', title: `Read ${b.scanned.length} scanned pages with AI?`, subtitle: `About $${(b.scanned.length * 0.0008).toFixed(2)}, once (counted as staff use). Keep this page open until it finishes.`,
+                actions: [{ label: 'Yes, read them', onClick: (c) => { c(); ocrBook(b); } }, { label: 'Cancel', cls: 'btn-ghost' }] });
+            if (e.target.closest('[data-clear]')) return Site.sheet({ iconName: 'alert', title: `Clear ${b.name}?`, subtitle: 'Assistant Pro stops using it until you index it again. The PDF itself stays in the bucket.',
+                actions: [{ label: 'Clear', cls: 'btn-danger', onClick: async (c) => { c(); try { await api('/api/curriculum?action=clear', { body: { key: b.key } }); await load(); } catch (err) { Site.toast(err.message, 'error'); } } }, { label: 'Cancel', cls: 'btn-ghost' }] });
+        });
+        window.addEventListener('beforeunload', (e) => { if (Object.keys(busy).length) { e.preventDefault(); e.returnValue = ''; } });
+
+        $('tb').addEventListener('click', async () => {
+            const q = $('tq').value.trim(); if (!q) return;
+            $('tr').innerHTML = '<div class="skel" style="height:90px;border-radius:14px;margin-top:10px"></div>';
+            try {
+                const r = await api(`/api/curriculum?action=search&grade=${encodeURIComponent($('tg').value)}&q=${encodeURIComponent(q)}`);
+                $('tr').innerHTML = r.passages.length ? r.passages.map(p => `<div class="pass" dir="auto"><b>📖 ${esc(((D.books || []).find(b => b.key === p.book) || {}).name || p.book)} — page ${p.page}</b>${esc(p.text)}</div>`).join('')
+                    : '<p class="muted small" style="margin:10px 0 0">Nothing found in this grade\'s book — Pro would say it\'s not in their book and suggest asking you.</p>';
+            } catch (err) { $('tr').innerHTML = `<div class="notice danger" style="margin-top:10px">${esc(err.message)}</div>`; }
+        });
+        $('tq').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('tb').click(); });
+        load();
+    })();
+    </script>
+</body>
+</html>
