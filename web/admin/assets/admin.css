@@ -74,6 +74,17 @@ select.pick {
 .entry .who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry .who small { color: var(--muted); font-size: 12px; }
 .entry .ctrl { display: flex; align-items: center; gap: 8px; }
+/* phones (21 Nov 2026): show the FULL name — wraps to 2 lines instead of "…" (the initials circle makes room) */
+@media (max-width: 600px) {
+    .entry { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 10px; }
+    .entry > .avatar { display: none; }
+    .entry .who b { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.35; font-size: 15px; }
+    .entry .ctrl { gap: 6px; }
+    .entry .mark { width: 66px; }
+    .entry .of { min-width: 0; font-size: 12px; }
+    .entry .abs-btn { padding: 0 10px; }
+    .entry .save-state { width: 18px; }
+}
 .mark {
     width: 84px; height: 48px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface-2);
     font: inherit; font-size: 20px; font-weight: 750; text-align: center; color: var(--text); font-variant-numeric: tabular-nums;
