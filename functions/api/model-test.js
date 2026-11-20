@@ -12,7 +12,7 @@
 // =====================================================================
 import { requireStaff, ensureAppSchema } from './admin-auth.js';
 import { chat, AiLimitError, BRANDS, claudeReady, modelFor } from './ai-gateway.js';
-import { bookContext, bookRules } from './curriculum.js';
+import { searchBook, bookRules, GRADE_LABELS } from './curriculum.js';
 import { tutorPrompt } from './tutor.js';
 import { reasoning, REASONING_MODES, stripPrivate, finalAnswers, taskRules } from './ai-rules.js';
 
@@ -243,8 +243,12 @@ export async function onRequest(context) {
             let fields;
             try {
                 // same curriculum-book grounding as a real student's Pro answer (their grade's book passages)
-                const bctx = await bookContext(db, String(set.grade || '').toLowerCase(), askText(item).slice(0, 600));
-                const out = await chat(env, db, { tier: 'pro', system: tutorPrompt(null, 'pro', { bench: { grade: set.grade }, books: !!bctx.text }) + taskRules('exam', 'pro') + (bctx.text ? bookRules(bctx, set.grade) : '') + R.system, messages: [{ role: 'user', content: askText(item) }], maxTokens: 1500 + R.extraTokens, temperature: 0.3, thinking: R.thinking, meter: { staffId: auth.staff.id, kind: 'bench' } });
+                // exactly what a student gets: the same keyword step + the grade's book + the strict rules
+                // (a grade whose book isn't indexed yet is benchmarked without the book)
+                const bg = String(set.grade || '').toLowerCase();
+                const bf = await searchBook(env, db, { grade: bg, text: askText(item).slice(0, 1500), meter: { staffId: auth.staff.id } });
+                const brules = bf.indexed && bf.science ? bookRules(bf.ctx, GRADE_LABELS[bg] || set.grade) : '';
+                const out = await chat(env, db, { tier: 'pro', system: tutorPrompt(null, 'pro', { bench: { grade: set.grade }, books: !!bf.ctx.text }) + taskRules('exam', 'pro') + brules + R.system, messages: [{ role: 'user', content: askText(item) }], maxTokens: 1500 + R.extraTokens, temperature: 0.3, thinking: R.thinking, meter: { staffId: auth.staff.id, kind: 'bench' } });
                 const text = stripPrivate(out.text);
                 const m = autoMark(item, text);
                 const u = out.usage || {};

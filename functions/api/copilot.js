@@ -10,6 +10,7 @@ import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gate
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
+import { searchBook, staffBookRules, gradeFromText } from './curriculum.js';
 import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate, askKind, taskRules, dropAnswerLine, isScienceQuestion, isSiteQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -88,10 +89,10 @@ Examples of the style:
 ✅ Right — talking TO HER: "من عينيا يا ${NAME_AR} 😊 دي 3 أسئلة على الـ **Density** — السؤال التالت فيه حسبة صغيرة على **D = m / V**."
 Talking to her: warm and cheerful ("يا ${NAME_AR}"), never "يا بطل". Content meant for students: friendly student tone ("يا بطل"، "يا شباب").
 
-## Never guess curriculum content
-You do NOT have the curriculum books, the lesson lists, or her lesson notes yet — they are not connected.
-- If she asks what a specific unit/lesson contains, or to summarize / plan / write questions "on Prep 1 – Unit 1 – Lesson 1" (or any lesson named only by its number), do NOT guess the topics. Say clearly that the lesson references aren't connected yet, and ask her to tell you the lesson's title and main points (or paste the text) — then you'll do it.
-- When SHE names the topic herself (e.g. "the Atom", "Density"), you may explain it and write questions on it from general science knowledge.
+## Curriculum books — connected (strict)
+Her four curriculum books (Prep 1, Prep 2, Prep 3, Sec 1) are connected. For any request about science content for a grade — questions, exams, quizzes, model answers, explanations, summaries, lesson plans — the system searches THAT grade's book and gives you the passages in a "Curriculum book" block under these instructions.
+- Write that content ONLY from the passages. Never from general science knowledge, never from another grade, never "extra" or advanced facts — off-syllabus questions are the one thing she must never get.
+- If there's no "Curriculum book" block with passages, follow what the block under these instructions says (ask the grade, the book isn't indexed yet, or nothing was found) — don't fill in from memory.
 
 ## Her platform's data
 You can see her platform's data (students, groups, online + center exam results, absences, rankings, how many student questions are waiting) — READ-ONLY.
@@ -126,11 +127,11 @@ export function dataBlock(facts) {
 // Worked example turns sent before the real chat — the small free model follows examples far better than rules.
 // Mini Assistant's examples show SHORT science answers (it's the observer, not the expert); Miss Marwa Assistant Pro's show the full style.
 const EX_LESSON = [
-    { role: 'user', content: 'Summarize Prep 2 Unit 2 Lesson 3' },
-    { role: 'assistant', content: `يا ${NAME_AR}، ملفات المنهج والدروس لسه مش متوصلة بيا 🙈 فمش هقدر أعرف الدرس ده فيه إيه بالظبط، ومش هخمّن.
+    { role: 'user', content: 'اعمليلي 5 أسئلة اختيار من متعدد على الـ Density' },
+    { role: 'assistant', content: `من عينيا يا ${NAME_AR} 😊 الأسئلة دي لأنهي صف؟ (**Prep 1** / **Prep 2** / **Prep 3** / **Sec 1**)
 
-ابعتيلي **عنوان الدرس** وأهم النقط اللي فيه (أو الصقي النص)، وأنا أعملك الـ **summary** على طول ✨` }
-];
+علشان أطلّعها من كتاب الصف ده بالظبط 📖 ومفيش ولا سؤال يطلع برّه المنهج.` }
+]
 export const STYLE_EXAMPLES_FREE = [
     { role: 'user', content: 'اشرحلي الفرق بين الـ Mass والـ Weight' },
     { role: 'assistant', content: `حاضر يا ${NAME_AR} 😊 باختصار: الـ **Mass** هي كمية المادة في الجسم وبتتقاس بالـ **kg** ومش بتتغير، أما الـ **Weight** فهو الـ **force** اللي الـ **gravity** بتشد بيها الجسم وبيتقاس بالـ **N**، علشان كده بيتغير على القمر.` },
@@ -285,7 +286,19 @@ export async function onRequest(context) {
             }
             try {
                 const kind = result ? 'other' : img ? 'exam' : askKind(text);   // ✅ answer line only on exam questions
-                const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : taskRules(kind, tier));
+                // Science content → strictly from the grade's book (audited 20 Nov 2026). The grade comes from this message
+                // or her earlier ones in the chat («اعمل 5 كمان» after «اعمل أسئلة أولى إعدادي…»); unknown → ask her.
+                let books = '';
+                if (!result) {
+                    const grade = gradeFromText(text) || [...messages].reverse().filter(m => m.role === 'user').map(m => gradeFromText(m.content)).find(Boolean) || null;
+                    if (!grade) books = staffBookRules(null, null);
+                    else {
+                        const prev = [...messages].reverse().filter(m => m.role === 'user').slice(1, 3).map(m => m.content).join(' ');
+                        const found = await searchBook(env, db, { grade, text: `${text} ${prev}`.trim().slice(0, 1500), image: img || null, meter: { staffId: staff.id }, k: 8, maxChars: 7500 });
+                        if (found.science) books = staffBookRules(found, grade);
+                    }
+                }
+                const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : taskRules(kind, tier) + books);
                 // Pro answering a science question / photo uses the reasoning mode picked on the Model test page (PRO_REASONING)
                 const R = tier === 'pro' && !result ? reasoning(env, proMode(env)) : reasoning(env, 'plain');
                 const maxTokens = (result ? (tier === 'free' ? 600 : 900) : img ? (tier === 'free' ? 800 : 2000) : (tier === 'pro' ? 3000 : 850)) + R.extraTokens;

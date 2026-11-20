@@ -25,7 +25,7 @@
 import { requireStaff, ensureAppSchema, verifyStudentRequest } from './admin-auth.js';
 import { chat, usageSummary, bonusOpen, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
 import { studentAccess } from './ai-quota.js';
-import { bookContext, bookRules } from './curriculum.js';
+import { searchBook, bookRules } from './curriculum.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
@@ -330,12 +330,14 @@ export async function onRequest(context) {
                     await kvAdd(db, counterKey(who, 'msgs'), 1);
                     if (img) await kvAdd(db, counterKey(who, 'imgs'), 1);
                 } else {
-                    // Pro: the student's own grade book is the source of truth for science (the question + the last one, for follow-ups)
+                    // Pro: the student's own grade book is the ONLY source for science (strict — audited 20 Nov 2026).
+                    // The question (+ the previous one, for follow-ups like «طب والوحدة؟») or the PHOTO → search terms → passages.
+                    const payer = who.preview ? { staffId: who.staff.id } : { studentId: sid };
                     const prevQ = messages.filter(m => m.role === 'user').slice(-2, -1).map(m => m.content).join(' ');
-                    const ctx = intents.length ? null : await bookContext(db, who.student.grade, `${text} ${prevQ}`.slice(0, 600));
+                    const found = intents.length ? null : await searchBook(env, db, { grade: who.student.grade, text: `${text} ${prevQ}`.trim(), image: img && !img.error ? img : null, meter: payer });
                     const gl = GRADE_LABEL[who.student.grade] || who.student.grade;
-                    const books = intents.length ? '' : (ctx && ctx.text) || !img ? bookRules(ctx, gl) : '';
-                    out = await chat(env, db, { tier: 'pro', system: tutorPrompt(d, 'pro', { books: !!(ctx && ctx.text) }) + (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro')),
+                    const books = !found || !found.science ? '' : bookRules(found.ctx, gl, { indexed: found.indexed });
+                    out = await chat(env, db, { tier: 'pro', system: tutorPrompt(d, 'pro', { books: !!(found && found.ctx.text) }) + (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro')),
                         messages: [...EXAMPLES, ...messages], maxTokens: img ? 1300 : 1100, image: img && !img.error ? img : null,
                         meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
                 }
