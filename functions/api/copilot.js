@@ -294,7 +294,7 @@ export async function onRequest(context) {
                     if (!grade) books = staffBookRules(null, null);
                     else {
                         const prev = [...messages].reverse().filter(m => m.role === 'user').slice(1, 3).map(m => m.content).join(' ');
-                        const found = await searchBook(env, db, { grade, text: `${text} ${prev}`.trim().slice(0, 1500), image: img || null, meter: { staffId: staff.id }, k: 8, maxChars: 7500 });
+                        const found = await searchBook(env, db, { grade, text: `${text} ${prev}`.trim().slice(0, 1500), refText: text, refFollow: true, image: img || null, meter: { staffId: staff.id }, k: 8, maxChars: 7500, unitChars: 24000 });
                         if (found.science) books = staffBookRules(found, grade);
                     }
                 }

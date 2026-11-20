@@ -30,6 +30,11 @@
         .book .msg { font-size: 13px; color: var(--muted); min-height: 18px; }
         .pass { padding: 12px 14px; border-radius: 14px; background: var(--surface-2); margin-top: 10px; font-size: 13.5px; line-height: 1.7; white-space: pre-wrap; }
         .pass b { display: block; font-size: 12px; color: var(--primary); margin-bottom: 4px; }
+        .map { border-top: 1px dashed var(--border); padding-top: 10px; font-size: 13px; }
+        .map summary { cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .map ol { margin: 8px 0 0; padding-inline-start: 18px; } .map li { margin: 4px 0; }
+        .map ul { margin: 2px 0 6px; padding-inline-start: 16px; color: var(--muted); }
+        .map .pg { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; }
         .try { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .try .fin { flex: 1; min-width: 200px; }
     </style>
@@ -84,13 +89,32 @@
                     <div class="book-top"><span class="book-ic">${icon('book')}</span><div style="flex:1;min-width:0"><b>${esc(b.name)}</b><small class="num">${esc(b.key)} · ${b.inBucket ? mb(b.size) : 'not in the bucket any more'}${b.grade ? '' : ' · ⚠️ name must start with prep1- / prep2- / prep3- / sec1-'}</small></div></div>
                     <div class="bar ${pct >= 100 ? 'ok' : ''}"><i style="width:${B ? B.pct : pct}%"></i></div>
                     <div class="book-stats">${state}${done ? `<span class="pill muted">${b.textPages} pages with text</span>` : ''}${b.ocrPages ? `<span class="pill muted">${b.ocrPages} read by AI</span>` : ''}${scan ? `<span class="pill warning">📷 ${scan} scanned page${scan === 1 ? '' : 's'}</span>` : ''}</div>
+                    ${done ? mapHtml(b) : ''}
                     <div class="msg" data-msg>${B ? esc(B.msg) : ''}</div>
                     <div class="book-acts">
                         ${b.inBucket && b.grade ? `<button class="btn btn-primary btn-sm" data-index ${B ? 'disabled' : ''}>${done && done < t ? 'Continue indexing' : done ? 'Index again' : 'Index this book'}</button>` : ''}
                         ${scan && b.inBucket ? `<button class="btn btn-soft btn-sm" data-ocr ${B || !D.aiReady ? 'disabled' : ''} title="About $${(scan * 0.0008).toFixed(2)} — once">${icon('sparkles', 'sm')}Read ${scan} scanned page${scan === 1 ? '' : 's'} with AI (≈ $${(scan * 0.0008).toFixed(2)})</button>` : ''}
+                        ${done && b.textPages ? `<button class="btn btn-soft btn-sm" data-map ${B || !D.aiReady ? 'disabled' : ''} title="Units + lessons with their pages — so «Unit 1» / «الدرس التاني» finds the real lesson pages (≈ $0.005)">${b.toc && b.toc.status === 'ready' ? 'Rebuild book map' : 'Build book map'}</button>` : ''}
                         ${done ? `<button class="btn btn-ghost btn-sm" data-clear ${B ? 'disabled' : ''}>Clear</button>` : ''}
                     </div></div>`;
             }).join('');
+        }
+        // the book map: units → lessons with their PDF pages (what «Unit 1» / «الدرس التاني» uses)
+        function mapHtml(b) {
+            const t = b.toc;
+            if (!t) return `<div class="map small muted">📑 No book map yet — it's built automatically the first time someone asks by unit/lesson, or press "Build book map".</div>`;
+            if (t.status === 'building') return `<div class="map small muted">📑 Building the book map…</div>`;
+            if (t.status !== 'ready') return `<div class="map small" style="color:var(--danger)">📑 Book map failed${t.error ? ': ' + esc(t.error) : ''} — press "Build book map" again.</div>`;
+            const lessons = t.units.reduce((n, u) => n + (u.lessons || []).length, 0);
+            return `<details class="map"><summary>📑 Book map · ${t.units.length} unit${t.units.length === 1 ? '' : 's'} · ${lessons} lesson${lessons === 1 ? '' : 's'} <span class="pg">(tap to check the pages)</span></summary>
+                <ol>${t.units.map(u => `<li><b>Unit ${u.unit}</b>${u.title ? ' — ' + esc(u.title) : ''} <span class="pg">PDF p.${u.start}–${u.end}</span>
+                    ${(u.lessons || []).length ? `<ul>${u.lessons.map(l => `<li>Lesson ${l.lesson}${l.title ? ' — ' + esc(l.title) : ''} <span class="pg">p.${l.start}–${l.end}</span></li>`).join('')}</ul>` : ''}</li>`).join('')}</ol></details>`;
+        }
+        async function buildMap(b, quiet) {
+            busy[b.key] = { msg: 'AI is reading the contents to map units and lessons…', pct: 100 }; render();
+            try { const r = await api('/api/curriculum?action=toc', { body: { key: b.key } }); if (!quiet || !r.ok) Site.toast(r.ok ? `${b.name}: book map ready ✅ ($${(r.costUsd || 0).toFixed(3)})` : 'The AI could not find units in the contents — try again', r.ok ? 'success' : 'error'); }
+            catch (err) { Site.toast(err.message || 'Book map failed — try again', 'error'); }
+            delete busy[b.key]; await load();
         }
         const setMsg = (key, msg, pct) => { busy[key] = { msg, pct }; const el = document.querySelector(`.book[data-key="${CSS.escape(key)}"]`); if (el) { el.querySelector('[data-msg]').textContent = msg; if (pct != null) el.querySelector('.bar i').style.width = pct + '%'; } };
 
@@ -108,8 +132,10 @@
                 }
                 await send();
                 Site.toast(`${b.name}: indexed ✅`, 'success');
-            } catch (err) { Site.toast(err.message || 'Indexing stopped — try "Continue"', 'error'); }
+            } catch (err) { Site.toast(err.message || 'Indexing stopped — try "Continue"', 'error'); delete busy[b.key]; return load(); }
             delete busy[b.key]; await load();
+            const nb = D.books.find(x => x.key === b.key);
+            if (nb && nb.textPages && !nb.scanned.length && D.aiReady) await buildMap(nb, true);      // all text → map it now (scanned pages: after the AI reads them)
         }
         async function ocrBook(b) {
             const pages = b.scanned.slice();
@@ -129,12 +155,15 @@
                     spent += r.costUsd || 0; ok++;
                 }
                 Site.toast(`${ok} page${ok === 1 ? '' : 's'} read by AI · $${spent.toFixed(3)}`, 'success');
-            } catch (err) { Site.toast((err.message || 'Stopped') + ` — ${ok} page${ok === 1 ? '' : 's'} done, press again to continue`, 'error'); }
+            } catch (err) { Site.toast((err.message || 'Stopped') + ` — ${ok} page${ok === 1 ? '' : 's'} done, press again to continue`, 'error'); delete busy[b.key]; return load(); }
             delete busy[b.key]; await load();
+            const nb = D.books.find(x => x.key === b.key);
+            if (nb && D.aiReady) await buildMap(nb, true);                                            // new text → (re)build the book map
         }
         $('books').addEventListener('click', (e) => {
             const card = e.target.closest('.book'); if (!card) return;
             const b = D.books.find(x => x.key === card.dataset.key); if (!b || busy[b.key]) return;
+            if (e.target.closest('[data-map]')) return buildMap(b);
             if (e.target.closest('[data-index]')) return indexBook(b, b.pagesDone && b.pagesDone < b.totalPages ? b.pagesDone + 1 : 1);
             if (e.target.closest('[data-ocr]')) return Site.sheet({ iconName: 'sparkles', title: `Read ${b.scanned.length} scanned pages with AI?`, subtitle: `About $${(b.scanned.length * 0.0008).toFixed(2)}, once (counted as staff use). Keep this page open until it finishes.`,
                 actions: [{ label: 'Yes, read them', onClick: (c) => { c(); ocrBook(b); } }, { label: 'Cancel', cls: 'btn-ghost' }] });
@@ -148,8 +177,8 @@
             $('tr').innerHTML = '<div class="skel" style="height:90px;border-radius:14px;margin-top:10px"></div>';
             try {
                 const r = await api(`/api/curriculum?action=search&grade=${encodeURIComponent($('tg').value)}&q=${encodeURIComponent(q)}`);
-                $('tr').innerHTML = r.passages.length ? r.passages.map(p => `<div class="pass" dir="auto"><b>📖 ${esc(((D.books || []).find(b => b.key === p.book) || {}).name || p.book)} — page ${p.page}</b>${esc(p.text)}</div>`).join('')
-                    : '<p class="muted small" style="margin:10px 0 0">Nothing found in this grade\'s book — Pro would say it\'s not in their book and suggest asking you.</p>';
+                $('tr').innerHTML = (r.scope ? `<p class="small" style="margin:10px 0 0"><b>📑 Unit ${r.scope.unit}${r.scope.lesson ? ' · Lesson ' + r.scope.lesson : ''}</b> — PDF pages ${r.scope.from}–${r.scope.to} (lesson pages only, no exams/covers)</p>` : '') + (r.note ? `<p class="muted small" style="margin:10px 0 0">${esc(r.note)}</p>` : '') + (r.passages.length ? r.passages.map(p => `<div class="pass" dir="auto"><b>📖 ${esc(((D.books || []).find(b => b.key === p.book) || {}).name || p.book)} — page ${p.page}</b>${esc(p.text)}</div>`).join('')
+                    : r.note ? '' : '<p class="muted small" style="margin:10px 0 0">Nothing found in this grade\'s book — Pro would say it\'s not in their book and suggest asking you.</p>');
             } catch (err) { $('tr').innerHTML = `<div class="notice danger" style="margin-top:10px">${esc(err.message)}</div>`; }
         });
         $('tq').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('tb').click(); });

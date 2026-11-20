@@ -76,7 +76,10 @@ export async function ensureCurriculum(db) {
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`),
         db.prepare(`CREATE TABLE IF NOT EXISTS curriculum_pages (book TEXT NOT NULL, page INTEGER NOT NULL, grade TEXT, chars INTEGER DEFAULT 0, source TEXT,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (book, page))`),
-        db.prepare(`CREATE VIRTUAL TABLE IF NOT EXISTS curriculum_fts USING fts5(norm, text UNINDEXED, grade UNINDEXED, book UNINDEXED, page UNINDEXED, tokenize = 'unicode61 remove_diacritics 2')`)
+        db.prepare(`CREATE VIRTUAL TABLE IF NOT EXISTS curriculum_fts USING fts5(norm, text UNINDEXED, grade UNINDEXED, book UNINDEXED, page UNINDEXED, tokenize = 'unicode61 remove_diacritics 2')`),
+        // the book map: units + lessons with their PDF page ranges (built once per book from its contents pages)
+        db.prepare(`CREATE TABLE IF NOT EXISTS curriculum_toc (book TEXT PRIMARY KEY, grade TEXT, status TEXT, units TEXT, total_pages INTEGER DEFAULT 0,
+            cost_usd REAL DEFAULT 0, error TEXT, built_at TEXT DEFAULT CURRENT_TIMESTAMP)`)
     ]);
     readyDbs.add(db);
 }
@@ -104,9 +107,11 @@ export async function bookContext(db, grade, question, { k = 4, maxChars = 4200 
         const q = ftsQuery(question);
         if (!q || !GRADES.includes(grade)) return { text: '', passages: [] };
         const { results } = await db.prepare(`SELECT text, book, page FROM curriculum_fts WHERE curriculum_fts MATCH ? AND grade = ? ORDER BY bm25(curriculum_fts) LIMIT ?`)
-            .bind(q, grade, k * 2).all();
+            .bind(q, grade, k * 6).all();
+        // real lesson pages first: covers, contents, weekly evaluations and model exams go to the back (kept only if nothing better)
+        const ranked = (results || []).map((r, i) => ({ r, s: i + penalty(r.text, k) })).sort((a, b) => a.s - b.s).map(x => x.r);
         const passages = []; let used = 0; const seen = new Set();
-        for (const r of results || []) {
+        for (const r of ranked) {
             const sig = r.book + ':' + r.page + ':' + String(r.text).slice(0, 60);
             if (seen.has(sig)) continue; seen.add(sig);
             if (used + r.text.length > maxChars && passages.length) break;
@@ -118,6 +123,135 @@ export async function bookContext(db, grade, question, { k = 4, maxChars = 4200 
         return { text, passages };
     } catch (e) { return { text: '', passages: [] }; }    // the search must never break an answer
 }
+// ---------------------------------------------------------------------------------------------------------------
+// Pages that aren't lesson content (20 Nov 2026 — live test: "Unit 1" only matched the unit cover, the weekly
+// evaluation and "Model Exam on Unit 1"): covers, contents, evaluations, model exams, answer keys, very short chunks.
+// ---------------------------------------------------------------------------------------------------------------
+const EXAMISH = /model\s*exam|exam\s*on|evaluation|assessment|weekly|test\s*yourself|revision\s*(test|exam)|answer\s*key|choose the correct|complete the following|put \(?✓|تقييم|اختبار|امتحان|نموذج|اختر الاجابه|اكمل العبارات|ضع علامه/;
+const FRONTISH = /contents|table of contents|preface|introduction to the book|copyright|all rights reserved|فهرس|المحتويات|مقدمه الكتاب|حقوق الطبع/;
+export function pageKind(text) {
+    const n = norm(text);
+    if (n.length < 220) return 'thin';
+    if (FRONTISH.test(n)) return 'front';
+    if ((n.match(EXAMISH) || []).length && /\b(a|b|c|d)\)|\(\s*[a-d]\s*\)|[1-9]\s*[-.)]\s/.test(text)) return 'exam';
+    return 'lesson';
+}
+const penalty = (text, k) => ({ lesson: 0, thin: k * 2, exam: k * 3, front: k * 4 })[pageKind(text)];
+
+// ---------------------------------------------------------------------------------------------------------------
+// "Unit 1" / "Lesson 2" / «الوحدة الأولى» / «الدرس التاني» → { unit, lesson } (the topic words alone can't find
+// a unit: lesson pages never say "Unit 1" — so we use the book map instead)
+// ---------------------------------------------------------------------------------------------------------------
+const ORD = { 'الاول': 1, 'الاولي': 1, 'اول': 1, 'اولي': 1, 'one': 1, 'first': 1,
+    'الثاني': 2, 'الثانيه': 2, 'التاني': 2, 'التانيه': 2, 'تاني': 2, 'تانيه': 2, 'ثاني': 2, 'ثانيه': 2, 'two': 2, 'second': 2,
+    'الثالث': 3, 'الثالثه': 3, 'التالت': 3, 'التالته': 3, 'تالت': 3, 'تالته': 3, 'ثالث': 3, 'ثالثه': 3, 'three': 3, 'third': 3,
+    'الرابع': 4, 'الرابعه': 4, 'رابع': 4, 'رابعه': 4, 'four': 4, 'fourth': 4,
+    'الخامس': 5, 'الخامسه': 5, 'خامس': 5, 'خامسه': 5, 'five': 5, 'fifth': 5,
+    'السادس': 6, 'السادسه': 6, 'سادس': 6, 'سادسه': 6, 'six': 6, 'sixth': 6 };
+const ORDS = Object.keys(ORD).sort((a, b) => b.length - a.length).join('|');
+const numOf = (v) => /^\d+$/.test(v) ? parseInt(v, 10) : ORD[v] || null;
+export function refFromText(text) {
+    const t = ' ' + norm(text).replace(/[^\p{L}\p{N}\s]/gu, ' ') + ' ';
+    const u = t.match(new RegExp(`(?:\\bunit|\\bu|الوحده|وحده|الباب|باب)\\s*(?:رقم\\s*|no\\s*)?(\\d{1,2}|${ORDS})(?=\\s)`));
+    const l = t.match(new RegExp(`(?:\\blesson|\\bl|الدرس|درس)\\s*(?:رقم\\s*|no\\s*)?(\\d{1,2}|${ORDS})(?=\\s)`));
+    const unit = u ? numOf(u[1]) : null, lesson = l ? numOf(l[1]) : null;
+    return unit || lesson ? { unit, lesson } : null;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The book map — built ONCE per book (≈ $0.005): Claude reads the contents pages + the top and bottom lines of every
+// page (headings, running footers like "Unit 1 · Lesson 2") and returns each unit/lesson with its PDF start page.
+// Built automatically the first time a unit/lesson is asked about, or from the Curriculum books page.
+// ---------------------------------------------------------------------------------------------------------------
+async function pageTexts(db, book, from, to) {
+    const { results } = await db.prepare('SELECT page, text FROM curriculum_fts WHERE book = ? AND page BETWEEN ? AND ? ORDER BY page, rowid').bind(book, from, to).all();
+    const m = new Map();
+    for (const r of results || []) { const p = Number(r.page); m.set(p, (m.get(p) ? m.get(p) + '\n' : '') + r.text); }
+    return m;
+}
+const TOC_SYSTEM = `You map an Egyptian school science textbook (a PDF) into its units and lessons.
+You get (1) the text of its first pages (with the table of contents / فهرس) and (2) for EVERY PDF page, its first and last lines (headings, running headers/footers).
+Return ONLY JSON, no markdown: {"units":[{"unit":1,"title":"...","start":<PDF page>,"lessons":[{"lesson":1,"title":"...","start":<PDF page>}]}]}
+- "start" = the PDF page number (the number after "p" in the list) where that unit / lesson REALLY begins — its first content page. Printed page numbers in the contents are usually different from PDF page numbers: use the page headings/footers to find the real PDF page.
+- Unit start = the unit's first page (its cover page is fine). Lessons in reading order. Keep titles short, as printed (English or Arabic).
+- Don't include the contents, preface, model exams or answer pages as lessons.`;
+export async function buildToc(env, db, book, { meter = null } = {}) {
+    await ensureCurriculum(db);
+    const grade = gradeOfKey(book);
+    const total = Number((await db.prepare('SELECT MAX(page) AS m FROM curriculum_pages WHERE book = ?').bind(book).first() || {}).m) || 0;
+    if (!total) throw new Error('Index the book first');
+    const all = await pageTexts(db, book, 1, total);
+    const first = [...all].filter(([p]) => p <= 24).map(([p, t]) => `--- PDF page ${p} ---\n${t.slice(0, 2500)}`).join('\n').slice(0, 45000);
+    const clean = (x) => x.replace(/\s+/g, ' ').trim();
+    const lines = []; for (let p = 1; p <= total; p++) { const t = clean(all.get(p) || ''); lines.push(`p${p}: ${t.slice(0, 110)}${t.length > 180 ? ' … ' + t.slice(-70) : ''}`); }
+    const r = await chat(env, db, { tier: 'pro', maxTokens: 3500, meter: { ...(meter || {}), kind: 'toc' }, system: TOC_SYSTEM,
+        messages: [{ role: 'user', content: `Book: ${book} (${GRADE_LABELS[grade] || grade}), ${total} PDF pages.\n\n## (1) First pages\n${first}\n\n## (2) Every page — first / last lines\n${lines.join('\n').slice(0, 160000)}` }] });
+    const js = String(r.text || '').replace(/^```(?:json)?|```$/g, '').trim();
+    let units = [];
+    try { units = (JSON.parse(js.slice(js.indexOf('{'), js.lastIndexOf('}') + 1)).units || []); } catch (e) { units = []; }
+    // tidy + page ranges: each part ends where the next one starts
+    units = units.map(u => ({ unit: parseInt(u.unit, 10), title: String(u.title || '').slice(0, 120), start: parseInt(u.start, 10),
+        lessons: (Array.isArray(u.lessons) ? u.lessons : []).map(l => ({ lesson: parseInt(l.lesson, 10), title: String(l.title || '').slice(0, 120), start: parseInt(l.start, 10) }))
+            .filter(l => l.lesson > 0 && l.start >= 1 && l.start <= total) }))
+        .filter(u => u.unit > 0 && u.start >= 1 && u.start <= total).sort((a, b) => a.start - b.start);
+    units.forEach((u, i) => {
+        u.end = i + 1 < units.length ? Math.max(u.start, units[i + 1].start - 1) : total;
+        u.lessons.sort((a, b) => a.start - b.start).forEach((l, j, L) => { l.start = Math.max(l.start, u.start); l.end = j + 1 < L.length ? Math.max(l.start, L[j + 1].start - 1) : u.end; });
+    });
+    const ok = units.length > 0;
+    await db.prepare(`INSERT INTO curriculum_toc (book, grade, status, units, total_pages, cost_usd, error, built_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(book) DO UPDATE SET grade = excluded.grade, status = excluded.status, units = excluded.units, total_pages = excluded.total_pages,
+        cost_usd = curriculum_toc.cost_usd + excluded.cost_usd, error = excluded.error, built_at = CURRENT_TIMESTAMP`)
+        .bind(book, grade, ok ? 'ready' : 'failed', JSON.stringify(units), total, r.costUsd || 0, ok ? null : 'No units found in the contents').run();
+    return { units, costUsd: r.costUsd || 0 };
+}
+/** The grade's book map → [{ book, units }]; builds it once if missing (staff-paid, ≈ $0.005). */
+export async function gradeToc(env, db, grade, { build = true } = {}) {
+    await ensureCurriculum(db);
+    const { results: books } = await db.prepare('SELECT DISTINCT book FROM curriculum_pages WHERE grade = ? AND chars > 0').bind(grade).all();
+    const out = [];
+    for (const { book } of books || []) {
+        let row = await db.prepare('SELECT * FROM curriculum_toc WHERE book = ?').bind(book).first();
+        if (!row && build && claudeReady(env)) {
+            // one builder at a time; others search without the map meanwhile
+            const claim = await db.prepare(`INSERT OR IGNORE INTO curriculum_toc (book, grade, status) VALUES (?, ?, 'building')`).bind(book, grade).run();
+            if (claim.meta.changes) { try { await buildToc(env, db, book); } catch (e) { await db.prepare(`UPDATE curriculum_toc SET status = 'failed', error = ? WHERE book = ?`).bind(String(e.message || e).slice(0, 200), book).run(); } }
+            row = await db.prepare('SELECT * FROM curriculum_toc WHERE book = ?').bind(book).first();
+        }
+        if (row && row.status === 'ready') { try { out.push({ book, units: JSON.parse(row.units) || [] }); } catch (e) { } }
+    }
+    return out;
+}
+/** The unit / lesson's own pages (lesson content only) → ctx with scope; null when the book map has no such unit/lesson. */
+export async function unitContext(db, toc, ref, { terms = '', maxChars = 9000 } = {}) {
+    for (const { book, units } of toc) {
+        let u = ref.unit ? units.find(x => x.unit === ref.unit) : null;
+        let l = null;
+        if (ref.lesson) {
+            if (u) l = u.lessons.find(x => x.lesson === ref.lesson);
+            else if (units.length) { const hits = units.flatMap(x => x.lessons.filter(y => y.lesson === ref.lesson).map(y => ({ x, y }))); if (hits.length === 1) { u = hits[0].x; l = hits[0].y; } }
+        }
+        if (!u || (ref.lesson && !l)) continue;
+        const from = l ? l.start : u.start, to = l ? l.end : u.end;
+        const pages = await pageTexts(db, book, from, to);
+        const want = new Set(norm(terms).split(/[\s,،]+/).filter(w => w.length >= 3));
+        // lesson chunks only (fall back to whatever there is), spread over the whole range so every lesson is covered
+        let chunks = [];
+        for (const [p, t] of pages) chunksOf(t).forEach((c, i) => chunks.push({ page: p, i, text: c, kind: pageKind(c), hit: [...want].filter(w => norm(c).includes(w)).length }));
+        const lessonOnly = chunks.filter(c => c.kind === 'lesson');
+        if (lessonOnly.length) chunks = lessonOnly;
+        chunks.sort((a, b) => (b.hit - a.hit) || (a.i - b.i) || (a.page - b.page));      // topic matches first, then the first part of every page
+        const picked = []; let used = 0;
+        for (const c of chunks) { if (used + c.text.length > maxChars && picked.length) continue; picked.push(c); used += c.text.length; if (used >= maxChars) break; }
+        picked.sort((a, b) => a.page - b.page || a.i - b.i);
+        const where = `${bookName(book)} — Unit ${u.unit}${u.title ? ': ' + u.title : ''}${l ? ` — Lesson ${l.lesson}${l.title ? ': ' + l.title : ''}` : ''} — PDF pages ${from}–${to}`;
+        const lessonsLine = !l && u.lessons.length ? `\nLessons in this unit: ${u.lessons.map(x => `Lesson ${x.lesson}${x.title ? ' (' + x.title + ')' : ''} p.${x.start}–${x.end}`).join(' · ')}` : '';
+        const text = `[${where}]${lessonsLine}\n\n` + picked.map(p => `[page ${p.page}]\n${p.text}`).join('\n\n');
+        return { text, passages: picked.map(p => ({ book, page: p.page, text: p.text })), scope: { book, unit: u.unit, unitTitle: u.title, lesson: l ? l.lesson : null, lessonTitle: l ? l.title : null, from, to, lessons: u.lessons } };
+    }
+    return null;
+}
+
 export async function gradeIndexed(db, grade) {
     try { await ensureCurriculum(db); const r = await db.prepare('SELECT COUNT(*) AS n FROM curriculum_pages WHERE grade = ? AND chars > 0').bind(grade).first(); return Number(r && r.n) || 0; } catch (e) { return 0; }
 }
@@ -142,8 +276,21 @@ If it is not a science question at all (greetings, the platform, marks, personal
  * Search the grade's book for a question → { science, terms, ctx: { text, passages }, indexed }
  * meter: who pays the tiny keyword step ({ studentId } | { staffId }); without Claude → plain search of the words.
  */
-export async function searchBook(env, db, { grade, text = '', image = null, meter = null, k = 4, maxChars = 4200 } = {}) {
+export async function searchBook(env, db, { grade, text = '', refText = null, refFollow = false, image = null, meter = null, k = 4, maxChars = 4200, unitChars = 9000 } = {}) {
     const indexed = await gradeIndexed(db, grade);
+    // asked by unit / lesson number? → that unit's / lesson's own pages from the book map. A SHORT follow-up
+    // («اعملي 3 كمان»، «صعّبيهم») keeps the unit of the earlier messages (refFollow — staff chats).
+    const cur = refText ?? text;
+    const ref = indexed ? (refFromText(cur) || (refFollow && refText != null && norm(cur).length <= 40 ? refFromText(text) : null)) : null;
+    if (ref) {
+        const toc = await gradeToc(env, db, grade);
+        if (toc.length) {
+            const uctx = await unitContext(db, toc, ref, { terms: text, maxChars: unitChars });
+            const units = toc.flatMap(t => t.units.map(u => u.unit));
+            if (uctx) return { science: true, terms: '', ctx: uctx, indexed: true, ref };
+            return { science: true, terms: '', ctx: { text: '', passages: [] }, indexed: true, ref, refMissing: { units: [...new Set(units)].sort((a, b) => a - b) } };
+        }
+    }
     let terms = '', science = true;
     if (indexed && claudeReady(env) && (text.trim() || image)) {
         try {
@@ -154,7 +301,7 @@ export async function searchBook(env, db, { grade, text = '', image = null, mete
         } catch (e) { terms = ''; }    // the keyword step must never block an answer (budget errors surface on the real call)
     }
     const ctx = indexed && science ? await bookContext(db, grade, `${terms} ${text}`.slice(0, 900), { k, maxChars }) : { text: '', passages: [] };
-    return { science, terms, ctx, indexed: indexed > 0 };
+    return { science, terms, ctx, indexed: indexed > 0, ref: null };
 }
 
 /** Grade named in a staff message ("Prep 1", "أولى إعدادي", "الصف الأول الإعدادي", "sec1", "1 ثانوي" …) → 'prep1' | … | null */
@@ -171,7 +318,12 @@ export function gradeFromText(text) {
 }
 
 /** Student Pro: the rules + passages (strict). */
-export function bookRules(ctx, gradeLabel, { indexed = true } = {}) {
+const scopeLine = (sc) => !sc ? '' : sc.lesson ? `These are the pages of Unit ${sc.unit}, Lesson ${sc.lesson}${sc.lessonTitle ? ' (' + sc.lessonTitle + ')' : ''} — PDF pages ${sc.from}–${sc.to}.`
+    : `These are the pages of Unit ${sc.unit}${sc.unitTitle ? ' (' + sc.unitTitle + ')' : ''} — PDF pages ${sc.from}–${sc.to}${sc.lessons && sc.lessons.length ? `, lessons ${sc.lessons.map(x => x.lesson).join(', ')}` : ''}.`;
+const missingLine = (ref, m, gl) => `Unit ${ref.unit || '?'}${ref.lesson ? ' Lesson ' + ref.lesson : ''} was not found in the ${gl} book's contents${m && m.units && m.units.length ? ` (its units: ${m.units.join(', ')})` : ''}.`;
+export function bookRules(ctx, gradeLabel, { indexed = true, ref = null, refMissing = null } = {}) {
+    if (indexed && refMissing) return `\n\n## Curriculum book — that unit/lesson wasn't found (${gradeLabel})
+${missingLine(ref, refMissing, gradeLabel)} Don't answer from general knowledge: tell the student in one line that you couldn't find that unit/lesson in their ${gradeLabel} book and ask them to write the lesson name or the topic.`;
     if (!indexed) return `\n\n## Curriculum book — not connected yet (${gradeLabel})
 The ${gradeLabel} book isn't connected to Assistant Pro yet. For science content do NOT answer from general knowledge: say «كتاب ${gradeLabel} لسه متربطش بـ Assistant Pro — اسأل مس مروة في الجزء ده 🙏» in one line. You can still help with how to study, the platform, or a question about Miss Marwa's own exams.`;
     if (!ctx || !ctx.text) return `\n\n## Curriculum book — nothing found for this question (${gradeLabel})
@@ -180,7 +332,7 @@ The search of the student's ${gradeLabel} book found NOTHING about this question
 - Say it in one friendly line: «السؤال ده مش لاقيه في كتاب ${gradeLabel} بتاعك — ممكن يكون مش مقرر عليك. ابعتلي اسم الدرس أو اسأل مس مروة 🙏».
 - If it's clearly from a higher grade or outside the syllabus, say that it's not in their curriculum.`;
     return `\n\n## Curriculum book — your ONLY source for science (${gradeLabel})
-The passages below are from the student's own ${gradeLabel} school book (found by searching it for this question).
+The passages below are from the student's own ${gradeLabel} school book (found by searching it for this question).${ctx.scope ? ' ' + scopeLine(ctx.scope) : ''}
 - EVERY science fact, definition, law, number and unit in your answer must come from these passages. Use their definitions and wording.
 - Do NOT add anything that isn't in the passages — no outside, advanced or "extra" facts, even if true. Simpler is fine; more is not.
 - If the passages don't actually cover what was asked, don't answer it from general knowledge: say «الجزء ده مش في كتاب ${gradeLabel} بتاعك — ممكن يكون مش مقرر عليك، اسأل مس مروة 🙏».
@@ -196,10 +348,12 @@ Her curriculum books ARE connected (searched per grade), but this request doesn'
     const gl = GRADE_LABELS[grade] || grade;
     if (!found.indexed) return `\n\n## Curriculum book — ${gl} not indexed yet
 The ${gl} book is not indexed yet (Staff → Curriculum books). Do NOT write questions, exams or explanations for ${gl} from general knowledge. Tell her in one line: «كتاب ${gl} لسه متعملوش Index يا ${'مس مروة'} — اعمليله Index من صفحة Curriculum books وأنا أكتبلك الأسئلة منه على طول 😊», or ask her to paste the lesson text.`;
+    if (found.refMissing) return `\n\n## Curriculum book — that unit/lesson wasn't found (${gl})
+${missingLine(found.ref, found.refMissing, gl)} Do NOT write questions or explanations for it from general knowledge. Tell her which units the ${gl} book map has and ask which one she means (or the lesson name).`;
     if (!found.ctx.text) return `\n\n## Curriculum book — nothing found in the ${gl} book
 The search of the ${gl} book found NOTHING for this request. Do NOT write questions or explanations from general knowledge (that's how off-syllabus questions happen). Say the topic wasn't found in the ${gl} book — it may not be in the ${gl} syllabus — and ask her for the lesson name or to paste the lesson text.`;
     return `\n\n## Curriculum book — your ONLY source (${gl})
-These passages are from the ${gl} school book (searched for this request). Rules — no exceptions:
+These passages are from the ${gl} school book (searched for this request).${found.ctx.scope ? ` ${scopeLine(found.ctx.scope)}${found.ctx.scope.lesson ? '' : ' For an exam or questions on the whole unit, cover ALL its lessons in a balanced way (not only the first one).'}` : ''} Rules — no exceptions:
 - Every question, choice, correct answer, model answer and explanation must come from these passages: their facts, definitions, laws, units and level. Nothing from outside the book, nothing from other grades, no "extra" or advanced facts.
 - Each question must be answerable using ONLY these passages. Don't stretch a passage into a topic it doesn't cover.
 - After each question's answer write its source page, like (📖 ص 45 PDF).
@@ -235,6 +389,8 @@ export async function onRequest(context) {
             const { results: stats } = await db.prepare(`SELECT book, COUNT(*) AS pages, SUM(CASE WHEN chars >= 40 THEN 1 ELSE 0 END) AS text_pages,
                 SUM(CASE WHEN source = 'ocr' THEN 1 ELSE 0 END) AS ocr_pages, SUM(chars) AS chars FROM curriculum_pages GROUP BY book`).all();
             const { results: scans } = await db.prepare(`SELECT book, page FROM curriculum_pages WHERE chars < 40 ORDER BY book, page`).all();
+            const { results: tocs } = await db.prepare('SELECT book, status, units, error, built_at FROM curriculum_toc').all();
+            const TC = new Map((tocs || []).map(t => { let units = []; try { units = JSON.parse(t.units || '[]') || []; } catch (e) { } return [t.book, { status: t.status, units, error: t.error, builtAt: t.built_at }]; }));
             const SC = new Map(); for (const r of scans || []) { if (!SC.has(r.book)) SC.set(r.book, []); SC.get(r.book).push(Number(r.page)); }
             const BK = new Map((books || []).map(b => [b.key, b])), ST = new Map((stats || []).map(s => [s.book, s]));
             const keys = new Set([...objects.map(o => o.key), ...BK.keys()]);
@@ -244,7 +400,7 @@ export async function onRequest(context) {
                     const o = objects.find(x => x.key === key), b = BK.get(key) || {}, s = ST.get(key) || {};
                     return { key, grade: gradeOfKey(key), name: bookName(key), inBucket: !!o, size: o ? o.size : b.size || 0, totalPages: b.total_pages || 0,
                         pagesDone: Number(s.pages) || 0, textPages: Number(s.text_pages) || 0, ocrPages: Number(s.ocr_pages) || 0, chars: Number(s.chars) || 0, updatedAt: b.updated_at || null,
-                        scanned: SC.get(key) || [] };
+                        scanned: SC.get(key) || [], toc: TC.get(key) || null };
                 })
             });
         }
@@ -269,6 +425,14 @@ export async function onRequest(context) {
         }
         if (action === 'search') {
             const grade = String(url.searchParams.get('grade') || '').toLowerCase(), q = url.searchParams.get('q') || '';
+            // same as Pro: a unit / lesson → that part's pages from the book map; otherwise the word search
+            const ref = refFromText(q);
+            if (ref) {
+                const toc = await gradeToc(env, db, grade, { build: false });
+                const u = toc.length ? await unitContext(db, toc, ref, { terms: q, maxChars: 9000 }) : null;
+                if (u) return json({ query: q, scope: u.scope, passages: u.passages.map(p => ({ ...p, book: bookName(p.book) })) });
+                return json({ query: q, passages: [], note: toc.length ? 'That unit / lesson is not in the book map.' : 'Build the book map first (button above) to search by unit / lesson.' });
+            }
             const ctx = await bookContext(db, grade, q);
             return json({ query: ftsQuery(q), passages: ctx.passages });
         }
@@ -312,11 +476,26 @@ export async function onRequest(context) {
             await touchBook(parseInt(data.total, 10) || 0);
             return json({ ok: true, page: n, chars: out.text.length, chunks, costUsd: out.costUsd });
         }
+        if (action === 'toc') {
+            // (re)build the book map: units + lessons with their PDF pages (≈ $0.005, staff use)
+            if (!(await db.prepare('SELECT 1 FROM curriculum_pages WHERE book = ? AND chars > 0').bind(key).first())) return bad('Index the book first');
+            await db.prepare(`INSERT INTO curriculum_toc (book, grade, status) VALUES (?, ?, 'building') ON CONFLICT(book) DO UPDATE SET status = 'building', error = NULL`).bind(key, grade).run();
+            try {
+                const out = await buildToc(env, db, key, { meter: { staffId: auth.staff.id } });
+                await audit(db, request, auth.staff, 'curriculum.toc', key, { units: out.units.length, lessons: out.units.reduce((t, u) => t + u.lessons.length, 0) });
+                return json({ ok: out.units.length > 0, units: out.units, costUsd: out.costUsd });
+            } catch (e) {
+                await db.prepare(`UPDATE curriculum_toc SET status = 'failed', error = ? WHERE book = ?`).bind(String(e.message || e).slice(0, 200), key).run();
+                if (e instanceof AiLimitError) return bad(e.message, 502, { code: e.code });
+                throw e;
+            }
+        }
         if (action === 'clear') {
             await db.batch([
                 db.prepare('DELETE FROM curriculum_fts WHERE book = ?').bind(key),
                 db.prepare('DELETE FROM curriculum_pages WHERE book = ?').bind(key),
-                db.prepare('DELETE FROM curriculum_books WHERE "key" = ?').bind(key)
+                db.prepare('DELETE FROM curriculum_books WHERE "key" = ?').bind(key),
+                db.prepare('DELETE FROM curriculum_toc WHERE book = ?').bind(key)
             ]);
             await audit(db, request, auth.staff, 'curriculum.clear', key, {});
             return json({ ok: true });

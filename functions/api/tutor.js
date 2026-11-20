@@ -334,9 +334,9 @@ export async function onRequest(context) {
                     // The question (+ the previous one, for follow-ups like «طب والوحدة؟») or the PHOTO → search terms → passages.
                     const payer = who.preview ? { staffId: who.staff.id } : { studentId: sid };
                     const prevQ = messages.filter(m => m.role === 'user').slice(-2, -1).map(m => m.content).join(' ');
-                    const found = intents.length ? null : await searchBook(env, db, { grade: who.student.grade, text: `${text} ${prevQ}`.trim(), image: img && !img.error ? img : null, meter: payer });
+                    const found = intents.length ? null : await searchBook(env, db, { grade: who.student.grade, text: `${text} ${prevQ}`.trim(), refText: text, image: img && !img.error ? img : null, meter: payer, unitChars: 9000 });
                     const gl = GRADE_LABEL[who.student.grade] || who.student.grade;
-                    const books = !found || !found.science ? '' : bookRules(found.ctx, gl, { indexed: found.indexed });
+                    const books = !found || !found.science ? '' : bookRules(found.ctx, gl, { indexed: found.indexed, ref: found.ref, refMissing: found.refMissing });
                     out = await chat(env, db, { tier: 'pro', system: tutorPrompt(d, 'pro', { books: !!(found && found.ctx.text) }) + (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro')),
                         messages: [...EXAMPLES, ...messages], maxTokens: img ? 1300 : 1100, image: img && !img.error ? img : null,
                         meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
