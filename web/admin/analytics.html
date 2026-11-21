@@ -251,9 +251,9 @@
                 subtitle: `Center ${fmtPct(r.centerPct, 1)} · Online ${fmtPct(r.onlinePct, 1)}${r.missed ? ` · ${r.missed} missed/absent` : ''}`,
                 html: '<p class="muted" style="margin:0">Choose which report to send. You\'ll see the message before WhatsApp opens.</p>',
                 actions: [
-                    { label: 'Center report', icon: 'whatsapp', cls: 'btn-soft', onClick: async (close) => {
+                    { label: 'Offline report', icon: 'whatsapp', cls: 'btn-soft', onClick: async (close) => {
                         close();
-                        try { const d = await api(`/api/analytics?action=student&studentId=${encodeURIComponent(studentId)}`); setTimeout(() => preview(d.student, ParentMessages.fullCenter({ student: d.student, rows: d.center.history }), 'Center report'), 240); }
+                        try { const d = await api(`/api/analytics?action=student&studentId=${encodeURIComponent(studentId)}`); setTimeout(() => preview(d.student, ParentMessages.fullCenter({ student: d.student, rows: d.center.history }), 'Offline report'), 240); }
                         catch (err) { Site.toast(err.message, 'error'); }
                     } },
                     { label: 'Online report', icon: 'whatsapp', cls: 'btn-soft', onClick: async (close) => {
@@ -325,7 +325,7 @@
                     <div class="hist">${hist.map(row).join('') || '<p class="muted">No exams yet.</p>'}</div>`,
                 actions: [
                     { label: 'Full profile & exam alerts', icon: 'user', cls: 'btn-primary', href: `/admin/student.html?id=${encodeURIComponent(studentId)}` },
-                    { label: 'Center report to parent', icon: 'whatsapp', cls: 'btn-soft', onClick: (close) => { close(); setTimeout(() => preview(st, ParentMessages.fullCenter({ student: st, rows: d.center.history }), 'Center report'), 240); } },
+                    { label: 'Offline report to parent', icon: 'whatsapp', cls: 'btn-soft', onClick: (close) => { close(); setTimeout(() => preview(st, ParentMessages.fullCenter({ student: st, rows: d.center.history }), 'Offline report'), 240); } },
                     { label: 'Online report to parent', icon: 'whatsapp', cls: 'btn-soft', onClick: async (close) => {
                         close();
                         try { const rep = await api(`/api/exams?action=student-report&studentId=${encodeURIComponent(studentId)}`); setTimeout(() => preview(st, ParentMessages.onlineReport(rep), 'Online report'), 240); }

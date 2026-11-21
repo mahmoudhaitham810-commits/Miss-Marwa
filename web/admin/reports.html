@@ -98,7 +98,7 @@
             $('content').innerHTML = `
                 ${A.can('reports.send') ? `<div class="card fade-up" style="margin-bottom:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
                     <div style="flex:1;min-width:220px"><b>Send to everyone in this list</b><div class="small muted">One message at a time — you tap send in WhatsApp for each parent. Students with nothing to report are skipped.</div></div>
-                    <button class="btn btn-wa" id="allCenter">${icon('whatsapp', 'sm')}Center reports (${sendable.length})</button>
+                    <button class="btn btn-wa" id="allCenter">${icon('whatsapp', 'sm')}Offline reports (${sendable.length})</button>
                     <button class="btn btn-soft" id="allOnline">${icon('whatsapp', 'sm')}Online reports (${sendable.length})</button>
                     ${A.feature('parentLinks') ? `<button class="btn btn-soft" id="allLinks" title="One private link per parent that always shows the latest marks">${icon('link', 'sm')}Report links (${sendable.filter(r => !(links[r.studentId] && links[r.studentId].views)).length} not opened)</button>` : ''}</div>` : ''}
                 <div class="card fade-up" style="--i:1;padding:6px 12px">
@@ -115,7 +115,7 @@
                     </div>`).join('')}
                 </div>`;
             const skipEmpty = (fn) => async (r) => { const t = await fn(r); return t || ''; };
-            $('allCenter')?.addEventListener('click', () => A.queue(sendable, skipEmpty(centerText), { title: 'Center report', kind: 'center-report' }));
+            $('allCenter')?.addEventListener('click', () => A.queue(sendable, skipEmpty(centerText), { title: 'Offline report', kind: 'center-report' }));
             $('allOnline')?.addEventListener('click', () => A.queue(sendable, skipEmpty(onlineText), { title: 'Online report', kind: 'online-report' }));
             $('allLinks')?.addEventListener('click', () => A.queue(sendable.filter(r => !(links[r.studentId] && links[r.studentId].views)), linkText, { title: 'Report link', kind: 'parent-link' }));
         }
@@ -128,7 +128,7 @@
             try {
                 const text = await (c ? centerText(r) : onlineText(r));
                 if (!text) return Site.toast(c ? 'No center marks yet for this student' : 'No online exams counted yet for this student', 'info');
-                A.preview(r, text, c ? 'Center report' : 'Online report', c ? 'center-report' : 'online-report');
+                A.preview(r, text, c ? 'Offline report' : 'Online report', c ? 'center-report' : 'online-report');
             } catch (err) { Site.toast(err.message, 'error'); }
         });
         load();

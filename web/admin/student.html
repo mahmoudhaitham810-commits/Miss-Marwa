@@ -74,7 +74,7 @@
                     ${A.copilotBtn('student:' + st.studentId)}
                     <button class="btn btn-ghost" id="rankCheck">${icon('award', 'sm')}Rank check</button>
                     ${A.can('students.view') ? `<a class="btn btn-ghost" data-tutor-preview href="/admin/tutor-preview.html?id=${encodeURIComponent(st.studentId)}">${icon('bot', 'sm')}Student AI preview</a>` : ''}
-                    ${st.parentPhone && A.can('reports.send') ? `<button class="btn btn-wa" id="centerRep">${icon('whatsapp', 'sm')}Center report</button><button class="btn btn-soft" id="onlineRep">${icon('whatsapp', 'sm')}Online report</button>` : ''}
+                    ${st.parentPhone && A.can('reports.send') ? `<button class="btn btn-wa" id="centerRep">${icon('whatsapp', 'sm')}Offline report</button><button class="btn btn-soft" id="onlineRep">${icon('whatsapp', 'sm')}Online report</button>` : ''}
                     ${A.can('reports.send') && A.feature('parentLinks') ? `<button class="btn btn-ghost" id="parentLink">${icon('link', 'sm')}Parent link</button>` : ''}
                 </div>
             </div>
@@ -162,7 +162,7 @@
             try {
                 const d = await api(`/api/analytics?action=student&studentId=${encodeURIComponent(id)}`);
                 if (!d.center.history.some(h => h.status !== 'not-entered')) return Site.toast('No center marks yet', 'info');
-                A.preview(st, ParentMessages.fullCenter({ student: { ...d.student, grade: st.grade }, rows: d.center.history }), 'Center report', 'center-report');
+                A.preview(st, ParentMessages.fullCenter({ student: { ...d.student, grade: st.grade }, rows: d.center.history }), 'Offline report', 'center-report');
             } catch (err) { Site.toast(err.message, 'error'); }
         });
         $('onlineRep')?.addEventListener('click', async () => {

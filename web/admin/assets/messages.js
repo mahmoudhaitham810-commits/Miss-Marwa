@@ -92,34 +92,32 @@
         return rtl(lines);
     }
 
-    // 4. Latest center mark (or absence)
-    function latestCenter({ student, examName, date, score, total, absent, groupAvg }) {
+    // 4. Latest offline mark (or absence) — offline exams are taken at the center or at home, so the
+    //    message shows only the exam name and score/total (no date, no %, no rating, no group average).
+    //    `date` and `groupAvg` are still accepted (callers pass them) but ignored.
+    function latestCenter({ student, examName, score, total, absent }) {
         const w = g(student);
-        const lines = [...head(student), `امتحان: ${iso(examName)}`];
-        if (date) lines.push(`التاريخ: ${dateAr(date)}`);
+        const lines = [...head(student), `الامتحان الأوفلاين: ${iso(examName)}`];
         if (absent) {
             lines.push(`${iso(student.firstName)} ${w.was} ${w.absent} عن الامتحان.`, 'برجاء المتابعة.');
             return rtl(lines);
         }
-        const p = total > 0 ? (score / total) * 100 : null;
-        lines.push(`الدرجة: ${scoreLine(score, total, p)}`);
-        if (groupAvg !== null && groupAvg !== undefined) lines.push(`متوسط المجموعة: ${pct(groupAvg)}`);
+        lines.push(`الدرجة: ${iso(`${score}/${total}`)}`);
         return rtl(lines);
     }
 
-    // 5. Full center report (absences counted as 0)
+    // 5. Full offline report (absences counted as 0) — marks as score/total only, no %, no rating
     function fullCenter({ student, rows }) {
         const w = g(student);
-        const lines = [...head(student), `تقرير امتحانات ${student.branch === 'private' ? 'الخاص' : 'السنتر'} — ${GRADE_AR[student.grade] || ''}`, ''];
+        const lines = [...head(student), `تقرير الامتحانات الأوفلاين — ${GRADE_AR[student.grade] || ''}`, ''];
         let earned = 0, possible = 0, taken = 0, missed = 0;
         rows.forEach(r => {
             if (r.status === 'not-entered') return;
             if (r.status === 'absent') { lines.push(`❌ ${iso(r.name)}: ${w.absent}`); missed++; possible += r.total; }
             else { lines.push(`✅ ${iso(r.name)}: ${iso(`${r.score}/${r.total}`)}`); taken++; earned += r.score; possible += r.total; }
         });
-        const p = possible > 0 ? (earned / possible) * 100 : null;
         lines.push('');
-        if (possible > 0) lines.push(`الإجمالي: ${scoreLine(earned, possible, p)}`);
+        if (possible > 0) lines.push(`الإجمالي: ${iso(`${earned}/${possible}`)}`);
         lines.push(`حضر ${taken} من ${taken + missed} امتحانات`);
         return rtl(lines);
     }
@@ -130,8 +128,8 @@
         return rtl([
             ...head(student),
             `الامتحانات الأونلاين: ${pct(onlinePct)}`,
-            `امتحانات السنتر: ${pct(centerPct)}`,
-            `لاحظنا إن مستوى ${iso(student.firstName)} في الأونلاين أعلى بفارق كبير من السنتر.`,
+            `الامتحانات الأوفلاين: ${pct(centerPct)}`,
+            `لاحظنا إن مستوى ${iso(student.firstName)} في الأونلاين أعلى بفارق كبير من الأوفلاين.`,
             `نتمنى نتعاون مع حضرتك إن ${iso(student.firstName)} ${w.solves} الامتحانات الأونلاين ${w.herself} من غير مساعدة، عشان نعرف ${w.level} الحقيقي ${w.help}.`
         ]);
     }
