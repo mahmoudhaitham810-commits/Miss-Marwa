@@ -85,6 +85,31 @@ function getDb(env) {
 // المتعلّمين بتاج المرحلة دي (مش كل الطلاب)؛ لو مفيش، بتبعت للكل كحل احتياطي.
 // لو الإرسال فشل لأي سبب، بترجع بس من غير ما توقف نشر الامتحان نفسه.
 // New content → everyone in that grade (shared helper: both OneSignal key styles, result kept for "Send a test")
+/**
+ * Create (and publish) an online exam — used by the Online exams page AND the Exam & summary studio.
+ * data: { title, grade, questions: [{ question, options, correctIndex }], durationDays, timeLimitMinutes, shuffle } → { examId } | { error }
+ */
+export async function createExam(env, db, request, staff, data) {
+    if (!data.title || !data.grade) return { error: 'عنوان الامتحان والمرحلة الدراسية مطلوبين' };
+    const qErr = validateQuestions(data.questions);
+    if (qErr) return { error: qErr };
+    await ensureAppSchema(db);
+    const shuffle = data.shuffle === false ? 0 : 1;
+    const durationDays = parseInt(data.durationDays, 10) > 0 ? parseInt(data.durationDays, 10) : 3;
+    // تايمر الامتحان اختياري: لو مبعتوش رقم صحيح موجب، يبقى مفيش وقت محدد (NULL)
+    const timeLimitMinutes = parseInt(data.timeLimitMinutes, 10) > 0 ? parseInt(data.timeLimitMinutes, 10) : null;
+    const examId = `EX-${Math.floor(100000 + Math.random() * 900000)}`;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    await db.prepare(
+        "INSERT INTO exams (id, title, grade, questions, duration_days, time_limit_minutes, expires_at, shuffle) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(examId, data.title, data.grade, JSON.stringify(cleanQuestions(data.questions)), durationDays, timeLimitMinutes, expiresAt.toISOString(), shuffle).run();
+    await audit(db, request, staff, 'exams.create', examId, { title: data.title, grade: data.grade, questions: data.questions.length, durationDays, timeLimitMinutes, shuffle: !!shuffle });
+    // بمجرد ما الامتحان يتحفظ بنجاح، ابعتي إشعار لطلاب نفس المرحلة بس
+    await sendPushNotification(env, { title: '📝 امتحان جديد', message: `${data.title} — متاح الآن لطلاب ${(data.grade || '').toUpperCase()}`, grade: data.grade });
+    return { examId };
+}
+
 async function sendPushNotification(env, { title, message, grade }) {
     const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
     return pushToGrade(env, db, grade, { title, message });
@@ -374,37 +399,9 @@ export async function onRequestPost(context) {
             // ── حماية: أدمن بس ──
             const auth = await requireStaff(request, env, 'exams.create');
             if (auth.error) return auth.error;
-
-            if (!data.title || !data.grade) {
-                return Response.json({ error: 'عنوان الامتحان والمرحلة الدراسية مطلوبين' }, { status: 400 });
-            }
-            const qErr = validateQuestions(data.questions);
-            if (qErr) return Response.json({ error: qErr }, { status: 400 });
-            await ensureAppSchema(db);
-            const shuffle = data.shuffle === false ? 0 : 1;
-
-            const durationDays = parseInt(data.durationDays, 10) > 0 ? parseInt(data.durationDays, 10) : 3;
-            // تايمر الامتحان اختياري: لو مبعتوش رقم صحيح موجب، يبقى مفيش وقت محدد (NULL)
-            const timeLimitMinutes = parseInt(data.timeLimitMinutes, 10) > 0 ? parseInt(data.timeLimitMinutes, 10) : null;
-            const examId = `EX-${Math.floor(100000 + Math.random() * 900000)}`;
-            const now = new Date();
-            const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
-
-            await db.prepare(
-                "INSERT INTO exams (id, title, grade, questions, duration_days, time_limit_minutes, expires_at, shuffle) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            ).bind(
-                examId, data.title, data.grade, JSON.stringify(cleanQuestions(data.questions)), durationDays, timeLimitMinutes, expiresAt.toISOString(), shuffle
-            ).run();
-            await audit(db, request, auth.staff, 'exams.create', examId, { title: data.title, grade: data.grade, questions: data.questions.length, durationDays, timeLimitMinutes, shuffle: !!shuffle });
-
-            // بمجرد ما الامتحان يتحفظ بنجاح، ابعتي إشعار لطلاب نفس المرحلة بس
-            await sendPushNotification(env, {
-                title: '📝 امتحان جديد',
-                message: `${data.title} — متاح الآن لطلاب ${(data.grade || '').toUpperCase()}`,
-                grade: data.grade
-            });
-
-            return Response.json({ success: true, examId });
+            const out = await createExam(env, db, request, auth.staff, data);
+            if (out.error) return Response.json({ error: out.error }, { status: 400 });
+            return Response.json({ success: true, examId: out.examId });
         }
 
         // === Edit an exam — only while NO student has opened it (so nobody's score can change) ===

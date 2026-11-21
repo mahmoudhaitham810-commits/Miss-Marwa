@@ -163,7 +163,7 @@ export function refFromText(text) {
 // page (headings, running footers like "Unit 1 · Lesson 2") and returns each unit/lesson with its PDF start page.
 // Built automatically the first time a unit/lesson is asked about, or from the Curriculum books page.
 // ---------------------------------------------------------------------------------------------------------------
-async function pageTexts(db, book, from, to) {
+export async function pageTexts(db, book, from, to) {
     const { results } = await db.prepare('SELECT page, text FROM curriculum_fts WHERE book = ? AND page BETWEEN ? AND ? ORDER BY page, rowid').bind(book, from, to).all();
     const m = new Map();
     for (const r of results || []) { const p = Number(r.page); m.set(p, (m.get(p) ? m.get(p) + '\n' : '') + r.text); }

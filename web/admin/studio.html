@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <title>Exams & summaries · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+    <style>
+        .st-grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+        @media (min-width: 1100px) { .st-grid { grid-template-columns: 360px minmax(0, 1fr); align-items: start; } .st-side { position: sticky; top: calc(var(--topbar-h) + 12px); } }
+        .st-side .card { padding: 16px; }
+        .fl { display: block; font-size: 12.5px; font-weight: 700; color: var(--text-2); margin: 12px 0 6px; }
+        .fl:first-child { margin-top: 0; }
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .chip-b { border: 1.5px solid var(--border); background: var(--surface); color: var(--text); padding: 7px 11px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-align: left; }
+        .chip-b small { color: var(--muted); font-weight: 500; }
+        .chip-b.on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+        .tabs3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); margin: 14px 0 4px; }
+        .tabs3 button { border: 0; background: transparent; padding: 9px 4px; border-radius: 10px; font: inherit; font-size: 13px; font-weight: 700; color: var(--text-2); cursor: pointer; }
+        .tabs3 button.on { background: var(--surface); color: var(--primary); box-shadow: 0 1px 4px rgba(15, 23, 42, .12); }
+        .secs { display: flex; flex-direction: column; gap: 6px; }
+        .sec-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 56px 56px; gap: 8px; align-items: center; font-size: 13px; }
+        .sec-row input[type=number] { width: 100%; height: 34px; border-radius: 9px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); text-align: center; font: inherit; font-weight: 700; }
+        .sec-row .h { font-size: 11px; color: var(--muted); text-align: center; font-weight: 700; }
+        .sec-row.off { opacity: .5; }
+        .tot { margin-top: 8px; font-size: 13px; font-weight: 700; text-align: right; color: var(--primary); }
+        .st-side textarea { width: 100%; min-height: 70px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); padding: 10px 12px; font: inherit; font-size: 14px; resize: vertical; }
+        .go { width: 100%; margin-top: 14px; }
+        .hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+        /* result */
+        .bar-r { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+        .bar-r .grow { flex: 1; min-width: 180px; }
+        .bar-r .meta { font-size: 12.5px; color: var(--muted); }
+        .paper { background: #E9EEF6; border-radius: 18px; padding: 18px 10px; overflow-x: auto; }
+        [data-theme="dark"] .paper { background: #1E293B; }
+        .paper .sx-page { box-shadow: 0 10px 30px -12px rgba(15, 23, 42, .35); border-radius: 4px; }
+        .paper .sx-page + .sx-page { margin-top: 18px; }
+        .steps { display: flex; flex-direction: column; gap: 8px; padding: 18px; }
+        .step { display: flex; gap: 10px; align-items: center; font-size: 14px; color: var(--muted); }
+        .step .d { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; font-size: 12px; flex: none; }
+        .step.on { color: var(--text); font-weight: 700; } .step.on .d { border-color: var(--primary); border-top-color: transparent; animation: spin 1s linear infinite; }
+        .step.done { color: var(--text-2); } .step.done .d { border-color: var(--success); background: var(--success); color: #fff; }
+        .lib-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
+        .lib-row:last-child { border-bottom: 0; }
+        .lib-row b { display: block; font-size: 13.5px; overflow-wrap: anywhere; } .lib-row small { color: var(--muted); font-size: 12px; }
+        .kind { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); white-space: nowrap; }
+        .cov { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--success-soft); color: var(--success); }
+        .cov.warn { background: var(--warning-soft); color: var(--notice-warning-text, #92400e); }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <div class="page-head"><div><h1>Exams & summaries</h1><p>Full summaries, printable exams and online quizzes — written by Assistant Pro <b>only from the curriculum book</b>, in Miss Marwa's style.</p></div></div>
+            <div id="note"></div>
+            <div class="st-grid">
+                <div class="st-side">
+                    <div class="card">
+                        <label class="fl">Grade</label><div class="chips" id="gradeC"></div>
+                        <label class="fl">Unit</label><div class="chips" id="unitC"></div>
+                        <label class="fl">Lessons <small class="muted" id="lessonHint"></small></label><div class="chips" id="lessonC"></div>
+                        <div class="tabs3" id="tabs"><button data-t="summary">📘 Summary</button><button data-t="exam">📝 Printed exam</button><button data-t="online">💻 Online quiz</button></div>
+                        <div id="opts"></div>
+                        <label class="fl" for="instr">Your instructions <small class="muted">(optional)</small></label>
+                        <textarea id="instr" maxlength="800" placeholder="e.g. make it harder · focus on the electroscope · more Give-reason questions"></textarea>
+                        <button class="btn btn-primary go" id="goBtn"></button>
+                        <div class="hint" id="goHint"></div>
+                    </div>
+                    <div class="card" style="margin-top:14px"><div class="card-head"><h2 class="card-title">Saved</h2><span class="muted small" id="libCount"></span></div><div id="lib"></div></div>
+                </div>
+                <div class="st-main" id="mainPane"></div>
+            </div>
+        </div>
+    </main>
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/admin/assets/studio-render.js?v=20261121a"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'studio', title: 'Exams & summaries' });
+        A.hydrate();
+        if (!A.can('studio.use')) { $('main').querySelector('.container').innerHTML = '<div class="card empty-state"><h3>This page is for Miss Marwa only</h3></div>'; return; }
+        StudioRender.css();
+        let M = null, grade = null, unit = null, lessons = new Set(), tab = 'summary', DOC = null, dirty = false, showKey = true, busy = false;
+        const pref = (() => { try { return JSON.parse(localStorage.getItem('studio_prefs') || '{}'); } catch (e) { return {}; } })();
+        let sections = Array.isArray(pref.sections) ? pref.sections : null, onlineCount = pref.onlineCount || 15;
+        const savePref = () => { try { localStorage.setItem('studio_prefs', JSON.stringify({ sections, onlineCount, grade, tab })); } catch (e) { } };
+
+        try { M = await api('/api/studio?action=map'); } catch (err) { $('mainPane').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+        sections = sections || M.defaultSections.map(s => ({ ...s, on: true }));
+        Object.keys(M.sectionTypes).forEach(t => { if (!sections.find(s => s.type === t)) sections.push({ type: t, count: 2, marks: 2, on: false }); });
+        const ready = M.grades.filter(g => g.units.length);
+        if (!M.aiReady) $('note').innerHTML = '<div class="notice danger" style="margin-bottom:12px"><span>Assistant Pro is not connected (ANTHROPIC_API_KEY).</span></div>';
+        if (!ready.length) $('note').innerHTML += '<div class="notice" style="margin-bottom:12px"><span>📑 No book map yet — go to <a href="/admin/books.html">Curriculum books</a>, index a book and build its map.</span></div>';
+        grade = (ready.find(g => g.grade === pref.grade) || ready[0] || {}).grade || null;
+        tab = ['summary', 'exam', 'online'].includes(pref.tab) ? pref.tab : 'summary';
+        const G = () => M.grades.find(g => g.grade === grade);
+        const U = () => G() && G().units.find(u => u.unit === unit);
+
+        function renderPick() {
+            $('gradeC').innerHTML = M.grades.map(g => `<button class="chip-b ${g.grade === grade ? 'on' : ''}" data-g="${g.grade}" ${g.units.length ? '' : 'disabled title="No book map yet"'}>${esc(g.label)}${g.units.length ? '' : ' <small>· no map</small>'}</button>`).join('');
+            const g = G();
+            if (g && !g.units.find(u => u.unit === unit)) { unit = g.units.length ? g.units[0].unit : null; lessons = new Set(); }
+            $('unitC').innerHTML = g ? g.units.map(u => `<button class="chip-b ${u.unit === unit ? 'on' : ''}" data-u="${u.unit}">Unit ${u.unit}${u.title ? ` <small>· ${esc(u.title)}</small>` : ''}</button>`).join('') : '';
+            const u = U();
+            if (u && !lessons.size) u.lessons.forEach(l => lessons.add(l.lesson));
+            if (tab === 'summary' && lessons.size > 1) { /* summaries: you can still pick several (one after another) */ }
+            $('lessonC').innerHTML = u ? u.lessons.map(l => `<button class="chip-b ${lessons.has(l.lesson) ? 'on' : ''}" data-l="${l.lesson}">Lesson ${l.lesson}${l.title ? ` <small>· ${esc(l.title)}</small>` : ''}</button>`).join('') : '';
+            $('lessonHint').textContent = tab === 'summary' ? '— each lesson gets its full summary' : '— questions come from the chosen lessons';
+            $('tabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
+            renderOpts();
+        }
+        function renderOpts() {
+            const n = lessons.size;
+            if (tab === 'summary') {
+                $('opts').innerHTML = `<div class="hint">Assistant Pro lists <b>every</b> idea on the lesson's pages, writes the full summary in your style (terms, G.R, arrows, tables…), then checks nothing was skipped.</div>`;
+                $('goBtn').textContent = n > 1 ? `Write ${n} lesson summaries` : 'Write the summary';
+                $('goHint').textContent = `≈ $${(0.015 * Math.max(1, n)).toFixed(3)} · about 1–2 minutes per lesson`;
+            } else if (tab === 'exam') {
+                $('opts').innerHTML = `<label class="fl">Sections</label><div class="sec-row"><span></span><span></span><span class="h">Qs</span><span class="h">Marks each</span></div>
+                    <div class="secs">${sections.map((s, i) => `<label class="sec-row ${s.on ? '' : 'off'}"><input type="checkbox" data-son="${i}" ${s.on ? 'checked' : ''}><span>${esc(M.sectionTypes[s.type])}</span>
+                        <input type="number" min="1" max="30" value="${s.count}" data-sc="${i}" aria-label="Questions"><input type="number" min="0" max="20" step="0.5" value="${s.marks}" data-sm="${i}" aria-label="Marks each"></label>`).join('')}</div>
+                    <div class="tot" id="tot"></div>
+                    <label class="fl" for="etitle">Title <small class="muted">(optional)</small></label><input class="fin" id="etitle" placeholder="e.g. Unit Two Exam: Force Fields">`;
+                $('goBtn').textContent = 'Make the exam';
+                updTot();
+            } else {
+                $('opts').innerHTML = `<label class="fl" for="ocount">Number of questions <small class="muted">(all multiple choice)</small></label><input class="fin" id="ocount" type="number" min="1" max="60" value="${onlineCount}">
+                    <label class="fl" for="etitle">Title <small class="muted">(optional)</small></label><input class="fin" id="etitle" placeholder="e.g. Unit Two Quiz: Force Fields">`;
+                $('goBtn').textContent = 'Make the online quiz';
+                $('goHint').textContent = 'You review every question before it goes to the students.';
+            }
+            $('goBtn').disabled = busy || !M.aiReady || !U() || !lessons.size;
+        }
+        function updTot() {
+            const on = sections.filter(s => s.on), q = on.reduce((t, s) => t + (+s.count || 0), 0), m = on.reduce((t, s) => t + (+s.count || 0) * (+s.marks || 0), 0);
+            if ($('tot')) $('tot').textContent = `${q} questions · ${m} marks`;
+            $('goHint').textContent = `≈ $${(0.004 + q * 0.0004).toFixed(3)} · about 1 minute`;
+        }
+        $('gradeC').addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (!b || b.disabled) return; grade = b.dataset.g; unit = null; lessons = new Set(); savePref(); renderPick(); });
+        $('unitC').addEventListener('click', e => { const b = e.target.closest('[data-u]'); if (!b) return; unit = +b.dataset.u; lessons = new Set(); renderPick(); });
+        $('lessonC').addEventListener('click', e => { const b = e.target.closest('[data-l]'); if (!b) return; const n = +b.dataset.l; lessons.has(n) ? lessons.delete(n) : lessons.add(n); if (!lessons.size) lessons.add(n); renderPick(); });
+        $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (!b) return; tab = b.dataset.t; savePref(); renderPick(); });
+        $('opts').addEventListener('input', e => {
+            const t = e.target;
+            if (t.dataset.son) { sections[+t.dataset.son].on = t.checked; t.closest('.sec-row').classList.toggle('off', !t.checked); }
+            if (t.dataset.sc) sections[+t.dataset.sc].count = Math.max(1, Math.min(30, parseInt(t.value, 10) || 1));
+            if (t.dataset.sm) sections[+t.dataset.sm].marks = Math.max(0, Math.min(20, Number(t.value) || 0));
+            if (t.id === 'ocount') onlineCount = Math.max(1, Math.min(60, parseInt(t.value, 10) || 10));
+            updTot(); savePref();
+        });
+
+        // ---------------- generating (with honest steps — the server does them in this order) ----------------
+        function steps(list) {
+            $('mainPane').innerHTML = `<div class="card"><div class="steps">${list.map((s, i) => `<div class="step" data-s="${i}"><span class="d"></span>${esc(s)}</div>`).join('')}</div><div class="hint" style="padding:0 18px 16px">Keep this page open. You can read your other saved documents afterwards.</div></div>`;
+            let i = 0; const mark = () => { document.querySelectorAll('.step').forEach((el, k) => { el.className = 'step' + (k < i ? ' done' : k === i ? ' on' : ''); if (k < i) el.querySelector('.d').textContent = '✓'; }); };
+            mark();
+            const timer = setInterval(() => { if (i < list.length - 1) { i++; mark(); } }, list.length > 3 ? 22000 : 18000);
+            return { done() { clearInterval(timer); i = list.length; mark(); }, stop() { clearInterval(timer); } };
+        }
+        $('goBtn').addEventListener('click', async () => {
+            if (busy) return;
+            if (dirty && !confirm('You have unsaved changes in the open document. Continue?')) return;
+            busy = true; renderOpts();
+            const u = U(), L = [...lessons].sort((a, b) => a - b), instructions = $('instr').value.trim();
+            try {
+                if (tab === 'summary') {
+                    let docId = null, last = null;
+                    for (let k = 0; k < L.length; k++) {
+                        const l = u.lessons.find(x => x.lesson === L[k]);
+                        const st = steps([`Reading Lesson ${l.lesson} (${l.title || ''}) — PDF pages ${l.from}–${l.to}`, 'Listing every idea on these pages', 'Writing the full summary in your style', 'Checking nothing was skipped']);
+                        try { last = await api('/api/studio?action=summary', { body: { grade, unit, lesson: l.lesson, docId, instructions } }); } finally { st.stop(); }
+                        st.done(); docId = last.doc.id;
+                    }
+                    openDoc(last.doc, true);
+                } else {
+                    const st = steps([`Reading Unit ${unit} · Lesson${L.length > 1 ? 's' : ''} ${L.join(', ')}`, tab === 'online' ? `Writing ${onlineCount} multiple-choice questions` : 'Writing the exam sections', 'Checking every question against the book']);
+                    let r;
+                    const title = ($('etitle') && $('etitle').value.trim()) || '';
+                    try {
+                        r = tab === 'online' ? await api('/api/studio?action=online', { body: { grade, unit, lessons: L, count: onlineCount, title, instructions } })
+                            : await api('/api/studio?action=exam', { body: { grade, unit, lessons: L, sections: sections.filter(s => s.on).map(({ type, count, marks }) => ({ type, count, marks })), title, instructions } });
+                    } finally { st.stop(); }
+                    st.done(); openDoc(r.doc, true);
+                }
+                loadLib();
+            } catch (err) { $('mainPane').innerHTML = `<div class="notice danger"><span>${esc(err.message)}</span></div>`; }
+            busy = false; renderOpts();
+        });
+
+        // ---------------- the document: preview = the PDF, edit in place ----------------
+        function openDoc(doc, fresh) {
+            DOC = doc; dirty = false; renderDoc(fresh);
+            if (fresh && window.innerWidth < 1100) $('mainPane').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            history.replaceState(null, '', '#doc=' + doc.id);
+        }
+        function renderDoc(fresh) {
+            const d = DOC, k = d.kind;
+            const html = k === 'summary' ? StudioRender.summaryHtml(d, { edit: true }) : k === 'online' ? StudioRender.onlineHtml(d, { edit: true }) : StudioRender.examHtml(d, { edit: true, key: showKey });
+            let meta = `${A.GRADES[d.grade] || d.grade} · Unit ${d.unit} · Lesson${d.lessons.length > 1 ? 's' : ''} ${d.lessons.join(', ')} · $${(d.costUsd || 0).toFixed(3)}`;
+            let badge = '';
+            if (k === 'summary') {
+                const cv = d.content.lessons.reduce((a, l) => ({ t: a.t + ((l.coverage && l.coverage.total) || 0), c: a.c + ((l.coverage && l.coverage.covered) || 0) }), { t: 0, c: 0 });
+                badge = cv.t ? `<span class="cov ${cv.c < cv.t ? 'warn' : ''}" title="${esc(d.content.lessons.flatMap(l => (l.coverage && l.coverage.missing) || []).join(' · ') || 'Everything on the checklist is in the summary')}">${cv.c < cv.t ? '⚠️' : '✅'} Covers ${cv.c}/${cv.t} ideas from the book</span>` : '';
+            } else {
+                const q = d.content.sections.reduce((t, s) => t + s.items.length, 0), w = d.content.sections.reduce((t, s) => t + (s.wanted || s.items.length), 0);
+                badge = `<span class="cov ${q < w ? 'warn' : ''}">✅ ${q}${q < w ? `/${w}` : ''} questions checked against the book${d.content.checked && d.content.checked.fixed ? ` · ${d.content.checked.fixed} fixed` : ''}</span>`;
+            }
+            $('mainPane').innerHTML = `<div class="bar-r">
+                    <div class="grow"><b>${esc(d.title)}</b><div class="meta">${meta}</div></div>${badge}</div>
+                <div class="bar-r">
+                    <button class="btn btn-primary btn-sm" id="pdfBtn">${icon('download', 'sm')}Download PDF</button>
+                    ${k === 'exam' ? `<button class="btn btn-soft btn-sm" id="keyBtn">${showKey ? 'Hide' : 'Show'} answer key</button>` : ''}
+                    ${k === 'online' ? `<button class="btn btn-wa btn-sm" id="pubBtn" ${d.publishedExam ? 'disabled' : ''}>${d.publishedExam ? '✅ Published' : '🚀 Publish to students'}</button>` : ''}
+                    <button class="btn btn-ghost btn-sm" id="saveBtn" disabled>Save changes</button>
+                    <span class="meta">Tap any text to edit it.${k !== 'summary' ? ' ↻ writes one question again.' : ''}</span></div>
+                <div class="paper" id="paper">${html}</div>`;
+            wire();
+            if (fresh) Site.toast(k === 'summary' ? 'Summary ready — read it, edit anything, then download the PDF' : 'Ready — review it, then download / publish', 'success');
+        }
+        function setDirty() { dirty = true; const b = $('saveBtn'); if (b) { b.disabled = false; b.classList.add('btn-primary'); b.classList.remove('btn-ghost'); } }
+        function wire() {
+            const P = $('paper');
+            P.addEventListener('input', e => { const el = e.target.closest('[data-e]'); if (!el) return; StudioRender.setPath(DOC.content, el.dataset.e, el.innerText.replace(/\s+\n/g, '\n').trim()); setDirty(); });
+            P.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest('[data-e]') && !e.shiftKey) { e.preventDefault(); e.target.blur(); } });
+            P.addEventListener('click', async e => {
+                const del = e.target.closest('[data-del]');
+                if (del) { StudioRender.removePath(DOC.content, del.dataset.del); setDirty(); return renderKeep(); }
+                const pk = e.target.closest('[data-pick]');
+                if (pk) { StudioRender.setPath(DOC.content, pk.dataset.pick + '.answer', +pk.dataset.k); setDirty(); return renderKeep(); }
+                const tf = e.target.closest('[data-tf]');
+                if (tf) { const q = StudioRender.getPath(DOC.content, tf.dataset.tf); q.answer = !q.answer; if (!q.answer && !q.correction) q.correction = '…'; setDirty(); return renderKeep(); }
+                const rg = e.target.closest('[data-regen]');
+                if (rg) {
+                    const [, s, , q] = rg.dataset.regen.split('.');
+                    rg.disabled = true; rg.textContent = '…';
+                    try { if (dirty) await save(true); const r = await api('/api/studio?action=regen', { body: { id: DOC.id, s: +s, q: +q, instructions: $('instr').value.trim() } }); StudioRender.setPath(DOC.content, rg.dataset.regen, r.item); DOC.costUsd += r.costUsd || 0; renderKeep(); Site.toast('New question written', 'success'); }
+                    catch (err) { Site.toast(err.message, 'error'); rg.disabled = false; rg.textContent = '↻'; }
+                }
+            });
+            $('pdfBtn').addEventListener('click', async () => {
+                if (dirty) await save(true);
+                const inner = DOC.kind === 'summary' ? StudioRender.summaryHtml(DOC) : DOC.kind === 'online' ? StudioRender.onlineHtml(DOC) : StudioRender.examHtml(DOC, { key: showKey });
+                Site.toast('Choose “Save as PDF” in the print window', 'info');
+                StudioRender.print(inner, DOC.title);
+            });
+            $('keyBtn')?.addEventListener('click', () => { showKey = !showKey; renderKeep(); });
+            $('saveBtn').addEventListener('click', () => save());
+            $('pubBtn')?.addEventListener('click', publish);
+        }
+        function renderKeep() { const y = window.scrollY; const wasDirty = dirty; renderDoc(); if (wasDirty) setDirty(); window.scrollTo(0, y); }
+        async function save(quiet) {
+            try { const r = await api('/api/studio?action=save', { body: { id: DOC.id, content: DOC.content } }); DOC = r.doc; dirty = false; if (!quiet) { Site.toast('Saved', 'success'); renderKeep(); } loadLib(); }
+            catch (err) { Site.toast(err.message, 'error'); throw err; }
+        }
+        function publish() {
+            const q = DOC.content.sections.reduce((t, s) => t + s.items.length, 0);
+            Site.sheet({ iconName: 'send', title: `Publish “${DOC.content.title}”?`, subtitle: `${q} questions → Online exams. ${A.GRADES[DOC.grade]} students get it right away (and a notification).`,
+                html: `<label class="fl" for="pd">Open for (days)</label><input class="fin" id="pd" type="number" min="1" max="60" value="3">
+                    <label class="fl" for="pt">Timer in minutes <small class="muted">(empty = no timer)</small></label><input class="fin" id="pt" type="number" min="1" max="300" placeholder="e.g. 20">`,
+                actions: [{ label: 'Publish now', cls: 'btn-primary', onClick: async (close) => {
+                    try { if (dirty) await save(true); const r = await api('/api/studio?action=publish', { body: { id: DOC.id, durationDays: +document.getElementById('pd').value || 3, timeLimitMinutes: +document.getElementById('pt').value || null } });
+                        close(); DOC.publishedExam = r.examId; renderKeep(); Site.toast('Published to Online exams ✅', 'success'); loadLib(); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }] });
+        }
+        window.addEventListener('beforeunload', e => { if (dirty || busy) { e.preventDefault(); e.returnValue = ''; } });
+
+        // ---------------- library ----------------
+        const KIND = { summary: 'Summary', exam: 'Printed exam', online: 'Online quiz' };
+        async function loadLib() {
+            let r; try { r = await api('/api/studio?action=list'); } catch (e) { return; }
+            $('libCount').textContent = r.docs.length ? `${r.docs.length}` : '';
+            $('lib').innerHTML = r.docs.length ? r.docs.map(d => `<div class="lib-row" data-open="${esc(d.id)}"><div><b>${esc(d.title)}</b><small>${esc(A.fmtDate(d.updatedAt, true))}${d.publishedExam ? ' · published' : ''}</small></div>
+                <span style="display:flex;gap:6px;align-items:center"><span class="kind">${KIND[d.kind] || d.kind}</span><button class="icon-btn" data-delete="${esc(d.id)}" title="Delete" aria-label="Delete">${icon('x', 'sm')}</button></span></div>`).join('')
+                : '<p class="muted small" style="margin:4px 0">Nothing saved yet.</p>';
+        }
+        $('lib').addEventListener('click', async e => {
+            const del = e.target.closest('[data-delete]');
+            if (del) { e.stopPropagation(); if (!confirm('Delete this document?')) return; try { await api('/api/studio?action=delete', { body: { id: del.dataset.delete } }); if (DOC && DOC.id === del.dataset.delete) { DOC = null; $('mainPane').innerHTML = ''; } loadLib(); } catch (err) { Site.toast(err.message, 'error'); } return; }
+            const row = e.target.closest('[data-open]'); if (!row) return;
+            if (dirty && !confirm('You have unsaved changes. Open another document?')) return;
+            try { const r = await api('/api/studio?action=get&id=' + encodeURIComponent(row.dataset.open)); openDoc(r.doc); window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (err) { Site.toast(err.message, 'error'); }
+        });
+
+        renderPick(); loadLib();
+        const h = (location.hash.match(/doc=([\w-]+)/) || [])[1];
+        if (h) { try { const r = await api('/api/studio?action=get&id=' + encodeURIComponent(h)); openDoc(r.doc); } catch (e) { } }
+        else $('mainPane').innerHTML = `<div class="card empty-state"><div class="bubble">${icon('file', 'lg')}</div><h3>Pick a grade, unit and lessons</h3><p>Then write a full summary, a printed exam with its answer key, or an online quiz — all from the curriculum book.</p></div>`;
+    })();
+    </script>
+</body>
+</html>

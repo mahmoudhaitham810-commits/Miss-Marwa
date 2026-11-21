@@ -58,6 +58,7 @@ export const PERMISSIONS = {
     'homework.review': BOTH,     // check / override marks (Step 4)
     'copilot.use': TEACHER,
     'ai.manage': TEACHER,        // AI usage page: student Pro on/off, budgets, EGP rate
+    'studio.use': TEACHER,       // Exam & summary studio (AI from the curriculum books)
     'staff.manage': TEACHER,
     'audit.view': TEACHER,
     'settings.manage': TEACHER

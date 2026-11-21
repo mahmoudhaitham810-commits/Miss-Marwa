@@ -117,6 +117,7 @@
             { key: 'datacheck', label: 'Data check', icon: 'shield', href: '/admin/data-check.html' },
             { key: 'inbox', label: 'Questions · أسئلتي', icon: 'inbox', href: '/admin/inbox.html' },
             teacher ? { key: 'copilot', label: 'AI Assistant', icon: 'sparkles', href: '/admin/copilot.html' } : null,
+            teacher ? { key: 'studio', label: 'Exams & summaries', icon: 'file', href: '/admin/studio.html' } : null,
             teacher ? { key: 'modeltest', label: 'Model test', icon: 'chart', href: '/admin/model-test.html' } : null,
             teacher ? { key: 'aiusage', label: 'AI usage · الاستهلاك', icon: 'chart', href: '/admin/ai-usage.html' } : null,
             teacher ? { key: 'books', label: 'Curriculum books', icon: 'book', href: '/admin/books.html' } : null,
