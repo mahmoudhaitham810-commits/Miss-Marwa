@@ -245,29 +245,52 @@
         const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
         return { jpg: c.toDataURL('image/jpeg', 0.92), h };
     }
+    // Colour layer UNDER each page picture: some PDF viewers (Edge / Chrome on Windows) draw a big picture in tiles and
+    // leave hairline gaps between them — the gaps then show this layer (navy under the navy header…) instead of white lines.
+    const rgbOf = (c) => { const m = String(c).match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/); return m && (m[4] === undefined || +m[4] > 0.5) ? [+m[1], +m[2], +m[3]] : null; };
+    function underlay(page) {
+        const r0 = page.getBoundingClientRect(), out = [];
+        for (const el of page.querySelectorAll('*')) {
+            const cs = el.ownerDocument.defaultView.getComputedStyle(el), r = el.getBoundingClientRect();
+            if (r.width < 2 || r.height < 2) continue;
+            const box = { x: r.left - r0.left, y: r.top - r0.top, w: r.width, h: r.height };
+            const grad = cs.backgroundImage && cs.backgroundImage.includes('gradient') ? (cs.backgroundImage.match(/rgba?\([^)]+\)/g) || []).map(rgbOf).filter(Boolean) : [];
+            if (grad.length >= 2) { out.push({ ...box, grad }); continue; }
+            const c = rgbOf(cs.backgroundColor);
+            if (c && c[0] + c[1] + c[2] < 750) out.push({ ...box, c });              // white needs no layer
+        }
+        return out;
+    }
     const fileName = (t) => (String(t || 'Science Academy').replace(/[·•—–]/g, '-').replace(/[^\x20-\x7E؀-ۿ]/g, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90) || 'Science Academy') + '.pdf';
     /** → { bytes, pages } (and saves the file unless o.save === false) */
     async function download(inner, title, o = {}) {
         css();
         const [, fonts] = await Promise.all([loadPdfLib(), fontCss()]);
-        // lay it out at the PDF width, out of sight (light colours whatever the page theme)
-        const host = document.createElement('div');
-        host.className = 'sx-pdf-host';
-        host.style.cssText = `position:absolute;left:-30000px;top:0;width:${CONTENT_W}px;background:#fff`;
-        host.innerHTML = inner;
-        const root = host.firstElementChild; root.classList.add('sx-pdf');
+        // lay it out at the PDF width in an ISOLATED frame with exactly the styles the page pictures are drawn with
+        // (laid out inside the portal, its own list / table / line-height styles changed the heights → cuts in the wrong place)
+        const style = fonts + '\n' + CSS;
+        const host = document.createElement('iframe');
+        host.setAttribute('aria-hidden', 'true'); host.tabIndex = -1;
+        host.style.cssText = `position:absolute;left:-30000px;top:0;width:${CONTENT_W}px;height:2000px;border:0;visibility:hidden`;
         document.body.appendChild(host);
         try {
-            const imgs = [...host.querySelectorAll('img')];
-            await Promise.all(imgs.map(async i => { const d = await fetchData(i.src); if (d) i.src = d; else i.remove(); }));
+            const fd = host.contentDocument;
+            fd.open(); fd.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${style.replace(/<\/style/gi, '')}\nhtml,body{margin:0;padding:0;background:#fff}</style></head><body>${inner}</body></html>`); fd.close();
+            const root = fd.body.firstElementChild; root.classList.add('sx-pdf');
+            const imgs = [...root.querySelectorAll('img')];
+            await Promise.all(imgs.map(async i => { const d = await fetchData(new URL(i.getAttribute('src'), location.href).href); if (d) i.src = d; else i.remove(); }));
             await Promise.all(imgs.filter(i => i.isConnected).map(i => i.decode().catch(() => { })));
-            if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 3000))]);
-            const style = fonts + '\n' + CSS;
+            if (fd.fonts && fd.fonts.ready) await Promise.race([fd.fonts.ready, new Promise(r => setTimeout(r, 4000))]);
             const ser = new XMLSerializer();
             const shots = [];
             for (const page of root.querySelectorAll('.sx-page')) {
                 const xhtml = ser.serializeToString(page);
-                for (const [s, e] of slices(page)) shots.push(await drawSlice(xhtml, style, s, e, o.scale || 2));
+                const under = underlay(page);
+                for (const [s, e] of slices(page)) {
+                    const shot = await drawSlice(xhtml, style, s, e, o.scale || 2);
+                    shot.under = under.filter(u => u.y < e && u.y + u.h > s).map(u => ({ ...u, y: Math.max(u.y, s) - s, h: Math.min(u.y + u.h, e) - Math.max(u.y, s) }));
+                    shots.push(shot);
+                }
             }
             const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
             const pdf = await PDFDocument.create();
@@ -278,6 +301,14 @@
                 const pg = pdf.addPage([A4W * pt, A4H * pt]);
                 const im = await pdf.embedJpg(shots[i].jpg);
                 const w = (A4W - MARGIN.l - MARGIN.r) * pt, h = shots[i].h / MM * pt;
+                const X = (px) => MARGIN.l * pt + px / MM * pt, Y = (px) => (A4H - MARGIN.t) * pt - px / MM * pt, P = (px) => px / MM * pt;
+                pg.drawRectangle({ x: MARGIN.l * pt, y: (A4H - MARGIN.t) * pt - h, width: w, height: h, color: rgb(1, 1, 1) });
+                for (const u of shots[i].under) {
+                    if (u.grad) {                                                        // a gradient → 48 thin strips, left to right
+                        const N = 48, a = u.grad[0], b = u.grad[u.grad.length - 1];
+                        for (let k = 0; k < N; k++) { const t = (k + 0.5) / N; pg.drawRectangle({ x: X(u.x + u.w * k / N), y: Y(u.y + u.h), width: P(u.w / N) + 0.2, height: P(u.h), color: rgb(...[0, 1, 2].map(j => (a[j] + (b[j] - a[j]) * t) / 255)) }); }
+                    } else pg.drawRectangle({ x: X(u.x), y: Y(u.y + u.h), width: P(u.w), height: P(u.h), color: rgb(u.c[0] / 255, u.c[1] / 255, u.c[2] / 255) });
+                }
                 pg.drawImage(im, { x: MARGIN.l * pt, y: (A4H - MARGIN.t) * pt - h, width: w, height: h });
                 const foot = `Science Academy - Miss Marwa   |   page ${i + 1} of ${n}`;
                 pg.drawText(foot, { x: (A4W * pt - font.widthOfTextAtSize(foot, 8)) / 2, y: 8 * pt, size: 8, font, color: rgb(0.39, 0.45, 0.55) });
