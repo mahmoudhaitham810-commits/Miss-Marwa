@@ -176,7 +176,24 @@ Return ONLY JSON, no markdown: {"units":[{"unit":1,"title":"...","start":<PDF pa
 - "end" = the LAST PDF page that still belongs to that lesson / unit (its explanation, activities and its own exercises). Stop BEFORE what follows it: the next lesson, a unit revision, unit / term model exams, final exams, answer keys, glossary or other back matter.
 - "backMatterStart" = the first PDF page after the last lesson's content where only revision / model exams / final exams / answers / back matter follow (null if none).
 - Unit start = the unit's first page (its cover page is fine). Lessons in reading order. Keep titles short, as printed (English or Arabic).
-- Don't include the contents, preface, model exams or answer pages as lessons.`;
+- Don't include the contents, preface, model exams or answer pages as lessons.
+- A "Preliminary lesson" / "Important previously studied points" is NOT a numbered lesson: give it "lesson": 0 and its own start page. Number the real lessons EXACTLY as the book does (Lesson One = 1, Lesson Two = 2…), never counting a preliminary lesson.`;
+// "Preliminary lesson / Important previously studied points" is not a numbered lesson in the book: its pages go to the
+// lesson right after it (they prepare that lesson), and the real lessons keep the book's own numbers.
+// (live: Prep 2 Unit 2 — the map called the preliminary "Lesson 1", so "Unit 2 Lesson 1" opened the wrong pages)
+const PRELIM = /preliminary|previously\s+studied|تمهيد|دروس?\s*تمهيدي/i;
+export function foldPreliminary(lessons) {
+    const L = lessons.slice().sort((a, b) => a.start - b.start);
+    const isPre = (l) => PRELIM.test(l.title) || !(l.lesson > 0);
+    if (!L.some(isPre)) return L;
+    const out = [];
+    for (let i = 0; i < L.length; i++) {
+        if (!isPre(L[i])) { out.push({ ...L[i] }); continue; }
+        const next = L.slice(i + 1).find(x => !isPre(x));
+        if (next) next.start = Math.min(next.start, L[i].start);                    // its pages join the next lesson
+    }
+    return out.map((l, k) => ({ ...l, lesson: k + 1 }));                              // the book's numbering: 1, 2, 3…
+}
 export async function buildToc(env, db, book, { meter = null } = {}) {
     await ensureCurriculum(db);
     const grade = gradeOfKey(book);
@@ -196,8 +213,8 @@ export async function buildToc(env, db, book, { meter = null } = {}) {
     try { const j = JSON.parse(js.slice(js.indexOf('{'), js.lastIndexOf('}') + 1)); back = parseInt(j.backMatterStart, 10) || null; } catch (e) { }
     const pint = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
     units = units.map(u => ({ unit: parseInt(u.unit, 10), title: String(u.title || '').slice(0, 120), start: parseInt(u.start, 10), givenEnd: pint(u.end),
-        lessons: (Array.isArray(u.lessons) ? u.lessons : []).map(l => ({ lesson: parseInt(l.lesson, 10), title: String(l.title || '').slice(0, 120), start: parseInt(l.start, 10), givenEnd: pint(l.end) }))
-            .filter(l => l.lesson > 0 && l.start >= 1 && l.start <= total) }))
+        lessons: foldPreliminary((Array.isArray(u.lessons) ? u.lessons : []).map(l => ({ lesson: parseInt(l.lesson, 10), title: String(l.title || '').slice(0, 120), start: parseInt(l.start, 10), givenEnd: pint(l.end) }))
+            .filter(l => l.start >= 1 && l.start <= total)) }))
         .filter(u => u.unit > 0 && u.start >= 1 && u.start <= total).sort((a, b) => a.start - b.start);
     // ranges: a part ends at the page the model gave (if it makes sense), never after the next part starts,
     // never inside the back matter (revision / model exams / answers at the end of the book)
