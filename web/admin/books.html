@@ -35,6 +35,11 @@
         .map ol { margin: 8px 0 0; padding-inline-start: 18px; } .map li { margin: 4px 0; }
         .map ul { margin: 2px 0 6px; padding-inline-start: 16px; color: var(--muted); }
         .map .pg { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; }
+        .bc { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow: auto; }
+        .bc-row { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); }
+        .bc-row.warn { border-color: var(--warning-line, #fcd34d); background: var(--warning-soft); }
+        .bc-h { font-size: 13.5px; } .bc-h .pg { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+        .bc-s { margin-top: 2px; } .bc-p { margin-top: 4px; color: var(--notice-warning-text, #92400e); font-weight: 600; }
         .try { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .try .fin { flex: 1; min-width: 200px; }
     </style>
@@ -95,6 +100,7 @@
                         ${b.inBucket && b.grade ? `<button class="btn btn-primary btn-sm" data-index ${B ? 'disabled' : ''}>${done && done < t ? 'Continue indexing' : done ? 'Index again' : 'Index this book'}</button>` : ''}
                         ${scan && b.inBucket ? `<button class="btn btn-soft btn-sm" data-ocr ${B || !D.aiReady ? 'disabled' : ''} title="About $${(scan * 0.0008).toFixed(2)} — once">${icon('sparkles', 'sm')}Read ${scan} scanned page${scan === 1 ? '' : 's'} with AI (≈ $${(scan * 0.0008).toFixed(2)})</button>` : ''}
                         ${done && b.textPages ? `<button class="btn btn-soft btn-sm" data-map ${B || !D.aiReady ? 'disabled' : ''} title="Units + lessons with their pages — so «Unit 1» / «الدرس التاني» finds the real lesson pages (≈ $0.005)">${b.toc && b.toc.status === 'ready' ? 'Rebuild book map' : 'Build book map'}</button>` : ''}
+                        ${b.toc && b.toc.status === 'ready' ? `<button class="btn btn-ghost btn-sm" data-check ${B ? 'disabled' : ''} title="Free — checks every lesson's pages">${icon('check', 'sm')}Book check</button>` : ''}
                         ${done ? `<button class="btn btn-ghost btn-sm" data-clear ${B ? 'disabled' : ''}>Clear</button>` : ''}
                     </div></div>`;
             }).join('');
@@ -115,6 +121,21 @@
             try { const r = await api('/api/curriculum?action=toc', { body: { key: b.key } }); if (!quiet || !r.ok) Site.toast(r.ok ? `${b.name}: book map ready ✅ ($${(r.costUsd || 0).toFixed(3)})` : 'The AI could not find units in the contents — try again', r.ok ? 'success' : 'error'); }
             catch (err) { Site.toast(err.message || 'Book map failed — try again', 'error'); }
             delete busy[b.key]; await load();
+        }
+        // Book check (free): every lesson's pages, real text, exercise share, title on its first pages
+        async function checkBook(b) {
+            let r;
+            try { r = await api('/api/curriculum?action=check&key=' + encodeURIComponent(b.key)); } catch (err) { return Site.toast(err.message, 'error'); }
+            if (!r.ready) return Site.toast('Build the book map first', 'info');
+            const bad = r.lessons.filter(l => l.problems.length).length;
+            Site.sheet({ iconName: bad ? 'alert' : 'check', title: bad ? `${b.name}: ${bad} lesson${bad === 1 ? '' : 's'} to check` : `${b.name}: all ${r.lessons.length} lessons look right ✅`,
+                subtitle: `${r.total} PDF pages · lessons end at p.${r.lastLessonEnd}${r.backMatterPages ? ` · the last ${r.backMatterPages} pages (revision / exams / answers) are not part of any lesson` : ''}`,
+                html: `<div class="bc">${r.lessons.map(l => `<div class="bc-row ${l.problems.length ? 'warn' : ''}">
+                    <div class="bc-h"><b>${l.problems.length ? '⚠️' : '✅'} Unit ${l.unit} · Lesson ${l.lesson}</b> ${esc(l.title || '')} <span class="pg">p.${l.start}–${l.end} · ${l.pages} pages</span></div>
+                    <div class="bc-s small muted">${Math.round(l.lessonChars / 1000)}k characters of lesson text · ${l.examShare}% exercises · first page: “${esc(l.firstLine)}”</div>
+                    ${l.problems.map(p => `<div class="bc-p small">• ${esc(p)}</div>`).join('')}</div>`).join('')}</div>
+                    ${bad ? '<p class="small muted" style="margin:10px 0 0">Most problems are fixed by <b>Rebuild book map</b>. If one stays, tell Mahmoud which lesson.</p>' : ''}`,
+                actions: [{ label: 'Close', cls: 'btn-ghost' }] });
         }
         const setMsg = (key, msg, pct) => { busy[key] = { msg, pct }; const el = document.querySelector(`.book[data-key="${CSS.escape(key)}"]`); if (el) { el.querySelector('[data-msg]').textContent = msg; if (pct != null) el.querySelector('.bar i').style.width = pct + '%'; } };
 
@@ -164,6 +185,7 @@
             const card = e.target.closest('.book'); if (!card) return;
             const b = D.books.find(x => x.key === card.dataset.key); if (!b || busy[b.key]) return;
             if (e.target.closest('[data-map]')) return buildMap(b);
+            if (e.target.closest('[data-check]')) return checkBook(b);
             if (e.target.closest('[data-index]')) return indexBook(b, b.pagesDone && b.pagesDone < b.totalPages ? b.pagesDone + 1 : 1);
             if (e.target.closest('[data-ocr]')) return Site.sheet({ iconName: 'sparkles', title: `Read ${b.scanned.length} scanned pages with AI?`, subtitle: `About $${(b.scanned.length * 0.0008).toFixed(2)}, once (counted as staff use). Keep this page open until it finishes.`,
                 actions: [{ label: 'Yes, read them', onClick: (c) => { c(); ocrBook(b); } }, { label: 'Cancel', cls: 'btn-ghost' }] });

@@ -171,8 +171,10 @@ async function pageTexts(db, book, from, to) {
 }
 const TOC_SYSTEM = `You map an Egyptian school science textbook (a PDF) into its units and lessons.
 You get (1) the text of its first pages (with the table of contents / فهرس) and (2) for EVERY PDF page, its first and last lines (headings, running headers/footers).
-Return ONLY JSON, no markdown: {"units":[{"unit":1,"title":"...","start":<PDF page>,"lessons":[{"lesson":1,"title":"...","start":<PDF page>}]}]}
+Return ONLY JSON, no markdown: {"units":[{"unit":1,"title":"...","start":<PDF page>,"end":<PDF page>,"lessons":[{"lesson":1,"title":"...","start":<PDF page>,"end":<PDF page>}]}],"backMatterStart":<PDF page or null>}
 - "start" = the PDF page number (the number after "p" in the list) where that unit / lesson REALLY begins — its first content page. Printed page numbers in the contents are usually different from PDF page numbers: use the page headings/footers to find the real PDF page.
+- "end" = the LAST PDF page that still belongs to that lesson / unit (its explanation, activities and its own exercises). Stop BEFORE what follows it: the next lesson, a unit revision, unit / term model exams, final exams, answer keys, glossary or other back matter.
+- "backMatterStart" = the first PDF page after the last lesson's content where only revision / model exams / final exams / answers / back matter follow (null if none).
 - Unit start = the unit's first page (its cover page is fine). Lessons in reading order. Keep titles short, as printed (English or Arabic).
 - Don't include the contents, preface, model exams or answer pages as lessons.`;
 export async function buildToc(env, db, book, { meter = null } = {}) {
@@ -190,13 +192,29 @@ export async function buildToc(env, db, book, { meter = null } = {}) {
     let units = [];
     try { units = (JSON.parse(js.slice(js.indexOf('{'), js.lastIndexOf('}') + 1)).units || []); } catch (e) { units = []; }
     // tidy + page ranges: each part ends where the next one starts
-    units = units.map(u => ({ unit: parseInt(u.unit, 10), title: String(u.title || '').slice(0, 120), start: parseInt(u.start, 10),
-        lessons: (Array.isArray(u.lessons) ? u.lessons : []).map(l => ({ lesson: parseInt(l.lesson, 10), title: String(l.title || '').slice(0, 120), start: parseInt(l.start, 10) }))
+    let back = null;
+    try { const j = JSON.parse(js.slice(js.indexOf('{'), js.lastIndexOf('}') + 1)); back = parseInt(j.backMatterStart, 10) || null; } catch (e) { }
+    const pint = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
+    units = units.map(u => ({ unit: parseInt(u.unit, 10), title: String(u.title || '').slice(0, 120), start: parseInt(u.start, 10), givenEnd: pint(u.end),
+        lessons: (Array.isArray(u.lessons) ? u.lessons : []).map(l => ({ lesson: parseInt(l.lesson, 10), title: String(l.title || '').slice(0, 120), start: parseInt(l.start, 10), givenEnd: pint(l.end) }))
             .filter(l => l.lesson > 0 && l.start >= 1 && l.start <= total) }))
         .filter(u => u.unit > 0 && u.start >= 1 && u.start <= total).sort((a, b) => a.start - b.start);
+    // ranges: a part ends at the page the model gave (if it makes sense), never after the next part starts,
+    // never inside the back matter (revision / model exams / answers at the end of the book)
+    const bookEnd = back && back > (units.length ? units[units.length - 1].start : 0) && back <= total ? back - 1 : total;
+    const within = (given, lo, hi) => given && given >= lo && given <= hi ? given : hi;
     units.forEach((u, i) => {
-        u.end = i + 1 < units.length ? Math.max(u.start, units[i + 1].start - 1) : total;
-        u.lessons.sort((a, b) => a.start - b.start).forEach((l, j, L) => { l.start = Math.max(l.start, u.start); l.end = j + 1 < L.length ? Math.max(l.start, L[j + 1].start - 1) : u.end; });
+        const hardEnd = i + 1 < units.length ? Math.max(u.start, units[i + 1].start - 1) : bookEnd;
+        u.end = within(u.givenEnd, u.start, hardEnd);
+        u.lessons.sort((a, b) => a.start - b.start).forEach((l, j, L) => {
+            l.start = Math.min(Math.max(l.start, u.start), u.end);
+            const hard = j + 1 < L.length ? Math.max(l.start, L[j + 1].start - 1) : u.end;
+            l.end = within(l.givenEnd, l.start, hard);
+            delete l.givenEnd;
+        });
+        // the unit covers at least up to its last lesson
+        if (u.lessons.length) u.end = Math.max(u.end, u.lessons[u.lessons.length - 1].end);
+        delete u.givenEnd;
     });
     const ok = units.length > 0;
     await db.prepare(`INSERT INTO curriculum_toc (book, grade, status, units, total_pages, cost_usd, error, built_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -205,6 +223,43 @@ export async function buildToc(env, db, book, { meter = null } = {}) {
         .bind(book, grade, ok ? 'ready' : 'failed', JSON.stringify(units), total, r.costUsd || 0, ok ? null : 'No units found in the contents').run();
     return { units, costUsd: r.costUsd || 0 };
 }
+/**
+ * Book check (free — no AI): for every lesson of the map → pages, real lesson text, share of exercise pages,
+ * is its title on its first pages, and plain-words problems. So Miss Marwa can trust the map before using it.
+ */
+export async function bookCheck(db, book) {
+    await ensureCurriculum(db);
+    const row = await db.prepare('SELECT units, total_pages, status FROM curriculum_toc WHERE book = ?').bind(book).first();
+    if (!row || row.status !== 'ready') return { ready: false };
+    let units = []; try { units = JSON.parse(row.units) || []; } catch (e) { }
+    const total = Number(row.total_pages) || 0;
+    const all = await pageTexts(db, book, 1, total || 99999);
+    const lastEnd = units.reduce((m, u) => Math.max(m, u.end || 0), 0);
+    const words = (t) => norm(t).replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(w => w.length >= 4 && !STOP.has(w));
+    const lessons = [];
+    for (const u of units) for (const l of (u.lessons || [])) {
+        let lessonChars = 0, examChunks = 0, chunks = 0, empty = 0;
+        for (let p = l.start; p <= l.end; p++) {
+            const t = all.get(p) || '';
+            if (t.trim().length < 40) empty++;
+            for (const c of chunksOf(t)) { chunks++; const k = pageKind(c); if (k === 'lesson') lessonChars += c.length; else if (k === 'exam') examChunks++; }
+        }
+        const pages = l.end - l.start + 1;
+        // most of the title's words together on ONE of the lesson's first 3 pages
+        const tw = words(l.title), need = Math.max(1, Math.ceil(tw.length * 0.7));
+        const titleOk = !tw.length || [l.start, l.start + 1, l.start + 2].some(p => { const t = norm(all.get(p) || ''); return tw.filter(w => t.includes(w)).length >= need; });
+        const problems = [];
+        if (pages > 60) problems.push(`Very long (${pages} pages) — it may include revision or exam pages. Check its last page.`);
+        if (lessonChars < 3000) problems.push('Very little lesson text found — check its pages (wrong range or unreadable pages).');
+        if (chunks && examChunks / chunks > 0.6) problems.push('Mostly exercise / exam pages — the explanation pages may be elsewhere.');
+        if (!titleOk) problems.push(`Its title isn't on its first pages (p.${l.start}–${l.start + 2}) — the start page may be wrong.`);
+        if (empty > pages / 3) problems.push(`${empty} pages have no text — read them with AI first.`);
+        lessons.push({ unit: u.unit, lesson: l.lesson, title: l.title, start: l.start, end: l.end, pages, lessonChars, examShare: chunks ? Math.round(examChunks / chunks * 100) : 0,
+            titleOk, firstLine: (all.get(l.start) || '').replace(/\s+/g, ' ').trim().slice(0, 120), problems });
+    }
+    return { ready: true, total, lastLessonEnd: lastEnd, backMatterPages: total && lastEnd ? Math.max(0, total - lastEnd) : 0, lessons, ok: lessons.every(x => !x.problems.length) };
+}
+
 /** The grade's book map → [{ book, units }]; builds it once if missing (staff-paid, ≈ $0.005). */
 export async function gradeToc(env, db, grade, { build = true } = {}) {
     await ensureCurriculum(db);
@@ -422,6 +477,11 @@ export async function onRequest(context) {
             }
             const obj = await B.get(key);
             return new Response(obj.body, { headers: { ...base, 'Content-Length': String(size) } });
+        }
+        if (action === 'check') {
+            const key = url.searchParams.get('key') || '';
+            if (!okKey(key)) return bad('Not a book', 400);
+            return json(await bookCheck(db, key));
         }
         if (action === 'search') {
             const grade = String(url.searchParams.get('grade') || '').toLowerCase(), q = url.searchParams.get('q') || '';
