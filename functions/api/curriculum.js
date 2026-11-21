@@ -79,19 +79,44 @@ export async function ensureCurriculum(db) {
         db.prepare(`CREATE VIRTUAL TABLE IF NOT EXISTS curriculum_fts USING fts5(norm, text UNINDEXED, grade UNINDEXED, book UNINDEXED, page UNINDEXED, tokenize = 'unicode61 remove_diacritics 2')`),
         // the book map: units + lessons with their PDF page ranges (built once per book from its contents pages)
         db.prepare(`CREATE TABLE IF NOT EXISTS curriculum_toc (book TEXT PRIMARY KEY, grade TEXT, status TEXT, units TEXT, total_pages INTEGER DEFAULT 0,
-            cost_usd REAL DEFAULT 0, error TEXT, built_at TEXT DEFAULT CURRENT_TIMESTAMP)`)
+            cost_usd REAL DEFAULT 0, error TEXT, built_at TEXT DEFAULT CURRENT_TIMESTAMP)`),
+        // D1 READ LIMIT FIX: the search index (FTS5) can't look rows up by book/page — every "this page / these pages"
+        // query scanned the WHOLE index (all chunks of all books). Reading 1,500 pages in one day → tens of millions of
+        // rows read → the free daily limit → the whole site down. Now:
+        //   curriculum_text  = each page's text by (book, page)  → lesson pages are read by key, never by scanning
+        //   index rows get a fixed rowid per (book, page)        → a page is replaced by rowid range, never by scanning
+        //   curriculum_fts_old = (book, page) → rowid of rows saved before this change, so they can be replaced the same way
+        db.prepare(`CREATE TABLE IF NOT EXISTS curriculum_text (book TEXT NOT NULL, page INTEGER NOT NULL, text TEXT, PRIMARY KEY (book, page))`),
+        db.prepare(`CREATE TABLE IF NOT EXISTS curriculum_fts_old (book TEXT NOT NULL, page INTEGER NOT NULL, rid INTEGER NOT NULL, PRIMARY KEY (book, page, rid)) WITHOUT ROWID`),
+        db.prepare(`CREATE TABLE IF NOT EXISTS curriculum_meta (k TEXT PRIMARY KEY, v TEXT)`)
     ]);
+    // one-time move of what's already indexed (one pass over the index — then never again)
+    if (!(await db.prepare(`SELECT 1 FROM curriculum_meta WHERE k = 'v2'`).first())) {
+        await db.batch([
+            db.prepare(`INSERT OR IGNORE INTO curriculum_fts_old (book, page, rid) SELECT book, page, rowid FROM curriculum_fts WHERE rowid < ${FIXED_ROWID_FROM}`),
+            db.prepare(`INSERT OR REPLACE INTO curriculum_text (book, page, text)
+                SELECT book, page, group_concat(text, char(10)) FROM (SELECT book, page, text FROM curriculum_fts ORDER BY book, page, rowid) GROUP BY book, page`),
+            db.prepare(`INSERT OR REPLACE INTO curriculum_meta (k, v) VALUES ('v2', CURRENT_TIMESTAMP)`)
+        ]);
+    }
     readyDbs.add(db);
 }
+// fixed index rowids: book number × 10,000,000 + page × 1,000 + chunk  (book number 100…99,999 from its file name)
+const FIXED_ROWID_FROM = 1_000_000_000;
+function bookBase(book) { let h = 0; for (const ch of String(book)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return (100 + (h % 99900)) * 10_000_000; }
 
 /** Save one page's text (replaces that page). source: 'text' (pdf.js) | 'ocr' (Claude vision) */
 async function savePage(db, book, grade, n, text, source) {
-    const chunks = chunksOf(text);
+    const chunks = chunksOf(text).slice(0, 999), base = bookBase(book) + n * 1000;
     const st = [
-        db.prepare('DELETE FROM curriculum_fts WHERE book = ? AND page = ?').bind(book, n),
+        // replace the page by rowid only (no scan of the index)
+        db.prepare('DELETE FROM curriculum_fts WHERE rowid IN (SELECT rid FROM curriculum_fts_old WHERE book = ? AND page = ?)').bind(book, n),
+        db.prepare('DELETE FROM curriculum_fts_old WHERE book = ? AND page = ?').bind(book, n),
+        db.prepare('DELETE FROM curriculum_fts WHERE rowid BETWEEN ? AND ? AND book = ?').bind(base, base + 999, book),
+        db.prepare('INSERT OR REPLACE INTO curriculum_text (book, page, text) VALUES (?, ?, ?)').bind(book, n, String(text || '').trim()),
         db.prepare(`INSERT INTO curriculum_pages (book, page, grade, chars, source, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(book, page) DO UPDATE SET grade = excluded.grade, chars = excluded.chars, source = excluded.source, updated_at = CURRENT_TIMESTAMP`).bind(book, n, grade, String(text || '').trim().length, source),
-        ...chunks.map(c => db.prepare('INSERT INTO curriculum_fts (norm, text, grade, book, page) VALUES (?, ?, ?, ?, ?)').bind(norm(c), c, grade, book, n))
+        ...chunks.map((c, i) => db.prepare('INSERT INTO curriculum_fts (rowid, norm, text, grade, book, page) VALUES (?, ?, ?, ?, ?, ?)').bind(base + i, norm(c), c, grade, book, n))
     ];
     await db.batch(st);
     return chunks.length;
@@ -164,9 +189,10 @@ export function refFromText(text) {
 // Built automatically the first time a unit/lesson is asked about, or from the Curriculum books page.
 // ---------------------------------------------------------------------------------------------------------------
 export async function pageTexts(db, book, from, to) {
-    const { results } = await db.prepare('SELECT page, text FROM curriculum_fts WHERE book = ? AND page BETWEEN ? AND ? ORDER BY page, rowid').bind(book, from, to).all();
+    await ensureCurriculum(db);
+    const { results } = await db.prepare('SELECT page, text FROM curriculum_text WHERE book = ? AND page BETWEEN ? AND ? ORDER BY page').bind(book, from, to).all();
     const m = new Map();
-    for (const r of results || []) { const p = Number(r.page); m.set(p, (m.get(p) ? m.get(p) + '\n' : '') + r.text); }
+    for (const r of results || []) if (r.text) m.set(Number(r.page), r.text);
     return m;
 }
 const TOC_SYSTEM = `You map an Egyptian school science textbook (a PDF) into its units and lessons.
@@ -572,7 +598,10 @@ export async function onRequest(context) {
         }
         if (action === 'clear') {
             await db.batch([
-                db.prepare('DELETE FROM curriculum_fts WHERE book = ?').bind(key),
+                db.prepare('DELETE FROM curriculum_fts WHERE rowid IN (SELECT rid FROM curriculum_fts_old WHERE book = ?)').bind(key),
+                db.prepare('DELETE FROM curriculum_fts WHERE rowid BETWEEN ? AND ? AND book = ?').bind(bookBase(key), bookBase(key) + 9_999_999, key),
+                db.prepare('DELETE FROM curriculum_fts_old WHERE book = ?').bind(key),
+                db.prepare('DELETE FROM curriculum_text WHERE book = ?').bind(key),
                 db.prepare('DELETE FROM curriculum_pages WHERE book = ?').bind(key),
                 db.prepare('DELETE FROM curriculum_books WHERE "key" = ?').bind(key),
                 db.prepare('DELETE FROM curriculum_toc WHERE book = ?').bind(key)
