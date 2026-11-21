@@ -77,7 +77,7 @@
     .sx-tf { white-space: nowrap; font-weight: 700; color: var(--navy); }
     .sx-ans { color: #166534; font-weight: 600; } .sx-ans b { color: #15803D; }
     .sx-luck { text-align: center; font-weight: 800; color: var(--blue); margin-top: 18px; font-size: 16px; }
-    .sx-pdf .sx-page { max-width: none; padding: 0 2px; margin: 0; } .sx-pdf .sx-keypage { margin-top: 0; padding-top: 0; border-top: 0; }
+    .sx-pdf .sx-page { max-width: none; width: 100%; padding: 0 1px; margin: 0; } .sx-pdf .sx-keypage { margin-top: 0; padding-top: 0; border-top: 0; }
     .sx-keypage { break-before: page; } .sx-keytab { margin-top: 4px; color: var(--ink); font-weight: 400; } .sx-keytab td { color: #166534; } .sx-keypage .sx-h1 { font-size: 20px; }
     .sx-src { color: #94A3B8; font-size: 11px; margin-left: 4px; white-space: nowrap; }
     @media screen { .sx-keypage { margin-top: 26px; padding-top: 20px; border-top: 2px dashed var(--line); } }
@@ -172,45 +172,124 @@
     }
 
     // ---------------------------------------------------------------- PDF file download (one tap → a .pdf file, no print window)
-    // html2pdf (html2canvas + jsPDF) draws each page of the template at high resolution into an A4 PDF.
-    // Each .sx-page (a lesson / the exam / the model answer) is drawn separately → long documents never hit canvas limits.
-    const LIB = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-    let libP = null;
-    const PDF_W = 711;     // A4 width minus the 11 mm side margins, in CSS px (188 mm)
-    function loadLib() {
-        if (window.html2pdf) return Promise.resolve();
-        return libP = libP || new Promise((res, rej) => {
-            const s = document.createElement('script'); s.src = LIB; s.async = true;
-            s.onload = () => window.html2pdf ? res() : rej(new Error('PDF tool did not load'));
-            s.onerror = () => { libP = null; s.remove(); rej(new Error('PDF tool did not load')); };
-            document.head.appendChild(s);
-            setTimeout(() => rej(new Error('PDF tool took too long to load')), 25000);
-        });
+    // Our own: the template is laid out at A4 width, cut into pages between blocks (never through a block, a heading
+    // stays with what follows), each page drawn by the browser itself (SVG foreignObject → canvas, 2×) and packed
+    // into an A4 PDF with pdf-lib (bundled with the site — no outside service). Colours / bold / Arabic exactly as on screen.
+    const MM = 96 / 25.4, A4W = 210, A4H = 297, MARGIN = { t: 11, r: 11, b: 15, l: 11 };
+    const CONTENT_W = Math.round((A4W - MARGIN.l - MARGIN.r) * MM);          // 711 px
+    const CONTENT_H = Math.floor((A4H - MARGIN.t - MARGIN.b) * MM);          // 1028 px
+    let pdfLibP = null;
+    const loadPdfLib = () => window.PDFLib ? Promise.resolve() : (pdfLibP = pdfLibP || new Promise((res, rej) => {
+        const s = document.createElement('script'); s.src = '/admin/assets/vendor/pdf-lib-1.17.1.min.js';
+        s.onload = () => window.PDFLib ? res() : rej(new Error('PDF tool did not load'));
+        s.onerror = () => { pdfLibP = null; s.remove(); rej(new Error('PDF tool did not load')); };
+        document.head.appendChild(s);
+    }));
+    const toDataUrl = (blob) => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.onerror = () => r(null); f.readAsDataURL(blob); });
+    const fetchData = async (url) => { try { const r = await fetch(url, { mode: 'cors', credentials: 'omit' }); return r.ok ? await toDataUrl(await r.blob()) : null; } catch (e) { return null; } };
+    // the fonts, embedded (an SVG image can't load outside files) — latin + arabic subsets only; skipped if offline
+    let fontCssP = null;
+    function fontCss() {
+        return fontCssP = fontCssP || (async () => {
+            try {
+                const r = await fetch('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;700&display=block', { credentials: 'omit' });
+                if (!r.ok) return '';
+                const css = await r.text();
+                const faces = css.split('/*').filter(x => /^\s*(latin|arabic)\s*\*\//.test(x)).map(x => x.slice(x.indexOf('@font-face')));
+                const out = [];
+                for (const f of faces) {
+                    const m = f.match(/url\((https:[^)]+)\)/); if (!m) continue;
+                    const d = await fetchData(m[1]); if (d) out.push(f.replace(m[1], d));
+                }
+                return out.join('\n');
+            } catch (e) { return ''; }
+        })();
     }
-    const fileName = (t) => (String(t || 'Science Academy').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90) || 'Science Academy') + '.pdf';
-    async function download(inner, title) {
-        await loadLib(); css();
+    // where a page may end: the top of each block (or of a list item / table row inside a block taller than a page)
+    function breakPoints(page) {
+        const top0 = page.getBoundingClientRect().top;
+        const y = (el) => el.getBoundingClientRect().top - top0;
+        const atoms = [...page.querySelectorAll(':scope > *')];
+        const pts = [];
+        atoms.forEach((el, i) => {
+            const prev = atoms[i - 1];
+            const glued = prev && prev.matches('.sx-sec, .sx-st, .sx-h1, .sx-ex-h, .sx-brand, .sx-fields, .sx-inst');   // never leave a heading alone at the bottom
+            if (i && !glued) pts.push(y(el));
+            if (el.getBoundingClientRect().height > CONTENT_H * 0.6)
+                el.querySelectorAll('li, tr, .sx-arr > div:nth-child(3n+1), .sx-opt:nth-child(odd)').forEach((c, k) => { if (k) pts.push(y(c)); });
+        });
+        return [...new Set(pts.map(v => Math.floor(v)))].sort((a, b) => a - b);
+    }
+    function slices(page) {
+        const H = Math.ceil(page.getBoundingClientRect().height), pts = breakPoints(page), out = [];
+        let s = 0;
+        while (s < H - 2) {
+            const lim = s + CONTENT_H;
+            if (lim >= H) { out.push([s, H]); break; }
+            const cands = pts.filter(p => p > s + 40 && p <= lim);
+            const e = cands.length ? cands[cands.length - 1] : lim;           // a single block taller than a page: cut it
+            out.push([s, e]); s = e;
+        }
+        return out;
+    }
+    async function drawSlice(xhtml, css, s, e, scale) {
+        const h = e - s;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CONTENT_W * scale}" height="${Math.ceil(h * scale)}" viewBox="0 0 ${CONTENT_W} ${h}"><foreignObject x="0" y="0" width="${CONTENT_W}" height="${h}">`
+            + `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${CONTENT_W}px;height:${h}px;overflow:hidden;position:relative;background:#fff"><style>${css.replace(/<\/style/gi, '')}</style>`
+            + `<div class="sx sx-pdf" style="position:absolute;left:0;top:${-s}px;width:${CONTENT_W}px">${xhtml}</div></div></foreignObject></svg>`;
+        const img = new Image();
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = CONTENT_W * scale; c.height = Math.ceil(h * scale);
+        const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+        return { jpg: c.toDataURL('image/jpeg', 0.92), h };
+    }
+    const fileName = (t) => (String(t || 'Science Academy').replace(/[·•—–]/g, '-').replace(/[^\x20-\x7E؀-ۿ]/g, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90) || 'Science Academy') + '.pdf';
+    /** → { bytes, pages } (and saves the file unless o.save === false) */
+    async function download(inner, title, o = {}) {
+        css();
+        const [, fonts] = await Promise.all([loadPdfLib(), fontCss()]);
+        // lay it out at the PDF width, out of sight (light colours whatever the page theme)
         const host = document.createElement('div');
-        host.className = 'sx-pdf';
-        host.style.cssText = `position:absolute;left:-12000px;top:0;width:${PDF_W}px;background:#fff`;
+        host.className = 'sx-pdf-host';
+        host.style.cssText = `position:absolute;left:-30000px;top:0;width:${CONTENT_W}px;background:#fff`;
         host.innerHTML = inner;
+        const root = host.firstElementChild; root.classList.add('sx-pdf');
         document.body.appendChild(host);
         try {
+            const imgs = [...host.querySelectorAll('img')];
+            await Promise.all(imgs.map(async i => { const d = await fetchData(i.src); if (d) i.src = d; else i.remove(); }));
+            await Promise.all(imgs.filter(i => i.isConnected).map(i => i.decode().catch(() => { })));
             if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 3000))]);
-            await Promise.all([...host.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
-            const pages = [...host.querySelectorAll('.sx-page')].map(pg => { const w = document.createElement('div'); w.className = 'sx sx-pdf'; w.style.cssText = `width:${PDF_W}px;background:#fff;color:#0F172A`; w.appendChild(pg.cloneNode(true)); host.appendChild(w); return w; });
-            const tallest = Math.max(...pages.map(p => p.scrollHeight), 1);
-            const scale = Math.max(1.2, Math.min(2, 30000 / tallest));            // stay under the browser's canvas size limit
-            const opt = { margin: [11, 11, 15, 11], filename: fileName(title), image: { type: 'jpeg', quality: 0.95 },
-                html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: PDF_W },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-                pagebreak: { mode: ['css', 'legacy'], avoid: ['.sx-blk', '.sx-q', 'tr', '.sx-st', '.sx-brand', '.sx-h1', '.sx-ex-h', '.sx-fields', 'li'] } };
-            let w = window.html2pdf().set(opt).from(pages[0]).toPdf();
-            for (const pg of pages.slice(1)) w = w.get('pdf').then(pdf => { pdf.addPage(); }).from(pg).toContainer().toCanvas().toPdf();
-            await w.get('pdf').then(pdf => {
-                const n = pdf.internal.getNumberOfPages();
-                for (let i = 1; i <= n; i++) { pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(100, 116, 139); pdf.text(`Science Academy - Miss Marwa   |   page ${i} of ${n}`, 105, 290, { align: 'center' }); }
-            }).save();
+            const style = fonts + '\n' + CSS;
+            const ser = new XMLSerializer();
+            const shots = [];
+            for (const page of root.querySelectorAll('.sx-page')) {
+                const xhtml = ser.serializeToString(page);
+                for (const [s, e] of slices(page)) shots.push(await drawSlice(xhtml, style, s, e, o.scale || 2));
+            }
+            const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+            const pdf = await PDFDocument.create();
+            pdf.setTitle(String(title || 'Science Academy')); pdf.setAuthor('Science Academy - Miss Marwa'); pdf.setCreator('Science Academy staff portal');
+            const font = await pdf.embedFont(StandardFonts.Helvetica);
+            const pt = 72 / 25.4, n = shots.length;
+            for (let i = 0; i < n; i++) {
+                const pg = pdf.addPage([A4W * pt, A4H * pt]);
+                const im = await pdf.embedJpg(shots[i].jpg);
+                const w = (A4W - MARGIN.l - MARGIN.r) * pt, h = shots[i].h / MM * pt;
+                pg.drawImage(im, { x: MARGIN.l * pt, y: (A4H - MARGIN.t) * pt - h, width: w, height: h });
+                const foot = `Science Academy - Miss Marwa   |   page ${i + 1} of ${n}`;
+                pg.drawText(foot, { x: (A4W * pt - font.widthOfTextAtSize(foot, 8)) / 2, y: 8 * pt, size: 8, font, color: rgb(0.39, 0.45, 0.55) });
+            }
+            const bytes = await pdf.save();
+            if (o.save !== false) {
+                const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+                const a = document.createElement('a'); a.href = url; a.download = fileName(title);
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 30000);
+            }
+            return { bytes, pages: n, name: fileName(title) };
         } finally { host.remove(); }
     }
     // the editable text → the stored text: <b> back to **bold**, line breaks kept, nothing else

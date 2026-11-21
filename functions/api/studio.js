@@ -155,7 +155,7 @@ Quality rules:
 - Every question must be answerable from ONE specific page of the book above — put it in "p". Never ask about anything that isn't in the pages.
 - Spread the questions over ALL the chosen lessons and ideas (not only the first page). No two questions test the same fact.
 - Clear, exam-style English like Egyptian school exams. Mix easy, medium and a few harder (application) questions.
-- MCQ: 4 options, exactly ONE correct, wrong options plausible and from the same topic, no "all of the above", vary the position of the correct answer.
+- MCQ: 4 options, exactly ONE correct, no "all of the above", vary the position of the correct answer. The wrong options must be real terms / values that appear in THESE pages (same topic, plausible) — never a term that isn't in the pages (e.g. a device or process from another lesson or grade), and never silly fillers like "stick to".
 - Complete: 1–2 blanks, each blank a key word from the book. ✓/✗: about half false, and a false one is wrong in ONE key detail; give its correction.
 - No question may depend on a picture (students only see text).
 ${instructions ? `\nMiss Marwa's instructions (follow them): ${instructions}\n` : ''}
