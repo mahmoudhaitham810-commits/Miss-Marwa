@@ -62,13 +62,19 @@
 
     // ---------- API with in-place re-login (unsaved work stays on screen) ----------
     let reloginPromise = null;
-    async function api(path, { method, body } = {}) {
+    async function api(path, { method, body, timeout } = {}) {
         const opts = { method: method || (body !== undefined ? 'POST' : 'GET'), credentials: 'same-origin', headers: {} };
         if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-        let res = await fetch(path, opts);
+        // optional time limit (ms): a request that never answers must not freeze a long job
+        const go = () => {
+            if (!timeout) return fetch(path, opts);
+            const ac = new AbortController(), t = setTimeout(() => ac.abort(), timeout);
+            return fetch(path, { ...opts, signal: ac.signal }).catch(e => { if (e.name === 'AbortError') { const err = new Error('No answer in time'); err.timeout = true; throw err; } throw e; }).finally(() => clearTimeout(t));
+        };
+        let res = await go();
         if (res.status === 401) {
             await relogin();
-            res = await fetch(path, opts);
+            res = await go();
         }
         let data = {};
         try { data = await res.json(); } catch (e) { }
