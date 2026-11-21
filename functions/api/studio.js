@@ -228,6 +228,12 @@ export function cleanSections(raw, wanted) {
         return { type: w.type, title: SECTION_TYPES[w.type].title, marks: w.marks, wanted: w.count, items };
     });
 }
+// a "p" outside the chosen lessons' pages is a wrong citation → removed (never shown as a fake page)
+export function keepPages(parts, list) {
+    const ok = (p) => parts.some(x => p >= x.from && p <= x.to);
+    for (const o of list) if (o && o.p != null && !ok(o.p)) delete o.p;
+    return list;
+}
 // coverage: is each checklist key in the summary text?
 export function blockText(b) { return [b.title, b.term, b.def, b.text, b.q, b.a, ...(b.items || []).map(x => typeof x === 'string' ? x : [x.from, x.to, x.k, x.v].join(' ')), ...(b.cols || []), ...(b.rows || []).flatMap(r => [r.label, ...r.cells])].filter(Boolean).join(' '); }
 export function coverage(checklist, blocks) {
@@ -319,6 +325,7 @@ export async function onRequest(context) {
                 const c2 = await ai(sys, task, 14000, 'studio-summary'); cost += c2.cost;
                 let blocks = ((c2.data && c2.data.blocks) || []).map(cleanBlock).filter(Boolean);
                 if (!blocks.length) return bad('The summary came back empty — try again.', 502, { code: 'AI_ERROR' });
+                keepPages([part], blocks);
                 // 3) coverage in code → 4) add what's missing (once)
                 let cov = coverage(checklist, blocks);
                 if (cov.missing.length) {
@@ -328,6 +335,7 @@ export async function onRequest(context) {
                     ins.sort((a, b) => b.after - a.after).forEach(x => blocks.splice(Math.min(x.after + 1, blocks.length), 0, x.block));
                     cov = coverage(checklist, blocks);
                 }
+                keepPages([part], blocks);
                 const lessonDoc = { unit: part.unit, unitTitle: part.unitTitle, lesson: part.lesson, title: str(c2.data.title, 200) || part.label, from: part.from, to: part.to, blocks,
                     coverage: { total: cov.total, covered: cov.covered, missing: cov.missing.map(m => m.key).slice(0, 30) } };
                 // save: a new doc, or append / replace this lesson in an existing one
@@ -380,6 +388,7 @@ export async function onRequest(context) {
                     const item = s && cleanItem(s.type, f.item);
                     if (s && item && j >= 0 && j < s.items.length) { s.items[j] = item; fixed++; }
                 }
+                secs.forEach(s => keepPages(parts, s.items));
                 const content = { title, subtitle: `Science | ${GRADE_EN[grade] || ''} | ${parts.map(p => p.title).filter(Boolean).join(' & ')}`, label, sections: secs, checked: { fixed } };
                 const id = newId(action);
                 await db.prepare('INSERT INTO studio_docs (id, kind, grade, unit, lessons, title, content, settings, cost_usd, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -405,6 +414,7 @@ Return ONLY JSON: {"item":{…}}`;
                 const r = await ai(sys, task, 1200, 'studio-' + doc.kind);
                 const item = cleanItem(s.type, r.data && r.data.item);
                 if (!item) return bad('Could not make a new question — try again', 502, { code: 'AI_ERROR' });
+                keepPages(parts, [item]);
                 s.items[j] = item;
                 await db.prepare('UPDATE studio_docs SET content = ?, cost_usd = cost_usd + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(JSON.stringify(doc.content), r.cost, doc.id).run();
                 return json({ item, costUsd: r.cost });

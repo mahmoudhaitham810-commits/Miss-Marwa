@@ -78,7 +78,7 @@
     .sx-ans { color: #166534; font-weight: 600; } .sx-ans b { color: #15803D; }
     .sx-luck { text-align: center; font-weight: 800; color: var(--blue); margin-top: 18px; font-size: 16px; }
     .sx-pdf .sx-page { max-width: none; padding: 0 2px; margin: 0; } .sx-pdf .sx-keypage { margin-top: 0; padding-top: 0; border-top: 0; }
-    .sx-keypage { break-before: page; } .sx-keypage .sx-h1 { font-size: 20px; }
+    .sx-keypage { break-before: page; } .sx-keytab { margin-top: 4px; color: var(--ink); font-weight: 400; } .sx-keytab td { color: #166534; } .sx-keypage .sx-h1 { font-size: 20px; }
     .sx-src { color: #94A3B8; font-size: 11px; margin-left: 4px; white-space: nowrap; }
     @media screen { .sx-keypage { margin-top: 26px; padding-top: 20px; border-top: 2px dashed var(--line); } }
     @media (max-width: 640px) { .sx-page { padding: 18px 14px 24px; } .sx-opts { grid-template-columns: 1fr 1fr; } .sx-fields { grid-template-columns: 1fr 1fr; } .sx-brand .b3 { display: none; } .sx-arr { grid-template-columns: 1fr; } .sx-arr .ar { transform: rotate(90deg); justify-self: start; } }
@@ -140,7 +140,10 @@
             case 'mcq': return `<b>${LETTER[q.answer]})</b> ${esc(q.options[q.answer])}`;
             case 'complete': return q.answer.map(esc).join(' — ');
             case 'tf': return q.answer ? '<b>(✓)</b>' : `<b>(✗)</b> ${esc(q.correction || '')}`;
-            case 'compare': return q.points.map((pt, k) => `<div><b>${esc(pt)}:</b> ${esc(q.a)}: ${esc(q.answer[k] && q.answer[k][0])} · ${esc(q.b)}: ${esc(q.answer[k] && q.answer[k][1])}</div>`).join('');
+            case 'compare': {
+                const cut = (name, v) => { const t = String(v || ''); const re = new RegExp('^\\s*' + String(name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[:\\-–]\\s*', 'i'); return name ? t.replace(re, '') : t; };
+                return `<table class="sx-keytab"><thead><tr><th></th><th>${esc(q.a)}</th><th>${esc(q.b)}</th></tr></thead><tbody>${q.points.map((pt, k) => `<tr><td class="rl">${esc(pt)}</td><td>${esc(cut(q.a, q.answer[k] && q.answer[k][0]))}</td><td>${esc(cut(q.b, q.answer[k] && q.answer[k][1]))}</td></tr>`).join('')}</tbody></table>`;
+            }
             default: return esc(q.answer);
         }
     }
@@ -173,6 +176,7 @@
     // Each .sx-page (a lesson / the exam / the model answer) is drawn separately → long documents never hit canvas limits.
     const LIB = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
     let libP = null;
+    const PDF_W = 711;     // A4 width minus the 11 mm side margins, in CSS px (188 mm)
     function loadLib() {
         if (window.html2pdf) return Promise.resolve();
         return libP = libP || new Promise((res, rej) => {
@@ -188,17 +192,17 @@
         await loadLib(); css();
         const host = document.createElement('div');
         host.className = 'sx-pdf';
-        host.style.cssText = 'position:fixed;left:-12000px;top:0;width:760px;background:#fff;z-index:-1';
+        host.style.cssText = `position:absolute;left:-12000px;top:0;width:${PDF_W}px;background:#fff`;
         host.innerHTML = inner;
         document.body.appendChild(host);
         try {
             if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 3000))]);
             await Promise.all([...host.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
-            const pages = [...host.querySelectorAll('.sx-page')];
+            const pages = [...host.querySelectorAll('.sx-page')].map(pg => { const w = document.createElement('div'); w.className = 'sx sx-pdf'; w.style.cssText = `width:${PDF_W}px;background:#fff;color:#0F172A`; w.appendChild(pg.cloneNode(true)); host.appendChild(w); return w; });
             const tallest = Math.max(...pages.map(p => p.scrollHeight), 1);
             const scale = Math.max(1.2, Math.min(2, 30000 / tallest));            // stay under the browser's canvas size limit
             const opt = { margin: [11, 11, 15, 11], filename: fileName(title), image: { type: 'jpeg', quality: 0.95 },
-                html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: 760 },
+                html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: PDF_W },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
                 pagebreak: { mode: ['css', 'legacy'], avoid: ['.sx-blk', '.sx-q', 'tr', '.sx-st', '.sx-brand', '.sx-h1', '.sx-ex-h', '.sx-fields', 'li'] } };
             let w = window.html2pdf().set(opt).from(pages[0]).toPdf();
