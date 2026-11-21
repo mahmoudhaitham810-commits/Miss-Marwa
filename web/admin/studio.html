@@ -87,7 +87,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
-    <script src="/admin/assets/studio-render.js?v=20261121a"></script>
+    <script src="/admin/assets/studio-render.js?v=20261121b"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -225,6 +225,7 @@
                     <div class="grow"><b>${esc(d.title)}</b><div class="meta">${meta}</div></div>${badge}</div>
                 <div class="bar-r">
                     <button class="btn btn-primary btn-sm" id="pdfBtn">${icon('download', 'sm')}Download PDF</button>
+                    <button class="btn btn-ghost btn-sm" id="printBtn" title="Send to the printer">🖨️ Print</button>
                     ${k === 'exam' ? `<button class="btn btn-soft btn-sm" id="keyBtn">${showKey ? 'Hide' : 'Show'} answer key</button>` : ''}
                     ${k === 'online' ? `<button class="btn btn-wa btn-sm" id="pubBtn" ${d.publishedExam ? 'disabled' : ''}>${d.publishedExam ? '✅ Published' : '🚀 Publish to students'}</button>` : ''}
                     <button class="btn btn-ghost btn-sm" id="saveBtn" disabled>Save changes</button>
@@ -236,7 +237,7 @@
         function setDirty() { dirty = true; const b = $('saveBtn'); if (b) { b.disabled = false; b.classList.add('btn-primary'); b.classList.remove('btn-ghost'); } }
         function wire() {
             const P = $('paper');
-            P.addEventListener('input', e => { const el = e.target.closest('[data-e]'); if (!el) return; StudioRender.setPath(DOC.content, el.dataset.e, el.innerText.replace(/\s+\n/g, '\n').trim()); setDirty(); });
+            P.addEventListener('input', e => { const el = e.target.closest('[data-e]'); if (!el) return; StudioRender.setPath(DOC.content, el.dataset.e, StudioRender.textOf(el).replace(/[ \t]+\n/g, '\n').trim()); setDirty(); });
             P.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest('[data-e]') && !e.shiftKey) { e.preventDefault(); e.target.blur(); } });
             P.addEventListener('click', async e => {
                 const del = e.target.closest('[data-del]');
@@ -253,12 +254,15 @@
                     catch (err) { Site.toast(err.message, 'error'); rg.disabled = false; rg.textContent = '↻'; }
                 }
             });
+            const finalHtml = () => DOC.kind === 'summary' ? StudioRender.summaryHtml(DOC) : DOC.kind === 'online' ? StudioRender.onlineHtml(DOC) : StudioRender.examHtml(DOC, { key: showKey });
             $('pdfBtn').addEventListener('click', async () => {
-                if (dirty) await save(true);
-                const inner = DOC.kind === 'summary' ? StudioRender.summaryHtml(DOC) : DOC.kind === 'online' ? StudioRender.onlineHtml(DOC) : StudioRender.examHtml(DOC, { key: showKey });
-                Site.toast('Choose “Save as PDF” in the print window', 'info');
-                StudioRender.print(inner, DOC.title);
+                const b = $('pdfBtn'); if (b.disabled) return;
+                const label = b.innerHTML; b.disabled = true; b.textContent = 'Making the PDF…';
+                try { if (dirty) await save(true); await StudioRender.download(finalHtml(), DOC.title); Site.toast('PDF downloaded ✅', 'success'); }
+                catch (err) { Site.toast('Could not make the file (' + err.message + ') — opening Print instead: choose “Save as PDF”', 'error'); StudioRender.print(finalHtml(), DOC.title); }
+                b.disabled = false; b.innerHTML = label;
             });
+            $('printBtn').addEventListener('click', async () => { if (dirty) await save(true); StudioRender.print(finalHtml(), DOC.title); });
             $('keyBtn')?.addEventListener('click', () => { showKey = !showKey; renderKeep(); });
             $('saveBtn').addEventListener('click', () => save());
             $('pubBtn')?.addEventListener('click', publish);

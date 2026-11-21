@@ -205,8 +205,11 @@ export async function buildToc(env, db, book, { meter = null } = {}) {
     const within = (given, lo, hi) => given && given >= lo && given <= hi ? given : hi;
     units.forEach((u, i) => {
         const hardEnd = i + 1 < units.length ? Math.max(u.start, units[i + 1].start - 1) : bookEnd;
-        u.end = within(u.givenEnd, u.start, hardEnd);
-        u.lessons.sort((a, b) => a.start - b.start).forEach((l, j, L) => {
+        u.lessons.sort((a, b) => a.start - b.start);
+        // a unit end the model gave BEFORE its own last lesson starts is wrong (seen: Unit 1 "ends" p.94, Lesson 4 starts p.129)
+        const lastStart = u.lessons.reduce((m, l) => l.start <= hardEnd ? Math.max(m, l.start) : m, u.start);
+        u.end = within(u.givenEnd, lastStart, hardEnd);
+        u.lessons.forEach((l, j, L) => {
             l.start = Math.min(Math.max(l.start, u.start), u.end);
             const hard = j + 1 < L.length ? Math.max(l.start, L[j + 1].start - 1) : u.end;
             l.end = within(l.givenEnd, l.start, hard);

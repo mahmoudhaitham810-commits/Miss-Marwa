@@ -12,7 +12,7 @@
     // **bold** inside text (her key words), everything else escaped
     const rich = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
     const ed = (o, path, text, tag = 'span', cls = '') => o.edit
-        ? `<${tag} class="${cls}" data-e="${path}" contenteditable="true" spellcheck="false">${esc(text)}</${tag}>`
+        ? `<${tag} class="${cls}" data-e="${path}" contenteditable="true" spellcheck="false">${rich(text)}</${tag}>`
         : `<${tag} class="${cls}">${rich(text)}</${tag}>`;
     const LETTER = ['a', 'b', 'c', 'd', 'e', 'f'];
     const ORD = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth'];
@@ -26,7 +26,7 @@
     .sx-page { background: #fff; width: 100%; max-width: 794px; margin: 0 auto; padding: 34px 40px 40px; }
     .sx [contenteditable="true"] { outline: none; border-radius: 4px; transition: background .12s; }
     .sx [contenteditable="true"]:hover { background: #F1F6FF; } .sx [contenteditable="true"]:focus { background: #FFF8DB; box-shadow: 0 0 0 2px #FDE68A; }
-    .sx-tools { float: right; display: inline-flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+    .sx-tools { position: absolute; top: 0; right: 0; z-index: 2; display: inline-flex; gap: 4px; opacity: 0; transition: opacity .12s; }
     .sx-blk:hover > .sx-tools, .sx-q:hover > .sx-tools { opacity: 1; }
     .sx-t { border: 1px solid var(--line); background: #fff; color: var(--muted); width: 26px; height: 26px; border-radius: 8px; cursor: pointer; font-size: 13px; line-height: 1; }
     .sx-t:hover { color: var(--blue); border-color: var(--blue); } .sx-t[data-del]:hover { color: #DC2626; border-color: #DC2626; }
@@ -38,7 +38,7 @@
     .sx-brand .b3 { margin-left: auto; text-align: right; font-size: 12px; font-weight: 600; opacity: .95; line-height: 1.4; }
     /* ---------- summary ---------- */
     .sx-h1 { font-size: 23px; font-weight: 850; letter-spacing: -.02em; color: var(--navy); margin: 2px 0 14px; padding-bottom: 8px; border-bottom: 3px solid var(--blue); }
-    .sx-blk { break-inside: avoid; margin: 0 0 11px; }
+    .sx-blk { break-inside: avoid; margin: 0 0 11px; position: relative; }
     .sx-sec { margin: 20px 0 10px; font-size: 17px; font-weight: 800; color: var(--blue); display: flex; align-items: center; gap: 8px; break-after: avoid; }
     .sx-sec::before { content: ''; width: 6px; height: 20px; border-radius: 3px; background: var(--blue); }
     .sx-term { padding: 9px 12px; border-left: 4px solid var(--blue); background: var(--sky); border-radius: 4px 10px 10px 4px; }
@@ -77,6 +77,7 @@
     .sx-tf { white-space: nowrap; font-weight: 700; color: var(--navy); }
     .sx-ans { color: #166534; font-weight: 600; } .sx-ans b { color: #15803D; }
     .sx-luck { text-align: center; font-weight: 800; color: var(--blue); margin-top: 18px; font-size: 16px; }
+    .sx-pdf .sx-page { max-width: none; padding: 0 2px; margin: 0; } .sx-pdf .sx-keypage { margin-top: 0; padding-top: 0; border-top: 0; }
     .sx-keypage { break-before: page; } .sx-keypage .sx-h1 { font-size: 20px; }
     .sx-src { color: #94A3B8; font-size: 11px; margin-left: 4px; white-space: nowrap; }
     @media screen { .sx-keypage { margin-top: 26px; padding-top: 20px; border-top: 2px dashed var(--line); } }
@@ -100,7 +101,7 @@
             case 'reason': return `<div class="sx-blk sx-gr">${t}<span class="tag">G.R</span>${ed(o, path + '.q', b.q, 'span', 'q')}${ed(o, path + '.a', b.a, 'span', 'a')}</div>`;
             case 'equation': return `<div class="sx-blk sx-eq">${t}${ed(o, path + '.text', b.text)}</div>`;
             case 'note': return `<div class="sx-blk sx-note">${t}<span class="tag">Note</span>${ed(o, path + '.text', b.text)}</div>`;
-            case 'figure': return `<div class="sx-blk sx-fig">${t}📖 Look at the figure in your book${b.p ? ` (PDF p.${b.p})` : ''}: ${ed(o, path + '.text', b.text)}</div>`;
+            case 'figure': return `<div class="sx-blk sx-fig">${t}📖 Look at the figure in your book${b.p && o.edit ? ` <span class="sx-src">(PDF p.${b.p})</span>` : ''}: ${ed(o, path + '.text', b.text)}</div>`;
             default: return '';
         }
     }
@@ -157,7 +158,7 @@
         n = 0;
         const key = `<div class="sx-page sx-keypage">${brand(doc, 'Model Answer<br>for the teacher')}<div class="sx-h1">Model Answer — ${esc(c.title)}</div>
             ${c.sections.map((s, si) => !s.items.length ? '' : `<div class="sx-st"><span>${ORD[si] || ''}: ${esc(s.title)}</span><span class="m">(${s.items.length * (Number(s.marks) || 0)} marks)</span></div>
-                ${s.items.map(q => `<div class="sx-q"><span class="n">${++n}.</span><span class="sx-ans">${answer(s, q)}</span>${q.p ? `<span class="sx-src">book p.${q.p}</span>` : ''}</div>`).join('')}`).join('')}</div>`;
+                ${s.items.map(q => `<div class="sx-q"><span class="n">${++n}.</span><span class="sx-ans">${answer(s, q)}</span>${q.p ? `<span class="sx-src">PDF p.${q.p}</span>` : ''}</div>`).join('')}`).join('')}</div>`;
         return `<div class="sx">${paper}${key}</div>`;
     }
     function onlineHtml(doc, o = {}) {
@@ -167,7 +168,64 @@
             ${c.sections.map((s, si) => s.items.map((q, qi) => question(s, si, q, qi, ++n, { ...o, key: true })).join('')).join('')}</div></div>`;
     }
 
-    // ---------------------------------------------------------------- PDF (the browser's own "Save as PDF" — real text, A4)
+    // ---------------------------------------------------------------- PDF file download (one tap → a .pdf file, no print window)
+    // html2pdf (html2canvas + jsPDF) draws each page of the template at high resolution into an A4 PDF.
+    // Each .sx-page (a lesson / the exam / the model answer) is drawn separately → long documents never hit canvas limits.
+    const LIB = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    let libP = null;
+    function loadLib() {
+        if (window.html2pdf) return Promise.resolve();
+        return libP = libP || new Promise((res, rej) => {
+            const s = document.createElement('script'); s.src = LIB; s.async = true;
+            s.onload = () => window.html2pdf ? res() : rej(new Error('PDF tool did not load'));
+            s.onerror = () => { libP = null; s.remove(); rej(new Error('PDF tool did not load')); };
+            document.head.appendChild(s);
+            setTimeout(() => rej(new Error('PDF tool took too long to load')), 25000);
+        });
+    }
+    const fileName = (t) => (String(t || 'Science Academy').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90) || 'Science Academy') + '.pdf';
+    async function download(inner, title) {
+        await loadLib(); css();
+        const host = document.createElement('div');
+        host.className = 'sx-pdf';
+        host.style.cssText = 'position:fixed;left:-12000px;top:0;width:760px;background:#fff;z-index:-1';
+        host.innerHTML = inner;
+        document.body.appendChild(host);
+        try {
+            if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 3000))]);
+            await Promise.all([...host.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
+            const pages = [...host.querySelectorAll('.sx-page')];
+            const tallest = Math.max(...pages.map(p => p.scrollHeight), 1);
+            const scale = Math.max(1.2, Math.min(2, 30000 / tallest));            // stay under the browser's canvas size limit
+            const opt = { margin: [11, 11, 15, 11], filename: fileName(title), image: { type: 'jpeg', quality: 0.95 },
+                html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: 760 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+                pagebreak: { mode: ['css', 'legacy'], avoid: ['.sx-blk', '.sx-q', 'tr', '.sx-st', '.sx-brand', '.sx-h1', '.sx-ex-h', '.sx-fields', 'li'] } };
+            let w = window.html2pdf().set(opt).from(pages[0]).toPdf();
+            for (const pg of pages.slice(1)) w = w.get('pdf').then(pdf => { pdf.addPage(); }).from(pg).toContainer().toCanvas().toPdf();
+            await w.get('pdf').then(pdf => {
+                const n = pdf.internal.getNumberOfPages();
+                for (let i = 1; i <= n; i++) { pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(100, 116, 139); pdf.text(`Science Academy - Miss Marwa   |   page ${i} of ${n}`, 105, 290, { align: 'center' }); }
+            }).save();
+        } finally { host.remove(); }
+    }
+    // the editable text → the stored text: <b> back to **bold**, line breaks kept, nothing else
+    function textOf(el) {
+        let out = '';
+        el.childNodes.forEach(nd => {
+            if (nd.nodeType === 3) out += nd.data;
+            else if (nd.nodeType === 1) {
+                const tg = nd.tagName;
+                if (tg === 'BR') out += '\n';
+                else if (tg === 'B' || tg === 'STRONG') { const t = textOf(nd); out += t.trim() ? `**${t}**` : t; }
+                else if (tg === 'DIV' || tg === 'P') out += (out ? '\n' : '') + textOf(nd);
+                else out += textOf(nd);
+            }
+        });
+        return out.replace(/\u00a0/g, ' ').replace(/\*\*\*\*/g, '');
+    }
+
+    // ---------------------------------------------------------------- Print (the browser's print window)
     function print(inner, title) {
         const f = document.createElement('iframe');
         f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
@@ -200,5 +258,5 @@
     }
     let styled = false;
     function css() { if (styled) return; styled = true; const s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s); }
-    window.StudioRender = { summaryHtml, examHtml, onlineHtml, print, css, setPath, getPath, removePath, total, CSS };
+    window.StudioRender = { summaryHtml, examHtml, onlineHtml, print, download, textOf, css, setPath, getPath, removePath, total, CSS };
 })();
