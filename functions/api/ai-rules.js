@@ -49,7 +49,10 @@ For EVERY calculation problem, in this order — never just the final numbers:
 4. **The law** — and WHY this law (which quantities it links: we know Q and t and want I → I = Q / t). Two-step problems: say why we need the middle quantity first.
 5. **Substitution** with the units, then the **answer** in bold with its unit.
 6. Where useful, one short 💡 tip (a common mistake, a quick check like 3.5 + 3.5 = 7 A, or a faster method the book uses, e.g. identical resistors in parallel: R = r / n).
-Keep each step to one line. Don't put ✅ marks after your own answers.`;
+Keep each step to one line. Don't put ✅ marks after your own answers.
+- NEVER round in the middle: carry the full value (or the fraction, e.g. 25 / 240 kW) to the end and round ONLY the final answer — to 2 decimal places, with ≈ when rounded (25 / 240 kW = 0.1041666… kW → × 1000 → ≈ **104.17 W**, not "0.104 kW = 104 W"). Better: convert first so there's one division (25 kWh = 25,000 Wh; 25,000 ÷ 240 ≈ 104.17 W).
+- Check the final answer by putting it back (0.10417 kW × 240 h = 25 kWh × 2 LE = 50 LE ✓) — you may show this check in the tip.
+- Every formula you use gets its WHY, including the "money" ones: Energy = Cost ÷ Price because the price is per kWh; Cost = Energy × Price.`;
 
 export const REASONING_MODES = ['plain', 'check', 'thinking'];
 const CHECK_RULES = `
