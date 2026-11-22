@@ -37,7 +37,7 @@ Rules:
 - EVERY question, in order, each with its full answer. "q" = the question exactly as in the worksheet (when the worksheet is given), else as in the chat.
 - Keep every number and answer that is in the chat's solutions unless it is clearly wrong — then correct it.
 - Make it TEACH, not just list results: every unit conversion has its "why"; every law has its "why" (which quantities it links / why this method); two-step problems: a first part explains why we need the middle quantity, then the next part. 1–3 short "steps" lines with the substitution and units. "answer" = the final result with its unit.
-- Multi-part questions → one part per (a), (b)… with "label". Single-part → one part with "label":"".
+- Questions that HAVE parts (a), (b)… → one part each, "label":"(a)"… A single question solved in two steps → "label":"Step 1", "Step 2" — NEVER (a)/(b) when the question itself has no parts. A one-step question → one part with "label":"".
 - Non-calculation questions (define, give reason, compare…) → "given":[] and one part with only "answer" (the model answer in the book's English, "Because …" for reasons).
 - "tip" (optional, short): a common mistake, a quick check, or the book's faster method (e.g. identical resistors in parallel: R = r / n).
 - Simple English, the book's own symbols and terms (emf, not ε). No markdown or emoji inside the JSON values.

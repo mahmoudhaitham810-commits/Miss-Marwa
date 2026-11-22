@@ -284,8 +284,50 @@
         }
         return out;
     }
-    async function drawSlice(xhtml, css, s, e, scale) {
-        const h = e - s;
+    // Page breaks from the DRAWN page, not from measurements (live 22 Nov, Windows: the drawn page came out taller than
+    // measured — emoji / font metrics differ inside the picture — so answers were cut in half and the end was lost).
+    // Each page: draw a window of one page height, then cut in the lowest clear white gap between two blocks.
+    const GAP = 9;                                       // a white band this tall (px) = between blocks (text lines are closer)
+    function whiteRows(c, scale) {
+        const g = c.getContext('2d'), W = c.width, H = Math.floor(c.height / scale), out = new Array(H);
+        const d = g.getImageData(0, 0, W, c.height).data;
+        for (let y = 0; y < H; y++) {
+            let white = true;
+            for (let k = 0; k < scale && white; k++) {
+                const row = (y * scale + k) * W * 4;
+                for (let x = 0; x < W; x++) { const i = row + x * 4; if (d[i] < 244 || d[i + 1] < 244 || d[i + 2] < 244) { white = false; break; } }
+            }
+            out[y] = white;
+        }
+        return out;
+    }
+    async function cutPage(xhtml, css, measuredH, scale) {
+        const out = []; let s = 0;
+        for (let guard = 0; guard < 400; guard++) {
+            const c = await drawWindow(xhtml, css, s, CONTENT_H, scale);
+            const rows = whiteRows(c, scale);
+            let last = rows.length - 1; while (last >= 0 && rows[last]) last--;
+            if (last < 0) break;                                                   // nothing left
+            const ends = rows.length - 1 - last >= 48 && s + last > measuredH * 0.6;  // the content ends in this window
+            let cut = rows.length;
+            if (ends) cut = Math.min(rows.length, last + 10);
+            else {
+                let run = 0;
+                for (let y = rows.length - 1; y >= 140; y--) {
+                    if (rows[y]) { run++; continue; }
+                    if (run >= GAP) { cut = y + 1 + Math.min(run - 2, 6); break; }  // just under the block above
+                    run = 0;
+                }
+            }
+            const k = document.createElement('canvas'); k.width = c.width; k.height = Math.ceil(cut * scale);
+            const g = k.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, k.width, k.height); g.drawImage(c, 0, 0);
+            out.push({ jpg: k.toDataURL('image/jpeg', 0.92), h: cut, s });
+            if (ends) break;
+            s += cut;
+        }
+        return out;
+    }
+    async function drawWindow(xhtml, css, s, h, scale) {
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CONTENT_W * scale}" height="${Math.ceil(h * scale)}" viewBox="0 0 ${CONTENT_W} ${h}"><foreignObject x="0" y="0" width="${CONTENT_W}" height="${h}">`
             + `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${CONTENT_W}px;height:${h}px;overflow:hidden;position:relative;background:#fff"><style>${css.replace(/<\/style/gi, '')}</style>`
             + `<div class="sx sx-pdf" style="position:absolute;left:0;top:${-s}px;width:${CONTENT_W}px">${xhtml}</div></div></foreignObject></svg>`;
@@ -295,7 +337,7 @@
         const c = document.createElement('canvas');
         c.width = CONTENT_W * scale; c.height = Math.ceil(h * scale);
         const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
-        return { jpg: c.toDataURL('image/jpeg', 0.92), h };
+        return c;
     }
     // Colour layer UNDER each page picture: some PDF viewers (Edge / Chrome on Windows) draw a big picture in tiles and
     // leave hairline gaps between them — the gaps then show this layer (navy under the navy header…) instead of white lines.
@@ -343,9 +385,9 @@
             for (const page of root.querySelectorAll('.sx-page')) {
                 const xhtml = ser.serializeToString(page);
                 const under = underlay(page);
-                for (const [s, e] of slices(page)) {
-                    const shot = await drawSlice(xhtml, style, s, e, o.scale || 2);
-                    shot.under = under.filter(u => u.y < e && u.y + u.h > s).map(u => ({ ...u, y: Math.max(u.y, s) - s, h: Math.min(u.y + u.h, e) - Math.max(u.y, s) }));
+                for (const shot of await cutPage(xhtml, style + (o.drawCss || ''), page.getBoundingClientRect().height, o.scale || 2)) {   // drawCss: tests only (simulate Windows drawing taller)
+                    const s0 = shot.s, e0 = shot.s + shot.h;
+                    shot.under = under.filter(u => u.y < e0 && u.y + u.h > s0).map(u => ({ ...u, y: Math.max(u.y, s0) - s0, h: Math.min(u.y + u.h, e0) - Math.max(u.y, s0) }));
                     shots.push(shot);
                 }
             }
