@@ -77,6 +77,9 @@
                 <div class="set-grid">
                     <div><label for="rate">EGP per 1 USD</label><input class="fin num" id="rate" inputmode="decimal" autocomplete="off"><small>Used to show costs in EGP.</small></div>
                     <div><label for="budget">Default budget per student (EGP / month)</label><input class="fin num" id="budget" inputmode="decimal" autocomplete="off"><small>Most AI cost a student can use in a month. Can be changed for one student.</small></div>
+                    <div><label for="dImg">Photos per day</label><input class="fin num" id="dImg" inputmode="numeric" autocomplete="off"><small>Photos a student can send each day.</small></div>
+                    <div><label for="dPin">PDFs uploaded per day</label><input class="fin num" id="dPin" inputmode="numeric" autocomplete="off"><small>Worksheets the student attaches.</small></div>
+                    <div><label for="dPout">PDFs made per day</label><input class="fin num" id="dPout" inputmode="numeric" autocomplete="off"><small>Solutions / exams the assistant makes (the costly ones). Text messages have no daily limit.</small></div>
                     <button class="btn btn-primary" id="saveSet">Save</button>
                 </div>
             </div>
@@ -128,6 +131,7 @@
             catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
             D.students.forEach(s => { s._q = `${name(s)} ${s.studentId}`.toLowerCase(); });
             $('rate').value = D.settings.rate; $('budget').value = D.settings.budget;
+            $('dImg').value = D.daily.images; $('dPin').value = D.daily.pdfIn; $('dPout').value = D.daily.pdfOut;
             const op = !!D.proOpenForStudents;
             $('openSw').checked = op; $('openLbl').textContent = op ? 'Open' : 'Closed';
             $('openCard').classList.toggle('is-open', op);
@@ -216,7 +220,8 @@
         $('saveSet').addEventListener('click', async () => {
             const rate = A.normalizeDigits($('rate').value).trim(), budget = A.normalizeDigits($('budget').value).trim();
             $('saveSet').disabled = true;
-            try { await api('/api/ai-usage?action=settings', { body: { rate, budget } }); Site.toast('Saved', 'success'); await load(); }
+            const n = (id) => A.normalizeDigits($(id).value).trim();
+            try { await api('/api/ai-usage?action=settings', { body: { rate, budget, daily: { images: n('dImg'), pdfIn: n('dPin'), pdfOut: n('dPout') } } }); Site.toast('Saved', 'success'); await load(); }
             catch (err) { Site.toast(err.message, 'error'); }
             finally { $('saveSet').disabled = false; }
         });
@@ -240,6 +245,10 @@
                     <label for="ownB" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Budget for this student (EGP / month)</label>
                     <div style="display:flex;gap:8px"><input class="fin num" id="ownB" inputmode="decimal" placeholder="${D.settings.budget} (default)" value="${s.customBudget ? s.budgetEgp : ''}"><button class="btn btn-primary" id="ownSave">Save</button></div>
                     <p class="small muted" style="margin:6px 0 0">Leave empty to use the default (${egp(D.settings.budget)}).</p>
+                    <h4 style="margin:18px 0 8px">Photos &amp; PDFs per day</h4>
+                    ${det.daily ? `<p class="small muted" style="margin:0 0 8px">Today: <b class="num">${det.daily.today.images.used}/${det.daily.today.images.max}</b> photos · <b class="num">${det.daily.today.pdfIn.used}/${det.daily.today.pdfIn.max}</b> PDFs uploaded · <b class="num">${det.daily.today.pdfOut.used}/${det.daily.today.pdfOut.max}</b> PDFs made${det.daily.limits.custom ? ' (own allowance)' : ' (default)'}</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="fin num" id="dxI" inputmode="numeric" style="width:92px" title="Photos" value="${det.daily.limits.images}"><input class="fin num" id="dxP" inputmode="numeric" style="width:92px" title="PDFs uploaded" value="${det.daily.limits.pdfIn}"><input class="fin num" id="dxO" inputmode="numeric" style="width:92px" title="PDFs made" value="${det.daily.limits.pdfOut}"><button class="btn btn-primary" id="dxSave">Save</button><button class="btn btn-ghost" id="dxReset">Use default</button></div>
+                    <p class="small muted" style="margin:6px 0 0">Order: photos · PDFs uploaded · PDFs made, per day.</p>` : ''}
                     <h4 style="margin:18px 0 8px">Where this month's money went</h4>
                     ${det.byKind && det.byKind.length ? `<div class="rec-wrap"><table class="rec"><thead><tr><th>What</th><th>Count</th><th>Cost</th></tr></thead><tbody>${det.byKind.map(k => `<tr><td>${esc(KIND[k.kind] || k.kind || '')}</td><td class="num">${k.n}${k.cached ? ` (${k.cached} free)` : ''}</td><td class="num">${egp(toEgp(k.usd))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">Nothing yet this month.</p>'}
                     <h4 style="margin:18px 0 8px">Latest Pro messages</h4>
@@ -252,6 +261,10 @@
                     { label: 'Close', cls: 'btn-ghost' }
                 ]
             });
+            const dx = async (daily, msg) => { try { await api('/api/ai-usage?action=daily', { body: { studentId: id, daily } }); Site.toast(msg, 'success'); close(); } catch (err) { Site.toast(err.message, 'error'); } };
+            const gv = (i) => A.normalizeDigits(document.getElementById(i).value).trim();
+            document.getElementById('dxSave')?.addEventListener('click', () => dx({ images: gv('dxI'), pdfIn: gv('dxP'), pdfOut: gv('dxO') }, 'Daily allowance saved'));
+            document.getElementById('dxReset')?.addEventListener('click', () => dx(null, 'Back to the default daily allowance'));
             document.getElementById('ownSave')?.addEventListener('click', async () => {
                 const v = A.normalizeDigits(document.getElementById('ownB').value).trim();
                 try { await setOne(id, { budgetEgp: v === '' ? null : v }, v === '' ? 'Back to the default budget' : `Budget set to ${egp(v)}`); close(); await load(); }

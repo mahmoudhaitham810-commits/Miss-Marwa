@@ -36,6 +36,8 @@ export async function ensureQuotaTables(db) {
         db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_usage_period ON ai_usage(period)'),
         db.prepare(`CREATE TABLE IF NOT EXISTS ai_student_plan (student_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0,
             budget_egp REAL, reset_at TEXT, reset_period TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_by TEXT)`),
+        db.prepare(`CREATE TABLE IF NOT EXISTS ai_daily_use (student_id TEXT NOT NULL, day TEXT NOT NULL, images INTEGER NOT NULL DEFAULT 0,
+            pdf_in INTEGER NOT NULL DEFAULT 0, pdf_out INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (student_id, day))`),
         db.prepare(`CREATE TABLE IF NOT EXISTS app_kv ("key" TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`)
     ]);
     readyDbs.add(db);
@@ -49,13 +51,61 @@ export async function quotaSettings(db) {
     const m = Object.fromEntries((results || []).map(r => [r.key, r.value]));
     return { rate: posNum(m.aiq_rate, RATE_DEFAULT), budget: posNum(m.aiq_budget, BUDGET_DEFAULT), open: m.aiq_open === '1' };
 }
-export async function saveQuotaSettings(db, { rate, budget, open }) {
+export async function saveQuotaSettings(db, { rate, budget, open, daily }) {
     const st = [];
     const put = (k, v) => db.prepare(`INSERT INTO app_kv ("key", value) VALUES (?, ?) ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(k, String(v));
     if (rate !== undefined) st.push(put('aiq_rate', rate));
     if (budget !== undefined) st.push(put('aiq_budget', budget));
     if (open !== undefined) st.push(put('aiq_open', open ? '1' : '0'));
+    if (daily) { st.push(put('aiq_d_images', daily.images)); st.push(put('aiq_d_pdfin', daily.pdfIn)); st.push(put('aiq_d_pdfout', daily.pdfOut)); }
     if (st.length) await db.batch(st);
+}
+
+// ---------- daily file allowance (22 Nov 2026, Miss Marwa): messages are NOT limited per day — only photos and PDFs ----------
+//   images = photos sent · pdfIn = PDFs the student uploads · pdfOut = PDFs the assistant makes (solutions / exams — the costly ones)
+export const DAILY_DEFAULT = { images: 5, pdfIn: 3, pdfOut: 2 };
+const DAILY_COL = { images: 'images', pdfIn: 'pdf_in', pdfOut: 'pdf_out' };
+const intIn = (v, d) => { const n = Math.floor(Number(v)); return Number.isFinite(n) && n >= 0 && n <= 200 ? n : d; };
+/** Cairo calendar day, e.g. "2026-11-22" */
+export function cairoDay(now = new Date()) { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now); }
+/** The default daily allowance (editable on the AI usage page) */
+export async function dailyDefaults(db) {
+    const { results } = await db.prepare(`SELECT "key", value FROM app_kv WHERE "key" IN ('aiq_d_images', 'aiq_d_pdfin', 'aiq_d_pdfout')`).all();
+    const m = Object.fromEntries((results || []).map(r => [r.key, r.value]));
+    return { images: intIn(m.aiq_d_images, DAILY_DEFAULT.images), pdfIn: intIn(m.aiq_d_pdfin, DAILY_DEFAULT.pdfIn), pdfOut: intIn(m.aiq_d_pdfout, DAILY_DEFAULT.pdfOut) };
+}
+/** One student's allowance: the default, or Miss Marwa's own numbers for them (app_kv aiq_dx_<id>) */
+export async function dailyLimits(db, studentId, defaults = null) {
+    const d = defaults || await dailyDefaults(db);
+    const row = await db.prepare('SELECT value FROM app_kv WHERE "key" = ?').bind('aiq_dx_' + studentId).first();
+    let own = null; try { own = row && row.value ? JSON.parse(row.value) : null; } catch (e) { own = null; }
+    return own ? { images: intIn(own.images, d.images), pdfIn: intIn(own.pdfIn, d.pdfIn), pdfOut: intIn(own.pdfOut, d.pdfOut), custom: true } : { ...d, custom: false };
+}
+export async function saveStudentDaily(db, studentId, own) {
+    if (!own) { await db.prepare('DELETE FROM app_kv WHERE "key" = ?').bind('aiq_dx_' + studentId).run(); return; }
+    const v = JSON.stringify({ images: intIn(own.images, DAILY_DEFAULT.images), pdfIn: intIn(own.pdfIn, DAILY_DEFAULT.pdfIn), pdfOut: intIn(own.pdfOut, DAILY_DEFAULT.pdfOut) });
+    await db.prepare(`INSERT INTO app_kv ("key", value) VALUES (?, ?) ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind('aiq_dx_' + studentId, v).run();
+}
+/** Today's use + the allowance → { images:{used,max}, pdfIn:{…}, pdfOut:{…} } */
+export async function dailyState(db, studentId, limits = null) {
+    await ensureQuotaTables(db);
+    const L = limits || await dailyLimits(db, studentId);
+    const r = await db.prepare('SELECT images, pdf_in, pdf_out FROM ai_daily_use WHERE student_id = ? AND day = ?').bind(studentId, cairoDay()).first();
+    return { images: { used: Number(r && r.images) || 0, max: L.images }, pdfIn: { used: Number(r && r.pdf_in) || 0, max: L.pdfIn }, pdfOut: { used: Number(r && r.pdf_out) || 0, max: L.pdfOut } };
+}
+/** Take one of today's allowance — atomic (two sends at the same moment can't both pass the last slot). → true / false */
+export async function claimDaily(db, studentId, what, max) {
+    const col = DAILY_COL[what]; if (!col) return false;
+    await ensureQuotaTables(db);
+    const day = cairoDay();
+    await db.prepare('INSERT OR IGNORE INTO ai_daily_use (student_id, day) VALUES (?, ?)').bind(studentId, day).run();
+    const r = await db.prepare(`UPDATE ai_daily_use SET ${col} = ${col} + 1 WHERE student_id = ? AND day = ? AND ${col} < ?`).bind(studentId, day, max).run();
+    return !!(r.meta && r.meta.changes);
+}
+/** The send failed → give the slot back (the student lost nothing) */
+export async function releaseDaily(db, studentId, what) {
+    const col = DAILY_COL[what]; if (!col) return;
+    try { await db.prepare(`UPDATE ai_daily_use SET ${col} = ${col} - 1 WHERE student_id = ? AND day = ? AND ${col} > 0`).bind(studentId, cairoDay()).run(); } catch (e) { /* harmless */ }
 }
 
 // What counts this month: rows of this period, after the last reset (a reset only counts in the month it was made)

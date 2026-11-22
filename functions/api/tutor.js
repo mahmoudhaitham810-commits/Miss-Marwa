@@ -24,7 +24,7 @@
 // =====================================================================
 import { requireStaff, ensureAppSchema, verifyStudentRequest } from './admin-auth.js';
 import { chat, usageSummary, bonusOpen, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
-import { studentAccess } from './ai-quota.js';
+import { studentAccess, dailyLimits, dailyState, claimDaily, releaseDaily } from './ai-quota.js';
 import { searchBook, bookRules, gradeToc } from './curriculum.js';
 import { sourceBlock, lessonParts } from './studio.js';
 import { getOrMake, CacheBusyError } from './ai-cache.js';
@@ -367,6 +367,23 @@ export async function onRequest(context) {
 
             let t = await ownThread(parseInt(data.threadId, 10));
             if (data.threadId && !t) return bad('Chat not found', 404);
+            // Pro: photos and PDFs have a daily allowance (messages don't). Miss Marwa's staff preview is never limited.
+            const claimed = [];
+            if (!free && !who.preview) {
+                const L2 = await dailyLimits(db, sid);
+                const need = [img && 'images', doc && 'pdfIn', !img && wantsPdf(text) && 'pdfOut'].filter(Boolean);
+                const WHAT = { images: ['صور', 'صورة'], pdfIn: ['ملفات PDF بتبعتها', 'ملف PDF بتبعته'], pdfOut: ['ملفات PDF أعملهالك (حل أو امتحان)', 'ملف PDF أعمله'] };
+                for (const w of need) {
+                    if (L2[w] > 0 && await claimDaily(db, sid, w, L2[w])) { claimed.push(w); continue; }
+                    for (const c of claimed) await releaseDaily(db, sid, c);   // nothing was sent → nothing used
+                    const msg = L2[w] > 0
+                        ? `النهارده وصلت للحد اليومي: ${L2[w]} ${WHAT[w][0]} 📎 — بيرجع من أول بكره ✨ ولسه تقدر تسألني أسئلة نصية براحتك، من غير حد 💬`
+                        : `${WHAT[w][1]} مش متاحة لحسابك دلوقتي 🙏 — كلّم مس مروة.`;
+                    return bad(msg, 429, { code: 'FILE_LIMIT', daily: await dailyState(db, sid, L2) });
+                }
+            }
+            const giveBack = async () => { for (const c of claimed) await releaseDaily(db, sid, c); };
+            const dailyOut = async () => (!free && !who.preview ? { daily: await dailyState(db, sid) } : {});
             if (!t) {
                 const r = await db.prepare('INSERT INTO tutor_threads (student_id, staff_id, title) VALUES (?, ?, ?)').bind(sid, staffId, text.split('\n')[0].slice(0, 60)).run();
                 t = await ownThread(Number(r.meta.last_row_id));
@@ -418,8 +435,9 @@ export async function onRequest(context) {
                     const girl = who.student.gender === 'female';
                     const saved = await save({ text: out.content.exam ? `جاهز امتحانك ${girl ? 'يا بطلة' : 'يا بطل'} 📝 **${out.content.title}** — ${out.content.items.length} سؤال من كتابك، وبعدهم صفحة الإجابة النموذجية بالتفصيل. ${girl ? 'حليه لوحدك الأول وبعدين راجعي' : 'حله لوحدك الأول وبعدين راجع'} من الإجابات 💪` : `جاهز ${girl ? 'يا بطلة' : 'يا بطل'} 📄 **${out.content.title}** — كل سؤال وتحته حله بالتفصيل: المعطيات، تحويل الوحدات وليه، القانون وليه، والحل. ${girl ? 'نزّليه' : 'نزّله'} من الزرار تحت وذاكر منه 💪`.replace('وذاكر', girl ? 'وذاكري' : 'وذاكر'),
                         model: out.model, cost: out.costUsd, cards: JSON.stringify([{ type: 'solutions', grade: who.student.grade, content: { ...out.content, mark: true } }]) });
-                    return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today() });
+                    return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), ...(await dailyOut()) });
                 } catch (e) {
+                    await giveBack();
                     const msg = e.code === 'NO_LESSON' ? 'قولي على أنهي Unit / Lesson عايز الامتحان 📚 (مثلاً: اعملي امتحان على Unit 2 Lesson 1 PDF)' : e.code === 'NO_SOLUTIONS' ? 'مفيش حلول في الشات ده لسه أحطها في PDF 🤔 — ابعتلي الأسئلة وأحلهالك الأول.' : e instanceof AiLimitError ? (FRIENDLY[e.code] || FRIENDLY.AI_ERROR) : 'ماعرفتش أعمل الـ PDF المرة دي — جرّب تاني 🙏';
                     await save({ role: 'error', text: msg, error: e.code || 'PDF' });
                     return json({ error: msg, code: e.code || 'PDF_FAILED', threadId: t.id, user: msgOut(userMsg) }, e instanceof AiLimitError ? 429 : 502);
@@ -447,8 +465,9 @@ export async function onRequest(context) {
                 }
                 const body = kind === 'exam' ? out.text : dropAnswerLine(out.text);
                 const saved = await save({ text: (intents.length ? body : englishTerms(body)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cost: out.costUsd, cards: cards.length ? JSON.stringify(cards) : null });
-                return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today() });
+                return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), ...(await dailyOut()) });
             } catch (e) {
+                await giveBack();
                 const code = e instanceof AiLimitError ? e.code : 'AI_ERROR';
                 // their own data is still shown even when the AI can't answer (costs nothing)
                 const dataCards = cards.filter(c => c.type !== 'upgrade');

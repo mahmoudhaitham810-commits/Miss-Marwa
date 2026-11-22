@@ -214,15 +214,17 @@
                 const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && r.user) { u.text = r.user.text; u.imageId = r.user.imageId; }
                 MSGS.push(r.reply);
                 if (r.today && ST) { ST.today = r.today; sub(); }
+                if (r.daily) { const left = [['images', 'صور'], ['pdfIn', 'ملفات PDF'], ['pdfOut', 'PDF تعملهم']].filter(([k]) => r.daily[k].max > 0 && r.daily[k].used > 0 && r.daily[k].max - r.daily[k].used <= 1)
+                    .map(([k, n]) => `${r.daily[k].max - r.daily[k].used === 0 ? 'خلصت' : 'باقيلك 1'} ${n}`); if (left.length) opt.toast(`النهارده: ${left.join(' · ')} — بيرجعوا بكره ✨`, 'info'); }
             } catch (e) {
                 const d = e.data || {};
                 MSGS = MSGS.filter(m => m.role !== 'typing');
                 if (d.threadId) threadId = d.threadId;
                 if (d.today && ST) { ST.today = d.today; sub(); }
                 const limit = ['DAILY_LIMIT', 'IMAGE_LIMIT', 'POOL_EMPTY', 'BONUS_CLOSED'].includes(d.code);
-                const noRetry = ['EXAM_LOCK', 'PRO_LOCKED', 'STUDENT_OFF', 'STUDENT_CAP', 'FREE_CLOSED'].includes(d.code);
+                const noRetry = ['FILE_LIMIT', 'EXAM_LOCK', 'PRO_LOCKED', 'STUDENT_OFF', 'STUDENT_CAP', 'FREE_CLOSED'].includes(d.code);
                 if (!d.user && !limit) { /* not saved → let them resend */ }
-                if (d.code === 'IMAGE_LIMIT' || d.code === 'DAILY_LIMIT' || (d.code === 'BONUS_CLOSED' && !d.threadId)) MSGS.pop();   // nothing was sent
+                if (d.code === 'IMAGE_LIMIT' || d.code === 'DAILY_LIMIT' || d.code === 'FILE_LIMIT' || (d.code === 'BONUS_CLOSED' && !d.threadId)) MSGS.pop();   // nothing was sent
                 MSGS.push({ role: 'error', text: e.message, retry: !limit && !noRetry, last: { text, image, doc },
                     cards: limit ? [{ type: 'upgrade', text: d.code === 'IMAGE_LIMIT' ? `عايز تبعت صور أكتر وتاخد حل أدق؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}` : `عايز تسأل أكتر من كده؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}`, tier: 'pro' }] : null });
                 if (d.code === 'EXAM_LOCK' && ST) { ST.inExam = true; sub(); }

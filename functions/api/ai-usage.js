@@ -5,11 +5,12 @@
 //   POST ?action=set      { studentId, enabled?, budgetEgp? }  (budgetEgp null → back to the default)
 //   POST ?action=bulk     { studentIds: [], enabled }
 //   POST ?action=reset    { studentId }   → this month's budget starts again from now
-//   POST ?action=settings { rate?, budget? }
+//   POST ?action=settings { rate?, budget?, open?, daily?: {images, pdfIn, pdfOut} }
+//   POST ?action=daily    { studentId, daily: {images, pdfIn, pdfOut} | null }   (own daily file allowance; null → default)
 // Every change goes to the activity log.
 // =====================================================================
 import { requireStaff, ensureAppSchema, audit } from './admin-auth.js';
-import { ensureQuotaTables, quotaSettings, saveQuotaSettings, studentQuota, period } from './ai-quota.js';
+import { ensureQuotaTables, quotaSettings, saveQuotaSettings, studentQuota, period, dailyDefaults, dailyLimits, dailyState, saveStudentDaily } from './ai-quota.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -83,7 +84,7 @@ export async function onRequest(context) {
             });
             const on = students.filter(s => s.enabled);
             return json({
-                settings: S, period: per, students,
+                settings: S, daily: await dailyDefaults(db), period: per, students,
                 totals: {
                     enabled: on.length, studentsUsd: money(students.reduce((t, s) => t + s.month.usd, 0)), staffUsd: money(staffUse && staffUse.usd), staffMessages: Number(staffUse && staffUse.n) || 0,
                     messages: students.reduce((t, s) => t + s.month.messages, 0), cached: students.reduce((t, s) => t + s.month.cached, 0),
@@ -104,7 +105,8 @@ export async function onRequest(context) {
                 FROM ai_usage WHERE student_id = ? ORDER BY id DESC LIMIT 50`).bind(id).all();
             const { results: byKind } = await db.prepare(`SELECT kind, COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd, COALESCE(SUM(cached), 0) AS cached
                 FROM ai_usage WHERE student_id = ? AND period = ? GROUP BY kind ORDER BY usd DESC`).bind(id, per).all();
-            return json({ quota: await studentQuota(db, id, S), recent: results || [], byKind: byKind || [] });
+            const lim = await dailyLimits(db, id);
+            return json({ quota: await studentQuota(db, id, S), recent: results || [], byKind: byKind || [], daily: { limits: lim, today: await dailyState(db, id, lim) } });
         }
         if (request.method !== 'POST') return bad('POST only', 405);
         const data = await request.json().catch(() => ({}));
@@ -148,11 +150,31 @@ export async function onRequest(context) {
             await audit(db, request, auth.staff, 'ai.student.reset', id, { usedEgpBefore: money(before.usedEgp), period: per });
             return json({ ok: true, quota: await studentQuota(db, id, S) });
         }
+        if (action === 'daily') {
+            const id = String(data.studentId || '').trim();
+            if (!await studentExists(id)) return bad('Student not found', 404);
+            let own = null;
+            if (data.daily) {
+                const g = (v) => { const n = Math.floor(Number(v)); return Number.isFinite(n) && n >= 0 && n <= 200 ? n : null; };
+                own = { images: g(data.daily.images), pdfIn: g(data.daily.pdfIn), pdfOut: g(data.daily.pdfOut) };
+                if (Object.values(own).some(v => v == null)) return bad('Each daily number must be between 0 and 200');
+            }
+            await saveStudentDaily(db, id, own);
+            await audit(db, request, auth.staff, 'ai.student.daily', id, { daily: own });
+            const lim = await dailyLimits(db, id);
+            return json({ ok: true, daily: { limits: lim, today: await dailyState(db, id, lim) } });
+        }
         if (action === 'settings') {
             const next = {};
             if (data.rate !== undefined) { const r = okAmount(data.rate); if (r == null || r > 1000) return bad('The EGP rate must be between 1 and 1000'); next.rate = r; }
             if (data.budget !== undefined) { const b = okAmount(data.budget); if (b == null) return bad('The default budget must be a number above 0'); next.budget = b; }
             if (data.open !== undefined) next.open = !!data.open;
+            if (data.daily) {
+                const g = (v) => { const n = Math.floor(Number(v)); return Number.isFinite(n) && n >= 0 && n <= 200 ? n : null; };
+                const dl = { images: g(data.daily.images), pdfIn: g(data.daily.pdfIn), pdfOut: g(data.daily.pdfOut) };
+                if (Object.values(dl).some(v => v == null)) return bad('Each daily number must be between 0 and 200');
+                next.daily = dl;
+            }
             if (!Object.keys(next).length) return bad('Nothing to change');
             await saveQuotaSettings(db, next);
             await audit(db, request, auth.staff, 'ai.settings', null, { before: S, after: { ...S, ...next } });
