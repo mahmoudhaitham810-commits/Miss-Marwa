@@ -192,9 +192,24 @@ const TERM_MAP = [
     ['المقاومة المكافئة', 'equivalent resistance'], ['الطاقة الكهربية', 'electric energy'], ['القدرة الكهربية', 'electric power'],
     ['الشحنات', 'charges'], ['الشحنة', 'charge'], ['الشحنه', 'charge'], ['الجهد', 'potential difference'], ['التيار', 'current'], ['المقاومتين', 'two resistors'], ['الخليتين', 'two cells'], ['المقاومات', 'resistors'], ['المقاومة', 'resistance'],
     ['الشغل', 'work'], ['القدرة', 'power'], ['الطاقة', 'energy'], ['الزمن', 'time'], ['الخلايا', 'cells'], ['الخلية', 'cell'], ['البطارية', 'battery'],
-    ['الكثافة', 'density'], ['الكتلة', 'mass'], ['الحجم', 'volume'], ['السرعة', 'speed'], ['العجلة', 'acceleration'], ['القوة', 'force'], ['الوزن', 'weight']
+    ['الكثافة', 'density'], ['الكتلة', 'mass'], ['الحجم', 'volume'], ['السرعة', 'speed'], ['العجلة', 'acceleration'], ['القوة', 'force'], ['الوزن', 'weight'],
+    // all four books (from their maps): matter & chemistry · forces & energy · living things · earth & space · water & air
+    ['الجدول الدوري', 'periodic table'], ['التفاعل الكيميائي', 'chemical reaction'], ['التفاعلات الكيميائية', 'chemical reactions'], ['المعادلة الكيميائية', 'chemical equation'], ['الرابطة الكيميائية', 'chemical bond'], ['الروابط الكيميائية', 'chemical bonds'],
+    ['الرابطة الأيونية', 'ionic bond'], ['الرابطة التساهمية', 'covalent bond'], ['العدد الذري', 'atomic number'], ['العدد الكتلي', 'mass number'], ['مستويات الطاقة', 'energy levels'], ['الطاقة الداخلية', 'internal energy'], ['درجة الحرارة', 'temperature'],
+    ['الطاقة الحرارية', 'thermal energy'], ['المجال المغناطيسي', 'magnetic field'], ['المجال الكهربي', 'electric field'], ['الكهربية الساكنة', 'static electricity'], ['خطوط المجال', 'field lines'], ['الأقطاب المغناطيسية', 'magnetic poles'],
+    ['البناء الضوئي', 'photosynthesis'], ['التنفس الخلوي', 'cellular respiration'], ['التنفس الهوائي', 'aerobic respiration'], ['الكائنات الحية', 'living organisms'], ['الكائن الحي', 'living organism'], ['الانتخاب الطبيعي', 'natural selection'],
+    ['الانتخاب الصناعي', 'artificial selection'], ['السجل الحفري', 'fossil record'], ['الزمن الجيولوجي', 'geologic time'], ['المجموعة الشمسية', 'solar system'], ['الخسوف', 'lunar eclipse'], ['الكسوف', 'solar eclipse'],
+    ['الغلاف الجوي', 'atmosphere'], ['الغلاف المائي', 'hydrosphere'], ['ثاني أكسيد الكربون', 'carbon dioxide'], ['الضغط الجوي', 'atmospheric pressure'], ['التوازن البيئي', 'ecological balance'], ['النظام البيئي', 'ecosystem'], ['الأنظمة البيئية', 'ecosystems'],
+    ['المحاليل المائية', 'aqueous solutions'], ['المحلول', 'solution'], ['المذيب', 'solvent'], ['المذاب', 'solute'], ['التكيف', 'adaptation'], ['التمثيل الغذائي', 'metabolism'], ['الكيمياء الغذائية', 'nutritional chemistry'],
+    ['الذرة', 'atom'], ['الذرات', 'atoms'], ['النواة', 'nucleus'], ['الإلكترونات', 'electrons'], ['الالكترونات', 'electrons'], ['الإلكترون', 'electron'], ['البروتونات', 'protons'], ['النيوترونات', 'neutrons'],
+    ['العنصر', 'element'], ['العناصر', 'elements'], ['المركب', 'compound'], ['المركبات', 'compounds'], ['الجزيء', 'molecule'], ['الجزيئات', 'molecules'], ['الأيون', 'ion'], ['الأيونات', 'ions'], ['التكافؤ', 'valency'],
+    ['الفلزات', 'metals'], ['اللافلزات', 'non-metals'], ['الأكسجين', 'oxygen'], ['الهيدروجين', 'hydrogen'], ['النيتروجين', 'nitrogen'], ['الكلوروفيل', 'chlorophyll'], ['البكتيريا', 'bacteria'], ['الميكروبات', 'microbes'], ['الفيروسات', 'viruses'],
+    ['الجينات', 'genes'], ['الوراثة', 'heredity'], ['الصفات الوراثية', 'inherited traits'], ['الحفريات', 'fossils'], ['الحفرية', 'fossil'], ['الصخور', 'rocks'], ['التربة', 'soil'], ['التجوية', 'weathering'], ['التعرية', 'erosion'],
+    ['الكواكب', 'planets'], ['الجاذبية', 'gravity'], ['المغناطيس', 'magnet'], ['الحرارة', 'heat'], ['التوصيل الحراري', 'conduction'], ['الحمل الحراري', 'convection'], ['الإشعاع', 'radiation'], ['التبخر', 'evaporation'], ['التكثف', 'condensation'],
+    ['الانصهار', 'melting'], ['التجمد', 'freezing'], ['الغليان', 'boiling'], ['التلوث', 'pollution'], ['الاحتراق', 'combustion'], ['التدخين', 'smoking']
 ];
-const BARE = [['خليتين', 'two cells'], ['مقاومتين', 'two resistors'], ['شحنة', 'charge'], ['شحنه', 'charge'], ['خلايا', 'cells'], ['خلية', 'cell'], ['خليه', 'cell'], ['مقاومات', 'resistors']];
+const TERM_SORTED = TERM_MAP.slice().sort((a, b) => b[0].length - a[0].length);   // longest first: «مستويات الطاقة» before «الطاقة»
+const BARE = [['نواة', 'nucleus'], ['ذرة', 'atom'], ['ذرات', 'atoms'], ['خليتين', 'two cells'], ['مقاومتين', 'two resistors'], ['شحنة', 'charge'], ['شحنه', 'charge'], ['خلايا', 'cells'], ['خلية', 'cell'], ['خليه', 'cell'], ['مقاومات', 'resistors']];
 const PHRASE = [['على التوالي', 'in series'], ['علي التوالي', 'in series'], ['على التوازي', 'in parallel'], ['علي التوازي', 'in parallel'], ['التوالي', 'series'], ['التوازي', 'parallel']];
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const B = '(^|[\\s(\\[«"،,.:؛!؟?\\-—/])', E = '(?=$|[\\s)\\]»"،,.:؛!؟?\\-—/])';
@@ -202,7 +217,7 @@ export function englishTerms(text) {
     let t = String(text || '');
     if (!/[؀-ۿ]/.test(t)) return t;
     for (const [ar, en] of PHRASE) t = t.replace(new RegExp(B + esc(ar) + E, 'g'), (m, a) => `${a}**${en}**`);
-    for (const [ar, en] of TERM_MAP) {
+    for (const [ar, en] of TERM_SORTED) {
         if (!ar.startsWith('ال')) {                                   // a phrase like فرق الجهد / شدة التيار / قانون أوم
             t = t.replace(new RegExp(B + '([وفب]?)' + esc(ar) + E, 'g'), (m, a, p) => `${a}${p ? p + 'الـ ' : 'الـ '}**${en}**`);
             continue;
