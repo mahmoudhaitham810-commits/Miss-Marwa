@@ -25,11 +25,13 @@
 import { requireStaff, ensureAppSchema, verifyStudentRequest } from './admin-auth.js';
 import { chat, usageSummary, bonusOpen, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
 import { studentAccess } from './ai-quota.js';
-import { searchBook, bookRules } from './curriculum.js';
+import { searchBook, bookRules, gradeToc } from './curriculum.js';
+import { sourceBlock, lessonParts } from './studio.js';
+import { getOrMake, CacheBusyError } from './ai-cache.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
-import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, askKind, taskRules, dropAnswerLine, isScienceQuestion, isCapabilityQuestion, capabilitiesForStudent } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, COMPANION, askKind, taskRules, dropAnswerLine, isScienceQuestion, isCapabilityQuestion, capabilitiesForStudent } from './ai-rules.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -147,10 +149,11 @@ function cardsFor(intents, d) {
 // ---------- personality ----------
 const ME = 'Miss Marwa AI Assistant';
 // opts.bench = { grade } → the Model test: same tutor, no real student's data
-export function tutorPrompt(d, tier = 'free', opts = {}) {
-    const st = opts.bench ? { firstName: 'a student', gender: 'male', gradeLabel: GRADE_LABEL[opts.bench.grade] || 'Prep' } : d ? d.student : { firstName: '', gender: 'male', gradeLabel: '' };
-    const girl = st.gender === 'female';
-    return `You are "${ME}" (model: ${BRANDS[tier].name}) — the study buddy of the students of ${'مس مروة'} (Miss Marwa), a science teacher in Egypt (Science Academy). You're talking to ONE student: ${st.firstName} (${girl ? 'a girl — talk to her in the feminine: يا بطلة، إنتِ، عملتي' : 'a boy — talk to him in the masculine: يا بطل، إنت، عملت'}), ${st.gradeLabel}.
+// The instructions in two parts (19→22 Nov 2026): a FIXED part — the same for every student, so Claude can cache it and
+// re-read it at 10% of the price — and a small part about THIS student and THIS question (never cached: it changes every time).
+// (Before, the whole thing was one "cache this" block that changed every message → never re-used, and +25% to write it.)
+function tutorFixed(tier) {
+    return `You are "${ME}" (model: ${BRANDS[tier].name}) — the study buddy of the students of ${'مس مروة'} (Miss Marwa), a science teacher in Egypt (Science Academy). You talk to ONE student at a time: their name, grade and whether they're a boy or a girl are in "The student" below — always use the right Arabic gender forms (boy: يا بطل، إنت، عملت · girl: يا بطلة، إنتِ، عملتي).
 
 ## Personality — دمه خفيف موت 😄
 - Super lively, witty, warm and encouraging — like the coolest older sibling who loves science. Light Egyptian humor, playful comparisons from daily life (الأكل، الكورة، الموبايل، المواصلات), but always kind — never make fun of the student.
@@ -162,11 +165,11 @@ export function tutorPrompt(d, tier = 'free', opts = {}) {
 - Egyptian colloquial Arabic (عامية مصرية) — never فصحى.
 - EVERY science term, unit, symbol and formula stays in English, usually with "الـ": الـ **Atom**، الـ **Density**، **D = m / V**، **kg**. NEVER translate science terms into Arabic. Never switch fully to English unless the student asks for English.
 - Put **bold** on the English science terms. Short paragraphs; the student is on a phone.
-Example: "بص يا ${girl ? 'بطلة' : 'بطل'}، الـ **Density** دي ببساطة هي الـ **mass** مقسومة على الـ **volume**: **D = m / V** — يعني لو حاجتين نفس الحجم، اللي أتقل فيهم كثافته أعلى 🧱🪶"
+Example: "بص يا بطل، الـ **Density** دي ببساطة هي الـ **mass** مقسومة على الـ **volume**: **D = m / V** — يعني لو حاجتين نفس الحجم، اللي أتقل فيهم كثافته أعلى 🧱🪶"
 
 ${LANGUAGE_SCHOOLS}
 ${EXAM_ANSWER_LINE}
-
+${COMPANION}
 ## Your job as ${BRANDS[tier].name}
 ${tier === 'pro'
         ? `- You're the paid model — the student pays for real, high-value teaching. Explain clearly and completely at their grade's level: the idea, why it's true, a quick everyday example, and the exact exam answer. Problems: every step with units.${PRO_ACCURACY}`
@@ -174,13 +177,25 @@ ${tier === 'pro'
 - Use ONLY the "MY DATA" block below for anything about their grades, rank, exams, absences or lessons. Never invent a number, exam, lesson or date. If something isn't there, say you don't see it.
 - Cards with their exact numbers appear under your reply when they ask about their grades, open exams or new lessons — so keep that part short and fun, don't repeat every number.
 - You can ONLY see this student's own data. If they ask about another student's grades or anything private about someone else, say kindly that you can't see that 🙂.
-${opts.books ? `- Passages from their own curriculum book for this question are at the end ("Curriculum book") — they are your source of truth for science content.` : `- Never guess what's inside a specific lesson of their book ("Unit 2 Lesson 3") — ${tier === 'pro' ? "no passage of their book was found for it" : "the books aren't connected yet"}; ask them to tell you the topic.`}
 - Stay on studies. Off-topic chat → one friendly line, then steer back to science. Keep everything appropriate for school students.
 - Never claim you did something on the platform (you can't submit, change marks or send anything).
-- If they ask what you can do, list (numbered) what you do on the platform — their level & grades, open exams & deadlines, new lessons, one photo question a day, quick Science help — then say honestly that you're a limited model and they shouldn't rely on you entirely for the academic content.
+- If they ask what you can do, list (numbered) what you do on the platform — their level & grades, open exams & deadlines, new lessons, lesson summaries, solving questions together, photos and PDFs of questions, Science help.`;
+}
+function tutorStudent(d, tier, opts = {}) {
+    const st = opts.bench ? { firstName: 'a student', gender: 'male', gradeLabel: GRADE_LABEL[opts.bench.grade] || 'Prep' } : d ? d.student : { firstName: '', gender: 'male', gradeLabel: '' };
+    const girl = st.gender === 'female';
+    return `## The student
+${st.firstName} — ${girl ? 'a GIRL: talk to her in the feminine (يا بطلة، إنتِ، عملتي)' : 'a BOY: talk to him in the masculine (يا بطل، إنت، عملت)'} — ${st.gradeLabel}.
+${opts.books ? `- Passages from their own curriculum book for this question are at the end ("Curriculum book") — they are your source of truth for science content.` : `- Never guess what's inside a specific lesson of their book ("Unit 2 Lesson 3") — ${tier === 'pro' ? "no passage of their book was found for it" : "the books aren't connected yet"}; ask them to tell you the topic.`}
 
 ## MY DATA (exact, from the platform — this student only)
 ${opts.bench ? '(Model test — no student data. Answer the science question only.)' : factsOf(d)}`;
+}
+/** The whole instructions as one text (Mini Assistant, Model test). */
+export function tutorPrompt(d, tier = 'free', opts = {}) { return tutorFixed(tier) + '\n\n' + tutorStudent(d, tier, opts); }
+/** Assistant Pro: [fixed part, cached] + [this student / this question, not cached]. */
+export function tutorSystem(d, tier, opts = {}, extra = '') {
+    return [{ type: 'text', text: tutorFixed(tier), cache_control: { type: 'ephemeral' } }, { type: 'text', text: tutorStudent(d, tier, opts) + extra }];
 }
 const SMALL = /^(شكرا|شكرًا|ميرسي|تسلم|تسلمي|تمام|اوك|اوكي|ok|okay|thanks|thank you|hi|hello|hey|ازيك|اهلا|أهلا|السلام عليكم|صباح الخير|مساء الخير|ماشي|حلو|جميل|برافو|يس|نو|اه|لا)[\s!.,،؟?😊👌🙏❤️💪✨😂]*$|انت مين|إنت مين|تقدر تعمل ايه|تقدر تعمل إيه|بتعمل ايه/i;
 export const NOTE_TEXT = 'دي إجابة مبسّطة من Mini Assistant 🙂 — لشرح أعمق وأدق جرّب **Miss Marwa Assistant Pro**.';
@@ -191,6 +206,16 @@ const EXAMPLES = [
     { role: 'user', content: 'يعني إيه Mass؟' },
     { role: 'assistant', content: 'سؤال جامد 😎 الـ **Mass** هي كمية المادة اللي في أي جسم، وبنقيسها بالـ **kilogram (kg)**. يعني إنت على الأرض أو على القمر، الـ **Mass** بتاعتك هي هي — اللي بيتغير هو الـ **Weight** 🌙' }
 ];
+
+// The short lesson summary students get in the chat (made once per lesson, shared) — not the long teacher summary.
+export const STUDENT_SUMMARY_TASK = `## Task: a SHORT, high-value summary of this lesson for students (they read it in the chat on their phone)
+Not the long teacher summary: about 350–650 words, but NOTHING important skipped — every definition, law / rule, unit, device, key reason (G.R), key comparison and key example the exams ask about, each as ONE tight line.
+Organise it like Miss Marwa (a roadmap first, then each main topic in turn, so it reads like one story):
+- First: 🗺️ **In this lesson:** then the 3–6 main topics as a numbered list (short, simple names).
+- Then each topic: ### 1. <topic> — bullets: **Term:** definition (the book's wording) · explanation in short lines · cause → result with arrows · formulas with their units on their own line · **G.R:** fact → Because … · a quick example.
+- A small markdown table only for a real comparison (2–4 rows).
+- End with: 📌 **Remember for the exam** — 3–5 bullets.
+Simple English like the book (an occasional Arabic word in brackets for a hard everyday word is fine). Markdown only. No greeting, no question at the end, no page numbers — the app adds those.`;
 
 // ---------- messages ----------
 const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } };
@@ -257,6 +282,11 @@ export async function onRequest(context) {
             return json({ thread: { id: t.id, title: t.title }, messages: (results || []).reverse().map(msgOut) });
         }
         if (action === 'image') return serveImage(env, db, parseInt(url.searchParams.get('id'), 10), (info) => info.kind === 'ai-student' && info.student_id === sid && (staffId ? Number(info.owner_id) === Number(staffId) : !info.owner_id));
+        if (action === 'lessons') {   // the book map of their own grade (for "لخصلي درس") — no AI, costs nothing
+            const toc = await gradeToc(env, db, who.student.grade, { build: false }).catch(() => []);
+            const units = (toc[0] && toc[0].units || []).map(u => ({ unit: u.unit, title: u.title, lessons: u.lessons.map(l => ({ lesson: l.lesson, title: l.title })) }));
+            return json({ grade: who.student.grade, units });
+        }
         if (action === 'mine') {   // exact data for the welcome screen (no AI, costs nothing)
             const d = await myData(db, who.student);
             return json({ cards: cardsFor(['me', 'todo', 'lessons'], d) });
@@ -269,6 +299,45 @@ export async function onRequest(context) {
             return json({ thread: { id: Number(r.meta.last_row_id), title: 'New chat' }, messages: [] });
         }
 
+        // ---------- a lesson summary: made ONCE per lesson from the book (shared by every student of the grade) ----------
+        // Not charged to the student (it's shared and made once); costs ~$0.005 per lesson the first time, then nothing.
+        if (action === 'lessonSummary') {
+            const pa = await proNow();
+            if (!pa.ok) return bad(PRO_MSG[pa.code] || `${BRANDS.pro.name} جاي قريب جداً 🚀`, 403, { code: pa.code === 'PRO_CLOSED' || pa.code === 'PAID_OFF' ? 'PRO_LOCKED' : pa.code });
+            if (await inExam()) return bad('إنت في امتحان دلوقتي 📝 — خلّص امتحانك الأول وبعدين أنا معاك على طول 😉', 423, { code: 'EXAM_LOCK' });
+            const unit = parseInt(data.unit, 10), lesson = parseInt(data.lesson, 10), grade = who.student.grade;
+            const toc = await gradeToc(env, db, grade, { build: false }).catch(() => []);
+            const U = toc[0] && toc[0].units.find(u => u.unit === unit), Ls = U && U.lessons.find(l => l.lesson === lesson);
+            if (!U || !Ls) return bad('الدرس ده مش موجود في كتابك 🤔', 404, { code: 'NO_LESSON' });
+            let t = await ownThread(parseInt(data.threadId, 10));
+            if (!t) { const r = await db.prepare('INSERT INTO tutor_threads (student_id, staff_id, title) VALUES (?, ?, ?)').bind(sid, staffId, `Unit ${unit} · Lesson ${lesson}`).run(); t = await ownThread(Number(r.meta.last_row_id)); }
+            const ask = `لخصلي Unit ${unit} · Lesson ${lesson}${Ls.title ? ': ' + Ls.title : ''} 📘`;
+            const ur = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text) VALUES (?, 'user', ?)`).bind(t.id, ask).run();
+            const userMsg = { id: Number(ur.meta.last_row_id), role: 'user', text: ask, created_at: new Date().toISOString() };
+            const key = `ssum:v1:${toc[0].book}:${unit}:${lesson}:${Ls.start}-${Ls.end}`;   // a rebuilt map with other pages → a new summary
+            try {
+                const out = await getOrMake(db, key, { kind: 'student-summary', ref: `${grade}:${unit}:${lesson}`, waitMs: 80000, make: async () => {
+                    const parts = await lessonParts(db, toc, unit, [lesson]);
+                    if (!parts.length || !parts[0].text.trim()) throw new Error('NO_PAGES');
+                    const r = await chat(env, db, { tier: 'pro', system: [sourceBlock(grade, parts), { type: 'text', text: STUDENT_SUMMARY_TASK }], messages: [{ role: 'user', content: 'Go.' }],
+                        maxTokens: 1800, meter: { staffId: who.preview ? who.staff.id : null, kind: 'student-summary' } });
+                    return { text: r.text, model: r.model, costUsd: r.costUsd };
+                } });
+                const head = `📘 **Unit ${unit} · Lesson ${lesson}${Ls.title ? ' — ' + Ls.title : ''}**
+
+`;
+                const r = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, tier, model, ms, cost_usd, cards) VALUES (?, 'assistant', ?, 'pro', ?, 0, ?, ?)`)
+                    .bind(t.id, head + out.text.trim(), out.model || null, 0, JSON.stringify([{ type: 'next', unit, lesson, title: Ls.title || '' }])).run();
+                await db.prepare('UPDATE tutor_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
+                const saved = await db.prepare('SELECT * FROM tutor_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
+                return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), cached: !!out.cached });
+            } catch (e) {
+                const msg = e instanceof CacheBusyError ? 'الملخص بيتجهز دلوقتي لزميل ليك ⏳ — جرّب كمان دقيقة' : e.message === 'NO_PAGES' ? 'صفحات الدرس ده لسه مش جاهزة 📚 — جرّب درس تاني' : e instanceof AiLimitError ? (FRIENDLY[e.code] || FRIENDLY.AI_ERROR) : FRIENDLY.AI_ERROR;
+                await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, error) VALUES (?, 'error', ?, ?)`).bind(t.id, msg, 'SUMMARY').run();
+                return json({ error: msg, code: 'SUMMARY_FAILED', threadId: t.id, user: msgOut(userMsg) }, 502);
+            }
+        }
+
         if (action === 'send') {
             const tier = data.tier === 'pro' ? 'pro' : 'free';
             if (tier === 'pro') {
@@ -278,7 +347,11 @@ export async function onRequest(context) {
             let text = String(data.text || '').replace(/\r/g, '').trim();
             const img = readImage(data.image);
             if (img && img.error) return bad(img.error, 400);
+            // a PDF: its text (read on the phone) goes to the AI for THIS message only; the chat keeps just its name
+            const doc = data.doc && typeof data.doc === 'object' && String(data.doc.text || '').trim()
+                ? { name: String(data.doc.name || 'file.pdf').replace(/[\r\n]/g, ' ').slice(0, 80), pages: Math.max(1, Math.min(50, parseInt(data.doc.pages, 10) || 1)), text: String(data.doc.text).replace(/\r/g, '').slice(0, tier === 'pro' ? 9000 : 3500) } : null;
             if (!text && img) text = 'حل السؤال اللي في الصورة 📷';
+            if (!text && doc) text = 'اشرحلي اللي في الملف ده 📄';
             if (!text) return bad('اكتب سؤالك الأول 🙂', 400);
             if (text.length > MAX_TEXT) return bad(`السؤال طويل شوية — خليه أقل من ${MAX_TEXT} حرف`, 400);
             if (await inExam()) return bad('إنت في امتحان دلوقتي 📝 — خلّص امتحانك الأول وبعدين أنا معاك على طول 😉', 423, { code: 'EXAM_LOCK' });
@@ -298,8 +371,9 @@ export async function onRequest(context) {
                 t = await ownThread(Number(r.meta.last_row_id));
             }
             const imageId = img ? await saveImage(env, db, img, { kind: 'ai-student', studentId: sid, ownerId: staffId }) : null;
-            const ur = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, image_id) VALUES (?, 'user', ?, ?)`).bind(t.id, text, imageId).run();
-            const userMsg = { id: Number(ur.meta.last_row_id), role: 'user', text, image_id: imageId, created_at: new Date().toISOString() };
+            const shown = doc ? `${text}\n📄 ${doc.name}` : text;
+            const ur = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, image_id) VALUES (?, 'user', ?, ?)`).bind(t.id, shown, imageId).run();
+            const userMsg = { id: Number(ur.meta.last_row_id), role: 'user', text: shown, image_id: imageId, created_at: new Date().toISOString() };
             if (img && context.waitUntil) context.waitUntil(purgeOldImages(env, db));
 
             if (cap) {
@@ -317,6 +391,8 @@ export async function onRequest(context) {
             else if (free && science) cards.push({ type: 'upgrade', text: NOTE_TEXT, tier: 'pro' });
             const { results: hist } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
+            messages.forEach((m, i) => { if (i < messages.length - 4 && m.content.length > 700) m.content = m.content.slice(0, 650) + ' …'; });   // older turns: the gist is enough (saves tokens on long chats)
+            if (doc && messages.length) messages[messages.length - 1].content = `${text}\n\n📄 The student attached "${doc.name}" (${doc.pages} page${doc.pages > 1 ? 's' : ''}). Its text:\n"""\n${doc.text}\n"""\nUse it only to understand what they're asking; answer from their curriculum book.`;
             const save = async (f) => {
                 const r = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, tier, model, ms, neurons, cost_usd, error, cards) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                     .bind(t.id, f.role || 'assistant', f.text, tier, f.model ?? null, f.ms ?? null, f.neurons ?? null, f.cost ?? null, f.error ?? null, f.cards ?? null).run();
@@ -334,10 +410,10 @@ export async function onRequest(context) {
                     // The question (+ the previous one, for follow-ups like «طب والوحدة؟») or the PHOTO → search terms → passages.
                     const payer = who.preview ? { staffId: who.staff.id } : { studentId: sid };
                     const prevQ = messages.filter(m => m.role === 'user').slice(-2, -1).map(m => m.content).join(' ');
-                    const found = intents.length ? null : await searchBook(env, db, { grade: who.student.grade, text: `${text} ${prevQ}`.trim(), refText: text, image: img && !img.error ? img : null, meter: payer, unitChars: 9000 });
+                    const found = intents.length ? null : await searchBook(env, db, { grade: who.student.grade, text: `${text} ${doc ? doc.text.slice(0, 1500) : ''} ${prevQ}`.trim(), refText: text, image: img && !img.error ? img : null, meter: payer, unitChars: 9000 });
                     const gl = GRADE_LABEL[who.student.grade] || who.student.grade;
                     const books = !found || !found.science ? '' : bookRules(found.ctx, gl, { indexed: found.indexed, ref: found.ref, refMissing: found.refMissing });
-                    out = await chat(env, db, { tier: 'pro', system: tutorPrompt(d, 'pro', { books: !!(found && found.ctx.text) }) + (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro')),
+                    out = await chat(env, db, { tier: 'pro', system: tutorSystem(d, 'pro', { books: !!(found && found.ctx.text) }, (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro'))),
                         messages: [...EXAMPLES, ...messages], maxTokens: img ? 1300 : 1100, image: img && !img.error ? img : null,
                         meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
                 }

@@ -80,6 +80,43 @@
         return html;
     }
 
+    // ---------- PDF → text (or, for a scanned PDF, its first pages as ONE small picture) — on the phone, free ----------
+    // Keeps the AI cost low: a text PDF is sent as plain text (capped), never as pictures; a scanned one as one
+    // compressed JPEG of its first 2 pages stacked.
+    let pdfP = null;
+    const pdfjs = () => pdfP || (pdfP = import('/assets/vendor/pdfjs/pdf.min.js').then(m => { m.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js'; return m; }));
+    const PDF_PAGES = 8, PDF_CHARS = 9000;
+    async function readPdf(file) {
+        if (file.size > 25 * 1024 * 1024) throw new Error('الملف كبير قوي (أكتر من 25MB) — ابعت الصفحات المهمة بس');
+        const lib = await pdfjs();
+        const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+        const n = Math.min(doc.numPages, PDF_PAGES);
+        let text = '';
+        for (let i = 1; i <= n && text.length < PDF_CHARS; i++) {
+            const pg = await doc.getPage(i);
+            const tc = await pg.getTextContent();
+            const t = tc.items.map(x => x.str + (x.hasEOL ? '\n' : ' ')).join('').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+            if (t) text += `[page ${i}]\n${t}\n\n`;
+        }
+        const name = String(file.name || 'file.pdf').slice(0, 80);
+        if (text.replace(/\[page \d+\]/g, '').trim().length >= 120)
+            return { kind: 'text', doc: { name, pages: n, total: doc.numPages, text: text.slice(0, PDF_CHARS).trim() } };
+        // scanned (no text) → first 2 pages, stacked, one JPEG
+        const shots = [];
+        for (let i = 1; i <= Math.min(2, doc.numPages); i++) {
+            const pg = await doc.getPage(i), v0 = pg.getViewport({ scale: 1 }), sc = 1000 / v0.width, v = pg.getViewport({ scale: sc });
+            const c = document.createElement('canvas'); c.width = Math.round(v.width); c.height = Math.round(v.height);
+            const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+            await pg.render({ canvasContext: g, viewport: v }).promise; shots.push(c);
+        }
+        const W = 1000, H = shots.reduce((t, c) => t + c.height, 0), k = Math.min(1, 1600 / H);
+        const out = document.createElement('canvas'); out.width = Math.round(W * k); out.height = Math.round(H * k);
+        const g = out.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, out.width, out.height);
+        let y = 0; for (const c of shots) { g.drawImage(c, 0, y * k, c.width * k, c.height * k); y += c.height; }
+        const data = out.toDataURL('image/jpeg', 0.72);
+        return { kind: 'image', image: { mime: 'image/jpeg', b64: data.split(',')[1], url: data, width: out.width, height: out.height, pdfName: name, pages: Math.min(2, doc.numPages), total: doc.numPages } };
+    }
+
     // ---------- photo → small JPEG ----------
     function shrink(file, max = 1280, quality = 0.82) {
         return new Promise((resolve, reject) => {
@@ -157,11 +194,12 @@
     function composer(el, opt) {
         injectCss();
         const o = Object.assign({ models: [], tier: 'free', placeholder: 'Ask anything…', maxLength: 4000, voiceKey: 'ai_voice', toast: (m) => alert(m) }, opt || {});
-        let models = o.models, tier = o.tier, busy = false, image = null, rec = null, listening = false;
+        let models = o.models, tier = o.tier, busy = false, image = null, pdoc = null, rec = null, listening = false;
         let voiceLang = store.get(o.voiceKey, 'ar-EG');
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         el.innerHTML = `<div class="ak">
             <div class="ak-att" hidden><div class="ak-thumb"><img alt="Photo to send"><button type="button" class="ak-rm" aria-label="Remove photo">${SVG.x}</button></div><small>Photo ready — add a note or just send</small></div>
+            <div class="ak-att ak-doc" hidden><div class="ak-thumb" style="display:grid;place-items:center;font-size:26px;background:var(--surface-2,#f1f5f9)">📄<button type="button" class="ak-rm ak-rmd" aria-label="Remove file">${SVG.x}</button></div><small></small></div>
             <textarea rows="1" dir="auto" maxlength="${o.maxLength}" placeholder="${esc(o.placeholder)}" aria-label="Message"></textarea>
             <div class="ak-row">
                 <button type="button" class="ak-b send" aria-label="Send" disabled>${SVG.send}</button>
@@ -169,12 +207,12 @@
                 <button type="button" class="ak-pill" aria-haspopup="menu" aria-label="Choose model"><span></span>${SVG.chev}</button>
                 <span class="sp"></span>
                 <button type="button" class="ak-b plus" aria-label="Add a photo">${SVG.plus}</button>
-                <input type="file" accept="image/*" hidden>
+                <input type="file" accept="${o.pdf ? 'image/*,application/pdf,.pdf' : 'image/*'}" hidden>
             </div></div>`;
         const $ = (s) => el.querySelector(s);
-        const ta = $('textarea'), sendB = $('.send'), micB = $('.mic'), pill = $('.ak-pill'), plus = $('.plus'), file = $('input[type=file]'), att = $('.ak-att');
+        const ta = $('textarea'), sendB = $('.send'), micB = $('.mic'), pill = $('.ak-pill'), plus = $('.plus'), file = $('input[type=file]'), att = $('.ak-att:not(.ak-doc)'), datt = $('.ak-doc');
         const autosize = () => { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; };
-        const update = () => { sendB.disabled = busy || (!ta.value.trim() && !image); };
+        const update = () => { sendB.disabled = busy || (!ta.value.trim() && !image && !pdoc); };
         const cur = () => models.find(m => m.tier === tier) || models[0] || { name: '—' };
         const drawPill = () => { const m = cur(); pill.querySelector('span').textContent = m.name; };
 
@@ -213,10 +251,22 @@
         file.addEventListener('change', async () => {
             const f = file.files && file.files[0]; file.value = '';
             if (!f) return;
-            try { setImage(await shrink(f)); } catch (e) { o.toast(e.message, 'error'); }
+            if (o.pdf && (/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name || ''))) {
+                setDoc(null); setImage(null);
+                datt.hidden = false; datt.querySelector('small').textContent = 'بقرا الملف… · Reading the PDF…';
+                try {
+                    const r = await readPdf(f);
+                    if (r.kind === 'text') setDoc(r.doc);
+                    else { datt.hidden = true; setImage(r.image); att.querySelector('small').textContent = `📄 ${r.image.pdfName} — scanned: first ${r.image.pages} page${r.image.pages > 1 ? 's' : ''} sent as a photo`; }
+                } catch (e) { datt.hidden = true; o.toast(e.message && /[\u0600-\u06FF]/.test(e.message) ? e.message : "الملف ده مش بيفتح — جرّب ملف تاني", 'error'); }
+                return;
+            }
+            try { setImage(await shrink(f, o.photoMax || 1280, o.photoQuality || 0.82)); att.querySelector('small').textContent = 'Photo ready — add a note or just send'; } catch (e) { o.toast(e.message, 'error'); }
         });
-        function setImage(img) { image = img; att.hidden = !img; if (img) att.querySelector('img').src = img.url; update(); if (img) ta.focus(); }
+        function setImage(img) { image = img; att.hidden = !img; if (img) { att.querySelector('img').src = img.url; setDoc(null); } update(); if (img) ta.focus(); }
+        function setDoc(d) { pdoc = d; datt.hidden = !d; if (d) datt.querySelector('small').textContent = `📄 ${d.name} · ${d.pages}${d.total > d.pages ? ' of ' + d.total : ''} page${d.pages > 1 ? 's' : ''} — اكتب سؤالك عنه أو ابعت`; update(); if (d) ta.focus(); }
         $('.ak-rm').addEventListener('click', () => setImage(null));
+        $('.ak-rmd').addEventListener('click', () => setDoc(null));
 
         // text + send
         ta.addEventListener('input', () => { autosize(); update(); });
@@ -224,9 +274,9 @@
             if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(hover: hover) and (pointer: fine)').matches) { e.preventDefault(); go(); }
         });
         async function go() {
-            const text = ta.value.trim(); if ((!text && !image) || busy) return;
-            const img = image; ta.value = ''; setImage(null); autosize();
-            await o.onSend({ text, image: img ? { mime: img.mime, b64: img.b64, url: img.url } : null });
+            const text = ta.value.trim(); if ((!text && !image && !pdoc) || busy) return;
+            const img = image, d = pdoc; ta.value = ''; setImage(null); setDoc(null); autosize();
+            await o.onSend({ text, image: img ? { mime: img.mime, b64: img.b64, url: img.url } : null, doc: d || null });
         }
         sendB.addEventListener('click', go);
 

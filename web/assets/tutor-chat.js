@@ -91,6 +91,16 @@
     .tc-lock img { width: 90px; height: 90px; border-radius: 50%; }
     .tc-banner { border-radius: 14px; padding: 10px 12px; font-size: 13.5px; background: var(--warning-soft, #fff7ed); margin-bottom: 8px; }
     .tc-cards > *, .tc-row > * { min-width: 0; }
+    /* study companion: next-step buttons + the lesson picker */
+    .tc-next { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .tc-next button { border: 1px solid var(--primary); background: var(--primary-soft, #eef2ff); color: var(--primary); border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .tc-pick { border: 1px solid var(--border); background: var(--surface); border-radius: 18px; padding: 14px; }
+    .tc-pick h5 { margin: 0 0 10px; font-size: 15px; }
+    .tc-pick .u { font-size: 12.5px; font-weight: 800; color: var(--muted); margin: 10px 0 6px; }
+    .tc-pick .ls { display: grid; gap: 6px; }
+    .tc-pick .ls button { text-align: start; border: 1px solid var(--border); background: var(--canvas); color: var(--text); border-radius: 12px; padding: 9px 11px; font: inherit; font-size: 13.5px; cursor: pointer; }
+    .tc-pick .ls button:hover { border-color: var(--primary); } .tc-pick .ls button b { color: var(--primary); }
+    .tc-ask { font-size: 16px; font-weight: 800; margin: 12px 0 2px; color: var(--text); }
     @media (prefers-reduced-motion: reduce) { .tc-msg, .tc-dots span { animation: none; } }`;
 
     function mount(root, opt) {
@@ -129,24 +139,28 @@
                 const rows = c.lessons.slice(0, 5).map(l => `<div class="tc-row"><span class="e">${/video/i.test(l.category) ? '🎬' : '📄'}</span><div class="tx"><b dir="auto">${esc(l.title)}</b><small>${esc(l.category)} · ${esc(l.at)}</small></div></div>`).join('');
                 return `<div class="tc-card tc-lescard"><h5>📚 آخر الدروس في ${esc(c.gradeLabel)}</h5>${rows || '<p style="margin:0">مفيش دروس جديدة لسه</p>'}${rows ? '<a class="btn btn-soft btn-sm" style="margin-top:10px" href="/lessons.html">افتح الدروس</a>' : ''}</div>`;
             },
+            next: (c) => `<div class="tc-next" dir="rtl"><button data-next="quiz" data-u="${c.unit}" data-l="${c.lesson}">🧪 يلا نحل أسئلة عليه</button><button data-next="explain" data-u="${c.unit}" data-l="${c.lesson}">🔍 اشرحلي جزء منه</button><button data-next="pick">📘 درس تاني</button></div>`,
             upgrade: (c) => `<div class="tc-card tc-up"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="pro" data-pro>${proReady() ? '✨ اسأل Pro' : '✨ Pro · قريب'}</button></div>`
         };
         const cardsHTML = (cards) => cards && cards.length ? `<div class="tc-cards">${cards.map(c => (CARD[c.type] || (() => ''))(c)).join('')}</div>` : '';
 
         function msgHTML(m, i) {
             if (m.role === 'user') { const src = m.imgUrl || (m.imageId ? q('image') + '&id=' + m.imageId : ''); return `<div class="tc-msg me"><div class="col">${src ? `<img class="shot" src="${esc(src)}" alt="Photo">` : ''}<div class="bubble" dir="auto">${esc(m.text)}</div></div></div>`; }
+            if (m.role === 'picker') return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body" style="flex:1 1 auto"><div class="tc-pick"><h5 dir="rtl">📘 تحب نلخص أنهي درس؟</h5>${m.units && m.units.length ? m.units.map(u => `<div class="u">Unit ${u.unit}${u.title ? ' · ' + esc(u.title) : ''}</div><div class="ls">${u.lessons.map(l => `<button data-sum="${u.unit}.${l.lesson}"><b>Lesson ${l.lesson}</b>${l.title ? ' · ' + esc(l.title) : ''}</button>`).join('')}</div>`).join('') : '<p class="muted" dir="rtl" style="margin:0">كتابك لسه بيتجهز 📚 — قريب جداً.</p>'}</div></div></div>`;
             if (m.role === 'typing') return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body"><span class="tc-dots"><span></span><span></span><span></span></span></div></div>`;
             if (m.role === 'error') return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body"><div class="tc-err" dir="auto">${esc(m.text)}${m.retry && i === MSGS.length - 1 ? '<br><button class="btn btn-soft btn-sm" data-retry>جرّب تاني</button>' : ''}</div>${cardsHTML(m.cards)}</div></div>`;
-            return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body"><div class="tc-md">${md(m.text)}</div>${cardsHTML(m.cards)}<div class="tc-meta">${esc(m.error ? 'من المنصة' : (m.brand || 'Mini Assistant'))}</div></div></div>`;
+            const lastPro = i === MSGS.length - 1 && m.tier === 'pro' && !m.error && !(m.cards || []).length && String(m.text || '').length > 260;
+            return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body"><div class="tc-md">${md(m.text)}</div>${cardsHTML(m.cards)}${lastPro ? `<div class="tc-next" dir="rtl"><button data-next="quiz">🧪 نحل أسئلة عليه</button><button data-next="explain">🔍 وضّحلي أكتر</button></div>` : ''}<div class="tc-meta">${esc(m.error ? 'من المنصة' : (m.brand || 'Mini Assistant'))}</div></div></div>`;
         }
         function welcome() {
             const f = ST && ST.student ? ST.student : {};
             const girl = f.gender === 'female';
-            const chips = ['عامل إيه في درجاتي؟ 📊', 'عندي امتحانات مفتوحة؟ ⏰', 'إيه الجديد في الدروس؟ 📚', 'اشرحلي الـ Density ببساطة 🤓'];
+            const chips = [['sum', '📘 لخصلي درس'], ['quiz', '🧪 يلا نحل أسئلة سوا'], ['explain', `🤓 اشرحلي حاجة ${girl ? 'مش فاهماها' : 'مش فاهمها'}`], ['me', '📊 عامل إيه في درجاتي؟']];
             return `<div class="tc-hello"><img src="${AVATAR}" alt=""><h2 dir="rtl">أهلاً يا ${esc(f.firstName || '')} 👋</h2>
-                <p dir="rtl">أنا مساعد مس مروة 🤖 اسألني في أي حاجة في العلوم، أو عن درجاتك وامتحاناتك — وابعتلي صورة سؤال لو ${girl ? 'محتارة' : 'محتار'} 📷</p>
-                <div id="tcMine">${MINE ? cardsHTML(MINE) : ''}</div>
-                <div class="tc-chips">${chips.map(c => `<button data-chip="${esc(c)}" dir="rtl">${esc(c)}</button>`).join('')}</div></div>`;
+                <p class="tc-ask" dir="rtl">هننجز إيه النهارده؟ 🎯</p>
+                <p dir="rtl">أنا مساعد مس مروة — بذاكر معاك من كتابك 📖: ألخصلك درس، نحل أسئلة سوا، أشرحلك أي جزء، أو ابعتلي صورة سؤال 📷</p>
+                <div class="tc-chips">${chips.map(([k, c]) => `<button data-go="${k}" dir="rtl">${esc(c)}</button>`).join('')}</div>
+                <div id="tcMine">${MINE ? cardsHTML(MINE) : ''}</div></div>`;
         }
         function render(scroll = true) {
             $('tcMsgs').innerHTML = MSGS.length ? MSGS.map(msgHTML).join('') : welcome();
@@ -160,13 +174,13 @@
                 + (ST.inExam ? `<div class="tc-banner">📝 إنت في امتحان دلوقتي — المساعد هيستناك لحد ما تخلّص 😉</div>` : '');
         }
 
-        async function send(text, image) {
+        async function send(text, image, doc) {
             if (sending) return;
             sending = true; comp && comp.setBusy(true);
-            MSGS.push({ role: 'user', text: text || '📷', imgUrl: image && image.url });
+            MSGS.push({ role: 'user', text: (text || (doc ? '' : '📷')) + (doc ? `${text ? '\n' : ''}📄 ${doc.name}` : ''), imgUrl: image && image.url });
             MSGS.push({ role: 'typing' }); render();
             try {
-                const r = await api('send', { threadId, text, tier: comp ? comp.tier : 'free', image: image ? { mime: image.mime, b64: image.b64 } : null });
+                const r = await api('send', { threadId, text, tier: comp ? comp.tier : 'free', image: image ? { mime: image.mime, b64: image.b64 } : null, doc: doc ? { name: doc.name, pages: doc.pages, text: doc.text } : null });
                 threadId = r.threadId;
                 MSGS = MSGS.filter(m => m.role !== 'typing');
                 const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && r.user) { u.text = r.user.text; u.imageId = r.user.imageId; }
@@ -181,14 +195,54 @@
                 const noRetry = ['EXAM_LOCK', 'PRO_LOCKED', 'STUDENT_OFF', 'STUDENT_CAP', 'FREE_CLOSED'].includes(d.code);
                 if (!d.user && !limit) { /* not saved → let them resend */ }
                 if (d.code === 'IMAGE_LIMIT' || d.code === 'DAILY_LIMIT' || (d.code === 'BONUS_CLOSED' && !d.threadId)) MSGS.pop();   // nothing was sent
-                MSGS.push({ role: 'error', text: e.message, retry: !limit && !noRetry, last: { text, image },
+                MSGS.push({ role: 'error', text: e.message, retry: !limit && !noRetry, last: { text, image, doc },
                     cards: limit ? [{ type: 'upgrade', text: d.code === 'IMAGE_LIMIT' ? `عايز تبعت صور أكتر وتاخد حل أدق؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}` : `عايز تسأل أكتر من كده؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}`, tier: 'pro' }] : null });
                 if (d.code === 'EXAM_LOCK' && ST) { ST.inExam = true; sub(); }
             }
             sending = false; comp && comp.setBusy(false); render();
         }
 
+        // ---------- study companion actions (no AI until the student picks something) ----------
+        let UNITS = null;
+        async function picker() {
+            if (!proReady()) { opt.toast(proLockedMsg(), 'info'); return; }
+            if (!UNITS) { try { UNITS = (await api('lessons')).units || []; } catch (e) { opt.toast(e.message, 'error'); return; } }
+            MSGS = MSGS.filter(m => m.role !== 'picker'); MSGS.push({ role: 'picker', units: UNITS }); render();
+        }
+        async function summarize(unit, lesson) {
+            if (sending) return;
+            sending = true; comp && comp.setBusy(true);
+            MSGS = MSGS.filter(m => m.role !== 'picker');
+            const L = (UNITS || []).flatMap(u => u.lessons.map(l => ({ ...l, unit: u.unit }))).find(x => x.unit === unit && x.lesson === lesson) || {};
+            MSGS.push({ role: 'user', text: `لخصلي Unit ${unit} · Lesson ${lesson}${L.title ? ': ' + L.title : ''} 📘` }); MSGS.push({ role: 'typing' }); render();
+            try {
+                const r = await api('lessonSummary', { threadId, unit, lesson });
+                threadId = r.threadId; MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push(r.reply);
+            } catch (e) {
+                const d = e.data || {}; if (d.threadId) threadId = d.threadId;
+                MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push({ role: 'error', text: e.message });
+            }
+            sending = false; comp && comp.setBusy(false); render();
+        }
+        const lessonName = (u, l) => { const x = (UNITS || []).find(v => v.unit === u); const y = x && x.lessons.find(v => v.lesson === l); return `Unit ${u} · Lesson ${l}${y && y.title ? ' (' + y.title + ')' : ''}`; };
         $('tcMsgs').addEventListener('click', (e) => {
+            const go = e.target.closest('[data-go]');
+            if (go) {
+                const k = go.dataset.go;
+                if (k === 'sum') return picker();
+                if (k === 'quiz') { comp && comp.fill('يلا نحل أسئلة سوا على '); return; }
+                if (k === 'explain') { comp && comp.fill('اشرحلي '); return; }
+                if (k === 'me') return send('عامل إيه في درجاتي؟', null);
+            }
+            const sm = e.target.closest('[data-sum]'); if (sm) { const [u, l] = sm.dataset.sum.split('.').map(Number); return summarize(u, l); }
+            const nx = e.target.closest('[data-next]');
+            if (nx) {
+                const k = nx.dataset.next, u = +nx.dataset.u, l = +nx.dataset.l;
+                if (k === 'pick') return picker();
+                if (comp && comp.tier !== 'pro' && proReady()) { comp.setTier('pro'); hint(); }
+                if (k === 'quiz') return send(u ? `يلا نحل أسئلة سوا على ${lessonName(u, l)} 🧪` : 'يلا نحل سؤالين سوا على الكلام ده 🧪', null);
+                if (k === 'explain') { comp && comp.fill(u ? `اشرحلي أكتر في ${lessonName(u, l)} جزء ` : 'وضّحلي أكتر جزء '); return; }
+            }
             const c = e.target.closest('[data-chip]'); if (c) { comp && comp.fill(c.dataset.chip.replace(/\s*[\u{1F300}-\u{1FAFF}\u2600-\u27BF]\uFE0F?$/u, '')); return; }
             if (e.target.closest('[data-pro]')) {
                 if (!proReady()) { opt.toast(proLockedMsg(), 'info'); return; }
@@ -198,7 +252,7 @@
                 return;
             }
             const r = e.target.closest('[data-retry]');
-            if (r) { const last = [...MSGS].reverse().find(m => m.role === 'error'); MSGS = MSGS.filter(m => m !== last); const u = MSGS.pop(); if (u && u.role === 'user') send(last.last.text, last.last.image); }
+            if (r) { const last = [...MSGS].reverse().find(m => m.role === 'error'); MSGS = MSGS.filter(m => m !== last); const u = MSGS.pop(); if (u && u.role === 'user') send(last.last.text, last.last.image, last.last.doc); }
         });
         $('tcNew').addEventListener('click', async () => {
             try { const r = await api('new', {}); threadId = r.thread.id; MSGS = []; render(false); loadMine(); } catch (e) { opt.toast(e.message, 'error'); }
@@ -223,8 +277,8 @@
             sub();
             comp = composer($('tcComp'), {
                 models: ST.models.map(m => ({ tier: m.tier, name: m.name, ready: m.ready, locked: m.locked, note: m.tier === 'free' ? (m.ready ? 'Free · مجاني' : 'قريب 🚀') : (m.note || 'قريب جداً 🚀') })),
-                tier: !ST.models[0].ready && proReady() ? 'pro' : 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, voiceKey: 'tutor_voice', toast: opt.toast,
-                onSend: ({ text, image }) => send(text, image),
+                tier: !ST.models[0].ready && proReady() ? 'pro' : 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, pdf: true, photoMax: 1152, photoQuality: 0.8, voiceKey: 'tutor_voice', toast: opt.toast,
+                onSend: ({ text, image, doc }) => send(text, image, doc),
                 onTier: () => hint(),
                 onLocked: (m) => opt.toast(m && m.tier === 'free' ? 'Mini Assistant جاي قريب 🚀' : proLockedMsg(), 'info'),
                 beforeAttach: () => (comp && comp.tier === 'free' && ST.today.images >= ST.today.limits.images ? `مسموح بصورة واحدة في اليوم على Mini Assistant 📷 — ${proReady() ? 'حوّل لـ Miss Marwa Assistant Pro وابعت صور براحتك ✨' : 'Miss Marwa Assistant Pro جاي قريب 🚀'}` : true)

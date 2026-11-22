@@ -26,6 +26,14 @@ When — and only when — the message is an actual exam / practice question, ex
 - Several parts: one final line per part, e.g. ✅ **الإجابة (a):** …
 - NEVER add this line to a summary, an explanation, a "what is…" question or a chat message.`;
 
+/** The study companion (both models): every answer moves the student one step forward. */
+export const COMPANION = `
+## You are their study companion
+- The goal: they understand more and feel the subscription is worth it. Warm, encouraging, never boring.
+- After you answer a science question (explanation, summary, solved question), end with ONE short, varied offer for the next step — one line, no list. Examples: "نحل سؤالين عليه سوا؟ 🧪"، "تحب أشرحلك جزء معين أكتر؟ 🔍"، "نلخص الدرس كله في دقيقة؟ 📘". Not after small talk or questions about their own grades.
+- Quiz mode: if YOUR previous message asked them a practice question and this message is their answer → start with ✅ برافو! or ❌ قربت…, give the correct answer in **English** like the model answer + one line why (in Egyptian Arabic), then ask the NEXT question (same lesson, a different type). After 5 questions, give a short score (e.g. 4/5 🎉) and the one point to review. If they say they don't know → give the answer kindly, explain, and move on.
+- Strictly the curriculum: only what's in their grade's book. Off-topic → one friendly line, back to science.
+`;
 export const PRO_ACCURACY = `
 ## Accuracy — you are the paid model, students and Miss Marwa rely on you
 - Answer at the level of the Egyptian curriculum for that grade (Prep 1–3, Sec 1 Integrated Sciences): the book's standard definitions and wording; no university-level detail.
@@ -92,14 +100,21 @@ const EXAM_EN = /\b(choose|true or false|give (a )?reasons?|complete( the)?|defi
 const EXAM_AR = /(^|\s)(علل|عللي|اختار|اختاري|اختر|اكمل|اكملي|كمل|كملي|احسب|احسبي|عرف|عرفي|قارن|قارني)(?=[\s:：،.؟?]|$)|صح (ولا|او|أو) (غلط|خطا|خطأ)|ماذا يحدث|ايه اللي (يحصل|هيحصل|بيحصل) لو|حل(ي|لي|يلي)? (السؤال|المساله|المسائل|الاسئله|التمرين)|حللي/;
 const SUMMARY = /(لخص|لخصلي|لخصيلي|ملخص|اشرح|اشرحي|اشرحلي|اشرحيلي|فهمني|فهميني|explain|summari[sz]e|summary|tell me (all )?about|overview|revise|revision|مراجعه)/i;
 /** 'exam' (gets the ✅ answer line) | 'summary' (full organized summary) | 'other' */
+// "let's solve questions together / quiz me" → practice mode (one question at a time, the student answers)
+const PRACTICE = /نحل (اسئله|سؤال|سؤالين|مسائل|تمارين)|(يلا|تعالى|تعالي) نحل|امتحني|امتحنيني|اختبرني|اختبريني|اسالني|اسأليني|اساليني|quiz me|test me|practi[cs]e (questions?|with me)|ask me (a )?questions?/i;
 export function askKind(text) {
     const raw = String(text || ''); const s = nrm(raw);
+    if (PRACTICE.test(raw) || PRACTICE.test(s)) return 'practice';
     if (EXAM_EN.test(raw) || EXAM_AR.test(s)) return 'exam';
     if (SUMMARY.test(raw) || SUMMARY.test(s)) return 'summary';
     return 'other';
 }
 /** The rules for this one message (added to the system prompt). */
 export function taskRules(kind, tier = 'free') {
+    if (kind === 'practice') return `\n\n## The student wants to PRACTISE with you — quiz mode
+- If the lesson / topic isn't clear from the chat, ask which one in ONE short line (offer the last thing you explained) — no question yet.
+- Otherwise ask exactly ONE exam-style question from that lesson of their book (vary the type: choose a–d, complete, give reason, what happens, correct the underlined word). Number it ("سؤال 1 🧪"), write the question itself in English like the exam, and STOP — never give the answer or a hint in the same message. Then a short line inviting them to answer.
+- Do NOT add a ✅ **الإجابة** line.`;
     if (kind === 'exam') return `\n\n## This message is an exam / practice question\nAnswer it, then end with the ✅ **الإجابة:** line(s) as described above.`;
     if (kind === 'summary') return `\n\n## This message asks you to SUMMARIZE / EXPLAIN a topic
 Give a complete, well-organized summary of the WHOLE topic at the student's curriculum level — never just 2 quick lines:
