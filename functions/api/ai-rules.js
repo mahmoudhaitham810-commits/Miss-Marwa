@@ -180,3 +180,38 @@ ${tier === 'free'
         ? 'أقدر أساعدك في المحتوى العلمي كمان، بس متعتمديش عليا بالكامل — أنا موديل محدود 🙂 للشرح والأسئلة ونماذج الإجابة استخدمي **Miss Marwa Assistant Pro**.'
         : 'وكمان كـ Pro: أشرح أي حاجة في المنهج، أكتب أسئلة بنماذج إجابة، وأجهّز امتحانات وملخصات 🎓'}`;
 }
+
+/**
+ * Safety net for the "no Arabic science terms" rule (22 Nov: the model still wrote الشحنة / الجهد / خلية / الزمن):
+ * the usual Arabic terms → the book's English term, keeping the Arabic prefix (بالشحنة → بالـ charge, للخلية → للـ cell).
+ * Science answers only — never for messages to parents.
+ */
+const TERM_MAP = [
+    ['القوة الدافعة الكهربية', 'emf'], ['القوه الدافعه الكهربيه', 'emf'], ['فرق الجهد', 'potential difference'], ['شدة التيار الكهربي', 'electric current intensity'], ['شدة التيار', 'current intensity'], ['شده التيار', 'current intensity'],
+    ['التيار الكهربي', 'electric current'], ['الشحنة الكهربية', 'electric charge'], ['كمية الكهربية', 'quantity of electricity'], ['قانون أوم', "Ohm's law"], ['قانون اوم', "Ohm's law"],
+    ['المقاومة المكافئة', 'equivalent resistance'], ['الطاقة الكهربية', 'electric energy'], ['القدرة الكهربية', 'electric power'],
+    ['الشحنات', 'charges'], ['الشحنة', 'charge'], ['الشحنه', 'charge'], ['الجهد', 'potential difference'], ['التيار', 'current'], ['المقاومتين', 'two resistors'], ['الخليتين', 'two cells'], ['المقاومات', 'resistors'], ['المقاومة', 'resistance'],
+    ['الشغل', 'work'], ['القدرة', 'power'], ['الطاقة', 'energy'], ['الزمن', 'time'], ['الخلايا', 'cells'], ['الخلية', 'cell'], ['البطارية', 'battery'],
+    ['الكثافة', 'density'], ['الكتلة', 'mass'], ['الحجم', 'volume'], ['السرعة', 'speed'], ['العجلة', 'acceleration'], ['القوة', 'force'], ['الوزن', 'weight']
+];
+const BARE = [['خليتين', 'two cells'], ['مقاومتين', 'two resistors'], ['شحنة', 'charge'], ['شحنه', 'charge'], ['خلايا', 'cells'], ['خلية', 'cell'], ['خليه', 'cell'], ['مقاومات', 'resistors']];
+const PHRASE = [['على التوالي', 'in series'], ['علي التوالي', 'in series'], ['على التوازي', 'in parallel'], ['علي التوازي', 'in parallel'], ['التوالي', 'series'], ['التوازي', 'parallel']];
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const B = '(^|[\\s(\\[«"،,.:؛!؟?\\-—/])', E = '(?=$|[\\s)\\]»"،,.:؛!؟?\\-—/])';
+export function englishTerms(text) {
+    let t = String(text || '');
+    if (!/[؀-ۿ]/.test(t)) return t;
+    for (const [ar, en] of PHRASE) t = t.replace(new RegExp(B + esc(ar) + E, 'g'), (m, a) => `${a}**${en}**`);
+    for (const [ar, en] of TERM_MAP) {
+        if (!ar.startsWith('ال')) {                                   // a phrase like فرق الجهد / شدة التيار / قانون أوم
+            t = t.replace(new RegExp(B + '([وفب]?)' + esc(ar) + E, 'g'), (m, a, p) => `${a}${p ? p + 'الـ ' : 'الـ '}**${en}**`);
+            continue;
+        }
+        const w = ar.replace(/^ال/, '');
+        // ال / وال / فال / بال / كال + word, and لل + word
+        t = t.replace(new RegExp(B + '([وف]?)(ب|ك)?ال' + esc(w) + E, 'g'), (m, a, wa, bk) => `${a}${wa || ''}${bk || ''}الـ **${en}**`);
+        t = t.replace(new RegExp(B + '([وف]?)لل' + esc(w) + E, 'g'), (m, a, wa) => `${a}${wa || ''}للـ **${en}**`);
+    }
+    for (const [ar, en] of BARE) t = t.replace(new RegExp(B + '([وفب]?)' + esc(ar) + E, 'g'), (m, a, p) => `${a}${p ? p + ' ' : ''}**${en}**`);
+    return t.replace(/\*\*\*\*/g, '').replace(/\*\*(\*\*[^*]+\*\*)\*\*/g, '$1');
+}

@@ -10,10 +10,10 @@ import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gate
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
-import { wantsPdf, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
+import { wantsPdf, wantsMark, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
 import { saveSolutionsDoc } from './studio.js';
 import { searchBook, staffBookRules, gradeFromText, GRADE_LABELS } from './curriculum.js';
-import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate, askKind, taskRules, dropAnswerLine, isScienceQuestion, isSiteQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, englishTerms, reasoning, proMode, stripPrivate, askKind, taskRules, dropAnswerLine, isScienceQuestion, isSiteQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const bad = (error, status = 400, extra = {}) => json({ error, ...extra }, status);
@@ -289,6 +289,7 @@ export async function onRequest(context) {
                     const chatMsgs = (all || []).reverse();
                     const grade = gradeFromText(text) || (worksheet && gradeFromText(worksheet.name + ' ' + worksheet.text.slice(0, 600))) || chatMsgs.filter(m => m.role === 'user').map(m => gradeFromText(m.text)).find(Boolean) || null;
                     const out = await makeSolutions(env, db, { messages: chatMsgs, worksheet, gradeLabel: grade ? GRADE_LABELS[grade] : '', meter: { staffId: staff.id, kind: 'copilot-pdf' } });
+                    if (wantsMark(text)) out.content.mark = true;   // her «سيب بصمتك» → the AI mark on every page
                     const docId = await saveSolutionsDoc(db, { grade, content: out.content, costUsd: out.costUsd, staffId: staff.id });
                     cards = JSON.stringify([{ type: 'solutions', docId, grade, content: out.content }]);
                     const saved = await saveReply({ text: `جاهز يا مس مروة 📄 **${out.content.title}** — ${out.content.items.length} سؤال، كل سؤال وتحته حله بالتفصيل (المعطيات، تحويل الوحدات وليه، القانون وليه، الحل). نزّليه PDF من الزرار تحت، أو افتحيه في **Exams & summaries** لو حابة تعدّلي فيه ✏️`, model: out.model, costUsd: out.costUsd });
@@ -335,7 +336,8 @@ export async function onRequest(context) {
                 const out = await chat(env, db, { tier, pool: 'staff', thinking: proSheet ? Math.max(R.thinking, 4000) : R.thinking,
                     system: proSheet ? [worksheetBlock(sheet, 'Miss Marwa'), { type: 'text', text: sysText }] : tier === 'free' && sheet ? sysText + `\n\n## The worksheet in this chat ("${sheet.name}"):\n${String(sheet.text).slice(0, 5000)}` : sysText, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img, meter: { staffId: staff.id, kind: 'copilot' } });
                 const u = out.usage || {};
-                const clean = kind === 'exam' ? stripPrivate(out.text) : dropAnswerLine(stripPrivate(out.text));
+                let clean = kind === 'exam' ? stripPrivate(out.text) : dropAnswerLine(stripPrivate(out.text));
+                if (!result && !wantsWriting && (sheet || kind === 'exam' || kind === 'summary' || /Curriculum book/.test(books))) clean = englishTerms(clean);   // science only — never a message to parents
                 const saved = await saveReply({ text: clean || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });
                 return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });
             } catch (e) {

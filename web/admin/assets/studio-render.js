@@ -88,6 +88,8 @@
     .sx-luck { text-align: center; font-weight: 800; color: var(--blue); margin-top: 18px; font-size: 16px; }
     .sx-pdf .sx-page { max-width: none; width: 100%; padding: 0 1px; margin: 0; } .sx-pdf .sx-keypage { margin-top: 0; padding-top: 0; border-top: 0; }
     .sx-keypage { break-before: page; }
+    .sx-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 18px; margin: 4px 0 0; font-weight: 500; }
+    .sx-lines { margin: 8px 0 2px; } .sx-lines span { display: block; border-bottom: 1px dotted #94A3B8; height: 22px; }
     .sx-sol { margin: 0 0 14px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
     .sx-solq { display: flex; gap: 10px; align-items: flex-start; background: var(--sky); padding: 10px 14px; font-weight: 700; color: #0F172A; }
     .sx-solq .qt { flex: 1; line-height: 1.5; } .sx-solq .sx-n { margin-top: 1px; }
@@ -112,8 +114,15 @@
     // content = { title, subtitle, items: [{ n, q, given[], find, convert[{text, why}], parts[{label, law, why, steps[], answer}], tip }] }
     function solutionsHtml(doc, o = {}) {
         const c = doc.content || {}, items = c.items || [];
-        return `<div class="sx"><div class="sx-page">${brand(doc, `${GRADE[doc.grade] || ''} · Science<br>Worked solutions`)}
-            <div class="sx-ex-h">${ed(o, 'title', c.title || 'Worked solutions', 'div', 't')}${c.subtitle || o.edit ? ed(o, 'subtitle', c.subtitle || '', 'div', 's') : ''}</div>
+        const opts = (it, P) => (it.options || []).length ? `<div class="sx-opts">${it.options.map((x, k) => `<span class="sx-opt">${ed(o, `${P}.options.${k}`, x)}</span>`).join('')}</div>` : '';
+        const paper = !c.exam ? '' : `<div class="sx-page">${brand(doc, `${GRADE[doc.grade] || ''} · Science<br>Practice exam`)}
+            <div class="sx-ex-h">${ed(o, 'title', c.title || 'Practice exam', 'div', 't')}${c.subtitle ? ed(o, 'subtitle', c.subtitle, 'div', 's') : ''}</div>
+            <div class="sx-fields"><span>Name: ........................................</span><span>Class: ..........</span><span>Date: ...../...../.......</span><span>Mark: ...... / ${items.length}</span></div>
+            <div class="sx-inst">Answer all questions.</div>
+            ${items.map((it, i) => `<div class="sx-blk sx-q"><span class="n">${esc(it.n || i + 1)}.</span>${ed(o, `items.${i}.q`, it.q)}${opts(it, `items.${i}`)}${(it.options || []).length ? '' : `<div class="sx-lines">${'<span></span>'.repeat((it.given || []).length || (it.parts || []).some(pt => pt.law) ? 5 : 2)}</div>`}</div>`).join('')}
+            <div class="sx-luck">Good Luck ✨</div></div>`;
+        return `<div class="sx">${paper}<div class="sx-page${c.exam ? ' sx-keypage' : ''}">${brand(doc, `${GRADE[doc.grade] || ''} · Science<br>${c.exam ? 'Model answer' : 'Worked solutions'}`)}
+            ${c.exam ? `<div class="sx-h1">Model Answer — ${esc(c.title || '')}</div>` : `<div class="sx-ex-h">${ed(o, 'title', c.title || 'Worked solutions', 'div', 't')}${c.subtitle || o.edit ? ed(o, 'subtitle', c.subtitle || '', 'div', 's') : ''}</div>`}
             ${items.map((it, i) => {
                 const P = `items.${i}`;
                 const given = (it.given || []).length ? `<div class="sx-solrow"><span class="sx-lbl">Given:</span> ${it.given.map((g, k) => `<span class="sx-chip">${ed(o, `${P}.given.${k}`, g)}</span>`).join(' ')}${it.find ? ` <span class="sx-lbl" style="margin-left:6px">Find:</span> <span class="sx-chip f">${ed(o, `${P}.find`, it.find)}</span>` : ''}</div>` : '';
@@ -122,7 +131,7 @@
                     ${pt.law ? `<div class="sx-law">${ed(o, `${P}.parts.${k}.law`, pt.law)}</div>` : ''}${pt.why ? `<div class="why">💡 ${ed(o, `${P}.parts.${k}.why`, pt.why)}</div>` : ''}
                     ${(pt.steps || []).map((st, q) => `<div class="sx-step">${ed(o, `${P}.parts.${k}.steps.${q}`, st)}</div>`).join('')}
                     ${pt.answer ? `<div class="sx-final">✔ ${ed(o, `${P}.parts.${k}.answer`, pt.answer)}</div>` : ''}</div>`).join('');
-                return `<div class="sx-blk sx-sol">${tools(o, P)}<div class="sx-solq"><span class="sx-n">${esc(it.n || i + 1)}</span>${ed(o, `${P}.q`, it.q, 'div', 'qt')}</div>
+                return `<div class="sx-blk sx-sol">${tools(o, P)}<div class="sx-solq"><span class="sx-n">${esc(it.n || i + 1)}</span><div class="qt">${c.exam ? esc(it.q) : ed(o, `${P}.q`, it.q)}${c.exam ? '' : opts(it, P)}</div></div>
                     <div class="sx-solb">${given}${conv}${parts}${it.tip ? `<div class="sx-solrow sx-tip"><span class="tag">Tip</span>${ed(o, `${P}.tip`, it.tip)}</div>` : ''}</div></div>`;
             }).join('')}
         </div></div>`;
@@ -396,7 +405,18 @@
             pdf.setTitle(String(title || 'Science Academy')); pdf.setAuthor('Science Academy - Miss Marwa'); pdf.setCreator('Science Academy staff portal');
             const font = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
             // the AI mark on every page: a vector sparkle (sharp in print, no emoji font needed) + "Generated by Miss Marwa Assistant"
-            const star = (r) => { const c = r * 0.16; return `M 0 ${-r} Q ${c} ${-c} ${r} 0 Q ${c} ${c} 0 ${r} Q ${-c} ${c} ${-r} 0 Q ${-c} ${-c} 0 ${-r} Z`; };
+            // OUR mark (not a borrowed sparkle): an atom whose orbits carry the nodes of a neural network — Science + AI,
+            // matching the Science Academy atom logo. Vector, so it stays sharp in print.
+            const CYAN = rgb(6 / 255, 182 / 255, 212 / 255);
+            const atomMark = (pg, cx, cy, r) => {
+                for (const a of [0, 60, 120]) pg.drawEllipse({ x: cx, y: cy, xScale: r, yScale: r * 0.36, rotate: window.PDFLib.degrees(a), borderColor: BLUE, borderWidth: 0.55 });
+                const nodes = [[0, 0.0], [60, 2.1], [120, 4.2], [0, 3.6], [60, 5.4], [120, 1.2]];
+                nodes.forEach(([a, t], k) => {
+                    const ex = r * Math.cos(t), ey = r * 0.36 * Math.sin(t), rad = a * Math.PI / 180;
+                    pg.drawCircle({ x: cx + ex * Math.cos(rad) - ey * Math.sin(rad), y: cy + ex * Math.sin(rad) + ey * Math.cos(rad), size: k % 3 === 0 ? 0.95 : 0.7, color: k === 1 ? CYAN : BLUE });
+                });
+                pg.drawCircle({ x: cx, y: cy, size: 1.55, color: NAVY });
+            };
             const NAVY = rgb(11 / 255, 31 / 255, 77 / 255), BLUE = rgb(29 / 255, 78 / 255, 216 / 255), SLATE = rgb(0.39, 0.45, 0.55), LINE = rgb(201 / 255, 216 / 255, 245 / 255);
             const pt = 72 / 25.4, n = shots.length;
             for (let i = 0; i < n; i++) {
@@ -414,12 +434,13 @@
                 pg.drawImage(im, { x: MARGIN.l * pt, y: (A4H - MARGIN.t) * pt - h, width: w, height: h });
                 const L = MARGIN.l * pt, R = (A4W - MARGIN.r) * pt, base = 7.6 * pt;
                 pg.drawLine({ start: { x: L, y: 11.6 * pt }, end: { x: R, y: 11.6 * pt }, thickness: 0.5, color: LINE });
-                pg.drawSvgPath(star(5.4), { x: L + 5.4, y: base + 3.1, color: BLUE });
-                pg.drawSvgPath(star(2.4), { x: L + 11.6, y: base + 7.6, color: NAVY });
-                const g1 = 'Generated by ', g2 = 'Miss Marwa Assistant';
-                pg.drawText(g1, { x: L + 16, y: base, size: 8, font, color: SLATE });
-                pg.drawText(g2, { x: L + 16 + font.widthOfTextAtSize(g1, 8), y: base, size: 8, font: bold, color: BLUE });
-                const right = `Science Academy   |   page ${i + 1} of ${n}`;
+                if (o.mark) {                                    // the AI mark: always on students' PDFs, on request for Miss Marwa
+                    atomMark(pg, L + 6.5, base + 2.9, 6.5);
+                    const g1 = 'Generated by ', g2 = 'Miss Marwa Assistant';
+                    pg.drawText(g1, { x: L + 16.5, y: base, size: 8, font, color: SLATE });
+                    pg.drawText(g2, { x: L + 16.5 + font.widthOfTextAtSize(g1, 8), y: base, size: 8, font: bold, color: BLUE });
+                } else pg.drawText('Science Academy  -  Miss Marwa', { x: L, y: base, size: 8, font, color: SLATE });
+                const right = o.mark ? `Science Academy   |   page ${i + 1} of ${n}` : `page ${i + 1} of ${n}`;
                 pg.drawText(right, { x: R - font.widthOfTextAtSize(right, 8), y: base, size: 8, font, color: SLATE });
             }
             // the document's full text inside the file (invisible): uploading one of our PDFs back to the AI then
@@ -456,7 +477,7 @@
     }
 
     // ---------------------------------------------------------------- Print (the browser's print window)
-    function print(inner, title) {
+    function print(inner, title, o = {}) {
         const f = document.createElement('iframe');
         f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
         document.body.appendChild(f);
@@ -465,7 +486,7 @@
         d.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(title)}</title><base href="${location.origin}/">
             <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
             <style>${CSS}
-            @page { size: A4; margin: 14mm 12mm 16mm; @bottom-left { content: "✦ Generated by Miss Marwa Assistant"; font: 600 8.5pt Inter, sans-serif; color: #1D4ED8; } @bottom-right { content: "Science Academy  |  page " counter(page) " of " counter(pages); font: 8.5pt Inter, sans-serif; color: #64748B; } }
+            @page { size: A4; margin: 14mm 12mm 16mm; @bottom-left { content: "${o.mark ? '⚛ Generated by Miss Marwa Assistant' : 'Science Academy · Miss Marwa'}"; font: 600 8.5pt Inter, sans-serif; color: ${o.mark ? '#1D4ED8' : '#64748B'}; } @bottom-right { content: "page " counter(page) " of " counter(pages); font: 8.5pt Inter, sans-serif; color: #64748B; } }
             html, body { margin: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .sx-page { max-width: none; padding: 0; } .sx-page + .sx-page { break-before: page; }</style></head><body>${inner}</body></html>`);
         d.close();

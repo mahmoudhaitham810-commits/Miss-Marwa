@@ -28,11 +28,11 @@ import { studentAccess } from './ai-quota.js';
 import { searchBook, bookRules, gradeToc } from './curriculum.js';
 import { sourceBlock, lessonParts } from './studio.js';
 import { getOrMake, CacheBusyError } from './ai-cache.js';
-import { wantsPdf, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
+import { wantsPdf, wantsExam, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
-import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, COMPANION, askKind, taskRules, dropAnswerLine, isScienceQuestion, isCapabilityQuestion, capabilitiesForStudent } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, COMPANION, englishTerms, askKind, taskRules, dropAnswerLine, isScienceQuestion, isCapabilityQuestion, capabilitiesForStudent } from './ai-rules.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -406,14 +406,21 @@ export async function onRequest(context) {
             if (!free && !img && wantsPdf(text)) {
                 try {
                     const { results: all } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
-                    const out = await makeSolutions(env, db, { messages: (all || []).reverse(), worksheet: await threadDoc(db, 'student', t.id), gradeLabel: GRADE_LABEL[who.student.grade] || '',
-                        meter: who.preview ? { staffId: who.staff.id, kind: 'chat-pdf' } : { studentId: sid, kind: 'chat-pdf' } });
+                    const payer = who.preview ? { staffId: who.staff.id, kind: 'chat-pdf' } : { studentId: sid, kind: 'chat-pdf' };
+                    // «اعملي امتحان على Unit 2 Lesson 1 PDF» → a practice exam from that lesson's book pages (+ Model Answer page)
+                    let exam = null;
+                    if (wantsExam(text) && !doc) {
+                        const found = await searchBook(env, db, { grade: who.student.grade, text, refText: text, meter: payer, k: 8, maxChars: 9000, unitChars: 16000 });
+                        const count = Math.min(30, Math.max(5, parseInt((text.match(/(\d{1,2})\s*(سؤال|اسئله|أسئلة|questions?)/i) || [])[1], 10) || 10));
+                        exam = { bookText: found && found.science ? found.ctx.text : '', ask: text, count };
+                    }
+                    const out = await makeSolutions(env, db, { messages: (all || []).reverse(), worksheet: exam ? null : await threadDoc(db, 'student', t.id), gradeLabel: GRADE_LABEL[who.student.grade] || '', meter: payer, exam });
                     const girl = who.student.gender === 'female';
-                    const saved = await save({ text: `جاهز ${girl ? 'يا بطلة' : 'يا بطل'} 📄 **${out.content.title}** — كل سؤال وتحته حله بالتفصيل: المعطيات، تحويل الوحدات وليه، القانون وليه، والحل. ${girl ? 'نزّليه' : 'نزّله'} من الزرار تحت وذاكر منه 💪`.replace('وذاكر', girl ? 'وذاكري' : 'وذاكر'),
-                        model: out.model, cost: out.costUsd, cards: JSON.stringify([{ type: 'solutions', grade: who.student.grade, content: out.content }]) });
+                    const saved = await save({ text: out.content.exam ? `جاهز امتحانك ${girl ? 'يا بطلة' : 'يا بطل'} 📝 **${out.content.title}** — ${out.content.items.length} سؤال من كتابك، وبعدهم صفحة الإجابة النموذجية بالتفصيل. ${girl ? 'حليه لوحدك الأول وبعدين راجعي' : 'حله لوحدك الأول وبعدين راجع'} من الإجابات 💪` : `جاهز ${girl ? 'يا بطلة' : 'يا بطل'} 📄 **${out.content.title}** — كل سؤال وتحته حله بالتفصيل: المعطيات، تحويل الوحدات وليه، القانون وليه، والحل. ${girl ? 'نزّليه' : 'نزّله'} من الزرار تحت وذاكر منه 💪`.replace('وذاكر', girl ? 'وذاكري' : 'وذاكر'),
+                        model: out.model, cost: out.costUsd, cards: JSON.stringify([{ type: 'solutions', grade: who.student.grade, content: { ...out.content, mark: true } }]) });
                     return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today() });
                 } catch (e) {
-                    const msg = e.code === 'NO_SOLUTIONS' ? 'مفيش حلول في الشات ده لسه أحطها في PDF 🤔 — ابعتلي الأسئلة وأحلهالك الأول.' : e instanceof AiLimitError ? (FRIENDLY[e.code] || FRIENDLY.AI_ERROR) : 'ماعرفتش أعمل الـ PDF المرة دي — جرّب تاني 🙏';
+                    const msg = e.code === 'NO_LESSON' ? 'قولي على أنهي Unit / Lesson عايز الامتحان 📚 (مثلاً: اعملي امتحان على Unit 2 Lesson 1 PDF)' : e.code === 'NO_SOLUTIONS' ? 'مفيش حلول في الشات ده لسه أحطها في PDF 🤔 — ابعتلي الأسئلة وأحلهالك الأول.' : e instanceof AiLimitError ? (FRIENDLY[e.code] || FRIENDLY.AI_ERROR) : 'ماعرفتش أعمل الـ PDF المرة دي — جرّب تاني 🙏';
                     await save({ role: 'error', text: msg, error: e.code || 'PDF' });
                     return json({ error: msg, code: e.code || 'PDF_FAILED', threadId: t.id, user: msgOut(userMsg) }, e instanceof AiLimitError ? 429 : 502);
                 }
@@ -438,7 +445,8 @@ export async function onRequest(context) {
                         messages: [...EXAMPLES, ...messages], maxTokens: sheet ? 9000 : img ? 2000 : 1600, image: img && !img.error ? img : null,
                         meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
                 }
-                const saved = await save({ text: (kind === 'exam' ? out.text : dropAnswerLine(out.text)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cost: out.costUsd, cards: cards.length ? JSON.stringify(cards) : null });
+                const body = kind === 'exam' ? out.text : dropAnswerLine(out.text);
+                const saved = await save({ text: (intents.length ? body : englishTerms(body)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cost: out.costUsd, cards: cards.length ? JSON.stringify(cards) : null });
                 return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today() });
             } catch (e) {
                 const code = e instanceof AiLimitError ? e.code : 'AI_ERROR';

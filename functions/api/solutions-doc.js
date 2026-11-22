@@ -10,6 +10,10 @@ const VERB = '(حط|عمل|خلي|خلى|حول|طلع|جهز|نزل|ابعت|ب
 const PDFW = '(pdf|بي ?دي ?[اإ]ف|بى ?دى ?[اإ]ف)';
 const MAKE_PDF = new RegExp(`${VERB}[^\\n]{0,60}${PDFW}|${PDFW}[^\\n]{0,25}(فيه|فيها|بالاجابات|بالإجابات|بالحل|with the answers|of the answers)`, 'i');
 export const wantsPdf = (text) => MAKE_PDF.test(String(text || ''));
+/** "اعملي امتحان … PDF" → a practice exam (questions, then a Model Answer page) instead of the chat's solutions */
+export const wantsExam = (text) => /امتحان|امتحني|اختبار|اختبرني|كويز|exam|quiz|\btest\b/i.test(String(text || ''));
+/** "سيب بصمتك" / "with your mark" → the AI mark on the PDF (Miss Marwa: on request; students: always) */
+export const wantsMark = (text) => /بصم|بصمت|بصمه|بصمة|توقيع|ختم|signature|watermark|imprint|your mark|ai mark/i.test(String(text || ''));
 
 // the worksheet attached in a chat (its text) — kept so a later "make it a PDF" can quote the questions exactly
 async function ensure(db) {
@@ -67,6 +71,7 @@ export function cleanSolutions(j) {
     if (!j || !Array.isArray(j.items)) return null;
     const items = j.items.slice(0, 80).map((it, i) => ({
         n: str(it.n || i + 1, 8), q: str(it.q, 1500),
+        options: (Array.isArray(it.options) ? it.options : []).map(x => str(x, 200)).filter(Boolean).slice(0, 6),
         given: (Array.isArray(it.given) ? it.given : []).map(g => str(g, 120)).filter(Boolean).slice(0, 12),
         find: str(it.find, 120),
         convert: (Array.isArray(it.convert) ? it.convert : []).map(x => ({ text: str(x && x.text, 200), why: str(x && x.why, 300) })).filter(x => x.text).slice(0, 8),
@@ -74,11 +79,28 @@ export function cleanSolutions(j) {
             steps: (Array.isArray(p && p.steps) ? p.steps : []).map(x => str(x, 300)).filter(Boolean).slice(0, 8), answer: str(p && p.answer, 600) })).filter(p => p.answer || p.steps.length || p.law).slice(0, 10),
         tip: str(it.tip, 400)
     })).filter(it => it.q && it.parts.length);
-    return items.length ? { title: str(j.title || 'Worked solutions', 160), subtitle: str(j.subtitle, 200), items } : null;
+    return items.length ? { title: str(j.title || 'Worked solutions', 160), subtitle: str(j.subtitle, 200), items, ...(j.mark ? { mark: true } : {}), ...(j.exam ? { exam: true } : {}) } : null;
 }
 
+const EXAM_TASK = (n) => `## Task: write a PRACTICE EXAM for the student, strictly from the book pages below, as JSON (it becomes a printable PDF: the questions, then a Model Answer page)
+Output ONLY JSON: {"exam":true,"title":"Unit 2 – Lesson 1: Electric Forces — Practice Exam","subtitle":"Prep 3 · Science","items":[{"n":"1","q":"…","options":["a) …","b) …","c) …","d) …"],"given":[],"find":"","convert":[],"parts":[{"label":"","law":"","why":"…","steps":[],"answer":"b) …"}],"tip":""}]}
+- ${n} questions, a real exam mix in the book's English: choose (exactly 4 options a)–d), ONE right), complete, give reason, what happens when, and calculation problems if the lesson has laws.
+- "q" = the question exactly as the student will see it (no answer in it). "options" only for choose questions.
+- The answers go in "parts" like worked solutions: for a problem — given, conversions with why, law with why, steps, answer with unit; for a choose / complete / reason — the answer + one line why.
+- ONLY what is in these pages (no other lesson, nothing extra). Recompute every answer. The book's own symbols and terms (emf, not ε).`;
+
 /** messages = the chat ({role, text}), newest last. → { content, costUsd } (throws on failure) */
-export async function makeSolutions(env, db, { messages, worksheet, gradeLabel, meter }) {
+export async function makeSolutions(env, db, { messages, worksheet, gradeLabel, meter, exam = null }) {
+    if (exam) {
+        if (!exam.bookText) { const e = new Error('NO_LESSON'); e.code = 'NO_LESSON'; throw e; }
+        const system = [{ type: 'text', text: `You prepare study material for Miss Marwa's ${gradeLabel || 'science'} students (Egyptian curriculum, language schools).${PRO_ACCURACY}\n\n${EXAM_TASK(exam.count || 10)}` },
+            { type: 'text', text: `## The student asked: ${String(exam.ask || '').slice(0, 400)}\n\n## Their book — the pages for it:\n${String(exam.bookText).slice(0, 30000)}` }];
+        const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'Go.' }], maxTokens: 12000, thinking: 4000, meter });
+        const content = cleanSolutions(parse(r.text));
+        if (!content) { const e = new Error('BAD_JSON'); e.code = 'BAD_JSON'; throw e; }
+        content.exam = true;
+        return { content, costUsd: r.costUsd || 0, model: r.model };
+    }
     // the solutions = the long answers since the worksheet was sent (up to the last 4)
     const sols = messages.filter(m => m.role === 'assistant' && String(m.text || '').length > 300).slice(-4).map(m => m.text).join('\n\n---\n\n').slice(0, 40000);
     if (!sols && !worksheet) { const e = new Error('NO_SOLUTIONS'); e.code = 'NO_SOLUTIONS'; throw e; }

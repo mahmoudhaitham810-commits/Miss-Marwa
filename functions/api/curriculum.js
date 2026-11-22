@@ -402,6 +402,15 @@ export async function searchBook(env, db, { grade, text = '', refText = null, re
         } catch (e) { terms = ''; }    // the keyword step must never block an answer (budget errors surface on the real call)
     }
     const ctx = indexed && science ? await bookContext(db, grade, `${terms} ${text}`.slice(0, 900), { k, maxChars }) : { text: '', passages: [] };
+    // each passage labelled with its unit / lesson (from the book map) → the answer can say WHERE it is in the book
+    if (ctx.text) {
+        try {
+            const toc = await gradeToc(env, db, grade, { build: false });
+            const units = (toc[0] && toc[0].units) || [];
+            const where = (pg) => { for (const u of units) for (const l of u.lessons) if (pg >= l.start && pg <= l.end) return `Unit ${u.unit} · Lesson ${l.lesson}${l.title ? ' (' + l.title + ')' : ''}`; return ''; };
+            if (units.length) ctx.text = ctx.text.replace(/— page (\d+)\]/g, (m, pg) => { const w = where(+pg); return w ? `— page ${pg} · ${w}]` : m; });
+        } catch (e) { }
+    }
     return { science, terms, ctx, indexed: indexed > 0, ref: null };
 }
 
@@ -437,7 +446,7 @@ The passages below are from the student's own ${gradeLabel} school book (found b
 - EVERY science fact, definition, law, number and unit in your answer must come from these passages. Use their definitions and wording.
 - Do NOT add anything that isn't in the passages — no outside, advanced or "extra" facts, even if true. Simpler is fine; more is not.
 - If the passages don't actually cover what was asked, don't answer it from general knowledge: say «الجزء ده مش في كتاب ${gradeLabel} بتاعك — ممكن يكون مش مقرر عليك، اسأل مس مروة 🙏».
-- End with the page(s) you used, like: 📖 (كتابك — صفحة 45 في الـ PDF).
+- End with WHERE it is in their book — the unit / lesson (from the passages), like: 📖 من كتابك — Unit 2 · Lesson 1 (Electric Current). NEVER write PDF page numbers to a student (their printed book has other page numbers).
 
 ${ctx.text}`;
 }

@@ -453,6 +453,7 @@ Return ONLY JSON: {"item":{…}}`;
                 content = { ...doc.content, title: str(c.title, 160) || doc.content.title, subtitle: str(c.subtitle, 240) || doc.content.subtitle,
                     sections: wanted.map((w, i) => ({ type: w.type, title: str(c.sections[i].title, 160) || SECTION_TYPES[w.type].title, marks: w.marks, wanted: c.sections[i].wanted, items: (c.sections[i].items || []).map(x => cleanItem(w.type, x)).filter(Boolean).slice(0, 60) })) };
             }
+            if (c.mark) content.mark = true; else delete content.mark;   // the AI mark (her choice)
             const title = str(data.title, 200) || doc.title;
             await db.prepare('UPDATE studio_docs SET content = ?, title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(JSON.stringify(content), title, doc.id).run();
             return json({ ok: true, doc: docOut(await db.prepare('SELECT * FROM studio_docs WHERE id = ?').bind(doc.id).first()) });

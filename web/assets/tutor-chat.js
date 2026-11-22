@@ -45,7 +45,13 @@
     .tc-md code { background: var(--surface-3, #eef2f7); border-radius: 6px; padding: 1px 5px; font-size: 13px; }
     .tc-md pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px; overflow-x: auto; direction: ltr; text-align: left; }
     .tc-md [dir="rtl"] { font-family: 'IBM Plex Sans Arabic', Inter, sans-serif; }
-    .tc-meta { font-size: 11.5px; color: var(--muted); margin-top: 6px; padding-inline-start: 4px; }
+    .tc-meta { font-size: 11.5px; color: var(--muted); margin-top: 6px; padding-inline-start: 4px; display: flex; align-items: center; gap: 6px; }
+    /* copy — like the big AI apps: always on the latest answer, on hover for the others (always on phones) */
+    .tc-cp { border: 0; background: transparent; color: var(--muted); width: 30px; height: 30px; border-radius: 9px; display: inline-grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; }
+    .tc-cp:hover { background: var(--surface-2, #f1f5f9); color: var(--text); } .tc-cp.ok { color: var(--success, #16a34a); opacity: 1; }
+    .tc-msg:hover .tc-cp, .tc-msg.last .tc-cp, .tc-cp:focus-visible { opacity: 1; }
+    @media (hover: none) { .tc-cp { opacity: 1; } }
+    .tc-msg.me .col { position: relative; } .tc-msg.me .tc-cp { align-self: flex-end; margin-top: 2px; }
     .tc-err { border: 1.5px solid color-mix(in srgb, var(--danger) 35%, transparent); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); border-radius: 14px; padding: 10px 12px; font-size: 14px; }
     .tc-err button { margin-top: 8px; }
     .tc-dots span { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); margin: 0 2px; animation: tcb 1.2s infinite ease-in-out; }
@@ -109,7 +115,7 @@
     // the branded PDF maker (same as "Exams & summaries") — loaded only when a PDF is asked for
     let rendererP = null;
     const loadRenderer = () => window.StudioRender ? Promise.resolve() : (rendererP = rendererP || new Promise((res, rej) => {
-        const s = document.createElement('script'); s.src = '/admin/assets/studio-render.js?v=20261122g';
+        const s = document.createElement('script'); s.src = '/admin/assets/studio-render.js?v=20261122h';
         s.onload = () => window.StudioRender ? res() : rej(new Error('PDF tool did not load'));
         s.onerror = () => { rendererP = null; s.remove(); rej(new Error('PDF tool did not load')); };
         document.head.appendChild(s);
@@ -119,7 +125,7 @@
         try {
             await loadRenderer();
             const doc = { kind: 'solutions', grade: c.grade, content: c.content, title: c.content.title };
-            await StudioRender.download(StudioRender.solutionsHtml(doc), c.content.title);
+            await StudioRender.download(StudioRender.solutionsHtml(doc), c.content.title, { mark: true });   // students: always the AI mark
         } finally { btn.disabled = false; btn.innerHTML = label; }
     }
     const SOLS = {}; let solSeq = 0;
@@ -166,12 +172,13 @@
         const cardsHTML = (cards) => cards && cards.length ? `<div class="tc-cards">${cards.map(c => (CARD[c.type] || (() => ''))(c)).join('')}</div>` : '';
 
         function msgHTML(m, i) {
-            if (m.role === 'user') { const src = m.imgUrl || (m.imageId ? q('image') + '&id=' + m.imageId : ''); return `<div class="tc-msg me"><div class="col">${src ? `<img class="shot" src="${esc(src)}" alt="Photo">` : ''}<div class="bubble" dir="auto">${esc(m.text)}</div></div></div>`; }
+            if (m.role === 'user') { const src = m.imgUrl || (m.imageId ? q('image') + '&id=' + m.imageId : ''); return `<div class="tc-msg me"><div class="col">${src ? `<img class="shot" src="${esc(src)}" alt="Photo">` : ''}<div class="bubble" dir="auto">${esc(m.text)}</div><button class="tc-cp" data-cp="${i}" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg></button></div></div>`; }
             if (m.role === 'picker') return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body" style="flex:1 1 auto"><div class="tc-pick"><h5 dir="rtl">📘 تحب نلخص أنهي درس؟</h5>${m.units && m.units.length ? m.units.map(u => `<div class="u">Unit ${u.unit}${u.title ? ' · ' + esc(u.title) : ''}</div><div class="ls">${u.lessons.map(l => `<button data-sum="${u.unit}.${l.lesson}"><b>Lesson ${l.lesson}</b>${l.title ? ' · ' + esc(l.title) : ''}</button>`).join('')}</div>`).join('') : '<p class="muted" dir="rtl" style="margin:0">كتابك لسه بيتجهز 📚 — قريب جداً.</p>'}</div></div></div>`;
             if (m.role === 'typing') return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body"><span class="tc-dots"><span></span><span></span><span></span></span></div></div>`;
             if (m.role === 'error') return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body"><div class="tc-err" dir="auto">${esc(m.text)}${m.retry && i === MSGS.length - 1 ? '<br><button class="btn btn-soft btn-sm" data-retry>جرّب تاني</button>' : ''}</div>${cardsHTML(m.cards)}</div></div>`;
-            const lastPro = i === MSGS.length - 1 && m.tier === 'pro' && !m.error && !(m.cards || []).length && String(m.text || '').length > 260;
-            return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body"><div class="tc-md">${md(m.text)}</div>${cardsHTML(m.cards)}${lastPro ? `<div class="tc-next" dir="rtl"><button data-next="quiz">🧪 نحل أسئلة عليه</button><button data-next="explain">🔍 وضّحلي أكتر</button></div>` : ''}<div class="tc-meta">${esc(m.error ? 'من المنصة' : (m.brand || 'Mini Assistant'))}</div></div></div>`;
+            const isLast = i === MSGS.length - 1;
+            const lastPro = isLast && m.tier === 'pro' && !m.error && !(m.cards || []).length && String(m.text || '').length > 260;
+            return `<div class="tc-msg${isLast ? ' last' : ''}"><img class="av" src="${AVATAR}" alt=""><div class="body"><div class="tc-md">${md(m.text)}</div>${cardsHTML(m.cards)}${lastPro ? `<div class="tc-next" dir="rtl"><button data-next="quiz">🧪 نحل أسئلة عليه</button><button data-next="explain">🔍 وضّحلي أكتر</button></div>` : ''}<div class="tc-meta"><button class="tc-cp" data-cp="${i}" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg></button><span>${esc(m.error ? 'من المنصة' : (m.brand || 'Mini Assistant'))}</span></div></div></div>`;
         }
         function welcome() {
             const f = ST && ST.student ? ST.student : {};
@@ -181,7 +188,7 @@
                 <p class="tc-ask" dir="rtl">هننجز إيه النهارده؟ 🎯</p>
                 <p dir="rtl">أنا مساعد مس مروة — بذاكر معاك من كتابك 📖: ألخصلك درس، نحل أسئلة سوا، أشرحلك أي جزء، أو ابعتلي صورة سؤال 📷</p>
                 <div class="tc-chips">${chips.map(([k, c]) => `<button data-go="${k}" dir="rtl">${esc(c)}</button>`).join('')}</div>
-                <div id="tcMine">${MINE ? cardsHTML(MINE) : ''}</div></div>`;
+</div>`;   // no level / grades cards here (22 Nov) — the student asks, the AI answers
         }
         function render(scroll = true) {
             $('tcMsgs').innerHTML = MSGS.length ? MSGS.map(msgHTML).join('') : welcome();
@@ -247,6 +254,17 @@
         }
         const lessonName = (u, l) => { const x = (UNITS || []).find(v => v.unit === u); const y = x && x.lessons.find(v => v.lesson === l); return `Unit ${u} · Lesson ${l}${y && y.title ? ' (' + y.title + ')' : ''}`; };
         $('tcMsgs').addEventListener('click', (e) => {
+            const cp = e.target.closest('[data-cp]');
+            if (cp) {
+                const m = MSGS[+cp.dataset.cp]; if (!m) return;
+                const plain = String(m.text || '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,4}\s*/gm, '').trim();
+                const done = () => { cp.classList.add('ok'); cp.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'; setTimeout(() => { cp.classList.remove('ok'); cp.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg>'; }, 1600); };
+                (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(plain) : Promise.reject()).then(done).catch(() => {
+                    const ta = document.createElement('textarea'); ta.value = plain; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select();
+                    try { document.execCommand('copy'); done(); } catch (x) { } ta.remove();
+                });
+                return;
+            }
             const sol = e.target.closest('[data-sol]');
             if (sol) { solutionsPdf(SOLS[sol.dataset.sol], sol).catch(err => opt.toast('ماعرفتش أنزّل الـ PDF — جرّب تاني (' + err.message + ')', 'error')); return; }
             const go = e.target.closest('[data-go]');
@@ -278,7 +296,7 @@
             if (r) { const last = [...MSGS].reverse().find(m => m.role === 'error'); MSGS = MSGS.filter(m => m !== last); const u = MSGS.pop(); if (u && u.role === 'user') send(last.last.text, last.last.image, last.last.doc); }
         });
         $('tcNew').addEventListener('click', async () => {
-            try { const r = await api('new', {}); threadId = r.thread.id; MSGS = []; render(false); loadMine(); } catch (e) { opt.toast(e.message, 'error'); }
+            try { const r = await api('new', {}); threadId = r.thread.id; MSGS = []; render(false); } catch (e) { opt.toast(e.message, 'error'); }
         });
         async function loadMine() { try { MINE = (await api('mine')).cards; const w = root.querySelector('#tcMine'); if (w) w.innerHTML = cardsHTML(MINE); } catch (e) { } }
 
@@ -308,7 +326,7 @@
             });
             hint();
             try { const t = await api('thread'); threadId = t.thread ? t.thread.id : null; MSGS = t.messages || []; } catch (e) { }
-            render(false); if (!MSGS.length) loadMine();
+            render(false);
         })();
     }
     window.TutorChat = { mount };
