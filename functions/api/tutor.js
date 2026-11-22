@@ -402,7 +402,7 @@ export async function onRequest(context) {
             };
             if (doc) await keepDoc(db, 'student', t.id, doc);   // a later "make it a PDF" quotes the worksheet's questions exactly
             // "حطهولي في PDF" → the chat's solutions as the same branded worked-solutions PDF Miss Marwa gets
-            if (!free && !img && !doc && wantsPdf(text)) {
+            if (!free && !img && wantsPdf(text)) {
                 try {
                     const { results: all } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
                     const out = await makeSolutions(env, db, { messages: (all || []).reverse(), worksheet: await threadDoc(db, 'student', t.id), gradeLabel: GRADE_LABEL[who.student.grade] || '',

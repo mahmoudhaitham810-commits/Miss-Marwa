@@ -6,7 +6,9 @@ import { chat } from './ai-gateway.js';
 import { PRO_ACCURACY } from './ai-rules.js';
 
 // "put it in a PDF / اعمله PDF / حطهم في ملف PDF" — a request to MAKE a PDF (not "here is a PDF, solve it")
-const MAKE_PDF = /(حط|حطي|حطه|حطها|حطهم|اعمل|اعملي|اعمله|اعملها|اعملهم|خلي|خليه|خليها|خليهم|حول|حولي|حوله|حولها|حولهم|طلع|طلعي|طلعه|طلعها|طلعهم|جهز|جهزي|جهزه|جهزها|جهزهم|نزل|نزلي|نزلهم|ابعت|ابعتي|ابعتهم|put|make|turn|export|convert|save|give me|create|generate)[^\n]{0,60}(pdf|بي ?دي ?[اإ]ف|بى ?دى ?[اإ]ف)/i;
+const VERB = '(حط|عمل|خلي|خلى|حول|طلع|جهز|نزل|ابعت|بعت|عايز|عاوز|محتاج|ممكن|اكتب|put|make|turn|export|convert|save|give me|create|generate|want|need|prepare)';
+const PDFW = '(pdf|بي ?دي ?[اإ]ف|بى ?دى ?[اإ]ف)';
+const MAKE_PDF = new RegExp(`${VERB}[^\\n]{0,60}${PDFW}|${PDFW}[^\\n]{0,25}(فيه|فيها|بالاجابات|بالإجابات|بالحل|with the answers|of the answers)`, 'i');
 export const wantsPdf = (text) => MAKE_PDF.test(String(text || ''));
 
 // the worksheet attached in a chat (its text) — kept so a later "make it a PDF" can quote the questions exactly
@@ -66,10 +68,10 @@ export function cleanSolutions(j) {
 export async function makeSolutions(env, db, { messages, worksheet, gradeLabel, meter }) {
     // the solutions = the long answers since the worksheet was sent (up to the last 4)
     const sols = messages.filter(m => m.role === 'assistant' && String(m.text || '').length > 300).slice(-4).map(m => m.text).join('\n\n---\n\n').slice(0, 40000);
-    if (!sols) { const e = new Error('NO_SOLUTIONS'); e.code = 'NO_SOLUTIONS'; throw e; }
+    if (!sols && !worksheet) { const e = new Error('NO_SOLUTIONS'); e.code = 'NO_SOLUTIONS'; throw e; }
     const system = [
         { type: 'text', text: `You prepare study material for Miss Marwa's ${gradeLabel || 'science'} students (Egyptian curriculum, language schools).${PRO_ACCURACY}\n\n${TASK}` },
-        { type: 'text', text: (worksheet ? `## The worksheet ("${worksheet.name}") — the questions exactly:\n"""\n${String(worksheet.text).slice(0, 30000)}\n"""\n\n` : '') + `## The solutions from the chat:\n"""\n${sols}\n"""` }
+        { type: 'text', text: (worksheet ? `## The worksheet ("${worksheet.name}") — the questions exactly:\n"""\n${String(worksheet.text).slice(0, 30000)}\n"""\n\n` : '') + (sols ? `## The solutions from the chat:\n"""\n${sols}\n"""` : `## No solutions in the chat yet — SOLVE every question of the worksheet yourself, fully and carefully, straight into the document.`) }
     ];
     const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'Go.' }], maxTokens: 16000, meter });
     const content = cleanSolutions(parse(r.text));

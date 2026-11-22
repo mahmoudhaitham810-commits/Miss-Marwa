@@ -281,7 +281,7 @@ export async function onRequest(context) {
                 return db.prepare('SELECT * FROM copilot_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
             // "put it in a PDF" → the chat's solutions as a branded worked-solutions PDF (each question, then its full answer)
-            if (!img && !doc && !result && tier === 'pro' && wantsPdf(text)) {
+            if (!img && !result && tier === 'pro' && wantsPdf(text)) {
                 try {
                     const { results: all } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
                     const worksheet = await threadDoc(db, 'staff', t.id);
