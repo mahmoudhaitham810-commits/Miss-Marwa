@@ -221,7 +221,11 @@ export async function onRequest(context) {
             const ctxPlan = planFromContext(data.context);
             let img = readImage(data.image);
             if (img && img.error) return bad(img.error, 400);
+            // a PDF (read in her browser): its text goes to the AI for THIS message only; the chat keeps just its name
+            const doc = data.doc && typeof data.doc === 'object' && String(data.doc.text || '').trim()
+                ? { name: String(data.doc.name || 'file.pdf').replace(/[\r\n]/g, ' ').slice(0, 80), pages: Math.max(1, Math.min(200, parseInt(data.doc.pages, 10) || 1)), text: String(data.doc.text).replace(/\r/g, '').slice(0, tier === 'pro' ? 24000 : 6000) } : null;
             if (!text && img) text = 'حلّي السؤال اللي في الصورة 📷';
+            if (!text && doc) text = 'اقري الملف ده وساعديني فيه 📄';
             if (!text && !ctxPlan) return bad('Type a message', 400);
             if (text.length > MAX_TEXT) return bad(`Keep it under ${MAX_TEXT} characters`, 400);
             let t = await own(parseInt(data.threadId, 10));
@@ -229,7 +233,7 @@ export async function onRequest(context) {
 
             // 1) Is this a data question? Code decides (same on every model), then the lookup runs
             const focus = t ? parse(t.focus) : null;
-            const plan = img ? null : ctxPlan || (text ? await route(db, text, focus) : null);   // a photo is a question, not a lookup
+            const plan = img || doc ? null : ctxPlan || (text ? await route(db, text, focus) : null);   // a photo is a question, not a lookup
             let result = null;
             if (plan) {
                 try { result = await runTool({ request, env, db, waitUntil: context.waitUntil }, plan); }
@@ -256,13 +260,15 @@ export async function onRequest(context) {
             else if (data.resend && lastUser && lastUser.text === text) userMsg = lastUser;
             else {
                 const imageId = img ? await saveImage(env, db, img, { kind: 'ai-staff', ownerId: staff.id }) : null;
-                const r = await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text, image_id) VALUES (?, 'user', ?, ?)`).bind(t.id, text, imageId).run();
-                userMsg = { id: Number(r.meta.last_row_id), role: 'user', text, image_id: imageId, created_at: new Date().toISOString() };
+                const shown = doc ? `${text}\n📄 ${doc.name}` : text;
+                const r = await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text, image_id) VALUES (?, 'user', ?, ?)`).bind(t.id, shown, imageId).run();
+                userMsg = { id: Number(r.meta.last_row_id), role: 'user', text: shown, image_id: imageId, created_at: new Date().toISOString() };
                 if (img && context.waitUntil) context.waitUntil(purgeOldImages(env, db));
             }
             if (data.resend) await db.prepare(`DELETE FROM copilot_messages WHERE thread_id = ? AND role = 'error' AND id > ?`).bind(t.id, userMsg.id).run();
             const { results: hist } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
+            if (doc && messages.length) messages[messages.length - 1].content = `${text}\n\n📄 Miss Marwa attached "${doc.name}" (${doc.pages} page${doc.pages > 1 ? 's' : ''}). Its text:\n"""\n${doc.text}\n"""`;
             const upgrade = img ? tier === 'free' : needsUpgradeNote(tier, text, !!result);
             let cards = result ? JSON.stringify(result.cards || []) : upgrade ? JSON.stringify([{ type: 'upgrade', text: img ? IMAGE_NOTE : ARGON_NOTE, tier: 'pro' }]) : null;
             const saveReply = async (fields) => {
@@ -294,7 +300,7 @@ export async function onRequest(context) {
                     if (!grade) books = staffBookRules(null, null);
                     else {
                         const prev = [...messages].reverse().filter(m => m.role === 'user').slice(1, 3).map(m => m.content).join(' ');
-                        const found = await searchBook(env, db, { grade, text: `${text} ${prev}`.trim().slice(0, 1500), refText: text, refFollow: true, image: img || null, meter: { staffId: staff.id }, k: 8, maxChars: 7500, unitChars: 24000 });
+                        const found = await searchBook(env, db, { grade, text: `${text} ${doc ? doc.text.slice(0, 1200) : ''} ${prev}`.trim().slice(0, 1500), refText: text, refFollow: true, image: img || null, meter: { staffId: staff.id }, k: 8, maxChars: 7500, unitChars: 24000 });
                         if (found.science) books = staffBookRules(found, grade);
                     }
                 }

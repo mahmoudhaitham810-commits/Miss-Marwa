@@ -211,7 +211,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
-    <script src="/assets/ai-kit.js?v=20261122a"></script>
+    <script src="/assets/ai-kit.js?v=20261122b"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -260,7 +260,7 @@
         let BRIEF = null;
         function welcome() {
             return `<div class="hello"><span class="spark">${icon('sparkles')}</span><h2 dir="rtl">أهلاً يا مس مروة 👋</h2>
-                <p>Mini Assistant 👀 reports what's happening — ask about any student («عامل إيه عمر عادل؟») or any grade, or send a 📷 photo of a question. For science, switch to Pro 🎓</p>
+                <p>Mini Assistant 👀 reports what's happening — ask about any student («عامل إيه عمر عادل؟») or any grade, or send a 📷 photo or 📄 PDF (or drag it here). For science, switch to Pro 🎓</p>
                 <div class="brief-wrap" id="briefWrap">${BRIEF ? cardsHTML(BRIEF, -1) : '<div class="skel" style="height:150px;border-radius:18px"></div>'}</div>
                 <div class="chips">${CHIPS.map(([e, t]) => `<button class="chip-q" data-chip="${esc(t)}"><span class="e">${e}</span><span dir="auto">${esc(t)}</span></button>`).join('')}</div></div>`;
         }
@@ -440,14 +440,16 @@
             if (r) { if (r.dataset.retry) { tier = r.dataset.retry; A.store.set('copilot_tier', tier); renderModels(); } const lastUser = [...MSGS].reverse().find(m => m.role === 'user'); if (lastUser) send(lastUser.ctx ? '' : lastUser.text, true, lastUser.ctx || null); }
         });
 
-        async function send(text, resend = false, context = null, again = false, image = null) {
-            text = String(text || '').trim(); if ((!text && !context && !image) || sending) return;
+        let lastDoc = null;
+        async function send(text, resend = false, context = null, again = false, image = null, doc = null) {
+            text = String(text || '').trim(); if ((!text && !context && !image && !doc) || sending) return;
+            if (doc) lastDoc = doc; else if (resend || again) doc = lastDoc; else lastDoc = null;   // "Try again" / "Ask Pro" re-send the same PDF
             sending = true; updateSend();
-            if (resend) MSGS = MSGS.filter(m => m.role !== 'error'); else if (!again) MSGS.push({ role: 'user', text: text || (image ? '📷' : '…'), ctx: context, imgUrl: image && image.url });
+            if (resend) MSGS = MSGS.filter(m => m.role !== 'error'); else if (!again) MSGS.push({ role: 'user', text: (text || (image ? '📷' : doc ? '' : '…')) + (doc ? `${text ? '\n' : ''}📄 ${doc.name}` : ''), ctx: context, imgUrl: image && image.url });
             MSGS.push({ role: 'typing' });
             render();
             try {
-                const r = await api('/api/copilot?action=send', { body: { threadId, text, tier, resend, context, again, image: image ? { mime: image.mime, b64: image.b64 } : null } });
+                const r = await api('/api/copilot?action=send', { body: { threadId, text, tier, resend, context, again, image: image ? { mime: image.mime, b64: image.b64 } : null, doc: doc ? { name: doc.name, pages: doc.pages, text: doc.text } : null } });
                 threadId = r.threadId; setChatUrl(); setTitle(r.title);
                 const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && r.user && !again) { u.text = r.user.text; if (r.user.imageId) u.imageId = r.user.imageId; }
                 MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push(r.reply);
@@ -497,8 +499,9 @@
         function updateSend() { if (comp) comp.setBusy(sending); }
         comp = AiKit.composer($('comp'), {
             models: modelList(), tier, placeholder: 'اكتبي سؤالك… · Ask anything', maxLength: 4000, voiceKey: 'copilot_voice',
+            pdf: true, pdfPages: 20, pdfChars: 24000, dropZone: document.querySelector('.main') || document.body,
             toast: (m, k) => Site.toast(m, k || 'info'),
-            onSend: ({ text, image }) => send(text, false, null, false, image),
+            onSend: ({ text, image, doc }) => send(text, false, null, false, image, doc),
             onTier: (t) => { tier = t; A.store.set('copilot_tier', t); },
             onLocked: notConnected
         });

@@ -85,8 +85,7 @@
     // compressed JPEG of its first 2 pages stacked.
     let pdfP = null;
     const pdfjs = () => pdfP || (pdfP = import('/assets/vendor/pdfjs/pdf.min.js').then(m => { m.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js'; return m; }));
-    const PDF_PAGES = 8, PDF_CHARS = 9000;
-    async function readPdf(file) {
+    async function readPdf(file, PDF_PAGES = 8, PDF_CHARS = 9000) {
         if (file.size > 25 * 1024 * 1024) throw new Error('الملف كبير قوي (أكتر من 25MB) — ابعت الصفحات المهمة بس');
         const lib = await pdfjs();
         const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
@@ -143,6 +142,8 @@
     .ak { display: grid; gap: 4px; padding: 8px; border-radius: 24px; background: var(--surface); border: 1.5px solid var(--border); box-shadow: 0 12px 32px -16px rgba(15, 23, 42, .4); }
     .ak:focus-within { border-color: var(--primary); }
     .ak-att { display: flex; gap: 8px; align-items: center; padding: 2px 4px 4px; }
+    .ak-dropping { position: relative; }
+    .ak-dropping::after { content: '⬇️  Drop it here · اسحبه هنا'; position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; border: 2.5px dashed var(--primary, #2563eb); border-radius: 20px; background: color-mix(in srgb, var(--primary, #2563eb) 10%, transparent); color: var(--primary, #2563eb); font-weight: 800; font-size: 16px; pointer-events: none; backdrop-filter: blur(1px); }
     .ak-att[hidden] { display: none; }
     .ak-thumb { position: relative; width: 64px; height: 64px; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); flex: none; }
     .ak-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -206,7 +207,7 @@
                 <button type="button" class="ak-b mic" aria-label="Speak" ${SR ? '' : 'hidden'}>${SVG.mic}</button>
                 <button type="button" class="ak-pill" aria-haspopup="menu" aria-label="Choose model"><span></span>${SVG.chev}</button>
                 <span class="sp"></span>
-                <button type="button" class="ak-b plus" aria-label="Add a photo">${SVG.plus}</button>
+                <button type="button" class="ak-b plus" aria-label="${o.pdf ? 'Add a photo or PDF' : 'Add a photo'}" title="${o.pdf ? 'Photo or PDF — or drag it here' : 'Photo — or drag it here'}">${SVG.plus}</button>
                 <input type="file" accept="${o.pdf ? 'image/*,application/pdf,.pdf' : 'image/*'}" hidden>
             </div></div>`;
         const $ = (s) => el.querySelector(s);
@@ -250,19 +251,45 @@
         });
         file.addEventListener('change', async () => {
             const f = file.files && file.files[0]; file.value = '';
+            if (f) take(f);
+        });
+        // drag & drop a photo / PDF anywhere on the chat (o.dropZone) or the box, and paste a screenshot (Ctrl+V)
+        const zone = o.dropZone || el;
+        const isOk = (f) => f && (/^image\//.test(f.type) || (o.pdf && (/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name || ''))));
+        let drag = 0;
+        const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+        zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); drag++; zone.classList.add('ak-dropping'); });
+        zone.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+        zone.addEventListener('dragleave', () => { drag = Math.max(0, drag - 1); if (!drag) zone.classList.remove('ak-dropping'); });
+        zone.addEventListener('drop', (e) => {
+            if (!hasFiles(e)) return; e.preventDefault(); drag = 0; zone.classList.remove('ak-dropping');
+            const f = [...e.dataTransfer.files].find(isOk);
+            if (!f) { o.toast(o.pdf ? 'Drop a photo or a PDF' : 'Drop a photo', 'error'); return; }
+            const ok = o.beforeAttach ? o.beforeAttach() : true;
+            if (ok !== true) { if (ok) o.toast(ok, 'error'); return; }
+            take(f);
+        });
+        ta.addEventListener('paste', (e) => {
+            const f = [...((e.clipboardData && e.clipboardData.files) || [])].find(isOk);
             if (!f) return;
+            e.preventDefault();
+            const ok = o.beforeAttach ? o.beforeAttach() : true;
+            if (ok !== true) { if (ok) o.toast(ok, 'error'); return; }
+            take(f);
+        });
+        async function take(f) {
             if (o.pdf && (/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name || ''))) {
                 setDoc(null); setImage(null);
                 datt.hidden = false; datt.querySelector('small').textContent = 'بقرا الملف… · Reading the PDF…';
                 try {
-                    const r = await readPdf(f);
+                    const r = await readPdf(f, o.pdfPages || 8, o.pdfChars || 9000);
                     if (r.kind === 'text') setDoc(r.doc);
                     else { datt.hidden = true; setImage(r.image); att.querySelector('small').textContent = `📄 ${r.image.pdfName} — scanned: first ${r.image.pages} page${r.image.pages > 1 ? 's' : ''} sent as a photo`; }
                 } catch (e) { datt.hidden = true; o.toast(e.message && /[\u0600-\u06FF]/.test(e.message) ? e.message : "الملف ده مش بيفتح — جرّب ملف تاني", 'error'); }
                 return;
             }
             try { setImage(await shrink(f, o.photoMax || 1280, o.photoQuality || 0.82)); att.querySelector('small').textContent = 'Photo ready — add a note or just send'; } catch (e) { o.toast(e.message, 'error'); }
-        });
+        }
         function setImage(img) { image = img; att.hidden = !img; if (img) { att.querySelector('img').src = img.url; setDoc(null); } update(); if (img) ta.focus(); }
         function setDoc(d) { pdoc = d; datt.hidden = !d; if (d) datt.querySelector('small').textContent = `📄 ${d.name} · ${d.pages}${d.total > d.pages ? ' of ' + d.total : ''} page${d.pages > 1 ? 's' : ''} — اكتب سؤالك عنه أو ابعت`; update(); if (d) ta.focus(); }
         $('.ak-rm').addEventListener('click', () => setImage(null));

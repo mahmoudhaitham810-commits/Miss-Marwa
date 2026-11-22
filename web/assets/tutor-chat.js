@@ -277,7 +277,7 @@
             sub();
             comp = composer($('tcComp'), {
                 models: ST.models.map(m => ({ tier: m.tier, name: m.name, ready: m.ready, locked: m.locked, note: m.tier === 'free' ? (m.ready ? 'Free · مجاني' : 'قريب 🚀') : (m.note || 'قريب جداً 🚀') })),
-                tier: !ST.models[0].ready && proReady() ? 'pro' : 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, pdf: true, photoMax: 1152, photoQuality: 0.8, voiceKey: 'tutor_voice', toast: opt.toast,
+                tier: !ST.models[0].ready && proReady() ? 'pro' : 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, pdf: true, photoMax: 1152, photoQuality: 0.8, dropZone: root, voiceKey: 'tutor_voice', toast: opt.toast,
                 onSend: ({ text, image, doc }) => send(text, image, doc),
                 onTier: () => hint(),
                 onLocked: (m) => opt.toast(m && m.tier === 'free' ? 'Mini Assistant جاي قريب 🚀' : proLockedMsg(), 'info'),
