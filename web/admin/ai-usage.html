@@ -163,7 +163,7 @@
                 return `<div class="srow urow fade-up" style="--i:${Math.min(i, 14)}" data-open="${esc(s.studentId)}" role="button" tabindex="0">
                     <span class="avatar">${A.initials({ firstName: s.firstName })}</span>
                     <span class="sname"><b dir="auto">${esc(name(s))}</b><small class="num muted">${esc(s.studentId)}${s.month.messages ? ` · ${s.month.messages} msg this month` : ''}</small>
-                        <span class="mini-use num muted">${egp(s.quota.usedEgp)} / ${egp(s.budgetEgp)}</span></span>
+                        <span class="mini-use num muted">${egp(s.quota.usedEgp)} / ${egp(s.budgetEgp)}</span>${s.top ? `<small class="muted">Most spent on: ${esc(KIND[s.top.kind] || s.top.kind)} (${egp(toEgp(s.top.usd))})</small>` : ''}</span>
                     <span class="sgrade">${esc(A.GRADES[s.grade] || s.grade)}</span>
                     <span class="use"><span class="bar ${barCls(p)}" title="${Math.round(p)}% used"><i style="width:${p}%"></i></span>
                         <small class="num muted"><span>${egp(s.quota.usedEgp)} used</span><span>${egp(s.quota.leftEgp)} left${s.customBudget ? ' ✎' : ''}</span></small></span>
@@ -221,7 +221,7 @@
             finally { $('saveSet').disabled = false; }
         });
 
-        const KIND = { chat: 'Question', explain: 'Exam explanation', summary: 'Summary', copilot: 'Staff assistant', bench: 'Benchmark' };
+        const KIND = { chat: 'Questions', 'chat-pdf': 'PDF / exam made', explain: 'Exam explanation', summary: 'Summary', 'student-summary': 'Lesson summary', copilot: 'Staff assistant', bench: 'Benchmark' };
         async function openStudent(id) {
             const s = D.students.find(x => x.studentId === id); if (!s) return;
             let det = { recent: [] };
@@ -240,6 +240,8 @@
                     <label for="ownB" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Budget for this student (EGP / month)</label>
                     <div style="display:flex;gap:8px"><input class="fin num" id="ownB" inputmode="decimal" placeholder="${D.settings.budget} (default)" value="${s.customBudget ? s.budgetEgp : ''}"><button class="btn btn-primary" id="ownSave">Save</button></div>
                     <p class="small muted" style="margin:6px 0 0">Leave empty to use the default (${egp(D.settings.budget)}).</p>
+                    <h4 style="margin:18px 0 8px">Where this month's money went</h4>
+                    ${det.byKind && det.byKind.length ? `<div class="rec-wrap"><table class="rec"><thead><tr><th>What</th><th>Count</th><th>Cost</th></tr></thead><tbody>${det.byKind.map(k => `<tr><td>${esc(KIND[k.kind] || k.kind || '')}</td><td class="num">${k.n}${k.cached ? ` (${k.cached} free)` : ''}</td><td class="num">${egp(toEgp(k.usd))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">Nothing yet this month.</p>'}
                     <h4 style="margin:18px 0 8px">Latest Pro messages</h4>
                     ${det.recent && det.recent.length ? `<div class="rec-wrap"><table class="rec"><thead><tr><th>When</th><th>What</th><th>Tokens in / out</th><th>Cost</th></tr></thead><tbody>${det.recent.map(r => `<tr>
                         <td>${esc(A.fmtDate(r.created_at, true))}</td><td>${esc(KIND[r.kind] || r.kind || '')}${r.cached ? ' · saved answer' : ''}${r.pending ? ' · running' : ''}</td>

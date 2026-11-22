@@ -51,6 +51,10 @@ export async function onRequest(context) {
                     COALESCE(SUM(CASE WHEN u.period = ? THEN u.cached ELSE 0 END), 0) AS m_cached
                 FROM ai_usage u LEFT JOIN ai_student_plan p ON p.student_id = u.student_id
                 WHERE u.student_id IS NOT NULL GROUP BY u.student_id`).bind(per, per, per, per, per).all();
+            const { results: kinds } = await db.prepare(`SELECT student_id, kind, COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage
+                WHERE student_id IS NOT NULL AND period = ? GROUP BY student_id, kind`).bind(per).all();
+            const topKind = new Map();
+            for (const k of (kinds || [])) { const t = topKind.get(k.student_id); if (!t || k.usd > t.usd) topKind.set(k.student_id, { kind: k.kind, usd: k.usd, n: k.n }); }
             const staffUse = await db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage WHERE student_id IS NULL AND period = ?`).bind(per).first();
             // grand totals — everyone (students + Miss Marwa + assistants)
             const day0 = cairoDayStart();
@@ -72,6 +76,7 @@ export async function onRequest(context) {
                     studentId: s.student_id, firstName: s.first_name, lastName: s.last_name, grade: String(s.grade || '').toLowerCase(),
                     enabled: !!p.enabled, budgetEgp, customBudget: p.budget_egp > 0, resetAt: p.reset_period === per ? p.reset_at : null,
                     month: { messages: Number(u.m_n) || 0, usd: money(u.m_usd), cached: Number(u.m_cached) || 0 },
+                    top: topKind.get(s.student_id) ? { kind: topKind.get(s.student_id).kind, usd: money(topKind.get(s.student_id).usd), n: topKind.get(s.student_id).n } : null,
                     quota: { usedUsd: money(usedUsd), usedEgp: money(usedUsd * S.rate), leftEgp: money(Math.max(0, budgetEgp - usedUsd * S.rate)) },
                     allTime: { messages: Number(u.all_n) || 0, usd: money(u.all_usd), tokensIn: Number(u.all_in) || 0, tokensOut: Number(u.all_out) || 0 }
                 };
@@ -97,7 +102,9 @@ export async function onRequest(context) {
             if (!await studentExists(id)) return bad('Student not found', 404);
             const { results } = await db.prepare(`SELECT kind, model, input_tokens, output_tokens, cache_read, cache_write, cost_usd, cached, pending, created_at
                 FROM ai_usage WHERE student_id = ? ORDER BY id DESC LIMIT 50`).bind(id).all();
-            return json({ quota: await studentQuota(db, id, S), recent: results || [] });
+            const { results: byKind } = await db.prepare(`SELECT kind, COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd, COALESCE(SUM(cached), 0) AS cached
+                FROM ai_usage WHERE student_id = ? AND period = ? GROUP BY kind ORDER BY usd DESC`).bind(id, per).all();
+            return json({ quota: await studentQuota(db, id, S), recent: results || [], byKind: byKind || [] });
         }
         if (request.method !== 'POST') return bad('POST only', 405);
         const data = await request.json().catch(() => ({}));

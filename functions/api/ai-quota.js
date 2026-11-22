@@ -14,7 +14,7 @@
 // =====================================================================
 
 export const RATE_DEFAULT = 53;      // EGP per 1 USD (editable on the AI usage page)
-export const BUDGET_DEFAULT = 44;    // EGP of AI cost per student per month
+export const BUDGET_DEFAULT = 65;    // EGP of AI cost per student per month (22 Nov: price 75 EGP, stop at 65 — Miss Marwa can change it per student)
 const PRICES = { 'claude-haiku-5-5': [0.10, 0.50], 'claude-sonnet-5-5': [2, 10] };   // USD per 1M tokens [in, out]
 const priceOf = (model) => PRICES[model] || PRICES['claude-sonnet-5-5'];           // unknown → the expensive price (safe side)
 
