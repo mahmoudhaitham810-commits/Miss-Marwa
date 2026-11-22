@@ -10,7 +10,7 @@ import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gate
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
-import { wantsPdf, keepDoc, threadDoc, makeSolutions } from './solutions-doc.js';
+import { wantsPdf, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
 import { saveSolutionsDoc } from './studio.js';
 import { searchBook, staffBookRules, gradeFromText, GRADE_LABELS } from './curriculum.js';
 import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate, askKind, taskRules, dropAnswerLine, isScienceQuestion, isSiteQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
@@ -268,10 +268,11 @@ export async function onRequest(context) {
                 if (img && context.waitUntil) context.waitUntil(purgeOldImages(env, db));
             }
             if (data.resend) await db.prepare(`DELETE FROM copilot_messages WHERE thread_id = ? AND role = 'error' AND id > ?`).bind(t.id, userMsg.id).run();
-            if (doc) await keepDoc(db, 'staff', t.id, doc);   // a later "make it a PDF" quotes the worksheet's questions exactly
+            if (doc) await keepDoc(db, 'staff', t.id, doc);   // kept with the chat: every later message (and "make it a PDF") sees it
+            const sheet = doc ? { name: doc.name, text: doc.text } : await threadDoc(db, 'staff', t.id);
             const { results: hist } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
-            if (doc && messages.length) messages[messages.length - 1].content = `${text}\n\n📄 Miss Marwa attached "${doc.name}" (${doc.pages} page${doc.pages > 1 ? 's' : ''}). Its text:\n"""\n${doc.text}\n"""`;
+            // the chat's worksheet → a cached block first in the instructions, for every message of the chat
             const upgrade = img ? tier === 'free' : needsUpgradeNote(tier, text, !!result);
             let cards = result ? JSON.stringify(result.cards || []) : upgrade ? JSON.stringify([{ type: 'upgrade', text: img ? IMAGE_NOTE : ARGON_NOTE, tier: 'pro' }]) : null;
             const saveReply = async (fields) => {
@@ -321,15 +322,18 @@ export async function onRequest(context) {
                     if (!grade) books = staffBookRules(null, null);
                     else {
                         const prev = [...messages].reverse().filter(m => m.role === 'user').slice(1, 3).map(m => m.content).join(' ');
-                        const found = await searchBook(env, db, { grade, text: `${text} ${doc ? doc.text.slice(0, 1200) : ''} ${prev}`.trim().slice(0, 1500), refText: text, refFollow: true, image: img || null, meter: { staffId: staff.id }, k: 8, maxChars: 7500, unitChars: 24000 });
+                        const found = await searchBook(env, db, { grade, text: `${text} ${sheet ? sheet.text.slice(0, 1200) : ''} ${prev}`.trim().slice(0, 1500), refText: text, refFollow: true, image: img || null, meter: { staffId: staff.id }, k: 8, maxChars: 7500, unitChars: 24000 });
                         if (found.science) books = staffBookRules(found, grade);
                     }
                 }
                 const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : taskRules(kind, tier) + books);
                 // Pro answering a science question / photo uses the reasoning mode picked on the Model test page (PRO_REASONING)
                 const R = tier === 'pro' && !result ? reasoning(env, proMode(env)) : reasoning(env, 'plain');
-                const maxTokens = (result ? (tier === 'free' ? 600 : 900) : doc ? (tier === 'pro' ? 14000 : 1200) : img ? (tier === 'free' ? 800 : 3000) : (tier === 'pro' ? 6000 : 850)) + R.extraTokens;
-                const out = await chat(env, db, { tier, pool: 'staff', thinking: R.thinking, system: system + (img ? IMAGE_RULES : '') + R.system, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img, meter: { staffId: staff.id, kind: 'copilot' } });
+                const maxTokens = (result ? (tier === 'free' ? 600 : 900) : sheet ? (tier === 'pro' ? 14000 : 1200) : img ? (tier === 'free' ? 800 : 3000) : (tier === 'pro' ? 6000 : 850)) + R.extraTokens;
+                const sysText = system + (img ? IMAGE_RULES : '') + R.system;
+                const proSheet = sheet && tier === 'pro' && !result;
+                const out = await chat(env, db, { tier, pool: 'staff', thinking: proSheet ? Math.max(R.thinking, 4000) : R.thinking,
+                    system: proSheet ? [worksheetBlock(sheet, 'Miss Marwa'), { type: 'text', text: sysText }] : tier === 'free' && sheet ? sysText + `\n\n## The worksheet in this chat ("${sheet.name}"):\n${String(sheet.text).slice(0, 5000)}` : sysText, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img, meter: { staffId: staff.id, kind: 'copilot' } });
                 const u = out.usage || {};
                 const clean = kind === 'exam' ? stripPrivate(out.text) : dropAnswerLine(stripPrivate(out.text));
                 const saved = await saveReply({ text: clean || '…', model: out.model, ms: out.ms, neurons: out.neurons, costUsd: out.costUsd, tin: u.input_tokens ?? u.prompt_tokens, tout: u.output_tokens ?? u.completion_tokens });

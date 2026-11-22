@@ -28,7 +28,7 @@ import { studentAccess } from './ai-quota.js';
 import { searchBook, bookRules, gradeToc } from './curriculum.js';
 import { sourceBlock, lessonParts } from './studio.js';
 import { getOrMake, CacheBusyError } from './ai-cache.js';
-import { wantsPdf, keepDoc, threadDoc, makeSolutions } from './solutions-doc.js';
+import { wantsPdf, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
@@ -393,14 +393,15 @@ export async function onRequest(context) {
             const { results: hist } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
             messages.forEach((m, i) => { if (i < messages.length - 4 && m.content.length > 700) m.content = m.content.slice(0, 650) + ' …'; });   // older turns: the gist is enough (saves tokens on long chats)
-            if (doc && messages.length) messages[messages.length - 1].content = `${text}\n\n📄 The student attached "${doc.name}" (${doc.pages} page${doc.pages > 1 ? 's' : ''}). Its text:\n"""\n${doc.text}\n"""\nUse it only to understand what they're asking; answer from their curriculum book.`;
+            // the chat's worksheet (attached now or earlier) → a cached block in the instructions for every message of the chat
             const save = async (f) => {
                 const r = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, tier, model, ms, neurons, cost_usd, error, cards) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                     .bind(t.id, f.role || 'assistant', f.text, tier, f.model ?? null, f.ms ?? null, f.neurons ?? null, f.cost ?? null, f.error ?? null, f.cards ?? null).run();
                 await db.prepare('UPDATE tutor_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
                 return db.prepare('SELECT * FROM tutor_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
-            if (doc) await keepDoc(db, 'student', t.id, doc);   // a later "make it a PDF" quotes the worksheet's questions exactly
+            if (doc) await keepDoc(db, 'student', t.id, doc);   // kept with the chat: every later message (and "make it a PDF") sees it
+            const sheet = doc ? { name: doc.name, text: doc.text } : await threadDoc(db, 'student', t.id);
             // "حطهولي في PDF" → the chat's solutions as the same branded worked-solutions PDF Miss Marwa gets
             if (!free && !img && wantsPdf(text)) {
                 try {
@@ -428,11 +429,13 @@ export async function onRequest(context) {
                     // The question (+ the previous one, for follow-ups like «طب والوحدة؟») or the PHOTO → search terms → passages.
                     const payer = who.preview ? { staffId: who.staff.id } : { studentId: sid };
                     const prevQ = messages.filter(m => m.role === 'user').slice(-2, -1).map(m => m.content).join(' ');
-                    const found = intents.length ? null : await searchBook(env, db, { grade: who.student.grade, text: `${text} ${doc ? doc.text.slice(0, 1500) : ''} ${prevQ}`.trim(), refText: text, image: img && !img.error ? img : null, meter: payer, unitChars: 9000 });
+                    const found = intents.length ? null : await searchBook(env, db, { grade: who.student.grade, text: `${text} ${sheet ? sheet.text.slice(0, 1500) : ''} ${prevQ}`.trim(), refText: text, image: img && !img.error ? img : null, meter: payer, unitChars: 9000 });
                     const gl = GRADE_LABEL[who.student.grade] || who.student.grade;
                     const books = !found || !found.science ? '' : bookRules(found.ctx, gl, { indexed: found.indexed, ref: found.ref, refMissing: found.refMissing });
-                    out = await chat(env, db, { tier: 'pro', system: tutorSystem(d, 'pro', { books: !!(found && found.ctx.text) }, (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro'))),
-                        messages: [...EXAMPLES, ...messages], maxTokens: doc ? 9000 : img ? 2000 : 1600, image: img && !img.error ? img : null,
+                    const sys = tutorSystem(d, 'pro', { books: !!(found && found.ctx.text) }, (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro')));
+                    if (sheet) sys.splice(1, 0, worksheetBlock(sheet, 'the student'));   // [fixed][worksheet] = the same cached prefix every turn
+                    out = await chat(env, db, { tier: 'pro', system: sys, thinking: sheet ? 4000 : 0,   // a worksheet: think + recompute first
+                        messages: [...EXAMPLES, ...messages], maxTokens: sheet ? 9000 : img ? 2000 : 1600, image: img && !img.error ? img : null,
                         meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
                 }
                 const saved = await save({ text: (kind === 'exam' ? out.text : dropAnswerLine(out.text)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cost: out.costUsd, cards: cards.length ? JSON.stringify(cards) : null });

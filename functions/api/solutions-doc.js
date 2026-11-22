@@ -22,6 +22,17 @@ export async function keepDoc(db, scope, threadId, doc) {
     await db.prepare(`INSERT OR REPLACE INTO ai_thread_docs (scope, thread_id, name, text, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`)
         .bind(scope, threadId, doc.name, String(doc.text).slice(0, 30000)).run();
 }
+/** The worksheet of a chat, for EVERY later message of that chat (live 22 Nov: "حل الـ 30 مرة واحدة" → "I can't see the
+ *  file" because the text went with one message only). A cached block: re-read at 10% of the price on each turn. */
+export function worksheetBlock(w, who = 'the student') {
+    return { type: 'text', cache_control: { type: 'ephemeral' }, text: `## The worksheet ${who} attached in this chat ("${w.name}") — its full text:
+"""
+${String(w.text).slice(0, 30000)}
+"""
+- It stays available for the WHOLE chat: never say you can't see it, and never ask for it again (or for photos of it).
+- Asked to solve it (حل / حلي / solve / the questions / الشيت / الملف): solve EVERY question of it in THIS one answer, in order — each with its number and a full worked solution as in the rules — never stop after one question to ask whether to continue. Only go one question at a time if they explicitly ask for that ("واحدة واحدة", "one at a time"), or if they ask about specific questions.
+- Before you write each answer, recompute it yourself (units, conversions, which law) — no careless mistakes.` };
+}
 export async function threadDoc(db, scope, threadId) {
     await ensure(db);
     return db.prepare('SELECT name, text FROM ai_thread_docs WHERE scope = ? AND thread_id = ?').bind(scope, threadId).first();
@@ -39,6 +50,8 @@ Rules:
 - Make it TEACH, not just list results: every unit conversion has its "why"; every law has its "why" (which quantities it links / why this method); two-step problems: a first part explains why we need the middle quantity, then the next part. 1–3 short "steps" lines with the substitution and units. "answer" = the final result with its unit.
 - Questions that HAVE parts (a), (b)… → one part each, "label":"(a)"… A single question solved in two steps → "label":"Step 1", "Step 2" — NEVER (a)/(b) when the question itself has no parts. A one-step question → one part with "label":"".
 - Non-calculation questions (define, give reason, compare…) → "given":[] and one part with only "answer" (the model answer in the book's English, "Because …" for reasons).
+- Recompute EVERY answer yourself before writing it (don't trust the chat blindly): units, conversions, the right law, the arithmetic. Fix anything wrong.
+- Every statement must match the Egyptian curriculum book (e.g. identical cells in parallel: the emf stays the same and the battery works for a longer time — not "supplies more current").
 - "tip" (optional, short): a common mistake, a quick check, or the book's faster method (e.g. identical resistors in parallel: R = r / n).
 - Simple English, the book's own symbols and terms (emf, not ε). No markdown or emoji inside the JSON values.
 - "title": e.g. "Unit 2 – Electricity: Worked Solutions"; "subtitle": grade + what it is.`;
@@ -73,7 +86,7 @@ export async function makeSolutions(env, db, { messages, worksheet, gradeLabel, 
         { type: 'text', text: `You prepare study material for Miss Marwa's ${gradeLabel || 'science'} students (Egyptian curriculum, language schools).${PRO_ACCURACY}\n\n${TASK}` },
         { type: 'text', text: (worksheet ? `## The worksheet ("${worksheet.name}") — the questions exactly:\n"""\n${String(worksheet.text).slice(0, 30000)}\n"""\n\n` : '') + (sols ? `## The solutions from the chat:\n"""\n${sols}\n"""` : `## No solutions in the chat yet — SOLVE every question of the worksheet yourself, fully and carefully, straight into the document.`) }
     ];
-    const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'Go.' }], maxTokens: 16000, meter });
+    const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'Go.' }], maxTokens: 16000, thinking: 5000, meter });
     const content = cleanSolutions(parse(r.text));
     if (!content) { const e = new Error('BAD_JSON'); e.code = 'BAD_JSON'; throw e; }
     return { content, costUsd: r.costUsd || 0, model: r.model };
