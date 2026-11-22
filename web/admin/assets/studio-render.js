@@ -293,12 +293,17 @@
         document.body.appendChild(host);
         try {
             const fd = host.contentDocument;
-            fd.open(); fd.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${style.replace(/<\/style/gi, '')}\nhtml,body{margin:0;padding:0;background:#fff}</style></head><body>${inner}</body></html>`); fd.close();
+            fd.open(); fd.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><style>${style.replace(/<\/style/gi, '')}\nhtml,body{margin:0;padding:0;background:#fff;overflow:hidden}</style></head><body>${inner}</body></html>`); fd.close();
+            // no scrollbar in the measuring frame: Windows scrollbars take ~17px → text measured in a narrower column
+            // than it is drawn in → more wrapped lines → every page break drifted into the middle of a block (live 22 Nov)
+            host.setAttribute('scrolling', 'no');
             const root = fd.body.firstElementChild; root.classList.add('sx-pdf');
+            if (fd.documentElement.clientWidth !== CONTENT_W) root.style.width = CONTENT_W + 'px';
             const imgs = [...root.querySelectorAll('img')];
             await Promise.all(imgs.map(async i => { const d = await fetchData(new URL(i.getAttribute('src'), location.href).href); if (d) i.src = d; else i.remove(); }));
             await Promise.all(imgs.filter(i => i.isConnected).map(i => i.decode().catch(() => { })));
-            if (fd.fonts && fd.fonts.ready) await Promise.race([fd.fonts.ready, new Promise(r => setTimeout(r, 4000))]);
+            if (fd.fonts) await Promise.race([Promise.all([...fd.fonts].map(f => f.load().catch(() => { }))).then(() => fd.fonts.ready), new Promise(r => setTimeout(r, 6000))]);
+            void root.offsetHeight;                                                    // lay out with the loaded fonts
             const ser = new XMLSerializer();
             const shots = [];
             for (const page of root.querySelectorAll('.sx-page')) {
@@ -338,7 +343,7 @@
                 document.body.appendChild(a); a.click(); a.remove();
                 setTimeout(() => URL.revokeObjectURL(url), 30000);
             }
-            return { bytes, pages: n, name: fileName(title) };
+            return { bytes, pages: n, name: fileName(title), shots: o.keepShots ? shots.map(x => ({ jpg: x.jpg, h: x.h })) : undefined };
         } finally { host.remove(); }
     }
     // the editable text → the stored text: <b> back to **bold**, line breaks kept, nothing else
