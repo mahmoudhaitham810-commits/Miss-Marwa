@@ -111,6 +111,12 @@ Be complete: a typical lesson has 25–80 items. One item per idea. No duplicate
 const SUMMARY_TASK = `## Task: write the FULL study summary of this lesson, in Miss Marwa's own style
 She writes complete, exhaustive summaries (several pages) so a student can rely ONLY on them and get full marks. Never shorten, never skip, never merge ideas into vague lines. Cover EVERY item of the checklist below, in the book's order.
 
+HOW SHE ORGANISES A LESSON — the most important part (this is what makes her summaries better than the usual books that list everything in one long block):
+- First a short "lead" (1–2 simple sentences): the story of the lesson — what we will learn and how the ideas connect.
+- Then the lesson is split into its MAIN TOPICS (usually 3–8), each one a "section" with a short simple heading (2–5 words) and an "intro": ONE simple sentence saying what this topic is about and how it follows from the one before. The page shows these topics first as a numbered roadmap, so the headings must be clear and simple.
+- Then each topic in turn, completely, before the next one: the term(s) and definition → the explanation (points / arrows) → examples → reasons (G.R), notes, uses… Every content block belongs to the topic above it — no block before the first section except the lead.
+- Topics follow the book's order and lead into each other, so the lesson reads like one coherent story, not a list of separate facts.
+
 Her style (from her handwritten summaries):
 - Header "Unit Two — Lesson One: Electric Forces" (numbers as words).
 - Every scientific term in its own "term" block: the term, then its exact definition.
@@ -121,13 +127,14 @@ Her style (from her handwritten summaries):
 - "Note:" lines for exceptions and details. "Uses:", "Advantages:", "Importance:", "Life application:" lists.
 - Equations on their own line: Glucose + Oxygen → Water + Carbon dioxide + Energy.
 - Sometimes a short Arabic meaning in brackets after a hard English word, like silk (حرير) — only for hard everyday words, never for scientific terms.
-- Short section headings for each big idea (like "Electric Forces", "Types of Nutrition").
+- Short simple section headings for each main topic (like "Static Electricity", "Electric Forces", "Types of Nutrition").
 - Simple English, short sentences. Use **bold** for key words inside sentences.
 
 Return ONLY JSON (no markdown fences):
 {"title":"Unit Two — Lesson One: Electric Forces","blocks":[ … ]}
 Block types (each block may have "p": PDF page):
-{"t":"section","title":"…"}
+{"t":"lead","text":"…"}   ← first block only
+{"t":"section","title":"…","intro":"one simple sentence"}
 {"t":"term","term":"…","def":"…"}
 {"t":"points","title":"optional heading","items":["…","…"],"ordered":false}
 {"t":"arrows","title":"optional","items":[{"from":"…","to":"…"}]}
@@ -183,7 +190,8 @@ export function cleanBlock(b) {
     const p = pnum(b.p);
     const base = (o) => (p ? { ...o, p } : o);
     switch (b.t) {
-        case 'section': return b.title ? base({ t: 'section', title: str(b.title, 200) }) : null;
+        case 'section': return b.title ? base({ t: 'section', title: str(b.title, 200), ...(b.intro ? { intro: str(b.intro, 400) } : {}) }) : null;
+        case 'lead': return b.text ? base({ t: 'lead', text: str(b.text, 800) }) : null;
         case 'term': return b.term && b.def ? base({ t: 'term', term: str(b.term, 200), def: str(b.def) }) : null;
         case 'points': { const items = (Array.isArray(b.items) ? b.items : []).map(x => str(x)).filter(Boolean).slice(0, 40); return items.length ? base({ t: 'points', title: str(b.title, 200), items, ordered: !!b.ordered }) : null; }
         case 'arrows': { const items = (Array.isArray(b.items) ? b.items : []).map(x => ({ from: str(x && x.from, 400), to: str(x && x.to, 400) })).filter(x => x.from && x.to).slice(0, 20); return items.length ? base({ t: 'arrows', title: str(b.title, 200), items }) : null; }
@@ -235,7 +243,7 @@ export function keepPages(parts, list) {
     return list;
 }
 // coverage: is each checklist key in the summary text?
-export function blockText(b) { return [b.title, b.term, b.def, b.text, b.q, b.a, ...(b.items || []).map(x => typeof x === 'string' ? x : [x.from, x.to, x.k, x.v].join(' ')), ...(b.cols || []), ...(b.rows || []).flatMap(r => [r.label, ...r.cells])].filter(Boolean).join(' '); }
+export function blockText(b) { return [b.title, b.intro, b.term, b.def, b.text, b.q, b.a, ...(b.items || []).map(x => typeof x === 'string' ? x : [x.from, x.to, x.k, x.v].join(' ')), ...(b.cols || []), ...(b.rows || []).flatMap(r => [r.label, ...r.cells])].filter(Boolean).join(' '); }
 export function coverage(checklist, blocks) {
     const all = norm(blocks.map(blockText).join(' \n '));
     const has = (key) => {

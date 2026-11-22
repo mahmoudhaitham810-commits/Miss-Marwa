@@ -39,8 +39,17 @@
     /* ---------- summary ---------- */
     .sx-h1 { font-size: 23px; font-weight: 850; letter-spacing: -.02em; color: var(--navy); margin: 2px 0 14px; padding-bottom: 8px; border-bottom: 3px solid var(--blue); }
     .sx-blk { break-inside: avoid; margin: 0 0 11px; position: relative; }
-    .sx-sec { margin: 20px 0 10px; font-size: 17px; font-weight: 800; color: var(--blue); display: flex; align-items: center; gap: 8px; break-after: avoid; }
-    .sx-sec::before { content: ''; width: 6px; height: 20px; border-radius: 3px; background: var(--blue); }
+    .sx-sec { margin: 22px 0 10px; break-after: avoid; }
+    .sx-sec-h { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 800; color: var(--blue); }
+    .sx-n { flex: none; width: 27px; height: 27px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-size: 13.5px; font-weight: 800; }
+    .sx-intro { margin: 4px 0 0 37px; font-size: 13.5px; color: #334155; font-style: italic; line-height: 1.5; }
+    /* the lesson's story + roadmap (Miss Marwa: main headings first, then each one in turn) */
+    .sx-lead { font-size: 14.5px; line-height: 1.6; color: #1E293B; margin: 0 0 12px; }
+    .sx-road { border: 1.5px solid var(--blue); background: var(--sky); border-radius: 14px; padding: 11px 16px 12px; margin: 0 0 16px; }
+    .sx-road .rt { font-weight: 800; color: var(--navy); font-size: 14px; margin-bottom: 7px; }
+    .sx-road ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+    .sx-road li { display: flex; gap: 8px; align-items: center; font-weight: 600; color: #1E293B; font-size: 13.5px; margin: 0; }
+    .sx-road li .sx-n { width: 22px; height: 22px; font-size: 12px; }
     .sx-term { padding: 9px 12px; border-left: 4px solid var(--blue); background: var(--sky); border-radius: 4px 10px 10px 4px; }
     .sx-term .k { display: inline-block; font-weight: 800; color: var(--navy); border: 1.5px solid var(--blue); border-radius: 999px; padding: 1px 11px; margin-right: 6px; background: #fff; }
     .sx-lbl { font-weight: 800; color: var(--navy); }
@@ -91,7 +100,8 @@
     function block(b, path, o) {
         const t = tools(o, path);
         switch (b.t) {
-            case 'section': return `<div class="sx-blk sx-sec">${ed(o, path + '.title', b.title)}${t}</div>`;
+            case 'section': return `<div class="sx-blk sx-sec">${t}<div class="sx-sec-h">${o.secNo && o.secNo[path] ? `<span class="sx-n">${o.secNo[path]}</span>` : ''}${ed(o, path + '.title', b.title)}</div>${b.intro ? ed(o, path + '.intro', b.intro, 'div', 'sx-intro') : ''}</div>`;
+            case 'lead': return `<div class="sx-blk sx-lead">${t}${ed(o, path + '.text', b.text)}</div>`;
             case 'term': return `<div class="sx-blk sx-term">${t}${ed(o, path + '.term', b.term, 'span', 'k')}${ed(o, path + '.def', b.def)}</div>`;
             case 'points': { const L = b.ordered ? 'ol' : 'ul'; return `<div class="sx-blk">${t}${b.title ? `<div>${ed(o, path + '.title', b.title, 'span', 'sx-lbl')}</div>` : ''}<${L}>${b.items.map((x, i) => `<li>${ed(o, `${path}.items.${i}`, x)}</li>`).join('')}</${L}></div>`; }
             case 'arrows': return `<div class="sx-blk">${t}${b.title ? `<div>${ed(o, path + '.title', b.title, 'span', 'sx-lbl')}</div>` : ''}<div class="sx-arr">${b.items.map((x, i) => `<div>${ed(o, `${path}.items.${i}.from`, x.from)}</div><div class="ar">⟶</div><div>${ed(o, `${path}.items.${i}.to`, x.to)}</div>`).join('')}</div></div>`;
@@ -110,9 +120,17 @@
         return `<div class="sx">${lessons.map((L, li) => {
             const last = L.blocks.length && L.blocks[L.blocks.length - 1];
             const keyIdx = last && last.t === 'points' && /key points/i.test(last.title || '') ? L.blocks.length - 1 : -1;
+            // the roadmap = the lesson's main topics (its sections, numbered) — always matches the headings below, even after edits
+            const secNo = {}, topics = [];
+            L.blocks.forEach((b, i) => { if (b.t === 'section') { topics.push(b.title); secNo[`lessons.${li}.blocks.${i}`] = topics.length; } });
+            const oo = { ...o, secNo };
+            const leadEnd = L.blocks.findIndex(b => b.t !== 'lead');
+            const nLead = leadEnd < 0 ? L.blocks.length : leadEnd;
+            const road = topics.length >= 2 ? `<div class="sx-blk sx-road"><div class="rt">🗺️ In this lesson</div><ol style="grid-template-rows:repeat(${Math.ceil(topics.length / 2)},auto);grid-auto-flow:column">${topics.map((x, k) => `<li><span class="sx-n">${k + 1}</span><span>${rich(x)}</span></li>`).join('')}</ol></div>` : '';
+            const one = (b, i) => i === keyIdx ? `<div class="sx-blk sx-key">${tools(o, `lessons.${li}.blocks.${i}`)}<div class="sx-lbl">⭐ ${esc(b.title)}</div><ul>${b.items.map((x, k) => `<li>${ed(o, `lessons.${li}.blocks.${i}.items.${k}`, x)}</li>`).join('')}</ul></div>` : block(b, `lessons.${li}.blocks.${i}`, oo);
             return `<div class="sx-page sx-lesson">${brand(doc, `${GRADE[doc.grade] || ''} · Science<br>Unit ${L.unit} · Lesson ${L.lesson}`)}
                 ${ed(o, `lessons.${li}.title`, L.title, 'div', 'sx-h1')}
-                ${L.blocks.map((b, i) => i === keyIdx ? `<div class="sx-blk sx-key">${tools(o, `lessons.${li}.blocks.${i}`)}<div class="sx-lbl">⭐ ${esc(b.title)}</div><ul>${b.items.map((x, k) => `<li>${ed(o, `lessons.${li}.blocks.${i}.items.${k}`, x)}</li>`).join('')}</ul></div>` : block(b, `lessons.${li}.blocks.${i}`, o)).join('')}
+                ${L.blocks.slice(0, nLead).map((b, i) => one(b, i)).join('')}${road}${L.blocks.slice(nLead).map((b, i) => one(b, i + nLead)).join('')}
             </div>`;
         }).join('')}</div>`;
     }
