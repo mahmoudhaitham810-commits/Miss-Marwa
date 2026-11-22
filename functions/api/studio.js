@@ -25,6 +25,7 @@
 import { requireStaff, ensureAppSchema, audit } from './admin-auth.js';
 import { chat, AiLimitError, claudeReady } from './ai-gateway.js';
 import { createExam } from './exams.js';
+import { cleanSolutions } from './solutions-doc.js';
 import { gradeToc, pageTexts, chunksOf, pageKind, norm, GRADE_LABELS, bookName } from './curriculum.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
@@ -259,6 +260,14 @@ export function coverage(checklist, blocks) {
 
 // ----------------------------------------------------------------------------------------------
 const readyDbs = new WeakSet();
+/** A worked-solutions document made in the AI Assistant → saved in "Exams & summaries" (editable there). */
+export async function saveSolutionsDoc(db, { grade, content, costUsd, staffId }) {
+    await ensureStudio(db);
+    const id = newId('solutions');
+    await db.prepare('INSERT INTO studio_docs (id, kind, grade, unit, lessons, title, content, settings, cost_usd, created_by) VALUES (?, \'solutions\', ?, NULL, \'[]\', ?, ?, \'{}\', ?, ?)')
+        .bind(id, grade || null, content.title, JSON.stringify(content), costUsd || 0, staffId || null).run();
+    return id;
+}
 async function ensureStudio(db) {
     if (readyDbs.has(db)) return;
     await db.prepare(`CREATE TABLE IF NOT EXISTS studio_docs (id TEXT PRIMARY KEY, kind TEXT NOT NULL, grade TEXT, unit INTEGER, lessons TEXT, title TEXT,
@@ -266,7 +275,7 @@ async function ensureStudio(db) {
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
     readyDbs.add(db);
 }
-const newId = (k) => `${k === 'summary' ? 'SUM' : k === 'online' ? 'ONL' : 'EXM'}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296).toString(36).toUpperCase()}`;
+const newId = (k) => `${k === 'summary' ? 'SUM' : k === 'online' ? 'ONL' : k === 'solutions' ? 'SOL' : 'EXM'}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296).toString(36).toUpperCase()}`;
 const docOut = (r) => r && ({ id: r.id, kind: r.kind, grade: r.grade, unit: r.unit, lessons: safe(r.lessons, []), title: r.title, content: safe(r.content, {}), settings: safe(r.settings, {}),
     costUsd: r.cost_usd || 0, publishedExam: r.published_exam || null, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at });
 function safe(s, d) { try { return JSON.parse(s) ?? d; } catch (e) { return d; } }
@@ -437,7 +446,8 @@ Return ONLY JSON: {"item":{…}}`;
             if (!doc) return bad('Not found', 404);
             const c = data.content || {};
             let content;
-            if (doc.kind === 'summary') content = { lessons: (Array.isArray(c.lessons) ? c.lessons : []).slice(0, 20).map(l => ({ ...l, title: str(l.title, 200), blocks: (Array.isArray(l.blocks) ? l.blocks : []).map(cleanBlock).filter(Boolean) })) };
+            if (doc.kind === 'solutions') { content = cleanSolutions(c); if (!content) return bad('Nothing to save', 400); }
+            else if (doc.kind === 'summary') content = { lessons: (Array.isArray(c.lessons) ? c.lessons : []).slice(0, 20).map(l => ({ ...l, title: str(l.title, 200), blocks: (Array.isArray(l.blocks) ? l.blocks : []).map(cleanBlock).filter(Boolean) })) };
             else {
                 const wanted = (Array.isArray(c.sections) ? c.sections : []).map(s => ({ type: s.type, count: 999, marks: Math.min(20, Math.max(0, Number(s.marks) || 0)) })).filter(s => SECTION_TYPES[s.type]);
                 content = { ...doc.content, title: str(c.title, 160) || doc.content.title, subtitle: str(c.subtitle, 240) || doc.content.subtitle,

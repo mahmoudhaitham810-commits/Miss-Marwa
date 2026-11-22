@@ -89,15 +89,28 @@
         if (file.size > 25 * 1024 * 1024) throw new Error('الملف كبير قوي (أكتر من 25MB) — ابعت الصفحات المهمة بس');
         const lib = await pdfjs();
         const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+        const name = String(file.name || 'file.pdf').slice(0, 80);
+        // one of OUR PDFs (summary / exam / solutions) carries its full text inside → use it as is
+        try {
+            const meta = await doc.getMetadata();
+            const own = meta && meta.info && meta.info.Custom && meta.info.Custom.SAText;
+            if (own && String(own).trim().length > 50) return { kind: 'text', doc: { name, pages: doc.numPages, total: doc.numPages, text: String(own).slice(0, PDF_CHARS).trim() } };
+        } catch (e) { }
         const n = Math.min(doc.numPages, PDF_PAGES);
-        let text = '';
-        for (let i = 1; i <= n && text.length < PDF_CHARS; i++) {
+        const pages = [];
+        for (let i = 1; i <= n; i++) {
             const pg = await doc.getPage(i);
             const tc = await pg.getTextContent();
-            const t = tc.items.map(x => x.str + (x.hasEOL ? '\n' : ' ')).join('').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-            if (t) text += `[page ${i}]\n${t}\n\n`;
+            pages.push(tc.items.map(x => x.str + (x.hasEOL ? '\n' : ' ')).join('').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim());
         }
-        const name = String(file.name || 'file.pdf').slice(0, 80);
+        // a line on most pages (a header / footer like "page 2 of 6") is not content: a picture-only PDF with a text
+        // footer must still count as scanned
+        const key = (l) => l.replace(/\d+/g, '#').trim();
+        const seen = {};
+        pages.forEach(t => new Set(t.split('\n').map(key).filter(k => k && k.length <= 90)).forEach(k => { seen[k] = (seen[k] || 0) + 1; }));   // only short lines can be a header / footer
+        const rep = n >= 2 ? new Set(Object.keys(seen).filter(k => seen[k] >= Math.max(2, Math.ceil(n * 0.6)))) : new Set();
+        let text = '';
+        pages.forEach((t, i) => { const body = t.split('\n').filter(l => !rep.has(key(l))).join('\n').trim(); if (body && text.length < PDF_CHARS) text += `[page ${i + 1}]\n${body}\n\n`; });
         if (text.replace(/\[page \d+\]/g, '').trim().length >= 120)
             return { kind: 'text', doc: { name, pages: n, total: doc.numPages, text: text.slice(0, PDF_CHARS).trim() } };
         // scanned (no text) → first 2 pages, stacked, one JPEG

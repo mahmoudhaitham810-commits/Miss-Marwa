@@ -10,7 +10,9 @@ import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gate
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
-import { searchBook, staffBookRules, gradeFromText } from './curriculum.js';
+import { wantsPdf, keepDoc, threadDoc, makeSolutions } from './solutions-doc.js';
+import { saveSolutionsDoc } from './studio.js';
+import { searchBook, staffBookRules, gradeFromText, GRADE_LABELS } from './curriculum.js';
 import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, reasoning, proMode, stripPrivate, askKind, taskRules, dropAnswerLine, isScienceQuestion, isSiteQuestion, isCapabilityQuestion, capabilitiesForStaff } from './ai-rules.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -266,6 +268,7 @@ export async function onRequest(context) {
                 if (img && context.waitUntil) context.waitUntil(purgeOldImages(env, db));
             }
             if (data.resend) await db.prepare(`DELETE FROM copilot_messages WHERE thread_id = ? AND role = 'error' AND id > ?`).bind(t.id, userMsg.id).run();
+            if (doc) await keepDoc(db, 'staff', t.id, doc);   // a later "make it a PDF" quotes the worksheet's questions exactly
             const { results: hist } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
             if (doc && messages.length) messages[messages.length - 1].content = `${text}\n\n📄 Miss Marwa attached "${doc.name}" (${doc.pages} page${doc.pages > 1 ? 's' : ''}). Its text:\n"""\n${doc.text}\n"""`;
@@ -277,6 +280,24 @@ export async function onRequest(context) {
                 await db.prepare('UPDATE copilot_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
                 return db.prepare('SELECT * FROM copilot_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
+            // "put it in a PDF" → the chat's solutions as a branded worked-solutions PDF (each question, then its full answer)
+            if (!img && !doc && !result && tier === 'pro' && wantsPdf(text)) {
+                try {
+                    const { results: all } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
+                    const worksheet = await threadDoc(db, 'staff', t.id);
+                    const chatMsgs = (all || []).reverse();
+                    const grade = gradeFromText(text) || (worksheet && gradeFromText(worksheet.name + ' ' + worksheet.text.slice(0, 600))) || chatMsgs.filter(m => m.role === 'user').map(m => gradeFromText(m.text)).find(Boolean) || null;
+                    const out = await makeSolutions(env, db, { messages: chatMsgs, worksheet, gradeLabel: grade ? GRADE_LABELS[grade] : '', meter: { staffId: staff.id, kind: 'copilot-pdf' } });
+                    const docId = await saveSolutionsDoc(db, { grade, content: out.content, costUsd: out.costUsd, staffId: staff.id });
+                    cards = JSON.stringify([{ type: 'solutions', docId, grade, content: out.content }]);
+                    const saved = await saveReply({ text: `جاهز يا مس مروة 📄 **${out.content.title}** — ${out.content.items.length} سؤال، كل سؤال وتحته حله بالتفصيل (المعطيات، تحويل الوحدات وليه، القانون وليه، الحل). نزّليه PDF من الزرار تحت، أو افتحيه في **Exams & summaries** لو حابة تعدّلي فيه ✏️`, model: out.model, costUsd: out.costUsd });
+                    return json({ threadId: t.id, title: t.title, user: msgOut(userMsg), reply: msgOut(saved), usage: await usageSummary(env, db) });
+                } catch (e) {
+                    const message = e.code === 'NO_SOLUTIONS' ? 'مفيش حلول في الشات ده لسه أحوّلها لـ PDF 🤔 — ابعتيلي الشيت وأحلّه الأول.' : e instanceof AiLimitError ? e.message : 'ماعرفتش أعمل الـ PDF المرة دي — جرّبي تاني.';
+                    await db.prepare(`INSERT INTO copilot_messages (thread_id, role, text, tier, error) VALUES (?, 'error', ?, ?, ?)`).bind(t.id, message, tier, e.code || 'PDF').run();
+                    return json({ error: message, code: e.code || 'PDF_FAILED', threadId: t.id, title: t.title, user: msgOut(userMsg), usage: await usageSummary(env, db) }, 502);
+                }
+            }
             // "what can you do?" → a fixed, always-correct list of what the AI Assistant does on the site (no AI call, free)
             if (!img && !result && isCapabilityQuestion(text)) {
                 cards = null;
@@ -307,7 +328,7 @@ export async function onRequest(context) {
                 const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : taskRules(kind, tier) + books);
                 // Pro answering a science question / photo uses the reasoning mode picked on the Model test page (PRO_REASONING)
                 const R = tier === 'pro' && !result ? reasoning(env, proMode(env)) : reasoning(env, 'plain');
-                const maxTokens = (result ? (tier === 'free' ? 600 : 900) : img ? (tier === 'free' ? 800 : 2000) : (tier === 'pro' ? 3000 : 850)) + R.extraTokens;
+                const maxTokens = (result ? (tier === 'free' ? 600 : 900) : doc ? (tier === 'pro' ? 14000 : 1200) : img ? (tier === 'free' ? 800 : 3000) : (tier === 'pro' ? 6000 : 850)) + R.extraTokens;
                 const out = await chat(env, db, { tier, pool: 'staff', thinking: R.thinking, system: system + (img ? IMAGE_RULES : '') + R.system, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img, meter: { staffId: staff.id, kind: 'copilot' } });
                 const u = out.usage || {};
                 const clean = kind === 'exam' ? stripPrivate(out.text) : dropAnswerLine(stripPrivate(out.text));

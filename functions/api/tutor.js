@@ -28,6 +28,7 @@ import { studentAccess } from './ai-quota.js';
 import { searchBook, bookRules, gradeToc } from './curriculum.js';
 import { sourceBlock, lessonParts } from './studio.js';
 import { getOrMake, CacheBusyError } from './ai-cache.js';
+import { wantsPdf, keepDoc, threadDoc, makeSolutions } from './solutions-doc.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
@@ -399,6 +400,23 @@ export async function onRequest(context) {
                 await db.prepare('UPDATE tutor_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
                 return db.prepare('SELECT * FROM tutor_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
+            if (doc) await keepDoc(db, 'student', t.id, doc);   // a later "make it a PDF" quotes the worksheet's questions exactly
+            // "حطهولي في PDF" → the chat's solutions as the same branded worked-solutions PDF Miss Marwa gets
+            if (!free && !img && !doc && wantsPdf(text)) {
+                try {
+                    const { results: all } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
+                    const out = await makeSolutions(env, db, { messages: (all || []).reverse(), worksheet: await threadDoc(db, 'student', t.id), gradeLabel: GRADE_LABEL[who.student.grade] || '',
+                        meter: who.preview ? { staffId: who.staff.id, kind: 'chat-pdf' } : { studentId: sid, kind: 'chat-pdf' } });
+                    const girl = who.student.gender === 'female';
+                    const saved = await save({ text: `جاهز ${girl ? 'يا بطلة' : 'يا بطل'} 📄 **${out.content.title}** — كل سؤال وتحته حله بالتفصيل: المعطيات، تحويل الوحدات وليه، القانون وليه، والحل. ${girl ? 'نزّليه' : 'نزّله'} من الزرار تحت وذاكر منه 💪`.replace('وذاكر', girl ? 'وذاكري' : 'وذاكر'),
+                        model: out.model, cost: out.costUsd, cards: JSON.stringify([{ type: 'solutions', grade: who.student.grade, content: out.content }]) });
+                    return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today() });
+                } catch (e) {
+                    const msg = e.code === 'NO_SOLUTIONS' ? 'مفيش حلول في الشات ده لسه أحطها في PDF 🤔 — ابعتلي الأسئلة وأحلهالك الأول.' : e instanceof AiLimitError ? (FRIENDLY[e.code] || FRIENDLY.AI_ERROR) : 'ماعرفتش أعمل الـ PDF المرة دي — جرّب تاني 🙏';
+                    await save({ role: 'error', text: msg, error: e.code || 'PDF' });
+                    return json({ error: msg, code: e.code || 'PDF_FAILED', threadId: t.id, user: msgOut(userMsg) }, e instanceof AiLimitError ? 429 : 502);
+                }
+            }
             try {
                 let out;
                 if (free) {
@@ -414,7 +432,7 @@ export async function onRequest(context) {
                     const gl = GRADE_LABEL[who.student.grade] || who.student.grade;
                     const books = !found || !found.science ? '' : bookRules(found.ctx, gl, { indexed: found.indexed, ref: found.ref, refMissing: found.refMissing });
                     out = await chat(env, db, { tier: 'pro', system: tutorSystem(d, 'pro', { books: !!(found && found.ctx.text) }, (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro'))),
-                        messages: [...EXAMPLES, ...messages], maxTokens: img ? 1300 : 1100, image: img && !img.error ? img : null,
+                        messages: [...EXAMPLES, ...messages], maxTokens: doc ? 9000 : img ? 2000 : 1600, image: img && !img.error ? img : null,
                         meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
                 }
                 const saved = await save({ text: (kind === 'exam' ? out.text : dropAnswerLine(out.text)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cost: out.costUsd, cards: cards.length ? JSON.stringify(cards) : null });

@@ -56,13 +56,13 @@
     .sx ul, .sx ol { margin: 4px 0 0; padding-left: 22px; } .sx li { margin: 2px 0; } .sx ul li::marker { color: var(--blue); }
     .sx-arr { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px 10px; align-items: center; margin-top: 4px; }
     .sx-arr .ar { color: var(--blue); font-weight: 900; }
-    .sx-ex { padding-left: 2px; } .sx-ex .tag, .sx-gr .tag, .sx-note .tag { display: inline-block; font-size: 11.5px; font-weight: 800; padding: 1px 8px; border-radius: 6px; margin-right: 6px; vertical-align: 1px; }
+    .sx-ex { padding-left: 2px; } .sx-ex .tag, .sx-gr .tag, .sx-note .tag, .sx-tip .tag { display: inline-block; font-size: 11.5px; font-weight: 800; padding: 1px 8px; border-radius: 6px; margin-right: 6px; vertical-align: 1px; }
     .sx-ex .tag { background: var(--sky); color: var(--blue); }
     .sx-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; } .sx-facts .f { padding: 3px 10px; border: 1px solid var(--line); border-radius: 8px; }
     .sx-gr { padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 10px; }
     .sx-gr .tag { background: var(--navy); color: #fff; } .sx-gr .q { font-weight: 700; } .sx-gr .a { display: block; margin-top: 3px; }
     .sx-eq { text-align: center; font-weight: 700; padding: 8px 12px; border: 1.5px dashed var(--blue); border-radius: 10px; color: var(--navy); }
-    .sx-note { padding: 8px 12px; border-radius: 10px; background: #FFFBEB; border: 1px solid #FDE68A; } .sx-note .tag { background: #F59E0B; color: #fff; }
+    .sx-note { padding: 8px 12px; border-radius: 10px; background: #FFFBEB; border: 1px solid #FDE68A; } .sx-note .tag, .sx-tip .tag { background: #F59E0B; color: #fff; }
     .sx-fig { padding: 8px 12px; border: 1.5px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 13.5px; }
     .sx table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 13.5px; }
     .sx th, .sx td { border: 1px solid var(--line); padding: 6px 8px; vertical-align: top; text-align: left; }
@@ -87,12 +87,46 @@
     .sx-ans { color: #166534; font-weight: 600; } .sx-ans b { color: #15803D; }
     .sx-luck { text-align: center; font-weight: 800; color: var(--blue); margin-top: 18px; font-size: 16px; }
     .sx-pdf .sx-page { max-width: none; width: 100%; padding: 0 1px; margin: 0; } .sx-pdf .sx-keypage { margin-top: 0; padding-top: 0; border-top: 0; }
-    .sx-keypage { break-before: page; } .sx-keytab { margin-top: 4px; color: var(--ink); font-weight: 400; } .sx-keytab td { color: #166534; } .sx-keypage .sx-h1 { font-size: 20px; }
+    .sx-keypage { break-before: page; }
+    .sx-sol { margin: 0 0 14px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    .sx-solq { display: flex; gap: 10px; align-items: flex-start; background: var(--sky); padding: 10px 14px; font-weight: 700; color: #0F172A; }
+    .sx-solq .qt { flex: 1; line-height: 1.5; } .sx-solq .sx-n { margin-top: 1px; }
+    .sx-solb { padding: 10px 14px 12px 51px; }
+    .sx-solrow { margin: 0 0 7px; line-height: 1.55; }
+    .sx-chip { display: inline-block; padding: 1px 9px; border-radius: 999px; background: #EEF2FF; border: 1px solid #C7D2FE; font-weight: 600; margin: 0 3px 3px 0; }
+    .sx-chip.f { background: #FEF3C7; border-color: #FCD34D; }
+    .sx-conv { display: flex; gap: 8px; } .sx-conv .ic { flex: none; }
+    .why { color: #475569; font-size: 13px; font-style: italic; }
+    .sx-plabel { font-weight: 800; color: var(--blue); margin-bottom: 2px; }
+    .sx-law { display: inline-block; font-weight: 800; color: var(--navy); background: #F1F5F9; border-left: 4px solid var(--blue); padding: 3px 10px; border-radius: 6px; margin: 2px 0 3px; }
+    .sx-step { padding-left: 4px; }
+    .sx-final { display: inline-block; margin-top: 4px; font-weight: 800; color: #166534; background: #DCFCE7; border: 1px solid #86EFAC; padding: 3px 11px; border-radius: 8px; }
+    .sx-tip { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 6px 10px; font-size: 13.5px; } .sx-keytab { margin-top: 4px; color: var(--ink); font-weight: 400; } .sx-keytab td { color: #166534; } .sx-keypage .sx-h1 { font-size: 20px; }
     .sx-src { color: #94A3B8; font-size: 11px; margin-left: 4px; white-space: nowrap; }
     @media screen { .sx-keypage { margin-top: 26px; padding-top: 20px; border-top: 2px dashed var(--line); } }
     @media (max-width: 640px) { .sx-page { padding: 18px 14px 24px; } .sx-opts { grid-template-columns: 1fr 1fr; } .sx-fields { grid-template-columns: 1fr 1fr; } .sx-brand .b3 { display: none; } .sx-arr { grid-template-columns: 1fr; } .sx-arr .ar { transform: rotate(90deg); justify-self: start; } }
     @media print { .sx-tools { display: none !important; } .sx [contenteditable] { background: none !important; box-shadow: none !important; } }
     `;
+
+    // ---------------------------------------------------------------- worked solutions (question → its full answer)
+    // content = { title, subtitle, items: [{ n, q, given[], find, convert[{text, why}], parts[{label, law, why, steps[], answer}], tip }] }
+    function solutionsHtml(doc, o = {}) {
+        const c = doc.content || {}, items = c.items || [];
+        return `<div class="sx"><div class="sx-page">${brand(doc, `${GRADE[doc.grade] || ''} · Science<br>Worked solutions`)}
+            <div class="sx-ex-h">${ed(o, 'title', c.title || 'Worked solutions', 'div', 't')}${c.subtitle || o.edit ? ed(o, 'subtitle', c.subtitle || '', 'div', 's') : ''}</div>
+            ${items.map((it, i) => {
+                const P = `items.${i}`;
+                const given = (it.given || []).length ? `<div class="sx-solrow"><span class="sx-lbl">Given:</span> ${it.given.map((g, k) => `<span class="sx-chip">${ed(o, `${P}.given.${k}`, g)}</span>`).join(' ')}${it.find ? ` <span class="sx-lbl" style="margin-left:6px">Find:</span> <span class="sx-chip f">${ed(o, `${P}.find`, it.find)}</span>` : ''}</div>` : '';
+                const conv = (it.convert || []).map((x, k) => `<div class="sx-solrow sx-conv"><span class="ic">🔁</span><div>${ed(o, `${P}.convert.${k}.text`, x.text, 'b')}${x.why ? `<div class="why">💡 ${ed(o, `${P}.convert.${k}.why`, x.why)}</div>` : ''}</div></div>`).join('');
+                const parts = (it.parts || []).map((pt, k) => `<div class="sx-solrow sx-part">${pt.label ? `<div class="sx-plabel">${ed(o, `${P}.parts.${k}.label`, pt.label)}</div>` : ''}
+                    ${pt.law ? `<div class="sx-law">${ed(o, `${P}.parts.${k}.law`, pt.law)}</div>` : ''}${pt.why ? `<div class="why">💡 ${ed(o, `${P}.parts.${k}.why`, pt.why)}</div>` : ''}
+                    ${(pt.steps || []).map((st, q) => `<div class="sx-step">${ed(o, `${P}.parts.${k}.steps.${q}`, st)}</div>`).join('')}
+                    ${pt.answer ? `<div class="sx-final">✔ ${ed(o, `${P}.parts.${k}.answer`, pt.answer)}</div>` : ''}</div>`).join('');
+                return `<div class="sx-blk sx-sol">${tools(o, P)}<div class="sx-solq"><span class="sx-n">${esc(it.n || i + 1)}</span>${ed(o, `${P}.q`, it.q, 'div', 'qt')}</div>
+                    <div class="sx-solb">${given}${conv}${parts}${it.tip ? `<div class="sx-solrow sx-tip"><span class="tag">Tip</span>${ed(o, `${P}.tip`, it.tip)}</div>` : ''}</div></div>`;
+            }).join('')}
+        </div></div>`;
+    }
 
     const brand = (doc, right) => `<div class="sx-brand"><img src="/assets/img/logo-96.png" alt=""><div><div class="b1">Science Academy</div><div class="b2">with Miss Marwa</div></div><div class="b3">${right}</div></div>`;
 
@@ -234,7 +268,7 @@
             const glued = prev && prev.matches('.sx-sec, .sx-st, .sx-h1, .sx-ex-h, .sx-brand, .sx-fields, .sx-inst');   // never leave a heading alone at the bottom
             if (i && !glued) pts.push(y(el));
             if (el.getBoundingClientRect().height > CONTENT_H * 0.6)
-                el.querySelectorAll('li, tr, .sx-arr > div:nth-child(3n+1), .sx-opt:nth-child(odd)').forEach((c, k) => { if (k) pts.push(y(c)); });
+                el.querySelectorAll('li, tr, .sx-arr > div:nth-child(3n+1), .sx-opt:nth-child(odd), .sx-solrow').forEach((c, k) => { if (k) pts.push(y(c)); });
         });
         return [...new Set(pts.map(v => Math.floor(v)))].sort((a, b) => a - b);
     }
@@ -336,6 +370,13 @@
                 const foot = `Science Academy - Miss Marwa   |   page ${i + 1} of ${n}`;
                 pg.drawText(foot, { x: (A4W * pt - font.widthOfTextAtSize(foot, 8)) / 2, y: 8 * pt, size: 8, font, color: rgb(0.39, 0.45, 0.55) });
             }
+            // the document's full text inside the file (invisible): uploading one of our PDFs back to the AI then
+            // costs plain text — not pictures — and nothing is lost (students send their summaries / solutions back)
+            try {
+                const txt = [...root.querySelectorAll('.sx-page')].map(pg => pg.innerText.replace(/\n{3,}/g, '\n\n').trim()).join('\n\n').slice(0, 60000);
+                if (txt) pdf.getInfoDict().set(window.PDFLib.PDFName.of('SAText'), window.PDFLib.PDFHexString.fromText(txt));
+                pdf.setSubject('Science Academy - Miss Marwa');
+            } catch (e) { }
             const bytes = await pdf.save();
             if (o.save !== false) {
                 const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
@@ -395,5 +436,5 @@
     }
     let styled = false;
     function css() { if (styled) return; styled = true; const s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s); }
-    window.StudioRender = { summaryHtml, examHtml, onlineHtml, print, download, textOf, css, setPath, getPath, removePath, total, CSS };
+    window.StudioRender = { summaryHtml, examHtml, onlineHtml, solutionsHtml, print, download, textOf, css, setPath, getPath, removePath, total, CSS };
 })();

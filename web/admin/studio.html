@@ -87,7 +87,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
-    <script src="/admin/assets/studio-render.js?v=20261122b"></script>
+    <script src="/admin/assets/studio-render.js?v=20261122e"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -211,10 +211,11 @@
         }
         function renderDoc(fresh) {
             const d = DOC, k = d.kind;
-            const html = k === 'summary' ? StudioRender.summaryHtml(d, { edit: true }) : k === 'online' ? StudioRender.onlineHtml(d, { edit: true }) : StudioRender.examHtml(d, { edit: true, key: showKey });
-            let meta = `${A.GRADES[d.grade] || d.grade} · Unit ${d.unit} · Lesson${d.lessons.length > 1 ? 's' : ''} ${d.lessons.join(', ')} · $${(d.costUsd || 0).toFixed(3)}`;
+            const html = k === 'solutions' ? StudioRender.solutionsHtml(d, { edit: true }) : k === 'summary' ? StudioRender.summaryHtml(d, { edit: true }) : k === 'online' ? StudioRender.onlineHtml(d, { edit: true }) : StudioRender.examHtml(d, { edit: true, key: showKey });
+            let meta = k === 'solutions' ? `${A.GRADES[d.grade] || d.grade || ''} · worked solutions from the AI Assistant · $${(d.costUsd || 0).toFixed(3)}` : `${A.GRADES[d.grade] || d.grade} · Unit ${d.unit} · Lesson${d.lessons.length > 1 ? 's' : ''} ${d.lessons.join(', ')} · $${(d.costUsd || 0).toFixed(3)}`;
             let badge = '';
-            if (k === 'summary') {
+            if (k === 'solutions') badge = `<span class="cov">✅ ${d.content.items.length} questions, each with its full answer</span>`;
+            else if (k === 'summary') {
                 const cv = d.content.lessons.reduce((a, l) => ({ t: a.t + ((l.coverage && l.coverage.total) || 0), c: a.c + ((l.coverage && l.coverage.covered) || 0) }), { t: 0, c: 0 });
                 badge = cv.t ? `<span class="cov ${cv.c < cv.t ? 'warn' : ''}" title="${esc(d.content.lessons.flatMap(l => (l.coverage && l.coverage.missing) || []).join(' · ') || 'Everything on the checklist is in the summary')}">${cv.c < cv.t ? '⚠️' : '✅'} Covers ${cv.c}/${cv.t} ideas from the book</span>` : '';
             } else {
@@ -254,7 +255,7 @@
                     catch (err) { Site.toast(err.message, 'error'); rg.disabled = false; rg.textContent = '↻'; }
                 }
             });
-            const finalHtml = () => DOC.kind === 'summary' ? StudioRender.summaryHtml(DOC) : DOC.kind === 'online' ? StudioRender.onlineHtml(DOC) : StudioRender.examHtml(DOC, { key: showKey });
+            const finalHtml = () => DOC.kind === 'solutions' ? StudioRender.solutionsHtml(DOC) : DOC.kind === 'summary' ? StudioRender.summaryHtml(DOC) : DOC.kind === 'online' ? StudioRender.onlineHtml(DOC) : StudioRender.examHtml(DOC, { key: showKey });
             $('pdfBtn').addEventListener('click', async () => {
                 const b = $('pdfBtn'); if (b.disabled) return;
                 const label = b.innerHTML; b.disabled = true; b.textContent = 'Making the PDF…';
@@ -286,7 +287,7 @@
         window.addEventListener('beforeunload', e => { if (dirty || busy) { e.preventDefault(); e.returnValue = ''; } });
 
         // ---------------- library ----------------
-        const KIND = { summary: 'Summary', exam: 'Printed exam', online: 'Online quiz' };
+        const KIND = { summary: 'Summary', exam: 'Printed exam', online: 'Online quiz', solutions: 'Solutions' };
         async function loadLib() {
             let r; try { r = await api('/api/studio?action=list'); } catch (e) { return; }
             $('libCount').textContent = r.docs.length ? `${r.docs.length}` : '';

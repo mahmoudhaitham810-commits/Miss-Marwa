@@ -92,6 +92,8 @@
     .tc-banner { border-radius: 14px; padding: 10px 12px; font-size: 13.5px; background: var(--warning-soft, #fff7ed); margin-bottom: 8px; }
     .tc-cards > *, .tc-row > * { min-width: 0; }
     /* study companion: next-step buttons + the lesson picker */
+    .tc-solcard { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; border: 1.5px solid var(--primary); background: var(--surface); border-radius: 16px; padding: 12px 14px; margin-top: 8px; }
+    .tc-solcard small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
     .tc-next { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
     .tc-next button { border: 1px solid var(--primary); background: var(--primary-soft, #eef2ff); color: var(--primary); border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
     .tc-pick { border: 1px solid var(--border); background: var(--surface); border-radius: 18px; padding: 14px; }
@@ -103,6 +105,24 @@
     .tc-ask { font-size: 16px; font-weight: 800; margin: 12px 0 2px; color: var(--text); }
     @media (prefers-reduced-motion: reduce) { .tc-msg, .tc-dots span { animation: none; } }`;
 
+
+    // the branded PDF maker (same as "Exams & summaries") — loaded only when a PDF is asked for
+    let rendererP = null;
+    const loadRenderer = () => window.StudioRender ? Promise.resolve() : (rendererP = rendererP || new Promise((res, rej) => {
+        const s = document.createElement('script'); s.src = '/admin/assets/studio-render.js?v=20261122e';
+        s.onload = () => window.StudioRender ? res() : rej(new Error('PDF tool did not load'));
+        s.onerror = () => { rendererP = null; s.remove(); rej(new Error('PDF tool did not load')); };
+        document.head.appendChild(s);
+    }));
+    async function solutionsPdf(c, btn) {
+        const label = btn.innerHTML; btn.disabled = true; btn.textContent = '…';
+        try {
+            await loadRenderer();
+            const doc = { kind: 'solutions', grade: c.grade, content: c.content, title: c.content.title };
+            await StudioRender.download(StudioRender.solutionsHtml(doc), c.content.title);
+        } finally { btn.disabled = false; btn.innerHTML = label; }
+    }
+    const SOLS = {}; let solSeq = 0;
     function mount(root, opt) {
         opt = Object.assign({ as: null, toast: (m) => alert(m) }, opt || {});
         if (!document.getElementById('tc-css')) { const s = document.createElement('style'); s.id = 'tc-css'; s.textContent = CSS; document.head.appendChild(s); }
@@ -139,6 +159,7 @@
                 const rows = c.lessons.slice(0, 5).map(l => `<div class="tc-row"><span class="e">${/video/i.test(l.category) ? '🎬' : '📄'}</span><div class="tx"><b dir="auto">${esc(l.title)}</b><small>${esc(l.category)} · ${esc(l.at)}</small></div></div>`).join('');
                 return `<div class="tc-card tc-lescard"><h5>📚 آخر الدروس في ${esc(c.gradeLabel)}</h5>${rows || '<p style="margin:0">مفيش دروس جديدة لسه</p>'}${rows ? '<a class="btn btn-soft btn-sm" style="margin-top:10px" href="/lessons.html">افتح الدروس</a>' : ''}</div>`;
             },
+            solutions: (c) => { const k = 's' + (++solSeq); SOLS[k] = c; return `<div class="tc-solcard" dir="rtl"><div><b dir="auto">📄 ${esc(c.content.title)}</b><small>${c.content.items.length} سؤال — كل سؤال وتحته حله بالتفصيل</small></div><button class="btn btn-primary btn-sm" data-sol="${k}">⬇️ نزّل الـ PDF</button></div>`; },
             next: (c) => `<div class="tc-next" dir="rtl"><button data-next="quiz" data-u="${c.unit}" data-l="${c.lesson}">🧪 يلا نحل أسئلة عليه</button><button data-next="explain" data-u="${c.unit}" data-l="${c.lesson}">🔍 اشرحلي جزء منه</button><button data-next="pick">📘 درس تاني</button></div>`,
             upgrade: (c) => `<div class="tc-card tc-up"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="pro" data-pro>${proReady() ? '✨ اسأل Pro' : '✨ Pro · قريب'}</button></div>`
         };
@@ -226,6 +247,8 @@
         }
         const lessonName = (u, l) => { const x = (UNITS || []).find(v => v.unit === u); const y = x && x.lessons.find(v => v.lesson === l); return `Unit ${u} · Lesson ${l}${y && y.title ? ' (' + y.title + ')' : ''}`; };
         $('tcMsgs').addEventListener('click', (e) => {
+            const sol = e.target.closest('[data-sol]');
+            if (sol) { solutionsPdf(SOLS[sol.dataset.sol], sol).catch(err => opt.toast('ماعرفتش أنزّل الـ PDF — جرّب تاني (' + err.message + ')', 'error')); return; }
             const go = e.target.closest('[data-go]');
             if (go) {
                 const k = go.dataset.go;

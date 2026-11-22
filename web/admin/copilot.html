@@ -180,6 +180,8 @@
         .qrow b { font-size: 13.5px; } .qrow small { color: var(--muted); font-size: 11.5px; }
         .qrow p { margin: 2px 0 0; font-size: 13px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .ncard { font-size: 14px; }
+        .solcard { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; border: 1.5px solid var(--primary); }
+        .solcard small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; } .solcard .sp { display: flex; gap: 8px; flex-wrap: wrap; }
         .ncard.warn { background: var(--warning-soft); border-color: transparent; }
         .ai-note { font-size: 11.5px; color: var(--muted); }
         .ucard { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--primary-soft); border-color: transparent; padding: 10px 12px; }
@@ -211,7 +213,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
-    <script src="/assets/ai-kit.js?v=20261122b"></script>
+    <script src="/assets/ai-kit.js?v=20261122d"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -298,6 +300,8 @@
                 if (next && next.role === 'assistant' && next.tier && next.tier !== 'free') return `<div class="dc ucard"><span class="tx">✅ Pro answered this below 👇</span></div>`;
                 return `<div class="dc ucard"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="btn btn-ai btn-sm" data-upgrade="${k}">${icon(ready ? 'sparkles' : 'lock', 'sm')}${ready ? 'Ask Pro' : 'Pro (not connected)'}</button></div>`;
             },
+            solutions: (c, k) => `<div class="dc solcard"><div><b dir="auto">📄 ${esc(c.content.title)}</b><small>${c.content.items.length} questions — each followed by its full worked answer</small></div>
+                <span class="sp"><button class="btn btn-primary btn-sm" data-solpdf="${k}">${icon('download', 'sm')}Download PDF</button>${c.docId ? `<a class="btn btn-soft btn-sm" href="/admin/studio.html#doc=${esc(c.docId)}">✏️ Edit</a>` : ''}</span></div>`,
             note: (c) => `<div class="dc ncard ${c.tone === 'warn' ? 'warn' : ''}" dir="auto">${esc(c.text || '')}</div>`,
             student(c, k) {
                 const st = c.student, sm = c.summary;
@@ -414,6 +418,8 @@
             if (scroll) requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
         }
         $('msgs').addEventListener('click', async (e) => {
+            const sp = e.target.closest('[data-solpdf]');
+            if (sp) { try { await solutionsPdf(CARDS[sp.dataset.solpdf], sp); Site.toast('PDF downloaded ✅', 'success'); } catch (x) { Site.toast('Could not make the PDF — ' + x.message, 'error'); } return; }
             const c = e.target.closest('[data-chip]'); if (c) { comp.fill(c.dataset.chip); return; }
             const z = e.target.closest('[data-zoom]'); if (z) { window.open(z.src, '_blank'); return; }
             const up = e.target.closest('[data-upgrade]');
@@ -493,6 +499,24 @@
                 if (dl) { const id = Number(dl.dataset.del); try { await api('/api/copilot?action=delete', { body: { id } }); dl.closest('.th').remove(); if (id === threadId) newChat(); Site.toast('Chat deleted', 'success'); } catch (x) { Site.toast(x.message, 'error'); } }
             });
         });
+
+
+        // the branded PDF maker (same as "Exams & summaries") — loaded only when a PDF is asked for
+        let rendererP = null;
+        const loadRenderer = () => window.StudioRender ? Promise.resolve() : (rendererP = rendererP || new Promise((res, rej) => {
+            const s = document.createElement('script'); s.src = '/admin/assets/studio-render.js?v=20261122e';
+            s.onload = () => window.StudioRender ? res() : rej(new Error('PDF tool did not load'));
+            s.onerror = () => { rendererP = null; s.remove(); rej(new Error('PDF tool did not load')); };
+            document.head.appendChild(s);
+        }));
+        async function solutionsPdf(c, btn) {
+            const label = btn.innerHTML; btn.disabled = true; btn.textContent = '…';
+            try {
+                await loadRenderer();
+                const doc = { kind: 'solutions', grade: c.grade, content: c.content, title: c.content.title };
+                await StudioRender.download(StudioRender.solutionsHtml(doc), c.content.title);
+            } finally { btn.disabled = false; btn.innerHTML = label; }
+        }
 
         // ---------- composer (shared with the students' assistant): [↑][🎤][Model ⌄] … [+] ----------
         let comp = null;
