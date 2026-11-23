@@ -296,6 +296,17 @@ export async function ensureAppSchema(db) {
     steps.push(`CREATE TABLE IF NOT EXISTS parent_links (
         student_id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         views INTEGER NOT NULL DEFAULT 0, last_view_at TEXT)`);
+    // Indexes for the hot read paths (audit 23 Nov 2026 — D1 bills every row a query scans):
+    //   a student's own exams (home, exams page, the assistant's exam lock on every message), exams / center exams by grade,
+    //   the student's content views, the Data check's look-up in the activity log
+    steps.push('CREATE INDEX IF NOT EXISTS idx_exam_sub_student ON exam_submissions(student_id)');
+    steps.push('CREATE INDEX IF NOT EXISTS idx_exams_grade ON exams(grade)');
+    steps.push('CREATE INDEX IF NOT EXISTS idx_offline_exams_grade ON offline_exams(grade)');
+    steps.push('CREATE INDEX IF NOT EXISTS idx_content_views_student ON content_views(student_id)');
+    steps.push('CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action, id)');
+    // the staff menu badge (ask?action=counts) runs every 45 s on every open staff page: only the waiting / unread rows
+    steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_status ON ask_questions(status, grade)');
+    steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_staff_unread ON ask_questions(staff_unread)');
     for (const q of steps) {
         try { await db.prepare(q).run(); } catch (e) { /* another request may have added it at the same moment */ }
     }

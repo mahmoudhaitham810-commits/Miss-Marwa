@@ -212,7 +212,7 @@ export async function onRequest(context) {
                 const last = await db.prepare(`SELECT m.id, m.question_id as q, m.text, m.media_kind as kind, m.sender, s.first_name as f, s.last_name as l, q.grade
                     FROM ask_messages m JOIN ask_questions q ON q.id = m.question_id LEFT JOIN students s ON s.student_id = q.student_id
                     WHERE m.sender IN ('student', 'parent') ORDER BY m.id DESC LIMIT 1`).first();
-                const unread = await db.prepare('SELECT COALESCE(SUM(staff_unread), 0) as c FROM ask_questions').first();
+                const unread = await db.prepare('SELECT COALESCE(SUM(staff_unread), 0) as c FROM ask_questions WHERE staff_unread > 0').first();   // the index reads only unread rows
                 return json({ waiting, total: Object.values(waiting).reduce((a, b) => a + b, 0), unread: (unread && unread.c) || 0,
                     latest: last ? { id: last.id, questionId: last.q, name: (last.sender === 'parent' ? 'ولي أمر ' : '') + `${last.f || ''} ${last.l || ''}`.trim(), parent: last.sender === 'parent', grade: last.grade, text: String(last.text || (last.kind === 'image' ? '📷 Photo' : last.kind === 'audio' ? '🎤 Voice note' : '')).slice(0, 90) } : null });
             }

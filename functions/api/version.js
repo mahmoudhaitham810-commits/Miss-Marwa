@@ -23,9 +23,10 @@ export async function onRequestGet({ env }) {
         bindings: names.filter(k => typeof env[k] !== 'string'),
         dbIsTextVariable: typeof env.DB === 'string',
         hasAdminTokenSecret: typeof env.ADMIN_TOKEN_SECRET === 'string',
-        adminTokenSecretLength: typeof env.ADMIN_TOKEN_SECRET === 'string' ? env.ADMIN_TOKEN_SECRET.trim().length : 0,
+        // public page: whether the secret is long enough — never its length (audit 23 Nov 2026)
+        adminTokenSecretLongEnough: typeof env.ADMIN_TOKEN_SECRET === 'string' && env.ADMIN_TOKEN_SECRET.trim().length >= 16,
         hasAdminPassword: typeof env.ADMIN_PASSWORD === 'string',
         database,
-        tables
+        tableCount: tables.length        // the table names stay private (anyone can open this URL)
     }, { headers: { 'Cache-Control': 'no-store' } });
 }

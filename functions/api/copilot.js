@@ -327,14 +327,19 @@ export async function onRequest(context) {
                         if (found.science) books = staffBookRules(found, grade);
                     }
                 }
-                const system = systemPrompt(staff, tier) + (result ? dataBlock(result.facts) : taskRules(kind, tier) + books);
+                const head = systemPrompt(staff, tier), body = (result ? dataBlock(result.facts) : taskRules(kind, tier) + books);
+                const system = head + body;
                 // Pro answering a science question / photo uses the reasoning mode picked on the Model test page (PRO_REASONING)
                 const R = tier === 'pro' && !result ? reasoning(env, proMode(env)) : reasoning(env, 'plain');
                 const maxTokens = (result ? (tier === 'free' ? 600 : 900) : sheet ? (tier === 'pro' ? 14000 : 1200) : img ? (tier === 'free' ? 800 : 3000) : (tier === 'pro' ? 6000 : 850)) + R.extraTokens;
                 const sysText = system + (img ? IMAGE_RULES : '') + R.system;
+                // Pro: the long, fixed instructions are their own cached block (read at 10% next time); the per-message part
+                // (book passages, data, task rules) follows uncached — caching it too only paid ×1.25 to write a cache never read again
+                const tail = body + (img ? IMAGE_RULES : '') + R.system;
+                const proBlocks = tier === 'pro' && tail.trim() ? [{ type: 'text', text: head, cache_control: { type: 'ephemeral' } }, { type: 'text', text: tail }] : null;
                 const proSheet = sheet && tier === 'pro' && !result;
                 const out = await chat(env, db, { tier, pool: 'staff', thinking: proSheet ? Math.max(R.thinking, 4000) : R.thinking,
-                    system: proSheet ? [worksheetBlock(sheet, 'Miss Marwa'), { type: 'text', text: sysText }] : tier === 'free' && sheet ? sysText + `\n\n## The worksheet in this chat ("${sheet.name}"):\n${String(sheet.text).slice(0, 5000)}` : sysText, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img, meter: { staffId: staff.id, kind: 'copilot' } });
+                    system: proSheet ? [worksheetBlock(sheet, 'Miss Marwa'), ...(proBlocks || [{ type: 'text', text: sysText }])] : proBlocks && !sheet ? proBlocks : tier === 'free' && sheet ? sysText + `\n\n## The worksheet in this chat ("${sheet.name}"):\n${String(sheet.text).slice(0, 5000)}` : sysText, messages: [...(tier === 'free' ? STYLE_EXAMPLES_FREE : STYLE_EXAMPLES), ...messages], maxTokens, temperature: tier === 'free' ? 0.3 : 0.5, image: img, meter: { staffId: staff.id, kind: 'copilot' } });
                 const u = out.usage || {};
                 let clean = kind === 'exam' ? stripPrivate(out.text) : dropAnswerLine(stripPrivate(out.text));
                 if (!result && !wantsWriting && (sheet || kind === 'exam' || kind === 'summary' || /Curriculum book/.test(books))) clean = englishTerms(clean);   // science only — never a message to parents
