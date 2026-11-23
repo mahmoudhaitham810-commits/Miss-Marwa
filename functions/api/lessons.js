@@ -1,4 +1,4 @@
-import { requireStaff, audit, auditStmt, requireStudent } from './admin-auth.js';
+import { requireStaff, audit, auditStmt, requireStudent, verifyStudentRequest, verifyAdminRequest, ensureAppSchema } from './admin-auth.js';
 import { pushToGrade } from './push.js';
 
 // الداتا بيز ممكن تكون متسجلة في Cloudflare باسم DB أو D1_DB
@@ -33,6 +33,11 @@ export async function onRequestGet(context) {
     const category = url.searchParams.get('category') || 'ALL';
 
     try {
+        // Signed-in students and staff only — the lesson links are never shown to guests (audit 23 Nov 2026)
+        if (!db) return Response.json({ error: 'Database not connected' }, { status: 500 });
+        await ensureAppSchema(db);
+        const signedIn = (await verifyStudentRequest(request, env, db)) || (await verifyAdminRequest(request, env));
+        if (!signedIn) return Response.json({ error: 'سجّل دخول الأول', code: 'STUDENT_SESSION_REQUIRED' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
         let query = "SELECT *, rowid AS _order FROM lessons ORDER BY rowid DESC";
         let params = [];
 

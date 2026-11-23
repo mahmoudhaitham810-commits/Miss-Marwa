@@ -306,6 +306,8 @@ export async function ensureAppSchema(db) {
     steps.push('CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action, id)');
     // the staff menu badge (ask?action=counts) runs every 45 s on every open staff page: only the waiting / unread rows
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_status ON ask_questions(status, grade)');
+    // the Parent Portal finds a parent's children by their phone on every request
+    steps.push('CREATE INDEX IF NOT EXISTS idx_students_parent_phone ON students(parent_phone)');
     steps.push('CREATE INDEX IF NOT EXISTS idx_ask_q_staff_unread ON ask_questions(staff_unread)');
     for (const q of steps) {
         try { await db.prepare(q).run(); } catch (e) { /* another request may have added it at the same moment */ }
