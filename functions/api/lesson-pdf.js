@@ -11,7 +11,7 @@
 //   GET  ?action=list (staff)                        → every attached PDF with pages / text size
 //   POST ?action=remove { lessonId } (staff, lessons.delete)
 // =====================================================================
-import { requireStaff, audit, ensureAppSchema } from './admin-auth.js';
+import { requireStaff, audit, ensureAppSchema, verifyStudentRequest, verifyAdminRequest } from './admin-auth.js';
 import { sha256 } from './ai-cache.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
@@ -57,13 +57,16 @@ export async function onRequest(context) {
         await ensureLessonFiles(db);
 
         if (action === 'file') {
+            // Miss Marwa's summary PDFs: signed-in students and staff only (pentest 23 Nov 2026 — it was open to anyone)
+            const signedIn = (await verifyStudentRequest(request, env, db)) || (await verifyAdminRequest(request, env));
+            if (!signedIn) return new Response('Please sign in first', { status: 401, headers: { 'Cache-Control': 'no-store' } });
             const id = url.searchParams.get('id') || '';
             const row = ID_RE.test(id) ? await db.prepare('SELECT r2_key, name FROM lesson_files WHERE lesson_id = ?').bind(id).first() : null;
             if (!row || !bucket) return new Response('Not found', { status: 404 });
             const obj = await bucket.get(row.r2_key);
             if (!obj) return new Response('Not found', { status: 404 });
             const name = String(row.name || 'summary.pdf').replace(/[^\w.\- ]+/g, '_');
-            return new Response(obj.body, { headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'public, max-age=3600', 'Content-Disposition': `inline; filename="${name}"` } });
+            return new Response(obj.body, { headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `inline; filename="${name}"` } });
         }
         if (action === 'ids') {
             const grade = String(url.searchParams.get('grade') || '').toLowerCase();

@@ -118,6 +118,7 @@ export async function onRequestPost(context) {
 // =====================================================================
 const GRADE_LABEL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
 const GRADE_AR = { prep1: 'أولى إعدادي', prep2: 'تانية إعدادي', prep3: 'تالتة إعدادي', sec1: 'أولى ثانوي' };
+const PARENT_MESSAGES_PER_DAY = 60;
 const LOGIN_LOCK = { fails: 8, windowMs: 15 * 60 * 1000, lockMs: 30 * 60 * 1000 };
 const pj = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { ...noStore, ...headers } });
 const newKey = () => { const b = crypto.getRandomValues(new Uint8Array(24)); return btoa(String.fromCharCode(...b)).replace(/[+/=]/g, ''); };
@@ -183,6 +184,11 @@ async function portalPost(context, db, action, data) {
         const att = decodeAttachments(data);
         if (att.error) return pj({ error: att.error }, 400);
         if (!text && !hasAtt(att)) return pj({ error: 'اكتب رسالتك أو ابعت صورة / رسالة صوتية' }, 400);
+        // Anti-spam (pentest 23 Nov 2026): like students, at most 60 messages a day (each one is stored and notifies the staff)
+        const kidIds = parent.children.map(c => c.studentId);
+        const sent = kidIds.length ? await db.prepare(`SELECT COUNT(*) AS n FROM ask_messages m JOIN ask_questions q ON q.id = m.question_id
+            WHERE q.audience = 'parent' AND q.student_id IN (${kidIds.map(() => '?').join(',')}) AND m.sender = 'parent' AND m.created_at >= datetime('now', '-1 day')`).bind(...kidIds).first() : null;
+        if (sent && sent.n >= PARENT_MESSAGES_PER_DAY) return pj({ error: 'وصلت لأقصى عدد رسائل النهارده — كمّل بكرة، أو كلّمنا على واتساب لو الموضوع مستعجل.', code: 'DAILY_LIMIT' }, 429);
         let qid = parseInt(data.id, 10) || null, child = null;
         if (qid) {
             const q = await db.prepare(`SELECT id, student_id FROM ask_questions WHERE id = ? AND audience = 'parent'`).bind(qid).first();

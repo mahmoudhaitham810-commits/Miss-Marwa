@@ -1,3 +1,13 @@
+# Security headers on every page (pentest 23 Nov 2026):
+#   HTTPS only for a year · no MIME sniffing · the site can't be framed by another site (clickjacking) ·
+#   no <object>/<embed> plugins · <base> can't be hijacked · referrer keeps only the origin when leaving the site
+/*
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Content-Security-Policy: frame-ancestors 'self'; base-uri 'self'; object-src 'none'
+  Referrer-Policy: strict-origin-when-cross-origin
+
 # Staff pages and the API must never be served from a cache
 /admin/*
   Cache-Control: no-store

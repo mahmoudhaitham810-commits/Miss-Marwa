@@ -6,6 +6,7 @@ const withCookies = (cookies) => { const h = new Headers(); cookies.filter(Boole
 // Student sign-in: 10 wrong passwords for one code (or 30 from one network) → 15 minutes pause
 const STUDENT_CODE_LOCK = { fails: 10, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 };
 const STUDENT_IP_LOCK = { fails: 30, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 };
+const SIGNUP_LOCK = { fails: 30, windowMs: 60 * 60 * 1000, lockMs: 60 * 60 * 1000 };
 const clientIp = (request) => request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || '';
 
 // بتحسب تحديث المتابعة اليومية (Streak) للطالب.
@@ -148,6 +149,15 @@ export async function onRequestPost(context) {
         // 2. حالة إنشاء حساب جديد (Signup)
         if (action === 'signup') {
             const data = await request.json();
+            // Anti-bot (pentest 23 Nov 2026): at most 30 new accounts per network per hour — a whole class signing up
+            // on the center's Wi-Fi still fits; a script creating fake accounts is stopped for an hour
+            const signIp = request.headers.get('CF-Connecting-IP') || '';
+            const signKey = signIp ? 'signup-ip:' + signIp : null;
+            if (signKey) {
+                await ensureStaffSchema(db);
+                const sst = await throttleState(db, signKey);
+                if (sst.locked_until > Date.now()) return Response.json({ error: 'اتعمل حسابات كتير من نفس الشبكة — جرّب تاني بعد ساعة، أو كلّمنا على واتساب.', code: 'SIGNUP_LIMIT' }, { status: 429 });
+            }
 
             // التأكد الإجباري إن الطالب اختار النوع
             if (!data.gender) {
@@ -217,6 +227,7 @@ export async function onRequestPost(context) {
                         candidate, firstName, lastName, data.gender, data.branch, phone, parentPhone, grade, password, 'student'
                     ).run();
                     studentId = candidate;
+                    if (signKey) await recordFail(db, signKey, SIGNUP_LOCK).catch(() => { });
                 } catch (insertErr) {
                     if (!String(insertErr.message || '').includes('UNIQUE')) throw insertErr;
                 }
