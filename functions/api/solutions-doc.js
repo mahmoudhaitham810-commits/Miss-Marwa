@@ -88,14 +88,14 @@ Output ONLY JSON: {"exam":true,"title":"Unit 2 – Lesson 1: Electric Forces —
 - "q" = the question exactly as the student will see it (no answer in it). "options" only for choose questions.
 - The answers go in "parts" like worked solutions: for a problem — given, conversions with why, law with why, steps, answer with unit; for a choose / complete / reason — the answer + one line why.
 - ONLY what is in these pages (no other lesson, nothing extra). Recompute every answer. The book's own symbols and terms (emf, not ε).
-- If the pages include READY QUESTIONS (El-Moasser, Miss Marwa's homework, the book's own questions): take the questions from them first, copied as written; only if there aren't enough, add new ones whose answer is written word for word in THE LESSON.`;
+- If the pages include READY QUESTIONS (El-Moasser's self-assessment questions inside THE LESSON, Miss Marwa's homework): take the questions from them first, copied as written; only if there aren't enough, add new ones whose answer is written word for word in THE LESSON.`;
 
 /** messages = the chat ({role, text}), newest last. → { content, costUsd } (throws on failure) */
 export async function makeSolutions(env, db, { messages, worksheet, gradeLabel, meter, exam = null }) {
     if (exam) {
         if (!exam.bookText) { const e = new Error('NO_LESSON'); e.code = 'NO_LESSON'; throw e; }
         const system = [{ type: 'text', text: `You prepare study material for Miss Marwa's ${gradeLabel || 'science'} students (Egyptian curriculum, language schools).${PRO_ACCURACY}\n\n${EXAM_TASK(exam.count || 10)}` },
-            { type: 'text', text: `## The student asked: ${String(exam.ask || '').slice(0, 400)}\n\n## Their book — the pages for it:\n${String(exam.bookText).slice(0, 30000)}` }];
+            { type: 'text', text: `## The student asked: ${String(exam.ask || '').slice(0, 400)}\n\n## Their book — the pages for it:\n${String(exam.bookText).slice(0, 170000)}` }];
         const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'Go.' }], maxTokens: 12000, thinking: 4000, meter });
         const content = cleanSolutions(parse(r.text));
         if (!content) { const e = new Error('BAD_JSON'); e.code = 'BAD_JSON'; throw e; }

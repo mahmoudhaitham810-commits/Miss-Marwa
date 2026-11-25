@@ -422,7 +422,9 @@ export async function searchBook(env, db, { grade, text = '', refText = null, re
 // from them. Cheap: Haiku reads ~8k tokens for ≈ $0.001, and the block is cached for the next messages on that lesson.
 // ---------------------------------------------------------------------------------------------------------------
 export const bookKind = (key) => /moasser|moaser|muasir|mouasser|mo3aser|moaaser|معاصر|practice|workbook/i.test(String(key || '')) ? 'practice' : 'school';
-const LESSON_CHARS = 40000, PRACTICE_CHARS = 30000, HW_MAX = 80;
+// The grade books ARE El-Moasser (25 Nov 2026: 766 / 663 / 402 / 458 pages) — explanation + its self-assessment questions
+// inside every lesson — so a lesson can be 30–60 pages: read it ALL (≈ 40k tokens ≈ $0.004, then cached at 10%).
+const LESSON_CHARS = 160000, PRACTICE_CHARS = 30000, HW_MAX = 80;
 const lessonAt = (units, page) => { for (const u of units) for (const l of u.lessons) if (page >= l.start && page <= l.end) return { unit: u.unit, lesson: l.lesson }; return null; };
 function findLesson(units, ref) {
     if (!ref || !ref.lesson) return null;
@@ -489,20 +491,21 @@ export async function lessonPack(env, db, { grade, text = '', ask = '', image = 
     if (practice) { const ph = findLesson(practice.units, { unit: u.unit, lesson: l.lesson }); if (ph) practiceText = await wholeText(db, practice.book, ph.l.start, ph.l.end, PRACTICE_CHARS); }
     const hw = await homeworkQuestions(db, grade, u.unit, l.lesson);
     const title = `Unit ${u.unit}${u.title ? ': ' + u.title : ''} · Lesson ${l.lesson}${l.title ? ': ' + l.title : ''}`;
-    const block = `## THE LESSON — the student's ${gl} school book, ${title}
-The WHOLE lesson as printed in their book (read all of it before you answer):
+    const block = `## THE LESSON — the student's ${gl} book (El-Moasser), ${title}
+The WHOLE lesson as printed in their book — its explanation AND its self-assessment questions (read all of it before you answer):
 """
 ${lessonText}
 """
 
 ## READY QUESTIONS for this lesson — the ONLY questions you may give the student
-${practiceText ? `### From El-Moasser (the practice book) — its self-assessment questions for this lesson (its explanation text is NOT a source for facts):
+### 1. El-Moasser's self-assessment questions INSIDE THE LESSON above (choose, complete, give reason, what happens, problems… printed between and after its explanation pages) — use these FIRST.
+${practiceText ? `### Extra practice book for this lesson:
 """
 ${practiceText}
 """
 ` : ''}${hw.length ? `### Miss Marwa's homework questions for this lesson (with her answer key):
 ${hw.map((q, i) => `${i + 1}. [${q.type}] ${String(q.prompt).replace(/\s+/g, ' ').trim()}${q.answer ? ` — answer: ${String(q.answer).replace(/\s+/g, ' ').trim()}` : ''}`).join('\n')}
-` : ''}### The questions / exercises printed in the lesson above (the school book's own) also count.${!practiceText && !hw.length ? '\n(No El-Moasser or homework questions for this lesson yet — use the book\'s own questions above.)' : ''}`;
+` : ''}`;
     return { indexed: true, science: true, ref: { unit: u.unit, lesson: l.lesson }, scope: { unit: u.unit, lesson: l.lesson, title: l.title || '', unitTitle: u.title || '' }, block, title };
 }
 /** The rules that go with lessonPack's block (in the uncached part). */
@@ -513,7 +516,7 @@ export function lessonRules(gradeLabel, title) {
 - Explain ONLY what the lesson says, at the depth the lesson goes. Every fact, definition, part, function, step, law, factor, condition and number must be written in the lesson. Do NOT add anything the book doesn't state — no extra factors, conditions, functions or details, even if true and even if it seems helpful.
 - Explain it OUR way: simple Egyptian Arabic, short steps, and an everyday example or comparison so it clicks. The example only ILLUSTRATES what the book says — it must never add a new scientific fact.
 - Key terms and definitions in the book's English wording, in **bold**.
-- Questions (quiz, «نحل أسئلة»، «اختبرني», practice): give ONLY questions from READY QUESTIONS (El-Moasser, Miss Marwa's homework, the book's own questions in the lesson), copied as written — one at a time, never one already asked in this chat. Check their answer with the lesson / the answer key and say why in one simple line. NEVER write your own questions. If none are left, say so and offer to explain a part instead.
+- Questions (quiz, «نحل أسئلة»، «اختبرني», practice): give ONLY questions from READY QUESTIONS — first El-Moasser's self-assessment questions inside THE LESSON, then Miss Marwa's homework — copied as written — one at a time, never one already asked in this chat. Check their answer with the lesson / the answer key and say why in one simple line. NEVER write your own questions. If none are left, say so and offer to explain a part instead.
 - If they ask about something that isn't in this lesson, look at whether it's in their book at all; if not, say it's not in their curriculum.
 - End an explanation with: 📖 من كتابك — Unit ${title.match(/Unit (\d+)/) ? title.match(/Unit (\d+)/)[1] : ''} · Lesson ${title.match(/Lesson (\d+)/) ? title.match(/Lesson (\d+)/)[1] : ''}. Never PDF page numbers.`;
 }

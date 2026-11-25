@@ -129,7 +129,7 @@ export function askKind(text) {
 export function taskRules(kind, tier = 'free', o = {}) {
     // with the whole lesson (Pro): the lesson decides the content — no "cover the factors / types" beyond the book
     if (o.lesson && kind === 'practice') return `\n\n## The student wants to PRACTISE — quiz mode
-- Ask exactly ONE question from READY QUESTIONS (El-Moasser → Miss Marwa's homework → the book's own questions), copied as written, numbered ("سؤال 1 🧪"). Not one already asked in this chat. Then wait for their answer.
+- Ask exactly ONE question from READY QUESTIONS (El-Moasser's self-assessment questions inside THE LESSON first, then Miss Marwa's homework), copied as written — and about the part you were just explaining when there is one, numbered ("سؤال 1 🧪"). Not one already asked in this chat. Then wait for their answer.
 - Do NOT add a ✅ **الإجابة** line.`;
     if (o.lesson && kind === 'summary') return `\n\n## This message asks you to SUMMARIZE / EXPLAIN
 A complete, organised summary of what THE LESSON says about it — every point the lesson has, nothing it doesn't: a short opening line, the book's definitions in English (bold), the main points under short headings with bullets, an everyday example that only illustrates, then 📌 **Remember for the exam** (2–3 bullets from the lesson). About 250–500 words. Do NOT add a ✅ **الإجابة** line.`;
