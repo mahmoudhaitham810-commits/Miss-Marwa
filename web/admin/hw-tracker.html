@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0B1220">
+    <meta name="robots" content="noindex, nofollow">
+    <script>try { var t = localStorage.getItem('theme'); if (t === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) { }</script>
+    <script>/* Catch the browser's install offer as early as possible (before any other script) */window.__deferredInstallPrompt=window.__deferredInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__deferredInstallPrompt=e;document.documentElement.classList.add('pwa-ready');});window.addEventListener('appinstalled',function(){window.__deferredInstallPrompt=null;});</script>
+    <title>Homework follow-up · Science Academy Staff</title>
+    <link rel="icon" href="/admin/icon-192.png">
+    <link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+    <link rel="manifest" href="/admin/admin-manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/student.css">
+    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/admin/assets/admin.css">
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+    <style>
+        .hw-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
+        .hw-legend span { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+        .code { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 8px; font-weight: 800; font-size: 13px; background: var(--surface-2); color: var(--muted); }
+        .code.R { background: rgba(220, 38, 38, .14); color: #dc2626; } .code.I { background: rgba(234, 88, 12, .14); color: #ea580c; }
+        .code.L { background: rgba(202, 138, 4, .16); color: #a16207; } .code.A { background: rgba(100, 116, 139, .18); color: #64748b; }
+        .code.E { background: rgba(37, 99, 235, .14); color: #2563eb; } .code.ok { background: rgba(22, 163, 74, .14); color: #16a34a; }
+        .hw-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); }
+        .hw-row .who { flex: 1; min-width: 0; } .hw-row .who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hw-row.marked { border-color: var(--primary-line); }
+        .chips { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+        .chips button { min-width: 36px; height: 34px; border-radius: 10px; border: 1px solid var(--border); background: transparent; font-weight: 800; font-size: 13px; color: var(--muted); cursor: pointer; }
+        .chips button.on.ok { background: #16a34a; border-color: #16a34a; color: #fff; } .chips button.on.R { background: #dc2626; border-color: #dc2626; color: #fff; }
+        .chips button.on.I { background: #ea580c; border-color: #ea580c; color: #fff; } .chips button.on.L { background: #ca8a04; border-color: #ca8a04; color: #fff; }
+        .chips button.on.A { background: #64748b; border-color: #64748b; color: #fff; } .chips button.on.E { background: #2563eb; border-color: #2563eb; color: #fff; }
+        .hw-counts { display: flex; gap: 6px; flex-wrap: wrap; }
+        table.book td.c { text-align: center; }
+        @media (max-width: 560px) { .hw-row { flex-wrap: wrap; } .chips { width: 100%; justify-content: space-between; } .chips button { flex: 1; } }
+    </style>
+</head>
+<body class="site staff">
+    <main class="main" id="main">
+        <div class="container">
+            <section id="listView">
+                <div class="page-head">
+                    <div><h1>Homework follow-up · متابعة الواجب</h1><p>Every student did the homework unless you mark them — mark only the exceptions, then message their parents.</p></div>
+                    <button class="btn btn-primary" id="newWeekBtn"><span data-icon="plus" style="display:contents"></span>New week</button>
+                </div>
+                <div class="toolbar">
+                    <select class="pick" id="gradePick" aria-label="Grade" data-ui="pills"></select>
+                    <div class="segmented" id="branchSeg" role="tablist" aria-label="Group">
+                        <button data-value="center">Center</button><button data-value="private">Private</button><button data-value="all">All students</button>
+                    </div>
+                    <div class="segmented" id="viewSeg" aria-label="View"><button data-value="weeks">Weeks</button><button data-value="book">Overview</button></div>
+                </div>
+                <div class="hw-legend" id="legend"></div>
+                <div id="weeksPane"></div>
+                <div id="bookPane" hidden></div>
+            </section>
+
+            <section id="entryView" hidden>
+                <div class="entry-head">
+                    <div class="row1">
+                        <button class="icon-btn" id="backBtn" aria-label="Back to weeks" data-icon="arrowLeft"></button>
+                        <div style="flex:1;min-width:0"><h2 id="entryTitle" dir="auto"></h2><div class="muted small" id="entryMeta"></div></div>
+                        <button class="btn btn-ghost btn-sm" id="editWeekBtn"><span data-icon="edit" style="display:contents"></span>Edit</button>
+                    </div>
+                    <div class="row" style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+                        <div class="input" style="flex:1;min-width:200px"><input class="plain" id="searchBox" placeholder="Search a student…" style="height:44px" autocomplete="off"></div>
+                        <label class="check small"><input type="checkbox" id="onlyMarked"> Only marked</label>
+                    </div>
+                    <div class="row" style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+                        <div class="hw-counts" id="entryCounts"></div>
+                        <div style="flex:1"></div>
+                        <button class="btn btn-wa" id="sendAllBtn"></button>
+                    </div>
+                </div>
+                <div class="entry-list" id="entryList"></div>
+            </section>
+        </div>
+    </main>
+
+    <script src="/assets/pwa.js"></script>
+    <script src="/assets/site.js"></script>
+    <script src="/admin/assets/admin.js"></script>
+    <script src="/admin/assets/messages.js"></script>
+    <script>
+    (async function () {
+        const A = Admin, $ = (id) => document.getElementById(id);
+        const { esc, icon, api } = A;
+        await A.boot({ active: 'hwtrack', title: 'Homework follow-up' });
+
+        // The standard: the student did the homework (no code). Only exceptions get a code.
+        const CODES = {
+            R: { en: 'Not submitted', ar: 'ما سلّمش', msg: true },
+            I: { en: 'Incomplete', ar: 'ناقص', msg: true },
+            L: { en: 'Late', ar: 'متأخر', msg: true },
+            A: { en: 'Absent', ar: 'غايب', msg: false },
+            E: { en: 'Excused', ar: 'معذور', msg: false }
+        };
+        const MSG = ['R', 'I', 'L'];
+        let grade = A.store.get('staff_grade', 'prep1'), branch = A.store.get('staff_branch', 'center');
+        if (!A.GRADES[grade]) grade = 'prep1';
+        if (!A.BRANCHES[branch] && branch !== 'all') branch = 'center';
+        let view = 'weeks', data = { students: [], weeks: [], marks: [] }, marks = {}, current = null;
+
+        $('legend').innerHTML = `<span><i class="code ok">✓</i>Done (default)</span>` + Object.entries(CODES).map(([k, c]) => `<span><i class="code ${k}">${k}</i>${c.en} · <span dir="rtl">${c.ar}</span></span>`).join('') +
+            `<span class="small">· R / I / L → message to the parent</span>`;
+        $('gradePick').innerHTML = Object.entries(A.GRADES).map(([k, v]) => `<option value="${k}" ${k === grade ? 'selected' : ''}>${v}</option>`).join('');
+        $('gradePick').addEventListener('change', (e) => { grade = e.target.value; A.store.set('staff_grade', grade); load(); });
+        A.segmented($('branchSeg'), branch, (v) => { branch = v; A.store.set('staff_branch', v); load(); });
+        A.segmented($('viewSeg'), view, (v) => { view = v; render(); });
+        if (!A.can('hwtrack.edit')) $('newWeekBtn').hidden = true;
+        Site.hydrateIcons();
+
+        const fmtDate = (d) => { if (!d) return ''; const x = new Date(d + 'T12:00:00Z'); return isNaN(x) ? d : x.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
+        const studentsFor = (w) => w && w.branch ? data.students.filter(s => s.branch === w.branch) : data.students;
+        const codeOf = (w, s) => (marks[w.id] || {})[s.studentId] || '';
+        function counts(w) { const c = { R: 0, I: 0, L: 0, A: 0, E: 0 }; studentsFor(w).forEach(s => { const k = codeOf(w, s); if (k) c[k]++; }); return c; }
+        // how many R / I / L this student has in the last 4 weeks up to (and including) this one
+        function misses(w, s) {
+            const idx = data.weeks.findIndex(x => x.id === w.id);
+            return data.weeks.slice(Math.max(0, idx - 3), idx + 1).filter(x => !x.branch || x.branch === s.branch).filter(x => MSG.includes(codeOf(x, s))).length;
+        }
+        const message = (w, s) => ParentMessages.homeworkWeek({ student: { ...s, grade }, title: w.title, date: w.weekDate, code: codeOf(w, s), misses: misses(w, s) });
+
+        async function load() {
+            $('weeksPane').innerHTML = `<div class="exam-cards">${'<div class="skel" style="height:140px;border-radius:18px"></div>'.repeat(3)}</div>`;
+            try { data = await api(`/api/hw-weekly?action=grade-data&grade=${grade}&branch=${branch}`); }
+            catch (err) { $('weeksPane').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
+            marks = {}; data.weeks.forEach(w => { marks[w.id] = {}; });
+            data.marks.forEach(m => { if (marks[m.weekId]) marks[m.weekId][m.studentId] = m.code; });
+            render();
+            const want = Number((location.hash.match(/week=(\d+)/) || [])[1]);
+            if (want && data.weeks.some(w => w.id === want)) openEntry(want);
+        }
+        function render() {
+            $('weeksPane').hidden = view !== 'weeks'; $('bookPane').hidden = view !== 'book';
+            view === 'weeks' ? renderWeeks() : renderBook();
+        }
+        const countPills = (c) => Object.keys(CODES).filter(k => c[k]).map(k => `<span class="code ${k}" title="${CODES[k].en}">${k} ${c[k]}</span>`).join('') || '<span class="code ok">✓ all done</span>';
+        function renderWeeks() {
+            if (!data.weeks.length) {
+                $('weeksPane').innerHTML = `<div class="card empty-state fade-up"><div class="bubble">${icon('checkCircle', 'lg')}</div><h3>No homework weeks for ${A.GRADES[grade]} yet</h3><p class="muted">Tap “New week”, then mark only the students who didn't do it.</p></div>`;
+                return;
+            }
+            $('weeksPane').innerHTML = `<div class="exam-cards">${[...data.weeks].reverse().map((w, i) => {
+                const c = counts(w), toSend = c.R + c.I + c.L;
+                return `<button class="exam-card fade-up" style="--i:${i}" data-week="${w.id}">
+                    <div class="top"><div style="min-width:0"><h3 dir="auto">${esc(w.title)}</h3><div class="meta">${esc(fmtDate(w.weekDate))} · ${studentsFor(w).length} students</div></div>
+                        ${w.branch ? `<span class="pill ${w.branch}">${A.BRANCHES[w.branch]}</span>` : ''}</div>
+                    <div class="hw-counts">${countPills(c)}</div>
+                    <div class="foot"><span>${toSend ? `${toSend} parent${toSend === 1 ? '' : 's'} to message` : 'Nothing to send'}</span><span>${icon('arrowRight', 'sm')}</span></div>
+                </button>`;
+            }).join('')}</div>`;
+        }
+        $('weeksPane').addEventListener('click', (e) => { const c = e.target.closest('[data-week]'); if (c) openEntry(Number(c.dataset.week)); });
+
+        function renderBook() {
+            if (!data.weeks.length || !data.students.length) { $('bookPane').innerHTML = `<div class="card empty-state"><p>Nothing to show yet.</p></div>`; return; }
+            const ws = data.weeks;
+            const rows = data.students.map(s => {
+                let miss = 0;
+                const cells = ws.map(w => {
+                    if (w.branch && w.branch !== s.branch) return '<td class="c none">·</td>';
+                    const k = codeOf(w, s); if (MSG.includes(k)) miss++;
+                    return `<td class="c">${k ? `<span class="code ${k}">${k}</span>` : '<span class="code ok">✓</span>'}</td>`;
+                }).join('');
+                return `<tr><td><b dir="auto">${esc(s.firstName)} ${esc(s.lastName)}</b><br><span class="small muted num">${esc(s.studentId)}</span></td>${cells}<td class="c"><b class="num">${miss}</b></td></tr>`;
+            }).join('');
+            $('bookPane').innerHTML = `<div class="table-wrap fade-up"><table class="book"><thead><tr><th>Student</th>${ws.map(w => `<th title="${esc(w.title)}"><span dir="auto">${esc(w.title.length > 14 ? w.title.slice(0, 13) + '…' : w.title)}</span><br><span class="small muted">${esc(fmtDate(w.weekDate))}</span></th>`).join('')}<th>Missed</th></tr></thead><tbody>${rows}</tbody></table></div>
+                <p class="small muted" style="margin-top:10px">✓ = did the homework (the default). Missed = R + I + L.</p>`;
+        }
+
+        // ---------- entry: mark the exceptions ----------
+        function openEntry(id) {
+            current = data.weeks.find(w => w.id === id); if (!current) return;
+            location.hash = 'week=' + id;
+            $('listView').hidden = true; $('entryView').hidden = false;
+            $('entryTitle').textContent = current.title;
+            $('entryMeta').textContent = `${A.GRADES[grade]}${current.branch ? ' · ' + A.BRANCHES[current.branch] : ''} · ${fmtDate(current.weekDate)}`;
+            $('editWeekBtn').hidden = !A.can('hwtrack.edit');
+            $('searchBox').value = ''; renderEntry(); window.scrollTo(0, 0);
+        }
+        function closeEntry() { current = null; history.replaceState(null, '', location.pathname); $('entryView').hidden = true; $('listView').hidden = false; render(); }
+        $('backBtn').addEventListener('click', closeEntry);
+        $('searchBox').addEventListener('input', renderEntry);
+        $('onlyMarked').addEventListener('change', renderEntry);
+        function renderEntry() {
+            if (!current) return;
+            const q = A.normalizeDigits($('searchBox').value).trim().toLowerCase(), only = $('onlyMarked').checked;
+            const list = studentsFor(current).filter(s => (!q || `${s.firstName} ${s.lastName} ${s.studentId}`.toLowerCase().includes(q)) && (!only || codeOf(current, s)));
+            const editable = A.can('hwtrack.edit');
+            $('entryList').innerHTML = list.length ? list.map(s => {
+                const k = codeOf(current, s);
+                return `<div class="hw-row ${k ? 'marked' : ''}" data-sid="${esc(s.studentId)}">
+                    <div class="who"><b dir="auto">${esc(s.firstName)} ${esc(s.lastName)}</b><span class="small muted num">${esc(s.studentId)}${k ? ` · <span dir="rtl">${CODES[k].ar}</span>` : ''}</span></div>
+                    <div class="chips">${[['', '✓'], ...Object.keys(CODES).map(c => [c, c])].map(([c, t]) => `<button type="button" class="${c || 'ok'} ${k === c ? 'on' : ''}" data-code="${c}" title="${c ? CODES[c].en + ' · ' + CODES[c].ar : 'Done'}" ${editable ? '' : 'disabled'}>${t}</button>`).join('')}
+                        ${MSG.includes(k) ? `<button type="button" class="ok" data-wa title="Message the parent" style="min-width:40px">${icon('whatsapp', 'sm')}</button>` : ''}</div>
+                </div>`;
+            }).join('') : `<div class="card empty-state"><p class="muted">${only ? 'Nobody marked — everyone did the homework ✓' : 'No students.'}</p></div>`;
+            const c = counts(current), toSend = c.R + c.I + c.L;
+            $('entryCounts').innerHTML = countPills(c);
+            $('sendAllBtn').innerHTML = `${icon('whatsapp', 'sm')}Message parents (${toSend})`;
+            $('sendAllBtn').disabled = !toSend;
+        }
+        $('entryList').addEventListener('click', async (e) => {
+            const row = e.target.closest('[data-sid]'); if (!row || !current) return;
+            const s = studentsFor(current).find(x => x.studentId === row.dataset.sid); if (!s) return;
+            if (e.target.closest('[data-wa]')) return A.preview(s, message(current, s), `Homework — ${s.firstName} ${s.lastName}`, 'homework-week');
+            const b = e.target.closest('[data-code]'); if (!b || b.disabled) return;
+            const code = b.dataset.code, before = codeOf(current, s);
+            if (code === before) return;
+            const w = current;
+            if (code) marks[w.id][s.studentId] = code; else delete marks[w.id][s.studentId];
+            renderEntry();
+            try { await api('/api/hw-weekly?action=save-marks', { body: { weekId: w.id, marks: [{ studentId: s.studentId, code }] } }); }
+            catch (err) { if (before) marks[w.id][s.studentId] = before; else delete marks[w.id][s.studentId]; renderEntry(); Site.toast(err.message, 'error'); }
+        });
+        $('sendAllBtn').addEventListener('click', () => {
+            if (!current) return;
+            const w = current, list = studentsFor(w).filter(s => MSG.includes(codeOf(w, s)));
+            A.sender({ list, makeText: (s) => message(w, s), title: `Homework — ${w.title}`, kind: 'homework-week' });
+        });
+
+        // ---------- new / edit / delete week ----------
+        const weekForm = (w) => `<div class="field"><label for="fTitle">Homework</label><div class="input"><input class="plain" id="fTitle" maxlength="80" dir="auto" value="${esc(w ? w.title : '')}" placeholder="e.g. Week 5 · Unit 2 Lesson 3"></div></div>
+            <div class="field"><label for="fDate">Week of</label><div class="input"><input class="plain" id="fDate" type="date" value="${esc(w ? w.weekDate || '' : new Date().toISOString().slice(0, 10))}"></div></div>
+            ${w ? '' : `<div class="field" style="margin:0"><label>Group</label><div class="segmented" id="fBranch"><button data-value="center" type="button">Center</button><button data-value="private" type="button">Private</button></div></div>`}`;
+        $('newWeekBtn').addEventListener('click', () => {
+            let chosen = branch === 'all' ? 'center' : branch;
+            Site.sheet({
+                iconName: 'checkCircle', title: `New homework week · ${A.GRADES[grade]}`, subtitle: 'Everyone starts as done ✓ — mark only who didn\'t.',
+                html: weekForm(null),
+                actions: [{ label: 'Create & start marking', onClick: async (close) => {
+                    const body = { grade, branch: chosen, title: $('fTitle').value.trim(), weekDate: $('fDate').value };
+                    if (!body.title) return Site.toast('Write the homework name', 'error');
+                    try {
+                        const r = await api('/api/hw-weekly?action=create-week', { body });
+                        close();
+                        if (branch !== 'all' && chosen !== branch) { branch = chosen; A.store.set('staff_branch', branch); $('branchSeg').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.value === branch)); }
+                        location.hash = 'week=' + r.week.id; await load();
+                    } catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+            A.segmented($('fBranch'), chosen, (v) => { chosen = v; });
+            setTimeout(() => $('fTitle')?.focus(), 250);
+        });
+        $('editWeekBtn').addEventListener('click', () => {
+            const w = current; if (!w) return;
+            const actions = [{ label: 'Save changes', onClick: async (close) => {
+                try { await api('/api/hw-weekly?action=update-week', { body: { id: w.id, title: $('fTitle').value.trim(), weekDate: $('fDate').value } }); close(); Site.toast('Saved', 'success'); await load(); openEntry(w.id); }
+                catch (err) { Site.toast(err.message, 'error'); }
+            } }];
+            if (A.can('hwtrack.delete')) actions.push({ label: 'Delete this week…', icon: 'trash', cls: 'btn-ghost danger-text', onClick: (close) => { close(); setTimeout(() => confirmDelete(w), 260); } });
+            actions.push({ label: 'Cancel', cls: 'btn-ghost' });
+            Site.sheet({ iconName: 'checkCircle', title: 'Edit homework week', html: weekForm(w), actions });
+        });
+        function confirmDelete(w) {
+            Site.sheet({
+                iconName: 'alert', title: `Delete "${w.title}"?`, subtitle: 'Its marks are removed with it. A full copy is kept in the activity log.',
+                html: `<div class="field" style="margin:0"><label for="delConfirm">Type <b dir="auto">${esc(w.title)}</b> to confirm</label><input class="fin" id="delConfirm" dir="auto" autocomplete="off"></div>`,
+                actions: [{ label: 'Delete week and its marks', cls: 'btn-danger', onClick: async (close) => {
+                    if ($('delConfirm').value.trim() !== String(w.title).trim()) return Site.toast('The name doesn\'t match', 'error');
+                    try { await api('/api/hw-weekly?action=delete-week', { body: { id: w.id } }); close(); Site.toast('Deleted', 'success'); closeEntry(); await load(); }
+                    catch (err) { Site.toast(err.message, 'error'); }
+                } }, { label: 'Cancel', cls: 'btn-ghost' }]
+            });
+        }
+        load();
+    })();
+    </script>
+</body>
+</html>

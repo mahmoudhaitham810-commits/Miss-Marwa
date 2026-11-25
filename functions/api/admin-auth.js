@@ -56,6 +56,9 @@ export const PERMISSIONS = {
     'homework.publish': BOTH,    // publish (push to the grade), close, reopen
     'homework.delete': TEACHER,  // full copy kept in the activity log
     'homework.review': BOTH,     // check / override marks (Step 4)
+    'hwtrack.view': BOTH,        // weekly homework follow-up (R / I / L / A / E codes + parent messages)
+    'hwtrack.edit': BOTH,
+    'hwtrack.delete': TEACHER,
     'copilot.use': TEACHER,
     'ai.manage': TEACHER,        // AI usage page: student Pro on/off, budgets, EGP rate
     'studio.use': TEACHER,       // Exam & summary studio (AI from the curriculum books)

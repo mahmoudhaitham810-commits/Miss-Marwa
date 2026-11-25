@@ -159,6 +159,21 @@
         ]);
     }
 
+    // 9. Weekly homework follow-up (25 Nov 2026): R = not submitted · I = incomplete · L = late (A / E → no message)
+    //    misses = how many times in the last 4 homework weeks (this one included) — mentioned from the 2nd time
+    function homeworkWeek({ student, title, date, code, misses }) {
+        const f = g(student).f, name = iso(student.firstName);
+        const what = { R: `${name} ${f ? 'لم تسلّم' : 'لم يسلّم'} الواجب.`, I: `${name} ${f ? 'سلّمت' : 'سلّم'} الواجب ناقص.`, L: `${name} ${f ? 'سلّمت' : 'سلّم'} الواجب متأخر.` }[code];
+        if (!what) return '';
+        return rtl([
+            ...head(student),
+            `واجب: ${iso(title)}${date ? ` (${dateAr(date)})` : ''}`,
+            what,
+            ...(misses >= 2 ? [`ودي المرة رقم ${misses} في آخر 4 واجبات.`] : []),
+            'برجاء المتابعة.'
+        ]);
+    }
+
     // WhatsApp link for an Egyptian number (01xxxxxxxxx → 201xxxxxxxxx)
     function waLink(phone, text) {
         let n = String(phone || '').replace(/[٠-٩]/g, d => d.charCodeAt(0) - 0x0660).replace(/\D/g, '');
@@ -169,5 +184,5 @@
         return `https://wa.me/20${n}?text=${encodeURIComponent(text)}`;
     }
 
-    window.ParentMessages = { onlineReport, missedOnline, notSubmitted, latestCenter, fullCenter, gap, congrats, parentLink, waLink, levelAr, GRADE_AR, BRANCH_AR };
+    window.ParentMessages = { onlineReport, missedOnline, notSubmitted, latestCenter, fullCenter, gap, congrats, parentLink, homeworkWeek, waLink, levelAr, GRADE_AR, BRANCH_AR };
 })();
