@@ -96,18 +96,16 @@
         const CODES = {
             R: { en: 'Not submitted', ar: 'ما سلّمش', msg: true },
             I: { en: 'Incomplete', ar: 'ناقص', msg: true },
-            L: { en: 'Late', ar: 'متأخر', msg: true },
-            A: { en: 'Absent', ar: 'غايب', msg: false },
-            E: { en: 'Excused', ar: 'معذور', msg: false }
+            A: { en: 'Absent', ar: 'غايب', msg: false }
         };
-        const MSG = ['R', 'I', 'L'];
+        const MSG = ['R', 'I'];
         let grade = A.store.get('staff_grade', 'prep1'), branch = A.store.get('staff_branch', 'center');
         if (!A.GRADES[grade]) grade = 'prep1';
         if (!A.BRANCHES[branch] && branch !== 'all') branch = 'center';
         let view = 'weeks', data = { students: [], weeks: [], marks: [] }, marks = {}, current = null;
 
         $('legend').innerHTML = `<span><i class="code ok">✓</i>Done (default)</span>` + Object.entries(CODES).map(([k, c]) => `<span><i class="code ${k}">${k}</i>${c.en} · <span dir="rtl">${c.ar}</span></span>`).join('') +
-            `<span class="small">· R / I / L → message to the parent</span>`;
+            `<span class="small">· R / I → message to the parent</span>`;
         $('gradePick').innerHTML = Object.entries(A.GRADES).map(([k, v]) => `<option value="${k}" ${k === grade ? 'selected' : ''}>${v}</option>`).join('');
         $('gradePick').addEventListener('change', (e) => { grade = e.target.value; A.store.set('staff_grade', grade); load(); });
         A.segmented($('branchSeg'), branch, (v) => { branch = v; A.store.set('staff_branch', v); load(); });
@@ -118,13 +116,8 @@
         const fmtDate = (d) => { if (!d) return ''; const x = new Date(d + 'T12:00:00Z'); return isNaN(x) ? d : x.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
         const studentsFor = (w) => w && w.branch ? data.students.filter(s => s.branch === w.branch) : data.students;
         const codeOf = (w, s) => (marks[w.id] || {})[s.studentId] || '';
-        function counts(w) { const c = { R: 0, I: 0, L: 0, A: 0, E: 0 }; studentsFor(w).forEach(s => { const k = codeOf(w, s); if (k) c[k]++; }); return c; }
-        // how many R / I / L this student has in the last 4 weeks up to (and including) this one
-        function misses(w, s) {
-            const idx = data.weeks.findIndex(x => x.id === w.id);
-            return data.weeks.slice(Math.max(0, idx - 3), idx + 1).filter(x => !x.branch || x.branch === s.branch).filter(x => MSG.includes(codeOf(x, s))).length;
-        }
-        const message = (w, s) => ParentMessages.homeworkWeek({ student: { ...s, grade }, title: w.title, date: w.weekDate, code: codeOf(w, s), misses: misses(w, s) });
+        function counts(w) { const c = { R: 0, I: 0, A: 0 }; studentsFor(w).forEach(s => { const k = codeOf(w, s); if (k in c) c[k]++; }); return c; }
+        const message = (w, s) => ParentMessages.homeworkWeek({ student: { ...s, grade }, code: codeOf(w, s) });
 
         async function load() {
             $('weeksPane').innerHTML = `<div class="exam-cards">${'<div class="skel" style="height:140px;border-radius:18px"></div>'.repeat(3)}</div>`;
@@ -147,7 +140,7 @@
                 return;
             }
             $('weeksPane').innerHTML = `<div class="exam-cards">${[...data.weeks].reverse().map((w, i) => {
-                const c = counts(w), toSend = c.R + c.I + c.L;
+                const c = counts(w), toSend = c.R + c.I;
                 return `<button class="exam-card fade-up" style="--i:${i}" data-week="${w.id}">
                     <div class="top"><div style="min-width:0"><h3 dir="auto">${esc(w.title)}</h3><div class="meta">${esc(fmtDate(w.weekDate))} · ${studentsFor(w).length} students</div></div>
                         ${w.branch ? `<span class="pill ${w.branch}">${A.BRANCHES[w.branch]}</span>` : ''}</div>
@@ -171,7 +164,7 @@
                 return `<tr><td><b dir="auto">${esc(s.firstName)} ${esc(s.lastName)}</b><br><span class="small muted num">${esc(s.studentId)}</span></td>${cells}<td class="c"><b class="num">${miss}</b></td></tr>`;
             }).join('');
             $('bookPane').innerHTML = `<div class="table-wrap fade-up"><table class="book"><thead><tr><th>Student</th>${ws.map(w => `<th title="${esc(w.title)}"><span dir="auto">${esc(w.title.length > 14 ? w.title.slice(0, 13) + '…' : w.title)}</span><br><span class="small muted">${esc(fmtDate(w.weekDate))}</span></th>`).join('')}<th>Missed</th></tr></thead><tbody>${rows}</tbody></table></div>
-                <p class="small muted" style="margin-top:10px">✓ = did the homework (the default). Missed = R + I + L.</p>`;
+                <p class="small muted" style="margin-top:10px">✓ = did the homework (the default). Missed = R + I.</p>`;
         }
 
         // ---------- entry: mark the exceptions ----------
@@ -196,12 +189,12 @@
             $('entryList').innerHTML = list.length ? list.map(s => {
                 const k = codeOf(current, s);
                 return `<div class="hw-row ${k ? 'marked' : ''}" data-sid="${esc(s.studentId)}">
-                    <div class="who"><b dir="auto">${esc(s.firstName)} ${esc(s.lastName)}</b><span class="small muted num">${esc(s.studentId)}${k ? ` · <span dir="rtl">${CODES[k].ar}</span>` : ''}</span></div>
+                    <div class="who"><b dir="auto">${esc(s.firstName)} ${esc(s.lastName)}</b><span class="small muted num">${esc(s.studentId)}${k && CODES[k] ? ` · <span dir="rtl">${CODES[k].ar}</span>` : ''}</span></div>
                     <div class="chips">${[['', '✓'], ...Object.keys(CODES).map(c => [c, c])].map(([c, t]) => `<button type="button" class="${c || 'ok'} ${k === c ? 'on' : ''}" data-code="${c}" title="${c ? CODES[c].en + ' · ' + CODES[c].ar : 'Done'}" ${editable ? '' : 'disabled'}>${t}</button>`).join('')}
                         ${MSG.includes(k) ? `<button type="button" class="ok" data-wa title="Message the parent" style="min-width:40px">${icon('whatsapp', 'sm')}</button>` : ''}</div>
                 </div>`;
             }).join('') : `<div class="card empty-state"><p class="muted">${only ? 'Nobody marked — everyone did the homework ✓' : 'No students.'}</p></div>`;
-            const c = counts(current), toSend = c.R + c.I + c.L;
+            const c = counts(current), toSend = c.R + c.I;
             $('entryCounts').innerHTML = countPills(c);
             $('sendAllBtn').innerHTML = `${icon('whatsapp', 'sm')}Message parents (${toSend})`;
             $('sendAllBtn').disabled = !toSend;

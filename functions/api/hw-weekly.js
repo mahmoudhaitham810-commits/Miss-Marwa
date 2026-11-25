@@ -2,8 +2,8 @@
 // Weekly homework follow-up · متابعة الواجب (25 Nov 2026) — separate from the (paused) online homework system.
 // Like Center grades: one column per week per grade (+ branch). The standard is that every student did the homework,
 // so staff only mark the exceptions with a code:
-//   R = not submitted (ما سلّمش) · I = incomplete (ناقص) · L = late (متأخر)   → a WhatsApp message to the parent
-//   A = absent that week (غايب) · E = excused (معذور)                          → recorded, no message
+//   R = not submitted (ما سلّمش) · I = incomplete (ناقص)   → a WhatsApp message to the parent
+//   A = absent that week (غايب)                             → recorded, no message
 //   (no code) = done ✓
 //
 //   GET  ?action=grade-data&grade=prep1&branch=center|private|all → { students, weeks, marks }
@@ -19,7 +19,7 @@ const json = (d, s = 200) => Response.json(d, { status: s, headers: { 'Cache-Con
 const bad = (m, s = 400) => json({ error: m }, s);
 const GRADES = ['prep1', 'prep2', 'prep3', 'sec1'];
 const BRANCHES = ['center', 'private'];
-export const HW_CODES = ['R', 'I', 'L', 'A', 'E'];
+export const HW_CODES = ['R', 'I', 'A'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const ready = new WeakSet();

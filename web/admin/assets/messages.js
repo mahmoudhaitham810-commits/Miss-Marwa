@@ -159,19 +159,12 @@
         ]);
     }
 
-    // 9. Weekly homework follow-up (25 Nov 2026): R = not submitted · I = incomplete · L = late (A / E → no message)
-    //    misses = how many times in the last 4 homework weeks (this one included) — mentioned from the 2nd time
-    function homeworkWeek({ student, title, date, code, misses }) {
-        const f = g(student).f, name = iso(student.firstName);
-        const what = { R: `${name} ${f ? 'لم تسلّم' : 'لم يسلّم'} الواجب.`, I: `${name} ${f ? 'سلّمت' : 'سلّم'} الواجب ناقص.`, L: `${name} ${f ? 'سلّمت' : 'سلّم'} الواجب متأخر.` }[code];
+    // 9. Weekly homework follow-up — Miss Marwa's exact wording (25 Nov 2026): R = not submitted · I = incomplete (A → no message)
+    function homeworkWeek({ student, code }) {
+        const w = g(student);
+        const what = { R: `نبلغكم بعدم تسليم ${w.student} الواجب`, I: `نبلغكم بعدم تسليم ${w.student} الواجب كاملا` }[code];
         if (!what) return '';
-        return rtl([
-            ...head(student),
-            `واجب: ${iso(title)}${date ? ` (${dateAr(date)})` : ''}`,
-            what,
-            ...(misses >= 2 ? [`ودي المرة رقم ${misses} في آخر 4 واجبات.`] : []),
-            'برجاء المتابعة.'
-        ]);
+        return rtl([...head(student), what, 'نرجو المتابعه و شكرا']);
     }
 
     // WhatsApp link for an Egyptian number (01xxxxxxxxx → 201xxxxxxxxx)
