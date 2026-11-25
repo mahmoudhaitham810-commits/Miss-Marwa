@@ -356,7 +356,7 @@ export async function unitContext(db, toc, ref, { terms = '', maxChars = 9000 } 
 export async function gradeIndexed(db, grade) {
     try { await ensureCurriculum(db); const r = await db.prepare('SELECT COUNT(*) AS n FROM curriculum_pages WHERE grade = ? AND chars > 0').bind(grade).first(); return Number(r && r.n) || 0; } catch (e) { return 0; }
 }
-export const bookName = (key) => { const g = gradeOfKey(key); return g ? `${{ prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' }[g]} Science book` : String(key).replace(/\.pdf$/i, ''); };
+export const bookName = (key) => { const g = gradeOfKey(key); return g ? `${{ prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' }[g]} ${/moasser|moaser|muasir|mouasser|mo3aser|moaaser|معاصر|practice|workbook/i.test(String(key)) ? 'El-Moasser (practice book)' : 'Science book'}` : String(key).replace(/\.pdf$/i, ''); };
 
 // ---------------------------------------------------------------------------------------------------------------
 // Strict grounding (audited 20 Nov 2026 at the user's request):
@@ -370,7 +370,7 @@ export const bookName = (key) => { const g = gradeOfKey(key); return g ? `${{ pr
 // ---------------------------------------------------------------------------------------------------------------
 export const GRADE_LABELS = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
 const KEYWORDS_SYSTEM = (gradeLabel) => `You prepare a search of an Egyptian ${gradeLabel} school SCIENCE textbook (the student/teacher's question may be in Egyptian Arabic, English or both, or in a photo).
-Output ONE line only: 6–14 search terms for the science topic of the question — EACH key term in English AND in Arabic (e.g. density, الكثافة, mass, الكتلة, volume, الحجم), comma-separated. Include the unit/lesson topic names if you can tell them. No sentences, no explanation.
+Output ONE line only: 6–14 search terms for the science topic of the question — EACH key term in English AND in Arabic (e.g. density, الكثافة, mass, الكتلة, volume, الحجم), comma-separated. Students often write the book's ENGLISH words in Arabic letters, misspelled or voice-typed (e.g. «الايدي او 4 كينج» / «ايديا اوف ووركنج» = idea of working, «تورك» = torque, «كوميوتاتور» = commutator, «الكترك موتور» = electric motor, «ديناسيتي» = density) — turn them into the real English book term. Include the unit/lesson topic names if you can tell them. No sentences, no explanation.
 If it is not a science question at all (greetings, the platform, marks, personal talk), output exactly: NONE`;
 
 /**
@@ -412,6 +412,110 @@ export async function searchBook(env, db, { grade, text = '', refText = null, re
         } catch (e) { }
     }
     return { science, terms, ctx, indexed: indexed > 0, ref: null };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// THE WHOLE LESSON (25 Nov 2026 — Miss Marwa's review before launch): a few search snippets made the assistant fill
+// the gaps from general knowledge (extra details the lesson doesn't have, off-syllabus quiz questions). Now Pro gets
+// the WHOLE lesson of the school book + the lesson's READY questions — El-Moasser (the practice book, if it's in the
+// bucket for that grade, e.g. "prep3-moasser.pdf") and Miss Marwa's homework questions — and explains / quizzes ONLY
+// from them. Cheap: Haiku reads ~8k tokens for ≈ $0.001, and the block is cached for the next messages on that lesson.
+// ---------------------------------------------------------------------------------------------------------------
+export const bookKind = (key) => /moasser|moaser|muasir|mouasser|mo3aser|moaaser|معاصر|practice|workbook/i.test(String(key || '')) ? 'practice' : 'school';
+const LESSON_CHARS = 40000, PRACTICE_CHARS = 30000, HW_MAX = 80;
+const lessonAt = (units, page) => { for (const u of units) for (const l of u.lessons) if (page >= l.start && page <= l.end) return { unit: u.unit, lesson: l.lesson }; return null; };
+function findLesson(units, ref) {
+    if (!ref || !ref.lesson) return null;
+    let u = ref.unit ? units.find(x => x.unit === ref.unit) : null;
+    if (u) { const l = u.lessons.find(x => x.lesson === ref.lesson); return l ? { u, l } : null; }
+    const hits = units.flatMap(x => x.lessons.filter(y => y.lesson === ref.lesson).map(y => ({ u: x, l: y })));
+    return hits.length === 1 ? hits[0] : null;
+}
+async function wholeText(db, book, from, to, cap) {
+    const pages = await pageTexts(db, book, from, to);
+    let out = '';
+    for (const [p, t] of pages) {
+        const piece = `[page ${p}]\n${String(t).trim()}\n\n`;
+        if (out.length + piece.length > cap) { out += piece.slice(0, Math.max(0, cap - out.length)); break; }
+        out += piece;
+    }
+    return out.trim();
+}
+async function homeworkQuestions(db, grade, unit, lesson) {
+    try {
+        const { results } = await db.prepare(`SELECT q.type, q.prompt, q.answer FROM hw_questions q JOIN hw_assignments a ON a.id = q.assignment_id
+            WHERE a.grade = ? AND a.unit = ? AND a.lesson = ? AND q.prompt IS NOT NULL AND TRIM(q.prompt) != '' ORDER BY a.id, q.ord LIMIT ?`).bind(grade, unit, lesson, HW_MAX).all();
+        return results || [];
+    } catch (e) { return []; }    // no homework tables yet → no homework questions
+}
+/**
+ * The lesson the student is asking about → { science, indexed, ref, scope, block } (block = the whole lesson + ready
+ * questions, for a cached system block). null → no book map / no school book (the caller keeps the old search).
+ *   text: question (+ worksheet / previous question)   ask: the student's own words (for "Unit 2 Lesson 3" and short replies)
+ *   threadRef: the lesson this chat was on            quick: a short reply in a quiz ("C", "True", "V = 3 V") → stay on it
+ */
+export async function lessonPack(env, db, { grade, text = '', ask = '', image = null, meter = null, threadRef = null, quick = false } = {}) {
+    if (!(await gradeIndexed(db, grade))) return { indexed: false, science: true, ref: null, block: '' };
+    const toc = await gradeToc(env, db, grade);
+    const school = toc.find(b => bookKind(b.book) === 'school'), practice = toc.find(b => bookKind(b.book) === 'practice');
+    if (!school || !school.units.length) return null;
+    let ref = null, science = true;
+    const named = refFromText(ask || text);
+    if (named && named.lesson && findLesson(school.units, named)) ref = named;
+    else if (quick && threadRef) ref = threadRef;
+    else {
+        const found = await searchBook(env, db, { grade, text, refText: '', image, meter, k: 8, maxChars: 8000 });
+        science = found.science;
+        if (science && found.ctx.passages.length) {
+            const votes = new Map();
+            for (const p of found.ctx.passages) {
+                const b = toc.find(x => x.book === p.book); const at = b ? lessonAt(b.units, p.page) : null;
+                if (at) { const k = at.unit + ':' + at.lesson; votes.set(k, (votes.get(k) || 0) + (bookKind(p.book) === 'school' ? 1 : 0.7)); }
+            }
+            const best = [...votes.entries()].sort((a, b) => b[1] - a[1])[0];
+            const prev = threadRef ? votes.get(threadRef.unit + ':' + threadRef.lesson) || 0 : 0;
+            // a follow-up keeps the chat's lesson unless the search clearly points at another one
+            if (best && best[1] >= 2 && !(prev && prev >= best[1] - 1)) { const [u, l] = best[0].split(':').map(Number); ref = { unit: u, lesson: l }; }
+            else if (threadRef) ref = threadRef;
+            else if (best) { const [u, l] = best[0].split(':').map(Number); ref = { unit: u, lesson: l }; }
+        } else if (threadRef && !science && String(ask || '').length <= 60) ref = threadRef;   // «idea»، «وضحلي» — still about the lesson
+    }
+    const hit = ref ? findLesson(school.units, ref) : null;
+    if (!hit) return { indexed: true, science, ref: null, block: '' };
+    const { u, l } = hit;
+    const gl = GRADE_LABELS[grade] || grade;
+    const lessonText = await wholeText(db, school.book, l.start, l.end, LESSON_CHARS);
+    let practiceText = '';
+    if (practice) { const ph = findLesson(practice.units, { unit: u.unit, lesson: l.lesson }); if (ph) practiceText = await wholeText(db, practice.book, ph.l.start, ph.l.end, PRACTICE_CHARS); }
+    const hw = await homeworkQuestions(db, grade, u.unit, l.lesson);
+    const title = `Unit ${u.unit}${u.title ? ': ' + u.title : ''} · Lesson ${l.lesson}${l.title ? ': ' + l.title : ''}`;
+    const block = `## THE LESSON — the student's ${gl} school book, ${title}
+The WHOLE lesson as printed in their book (read all of it before you answer):
+"""
+${lessonText}
+"""
+
+## READY QUESTIONS for this lesson — the ONLY questions you may give the student
+${practiceText ? `### From El-Moasser (the practice book) — its self-assessment questions for this lesson (its explanation text is NOT a source for facts):
+"""
+${practiceText}
+"""
+` : ''}${hw.length ? `### Miss Marwa's homework questions for this lesson (with her answer key):
+${hw.map((q, i) => `${i + 1}. [${q.type}] ${String(q.prompt).replace(/\s+/g, ' ').trim()}${q.answer ? ` — answer: ${String(q.answer).replace(/\s+/g, ' ').trim()}` : ''}`).join('\n')}
+` : ''}### The questions / exercises printed in the lesson above (the school book's own) also count.${!practiceText && !hw.length ? '\n(No El-Moasser or homework questions for this lesson yet — use the book\'s own questions above.)' : ''}`;
+    return { indexed: true, science: true, ref: { unit: u.unit, lesson: l.lesson }, scope: { unit: u.unit, lesson: l.lesson, title: l.title || '', unitTitle: u.title || '' }, block, title };
+}
+/** The rules that go with lessonPack's block (in the uncached part). */
+export function lessonRules(gradeLabel, title) {
+    return `\n\n## How to teach from THE LESSON (above) — these rules override anything else about content
+- THE LESSON (${title}) from their ${gradeLabel} book is your ONLY source of science. Read the whole lesson first, then answer.
+- Find the part they mean. Students write the book's English words in Arabic letters, misspell them or voice-type them («الايدي او 4 كينج» / «ايديا اوف ووركنج» = "Idea of working", «تورك» = torque, «كوميوتاتور» = commutator). Match their words to the closest HEADING or term in the lesson by sound and meaning, and name it exactly as the book writes it (its heading, its English term). Ask what they mean only if nothing in the lesson is close — never answer about something else.
+- Explain ONLY what the lesson says, at the depth the lesson goes. Every fact, definition, part, function, step, law, factor, condition and number must be written in the lesson. Do NOT add anything the book doesn't state — no extra factors, conditions, functions or details, even if true and even if it seems helpful.
+- Explain it OUR way: simple Egyptian Arabic, short steps, and an everyday example or comparison so it clicks. The example only ILLUSTRATES what the book says — it must never add a new scientific fact.
+- Key terms and definitions in the book's English wording, in **bold**.
+- Questions (quiz, «نحل أسئلة»، «اختبرني», practice): give ONLY questions from READY QUESTIONS (El-Moasser, Miss Marwa's homework, the book's own questions in the lesson), copied as written — one at a time, never one already asked in this chat. Check their answer with the lesson / the answer key and say why in one simple line. NEVER write your own questions. If none are left, say so and offer to explain a part instead.
+- If they ask about something that isn't in this lesson, look at whether it's in their book at all; if not, say it's not in their curriculum.
+- End an explanation with: 📖 من كتابك — Unit ${title.match(/Unit (\d+)/) ? title.match(/Unit (\d+)/)[1] : ''} · Lesson ${title.match(/Lesson (\d+)/) ? title.match(/Lesson (\d+)/)[1] : ''}. Never PDF page numbers.`;
 }
 
 /** Grade named in a staff message ("Prep 1", "أولى إعدادي", "الصف الأول الإعدادي", "sec1", "1 ثانوي" …) → 'prep1' | … | null */

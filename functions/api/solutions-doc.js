@@ -87,7 +87,8 @@ Output ONLY JSON: {"exam":true,"title":"Unit 2 – Lesson 1: Electric Forces —
 - ${n} questions, a real exam mix in the book's English: choose (exactly 4 options a)–d), ONE right), complete, give reason, what happens when, and calculation problems if the lesson has laws.
 - "q" = the question exactly as the student will see it (no answer in it). "options" only for choose questions.
 - The answers go in "parts" like worked solutions: for a problem — given, conversions with why, law with why, steps, answer with unit; for a choose / complete / reason — the answer + one line why.
-- ONLY what is in these pages (no other lesson, nothing extra). Recompute every answer. The book's own symbols and terms (emf, not ε).`;
+- ONLY what is in these pages (no other lesson, nothing extra). Recompute every answer. The book's own symbols and terms (emf, not ε).
+- If the pages include READY QUESTIONS (El-Moasser, Miss Marwa's homework, the book's own questions): take the questions from them first, copied as written; only if there aren't enough, add new ones whose answer is written word for word in THE LESSON.`;
 
 /** messages = the chat ({role, text}), newest last. → { content, costUsd } (throws on failure) */
 export async function makeSolutions(env, db, { messages, worksheet, gradeLabel, meter, exam = null }) {

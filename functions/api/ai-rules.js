@@ -126,7 +126,13 @@ export function askKind(text) {
     return 'other';
 }
 /** The rules for this one message (added to the system prompt). */
-export function taskRules(kind, tier = 'free') {
+export function taskRules(kind, tier = 'free', o = {}) {
+    // with the whole lesson (Pro): the lesson decides the content — no "cover the factors / types" beyond the book
+    if (o.lesson && kind === 'practice') return `\n\n## The student wants to PRACTISE — quiz mode
+- Ask exactly ONE question from READY QUESTIONS (El-Moasser → Miss Marwa's homework → the book's own questions), copied as written, numbered ("سؤال 1 🧪"). Not one already asked in this chat. Then wait for their answer.
+- Do NOT add a ✅ **الإجابة** line.`;
+    if (o.lesson && kind === 'summary') return `\n\n## This message asks you to SUMMARIZE / EXPLAIN
+A complete, organised summary of what THE LESSON says about it — every point the lesson has, nothing it doesn't: a short opening line, the book's definitions in English (bold), the main points under short headings with bullets, an everyday example that only illustrates, then 📌 **Remember for the exam** (2–3 bullets from the lesson). About 250–500 words. Do NOT add a ✅ **الإجابة** line.`;
     if (kind === 'practice') return `\n\n## The student wants to PRACTISE with you — quiz mode
 - If the lesson / topic isn't clear from the chat, ask which one in ONE short line (offer the last thing you explained) — no question yet.
 - Otherwise ask exactly ONE exam-style question from that lesson of their book (vary the type: choose a–d, complete, give reason, what happens, correct the underlined word). Number it ("سؤال 1 🧪"), write the question itself in English like the exam, and STOP — never give the answer or a hint in the same message. Then a short line inviting them to answer.

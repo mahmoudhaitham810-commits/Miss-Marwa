@@ -25,7 +25,7 @@
 import { requireStaff, ensureAppSchema, verifyStudentRequest } from './admin-auth.js';
 import { chat, usageSummary, bonusOpen, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
 import { studentAccess, dailyLimits, dailyState, claimDaily, releaseDaily } from './ai-quota.js';
-import { searchBook, bookRules, gradeToc } from './curriculum.js';
+import { searchBook, bookRules, gradeToc, lessonPack, lessonRules } from './curriculum.js';
 import { sourceBlock, lessonParts } from './studio.js';
 import { getOrMake, CacheBusyError } from './ai-cache.js';
 import { wantsPdf, wantsExam, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
@@ -147,6 +147,22 @@ function cardsFor(intents, d) {
     return c;
 }
 
+// ---------- the lesson a chat is on (so «idea»، «C»، «وضحلي أكتر» stay on it) ----------
+async function threadLesson(db, threadId) {
+    try {
+        await db.prepare('CREATE TABLE IF NOT EXISTS tutor_thread_lesson (thread_id INTEGER PRIMARY KEY, unit INTEGER, lesson INTEGER, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)').run();
+        const r = await db.prepare('SELECT unit, lesson FROM tutor_thread_lesson WHERE thread_id = ?').bind(threadId).first();
+        return r && r.lesson ? { unit: r.unit, lesson: r.lesson } : null;
+    } catch (e) { return null; }
+}
+async function keepThreadLesson(db, threadId, ref) {
+    if (!ref) return;
+    try { await db.prepare(`INSERT INTO tutor_thread_lesson (thread_id, unit, lesson, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(thread_id) DO UPDATE SET unit = excluded.unit, lesson = excluded.lesson, updated_at = CURRENT_TIMESTAMP`).bind(threadId, ref.unit, ref.lesson).run(); } catch (e) { }
+}
+/** Did the assistant's last message ask the student a practice question? (then a short message is the answer) */
+const prevAskedQuestion = (messages) => { const a = messages.filter(m => m.role === 'assistant').slice(-1)[0]; return !!a && /question\s*\d|سؤال\s*\d|اختيارك|true or false|صح ولا غلط|ابعتلي إجابتك|إجابتك/i.test(a.content); };
+
 // ---------- personality ----------
 const ME = 'Miss Marwa AI Assistant';
 // opts.bench = { grade } → the Model test: same tutor, no real student's data
@@ -192,7 +208,7 @@ function tutorStudent(d, tier, opts = {}) {
     const girl = st.gender === 'female';
     return `## The student
 ${st.firstName} — ${girl ? 'a GIRL: talk to her in the feminine (يا بطلة، إنتِ، عملتي)' : 'a BOY: talk to him in the masculine (يا بطل، إنت، عملت)'} — ${st.gradeLabel}.
-${opts.books ? `- Passages from their own curriculum book for this question are at the end ("Curriculum book") — they are your source of truth for science content.` : `- Never guess what's inside a specific lesson of their book ("Unit 2 Lesson 3") — ${tier === 'pro' ? "no passage of their book was found for it" : "the books aren't connected yet"}; ask them to tell you the topic.`}
+${opts.lesson ? `- The WHOLE lesson from their own book is above ("THE LESSON") with its ready questions — your only source for science and for practice questions.` : opts.books ? `- Passages from their own curriculum book for this question are at the end ("Curriculum book") — they are your source of truth for science content.` : `- Never guess what's inside a specific lesson of their book ("Unit 2 Lesson 3") — ${tier === 'pro' ? "no passage of their book was found for it" : "the books aren't connected yet"}; ask them to tell you the topic.`}
 
 ## MY DATA (exact, from the platform — this student only)
 ${opts.bench ? '(Model test — no student data. Answer the science question only.)' : factsOf(d)}`;
@@ -432,9 +448,12 @@ export async function onRequest(context) {
                     // «اعملي امتحان على Unit 2 Lesson 1 PDF» → a practice exam from that lesson's book pages (+ Model Answer page)
                     let exam = null;
                     if (wantsExam(text) && !doc) {
-                        const found = await searchBook(env, db, { grade: who.student.grade, text, refText: text, meter: payer, k: 8, maxChars: 9000, unitChars: 16000 });
+                        // the whole lesson + its ready questions (El-Moasser, homework) when we can tell the lesson; else the old search
+                        let bookText = '';
+                        try { const pk = await lessonPack(env, db, { grade: who.student.grade, text, ask: text, meter: payer, threadRef: await threadLesson(db, t.id) }); if (pk && pk.block) bookText = pk.block; } catch (e) { }
+                        if (!bookText) { const found = await searchBook(env, db, { grade: who.student.grade, text, refText: text, meter: payer, k: 8, maxChars: 9000, unitChars: 16000 }); bookText = found && found.science ? found.ctx.text : ''; }
                         const count = Math.min(30, Math.max(5, parseInt((text.match(/(\d{1,2})\s*(سؤال|اسئله|أسئلة|questions?)/i) || [])[1], 10) || 10));
-                        exam = { bookText: found && found.science ? found.ctx.text : '', ask: text, count };
+                        exam = { bookText, ask: text, count };
                     }
                     const out = await makeSolutions(env, db, { messages: (all || []).reverse(), worksheet: exam ? null : await threadDoc(db, 'student', t.id), gradeLabel: GRADE_LABEL[who.student.grade] || '', meter: payer, exam });
                     const girl = who.student.gender === 'female';
@@ -459,11 +478,27 @@ export async function onRequest(context) {
                     // The question (+ the previous one, for follow-ups like «طب والوحدة؟») or the PHOTO → search terms → passages.
                     const payer = who.preview ? { staffId: who.staff.id } : { studentId: sid };
                     const prevQ = messages.filter(m => m.role === 'user').slice(-2, -1).map(m => m.content).join(' ');
-                    const found = intents.length ? null : await searchBook(env, db, { grade: who.student.grade, text: `${text} ${sheet ? sheet.text.slice(0, 1500) : ''} ${prevQ}`.trim(), refText: text, image: img && !img.error ? img : null, meter: payer, unitChars: 9000 });
                     const gl = GRADE_LABEL[who.student.grade] || who.student.grade;
-                    const books = !found || !found.science ? '' : bookRules(found.ctx, gl, { indexed: found.indexed, ref: found.ref, refMissing: found.refMissing });
-                    const sys = tutorSystem(d, 'pro', { books: !!(found && found.ctx.text) }, (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro')));
-                    if (sheet) sys.splice(1, 0, worksheetBlock(sheet, 'the student'));   // [fixed][worksheet] = the same cached prefix every turn
+                    const searchText = `${text} ${sheet ? sheet.text.slice(0, 1500) : ''} ${prevQ}`.trim();
+                    // 25 Nov 2026: the WHOLE lesson of their book (+ its ready questions) instead of a few snippets — the chat
+                    // remembers its lesson, so follow-ups («idea»، «C»، «وضحلي») stay on it
+                    let pack = null;
+                    if (!intents.length) {
+                        const threadRef = await threadLesson(db, t.id);
+                        const quick = !img && !doc && threadRef && (String(text).trim().length <= 14 || (prevAskedQuestion(messages) && String(text).trim().length <= 40));
+                        try { pack = await lessonPack(env, db, { grade: who.student.grade, text: searchText, ask: text, image: img && !img.error ? img : null, meter: payer, threadRef, quick }); } catch (e) { pack = null; }
+                        if (pack && pack.block) await keepThreadLesson(db, t.id, pack.ref);
+                    }
+                    let sys;
+                    if (pack && pack.block) {
+                        sys = tutorSystem(d, 'pro', { lesson: true }, (img ? IMAGE_RULES : '') + lessonRules(gl, pack.title) + taskRules(kind, 'pro', { lesson: true }));
+                        sys.splice(1, 0, { type: 'text', text: pack.block, cache_control: { type: 'ephemeral' } });   // [fixed][lesson] — cached for the next messages on this lesson
+                    } else {
+                        const found = intents.length ? null : pack && !pack.indexed ? { science: true, indexed: false, ctx: { text: '' } } : await searchBook(env, db, { grade: who.student.grade, text: searchText, refText: text, image: img && !img.error ? img : null, meter: payer, unitChars: 9000 });
+                        const books = !found || !found.science ? '' : bookRules(found.ctx, gl, { indexed: found.indexed, ref: found.ref, refMissing: found.refMissing });
+                        sys = tutorSystem(d, 'pro', { books: !!(found && found.ctx.text) }, (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro')));
+                    }
+                    if (sheet) sys.splice(1, 0, worksheetBlock(sheet, 'the student'));   // [fixed][worksheet][lesson] = the same cached prefix every turn
                     out = await chat(env, db, { tier: 'pro', system: sys, thinking: sheet ? 4000 : 0,   // a worksheet: think + recompute first
                         messages: [...EXAMPLES, ...messages], maxTokens: sheet ? 9000 : img ? 2000 : 1600, image: img && !img.error ? img : null,
                         meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
