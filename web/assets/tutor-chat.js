@@ -120,6 +120,8 @@
     /* study companion: next-step buttons + the lesson picker */
     .tc-solcard { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; border: 1.5px solid var(--primary); background: var(--surface); border-radius: 16px; padding: 12px 14px; margin-top: 8px; }
     .tc-solcard small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+    .tc-sumbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tc-sumbtns .btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
     .tc-next { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
     .tc-next button { border: 1px solid var(--primary); background: var(--primary-soft, #eef2ff); color: var(--primary); border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
     .tc-pick { border: 1px solid var(--border); background: var(--surface); border-radius: 18px; padding: 14px; }
@@ -135,7 +137,7 @@
     // the branded PDF maker (same as "Exams & summaries") — loaded only when a PDF is asked for
     let rendererP = null;
     const loadRenderer = () => window.StudioRender ? Promise.resolve() : (rendererP = rendererP || new Promise((res, rej) => {
-        const s = document.createElement('script'); s.src = '/admin/assets/studio-render.js?v=20261122h';
+        const s = document.createElement('script'); s.src = '/admin/assets/studio-render.js?v=20261128b';
         s.onload = () => window.StudioRender ? res() : rej(new Error('PDF tool did not load'));
         s.onerror = () => { rendererP = null; s.remove(); rej(new Error('PDF tool did not load')); };
         document.head.appendChild(s);
@@ -196,7 +198,7 @@
             solutions: (c) => { const k = 's' + (++solSeq); SOLS[k] = c; return `<div class="tc-solcard" dir="rtl"><div><b dir="auto">📄 ${esc(c.content.title)}</b><small>${c.content.items.length} سؤال — كل سؤال وتحته حله بالتفصيل</small></div><button class="btn btn-primary btn-sm" data-sol="${k}">⬇️ نزّل الـ PDF</button></div>`; },
             // 28 Nov: the full lesson summary in Miss Marwa's style → the studio's PDF (her own when she made one)
             lessonpdf: (c) => { const k = 'l' + (++solSeq); SOLS[k] = c; const L = (c.content.lessons || [])[0] || { blocks: [] }, B = L.blocks || [], n = (t) => B.filter(b => b.t === t).length;
-                return `<div class="tc-solcard tc-sumcard" dir="rtl"><div><b dir="auto">📄 ${esc(c.title)}</b><small>${c.by === 'marwa' ? 'ملخص مس مروة نفسها ✨ · ' : 'بأسلوب مس مروة · '}${n('term')} تعريف · ${n('reason')} G.R · ${n('section')} أجزاء</small></div><button class="btn btn-primary btn-sm" data-lsum="${k}">⬇️ نزّل الـ PDF</button></div>`; },
+                return `<div class="tc-solcard tc-sumcard" dir="rtl"><div><b dir="auto">📄 ${esc(c.title)}</b><small>${c.by === 'marwa' ? 'ملخص مس مروة نفسها ✨ · ' : 'بأسلوب مس مروة · '}${c.lang === 'en' ? 'إنجليزي بس 📘' : 'شرح بالعامية تحت كل جزء 💬'} · ${n('term')} تعريف · ${n('reason')} G.R</small></div><div class="tc-sumbtns"><button class="btn btn-primary btn-sm" data-lsum="${k}">⬇️ نزّل الـ PDF</button>${c.lang === 'en' || !L.unit ? '' : `<button class="btn btn-ghost btn-sm" data-next="pdfen" data-u="${L.unit}" data-l="${L.lesson}">📘 نسخة إنجليزي بس</button>`}</div></div>`; },
             next: (c) => `<div class="tc-next" dir="rtl"><button data-next="quiz" data-u="${c.unit}" data-l="${c.lesson}">🧪 يلا نحل أسئلة عليه</button><button data-next="pdf" data-u="${c.unit}" data-l="${c.lesson}">📄 الملخص الكامل PDF</button><button data-next="explain" data-u="${c.unit}" data-l="${c.lesson}">🔍 اشرحلي جزء منه</button><button data-next="pick">📘 درس تاني</button></div>`,
             upgrade: (c) => `<div class="tc-card tc-up"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="pro" data-pro>${proReady() ? '✨ اسأل Pro' : '✨ Pro · قريب'}</button></div>`
         };
@@ -340,6 +342,7 @@
                 if (comp && comp.tier !== 'pro' && proReady()) { comp.setTier('pro'); hint(); }
                 if (k === 'quiz') return send(u ? `يلا نحل أسئلة سوا على ${lessonName(u, l)} 🧪` : 'يلا نحل سؤالين سوا على الكلام ده 🧪', null);
                 if (k === 'explain') { comp && comp.fill(u ? `اشرحلي أكتر في ${lessonName(u, l)} جزء ` : 'وضّحلي أكتر جزء '); return; }
+                if (k === 'pdfen') return send(`اعملي ملخص Unit ${u} Lesson ${l} PDF بالإنجليزي بس 📘`, null);
                 if (k === 'pdf') return send(u ? `اعملي ملخص Unit ${u} Lesson ${l} كامل PDF 📄` : 'اعملي ملخص الدرس ده كامل PDF 📄', null);
             }
             const c = e.target.closest('[data-chip]'); if (c) { comp && comp.fill(c.dataset.chip.replace(/\s*[\u{1F300}-\u{1FAFF}\u2600-\u27BF]\uFE0F?$/u, '')); return; }

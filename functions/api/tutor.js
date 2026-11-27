@@ -26,7 +26,7 @@ import { requireStaff, ensureAppSchema, verifyStudentRequest } from './admin-aut
 import { chat, usageSummary, bonusOpen, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
 import { studentAccess, dailyLimits, dailyState, claimDaily, releaseDaily, quotaSettings, ensureQuotaTables, refreshRate } from './ai-quota.js';
 import { searchBook, bookRules, gradeToc, lessonPack, lessonRules, refFromText } from './curriculum.js';
-import { sourceBlock, lessonParts, buildLessonSummary } from './studio.js';
+import { sourceBlock, lessonParts, buildLessonSummary, explainLessonSummary } from './studio.js';
 import { getOrMake, CacheBusyError } from './ai-cache.js';
 import { wantsPdf, wantsExam, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
 import { aiReady } from './ai-engine.js';
@@ -198,7 +198,21 @@ export const wantsSummaryPdf = (text, lastAssistant = '', lastUser = '') => {
     // "put it in a PDF" after an EXPLANATION → the lesson summary; after questions / solutions → the worked solutions
     return !SOLVE_WORD.test(t) && !THEM.test(t) && !looksSolved(lastAssistant) && !looksLikeQuestions(lastUser);
 };
-async function lessonSummaryDoc(env, db, { grade, unit, lesson, payer }) {
+// the student's PDF explains in Egyptian Arabic (Miss Marwa's way) — the all-English one only when they ask for English
+export const ENGLISH_ONLY = /(بال?[اإ]نجليز[يى]|بال?[اإ]نجلش|[اإ]نجليز[يى] بس|english only|in english|english version|only english)/i;
+// «الشرح بالعربي والمصطلحات بالإنجليزي» is the normal one, not an English-only request
+export const wantsEnglishOnly = (t) => ENGLISH_ONLY.test(String(t || '')) && !/(عربي|عامي|اشرح)/.test(String(t || ''));
+const shortHash = async (t) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+async function lessonSummaryDoc(env, db, { grade, unit, lesson, payer, english = false }) {
+    const base = await lessonSummaryBase(env, db, { grade, unit, lesson, payer });
+    if (english) return { ...base, lang: 'en' };
+    const out = await getOrMake(db, `lsumx:v1:${base.key}`, { kind: 'lesson-summary-pdf-ar', ref: `${grade}:${unit}:${lesson}`, waitMs: 170000, make: async () => {
+        const x = await explainLessonSummary(env, db, { grade, toc: base.toc, unit, lesson, blocks: base.lessonDoc.blocks || [], meter: payer });
+        return { text: JSON.stringify({ ...base.lessonDoc, blocks: x.blocks }), model: 'claude-haiku-5-5', costUsd: x.cost };
+    } });
+    return { ...base, lessonDoc: parse(out.text), lang: 'ar', cached: base.cached && !!out.cached };
+}
+async function lessonSummaryBase(env, db, { grade, unit, lesson, payer }) {
     const toc = await gradeToc(env, db, grade, { build: false }).catch(() => []);
     const U = toc[0] && toc[0].units.find(u => u.unit === unit), Ls = U && U.lessons.find(l => l.lesson === lesson);
     if (!U || !Ls) { const e = new Error('NO_LESSON'); e.code = 'NO_LESSON'; throw e; }
@@ -207,7 +221,7 @@ async function lessonSummaryDoc(env, db, { grade, unit, lesson, payer }) {
         const { results } = await db.prepare(`SELECT content FROM studio_docs WHERE kind = 'summary' AND grade = ? AND unit = ? ORDER BY updated_at DESC LIMIT 20`).bind(grade, unit).all();
         for (const r of results || []) {
             const c = parse(r.content), L = c && (c.lessons || []).find(x => Number(x.unit) === unit && Number(x.lesson) === lesson && (x.blocks || []).length);
-            if (L) return { lessonDoc: L, by: 'marwa', title: Ls.title || L.title || '' };
+            if (L) return { lessonDoc: L, by: 'marwa', title: Ls.title || L.title || '', toc, key: `marwa:${grade}:${unit}:${lesson}:${await shortHash(JSON.stringify(L.blocks))}`, cached: true };
         }
     } catch (e) { /* no studio yet */ }
     // 2) made once, shared (a rebuilt book map with other pages → a new one)
@@ -216,7 +230,7 @@ async function lessonSummaryDoc(env, db, { grade, unit, lesson, payer }) {
         const b = await buildLessonSummary(env, db, { grade, toc, unit, lesson, meter: payer, kind: 'student-summary-pdf' });
         return { text: JSON.stringify(b.lessonDoc), model: 'claude-haiku-5-5', costUsd: b.cost };
     } });
-    return { lessonDoc: parse(out.text), by: 'ai', title: Ls.title || '', cached: !!out.cached };
+    return { lessonDoc: parse(out.text), by: 'ai', title: Ls.title || '', cached: !!out.cached, toc, key };
 }
 
 /** Did the assistant's last message ask the student a practice question? (then a short message is the answer) */
@@ -530,26 +544,35 @@ export async function onRequest(context) {
                 const la = await db.prepare(`SELECT cards FROM tutor_messages WHERE thread_id = ? AND role = 'assistant' AND id < ? ORDER BY id DESC LIMIT 1`).bind(t.id, userMsg.id).first();
                 fix = correctsToSummary(text, la && parse(la.cards));
             }
-            if (!free && !img && (fix || wantsPdf(text) || (!doc && !sheet && SUMMARY_PDF.test(text)))) {
+            // «ممكن بالإنجليزي؟» right after the explained summary PDF → the same lesson, English only
+            let toEn = false;
+            if (!free && !img && !doc && !fix && !wantsPdf(text) && wantsEnglishOnly(text) && text.length < 80) {
+                const la = await db.prepare(`SELECT cards FROM tutor_messages WHERE thread_id = ? AND role = 'assistant' AND id < ? ORDER BY id DESC LIMIT 1`).bind(t.id, userMsg.id).first();
+                toEn = (parse(la && la.cards) || []).some(c => c && c.type === 'lessonpdf' && c.lang !== 'en');
+            }
+            if (!free && !img && (fix || toEn || wantsPdf(text) || (!doc && !sheet && SUMMARY_PDF.test(text)))) {
                 try {
                     const { results: all } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
                     const payer = who.preview ? { staffId: who.staff.id, kind: 'chat-pdf' } : { studentId: sid, kind: 'chat-pdf' };
                     const lastA = ((all || []).find(m => m.role === 'assistant') || {}).text || '';
                     const lastU = ((all || []).find(m => m.role === 'user') || {}).text || '';
-                    if (fix || (!doc && !sheet && wantsSummaryPdf(text, lastA, lastU))) {
+                    if (fix || toEn || (!doc && !sheet && wantsSummaryPdf(text, lastA, lastU))) {
                         // which lesson: named in the message → the chat's lesson → the lesson the message is about
                         let ref = refFromText(text) || await threadLesson(db, t.id);
                         if (!ref) { try { const pk = await lessonPack(env, db, { grade: who.student.grade, text, ask: text, meter: payer }); ref = pk && pk.ref; } catch (e) { } }
                         if (!ref || !ref.lesson) { const e = new Error('NO_LESSON'); e.code = 'NO_LESSON_SUM'; throw e; }
-                        const S = await lessonSummaryDoc(env, db, { grade: who.student.grade, unit: Number(ref.unit), lesson: Number(ref.lesson), payer: { staffId: who.preview ? who.staff.id : null } });
+                        const S = await lessonSummaryDoc(env, db, { grade: who.student.grade, unit: Number(ref.unit), lesson: Number(ref.lesson), payer: { staffId: who.preview ? who.staff.id : null }, english: wantsEnglishOnly(text) });
                         await keepThreadLesson(db, t.id, ref);
-                        if (S.by === 'marwa' || S.cached) await giveBack();   // ready-made (hers, or a classmate's) costs nothing → not one of today's PDFs
+                        if (S.cached) await giveBack();   // ready-made (hers, or a classmate's) costs nothing → not one of today's PDFs
                         const girl = who.student.gender === 'female';
                         const name = `Unit ${ref.unit} · Lesson ${ref.lesson}${S.title ? ' — ' + S.title : ''}`;
                         const nameIso = `\u2066${name}\u2069`;   // keeps "Unit 2 · Lesson 1" in reading order inside the Arabic line
                         const L = S.lessonDoc, nTerms = (L.blocks || []).filter(b => b.t === 'term').length, nGr = (L.blocks || []).filter(b => b.t === 'reason').length;
-                        const saved = await save({ text: `${fix ? `حقك عليا ${girl ? 'يا بطلة' : 'يا بطل'} 🙏 — ده ` : `جاهز ملخصك ${girl ? 'يا بطلة' : 'يا بطل'} 📄 `}**${nameIso}** — الدرس كله بأسلوب مس مروة${S.by === 'marwa' ? ' (الملخص اللي عاملاه بنفسها ✨)' : ''}: كل تعريف${nTerms ? ` (${nTerms})` : ''}، كل G.R${nGr ? ` (${nGr})` : ''}، القوانين والمقارنات، وفي الآخر أهم النقط للامتحان. نزّله من الزرار 👇`,
-                            model: 'claude-haiku-5-5', cost: 0, cards: JSON.stringify([{ type: 'lessonpdf', grade: who.student.grade, by: S.by, title: name, content: { lessons: [L] } }]) });
+                        const what = S.lang === 'ar'
+                            ? `الدرس كله${S.by === 'marwa' ? ' (ملخص مس مروة نفسها ✨)' : ''} — وتحت كل جزء شرح بالعامية 💬 كإن مس مروة بتشرحهولك، بأمثلة من حياتك. التعريفات والقوانين والـ G.R فاضلة بالإنجليزي زي الامتحان${nTerms ? ` (${nTerms} تعريف${nGr ? `، ${nGr} G.R` : ''})` : ''}. ولو عايز نسخة إنجليزي بس قولي «بالإنجليزي» 📘`
+                            : `النسخة الإنجليزي بس${S.by === 'marwa' ? ' (ملخص مس مروة نفسها ✨)' : ''}: كل تعريف${nTerms ? ` (${nTerms})` : ''}، كل G.R${nGr ? ` (${nGr})` : ''}، القوانين والمقارنات.`;
+                        const saved = await save({ text: `${fix ? `حقك عليا ${girl ? 'يا بطلة' : 'يا بطل'} 🙏 — ده ` : `جاهز ملخصك ${girl ? 'يا بطلة' : 'يا بطل'} 📄 `}**${nameIso}** — ${what} نزّله من الزرار 👇`,
+                            model: 'claude-haiku-5-5', cost: 0, cards: JSON.stringify([{ type: 'lessonpdf', grade: who.student.grade, by: S.by, lang: S.lang, title: name, content: { lessons: [L] } }]) });
                         return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), ...(await dailyOut()) });
                     }
                     // «اعملي امتحان على Unit 2 Lesson 1 PDF» → a practice exam from that lesson's book pages (+ Model Answer page)

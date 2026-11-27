@@ -508,7 +508,7 @@
         // the branded PDF maker (same as "Exams & summaries") — loaded only when a PDF is asked for
         let rendererP = null;
         const loadRenderer = () => window.StudioRender ? Promise.resolve() : (rendererP = rendererP || new Promise((res, rej) => {
-            const s = document.createElement('script'); s.src = '/admin/assets/studio-render.js?v=20261122h';
+            const s = document.createElement('script'); s.src = '/admin/assets/studio-render.js?v=20261128b';
             s.onload = () => window.StudioRender ? res() : rej(new Error('PDF tool did not load'));
             s.onerror = () => { rendererP = null; s.remove(); rej(new Error('PDF tool did not load')); };
             document.head.appendChild(s);

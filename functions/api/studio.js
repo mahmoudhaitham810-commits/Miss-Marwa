@@ -26,6 +26,7 @@ import { requireStaff, ensureAppSchema, audit } from './admin-auth.js';
 import { chat, AiLimitError, claudeReady } from './ai-gateway.js';
 import { createExam } from './exams.js';
 import { cleanSolutions } from './solutions-doc.js';
+import { englishTerms } from './ai-rules.js';
 import { gradeToc, pageTexts, chunksOf, pageKind, norm, GRADE_LABELS, bookName } from './curriculum.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
@@ -316,6 +317,34 @@ export async function buildLessonSummary(env, db, { grade, toc, unit, lesson, in
     const lessonDoc = { unit: part.unit, unitTitle: part.unitTitle, lesson: part.lesson, title: str(c2.data.title, 200) || part.label, from: part.from, to: part.to, blocks,
         coverage: { total: cov.total, covered: cov.covered, missing: cov.missing.map(m => m.key).slice(0, 30) } };
     return { part, lessonDoc, cov, cost };
+}
+
+// ---------- the STUDENT version (28 Nov 2026, Mahmoud): the same summary + Miss Marwa explaining each part in Egyptian Arabic ----------
+// "The all-English PDF is the teacher's. The student's must explain — as if she explains it herself, our way."
+const EXPLAIN_TASK = `## Task: Miss Marwa explains this summary to her student — in Egyptian Arabic, block by block
+The student reads this PDF at home. Under each block of the summary, write what Miss Marwa would SAY in class to make it click.
+For each block (by its number) give:
+- "ar": 1–3 short lines in Egyptian colloquial Arabic (عامية مصرية — never فصحى) that explain the IDEA simply, like a great teacher talking to a 14-year-old. Not a translation of the English line — the meaning, the "why", how to picture it. For a law: what each symbol is and when we use it. For a G.R: the reason in simple words. For a comparison: the key difference in one line. For a section heading: what this part is about and how it connects to the one before.
+- "ex" (optional, at most every 2nd–3rd block): ONE everyday example from Egyptian daily life (البيت، الموبايل، الكورة، المواصلات، المطبخ) that only ILLUSTRATES — it must never add a new scientific fact.
+LANGUAGE — strict: every science term, unit, symbol and formula stays in English inside the Arabic, usually with "الـ" (الـ **current intensity**، **I = Q / t**، **Ampere**). NEVER an Arabic science term (no شدة التيار، فرق الجهد، المقاومة، الشحنة، الدائرة، التوالي، التوازي، القوة الدافعة …). Use **bold** for the English terms.
+Only what THE LESSON (the pages above) says — nothing extra. Skip blocks that need nothing (a figure, the last "Key points" list).
+Return ONLY JSON: {"notes":[{"i":0,"ar":"…","ex":"…"}]}`;
+/** Adds { ar, ex } to the blocks (a copy). The lesson pages are the prompt-cached source. */
+export async function explainLessonSummary(env, db, { grade, toc, unit, lesson, blocks, meter, kind = 'student-summary-pdf' }) {
+    const [part] = await lessonParts(db, toc, unit, [lesson]);
+    if (!part) throw new Error('NO_LESSON');
+    const list = blocks.map((b, i) => `${i}: ${JSON.stringify(b).slice(0, 420)}`).join('\n');
+    const r = await chat(env, db, { tier: 'pro', system: [sourceBlock(grade, [part]), { type: 'text', text: EXPLAIN_TASK }], messages: [{ role: 'user', content: 'The summary blocks (number: block):\n' + list }], maxTokens: 12000, meter: { ...meter, kind } });
+    const notes = ((parseJson(r.text) || {}).notes || []);
+    const out = blocks.map(b => ({ ...b }));
+    let n = 0;
+    for (const x of notes) {
+        const i = parseInt(x && x.i, 10); if (!(i >= 0 && i < out.length)) continue;
+        const ar = englishTerms(str(x.ar, 700)), ex = englishTerms(str(x.ex, 400));
+        if (ar) { out[i].ar = ar; n++; } if (ex) out[i].ex = ex;
+    }
+    if (!n) throw new Error('EMPTY');
+    return { blocks: out, cost: r.costUsd || 0 };
 }
 
 export async function onRequest(context) {

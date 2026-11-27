@@ -39,6 +39,9 @@
     /* ---------- summary ---------- */
     .sx-h1 { font-size: 23px; font-weight: 850; letter-spacing: -.02em; color: var(--navy); margin: 2px 0 14px; padding-bottom: 8px; border-bottom: 3px solid var(--blue); }
     .sx-blk { break-inside: avoid; margin: 0 0 11px; position: relative; }
+    .sx-arx { flex: 1 1 100%; width: 100%; box-sizing: border-box; margin-top: 7px; padding: 7px 12px; border-radius: 9px; background: #FFF8E6; border-inline-start: 3px solid #F59E0B; direction: rtl; text-align: right; font-family: "IBM Plex Sans Arabic", Inter, sans-serif; font-size: 13.5px; font-weight: 500; line-height: 1.8; color: #3B2F0B; unicode-bidi: plaintext; }
+    .sx-arx .ex { margin-top: 4px; padding-top: 4px; border-top: 1px dashed #F5C46B; color: #5B4510; }
+    .sx-sec .sx-arx { font-weight: 500; }
     .sx-sec { margin: 22px 0 10px; break-after: avoid; }
     .sx-sec-h { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 800; color: var(--blue); }
     .sx-n { flex: none; width: 27px; height: 27px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-size: 13.5px; font-weight: 800; }
@@ -170,7 +173,10 @@
             const leadEnd = L.blocks.findIndex(b => b.t !== 'lead');
             const nLead = leadEnd < 0 ? L.blocks.length : leadEnd;
             const road = topics.length >= 2 ? `<div class="sx-blk sx-road"><div class="rt">🗺️ In this lesson</div><ol style="grid-template-rows:repeat(${Math.ceil(topics.length / 2)},auto);grid-auto-flow:column">${topics.map((x, k) => `<li><span class="sx-n">${k + 1}</span><span>${rich(x)}</span></li>`).join('')}</ol></div>` : '';
-            const one = (b, i) => i === keyIdx ? `<div class="sx-blk sx-key">${tools(o, `lessons.${li}.blocks.${i}`)}<div class="sx-lbl">⭐ ${esc(b.title)}</div><ul>${b.items.map((x, k) => `<li>${ed(o, `lessons.${li}.blocks.${i}.items.${k}`, x)}</li>`).join('')}</ul></div>` : block(b, `lessons.${li}.blocks.${i}`, oo);
+            // the student's copy: Miss Marwa explains each part in Egyptian Arabic, right under it (inside the block → never split from it)
+            const withAr = (h, b) => !b || !b.ar || !h ? h : h.replace(/<\/div>\s*$/, `<div class="sx-arx" dir="rtl">💬 ${rich(b.ar)}${b.ex ? `<div class="ex">🌍 مثال: ${rich(b.ex)}</div>` : ''}</div></div>`);
+            const one = (b, i) => withAr(one0(b, i), b);
+            const one0 = (b, i) => i === keyIdx ? `<div class="sx-blk sx-key">${tools(o, `lessons.${li}.blocks.${i}`)}<div class="sx-lbl">⭐ ${esc(b.title)}</div><ul>${b.items.map((x, k) => `<li>${ed(o, `lessons.${li}.blocks.${i}.items.${k}`, x)}</li>`).join('')}</ul></div>` : block(b, `lessons.${li}.blocks.${i}`, oo);
             return `<div class="sx-page sx-lesson">${brand(doc, `${GRADE[doc.grade] || ''} · Science<br>Unit ${L.unit} · Lesson ${L.lesson}`)}
                 ${ed(o, `lessons.${li}.title`, L.title, 'div', 'sx-h1')}
                 ${L.blocks.slice(0, nLead).map((b, i) => one(b, i)).join('')}${road}${L.blocks.slice(nLead).map((b, i) => one(b, i + nLead)).join('')}
