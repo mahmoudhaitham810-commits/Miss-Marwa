@@ -140,6 +140,14 @@
         s.onerror = () => { rendererP = null; s.remove(); rej(new Error('PDF tool did not load')); };
         document.head.appendChild(s);
     }));
+    async function summaryPdf(c, btn) {   // the studio's summary template (term boxes, G.R, arrows, tables) → the branded PDF
+        const label = btn.innerHTML; btn.disabled = true; btn.textContent = '…';
+        try {
+            await loadRenderer();
+            const doc = { kind: 'summary', grade: c.grade, content: c.content, title: c.title };
+            await StudioRender.download(StudioRender.summaryHtml(doc), c.title, { mark: c.by !== 'marwa' });   // her own summary: no AI mark
+        } finally { btn.disabled = false; btn.innerHTML = label; }
+    }
     async function solutionsPdf(c, btn) {
         const label = btn.innerHTML; btn.disabled = true; btn.textContent = '…';
         try {
@@ -186,7 +194,10 @@
                 return `<div class="tc-card tc-lescard"><h5>📚 آخر الدروس في ${esc(c.gradeLabel)}</h5>${rows || '<p style="margin:0">مفيش دروس جديدة لسه</p>'}${rows ? '<a class="btn btn-soft btn-sm" style="margin-top:10px" href="/lessons.html">افتح الدروس</a>' : ''}</div>`;
             },
             solutions: (c) => { const k = 's' + (++solSeq); SOLS[k] = c; return `<div class="tc-solcard" dir="rtl"><div><b dir="auto">📄 ${esc(c.content.title)}</b><small>${c.content.items.length} سؤال — كل سؤال وتحته حله بالتفصيل</small></div><button class="btn btn-primary btn-sm" data-sol="${k}">⬇️ نزّل الـ PDF</button></div>`; },
-            next: (c) => `<div class="tc-next" dir="rtl"><button data-next="quiz" data-u="${c.unit}" data-l="${c.lesson}">🧪 يلا نحل أسئلة عليه</button><button data-next="explain" data-u="${c.unit}" data-l="${c.lesson}">🔍 اشرحلي جزء منه</button><button data-next="pick">📘 درس تاني</button></div>`,
+            // 28 Nov: the full lesson summary in Miss Marwa's style → the studio's PDF (her own when she made one)
+            lessonpdf: (c) => { const k = 'l' + (++solSeq); SOLS[k] = c; const L = (c.content.lessons || [])[0] || { blocks: [] }, B = L.blocks || [], n = (t) => B.filter(b => b.t === t).length;
+                return `<div class="tc-solcard tc-sumcard" dir="rtl"><div><b dir="auto">📄 ${esc(c.title)}</b><small>${c.by === 'marwa' ? 'ملخص مس مروة نفسها ✨ · ' : 'بأسلوب مس مروة · '}${n('term')} تعريف · ${n('reason')} G.R · ${n('section')} أجزاء</small></div><button class="btn btn-primary btn-sm" data-lsum="${k}">⬇️ نزّل الـ PDF</button></div>`; },
+            next: (c) => `<div class="tc-next" dir="rtl"><button data-next="quiz" data-u="${c.unit}" data-l="${c.lesson}">🧪 يلا نحل أسئلة عليه</button><button data-next="pdf" data-u="${c.unit}" data-l="${c.lesson}">📄 الملخص الكامل PDF</button><button data-next="explain" data-u="${c.unit}" data-l="${c.lesson}">🔍 اشرحلي جزء منه</button><button data-next="pick">📘 درس تاني</button></div>`,
             upgrade: (c) => `<div class="tc-card tc-up"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="pro" data-pro>${proReady() ? '✨ اسأل Pro' : '✨ Pro · قريب'}</button></div>`
         };
         const cardsHTML = (cards) => cards && cards.length ? `<div class="tc-cards">${cards.map(c => (CARD[c.type] || (() => ''))(c)).join('')}</div>` : '';
@@ -198,7 +209,8 @@
             if (m.role === 'error') return `<div class="tc-msg">${bot(m.tier || 'pro', 34)}<div class="body"><div class="tc-err" dir="auto">${esc(m.text)}${m.retry && i === MSGS.length - 1 ? '<br><button class="btn btn-soft btn-sm" data-retry>جرّب تاني</button>' : ''}</div>${m.sub ? `<div class="tc-subcard" dir="rtl"><span class="tx">${m.sub === 'STUDENT_CAP' ? '<b>رصيد الشهر خلص</b> — بيتجدد أول الشهر الجاي. وMini Assistant المجاني لسه معاك.' : (/^SUB_/.test(m.sub) ? '<b>عايز تكمّل مع Assistant Pro؟</b> جدّد اشتراكك وكمّل مذاكرة معايا ✨ — وMini Assistant المجاني لسه معاك.' : '<b>عايز تكمّل مع Assistant Pro؟</b> اشترك وكمّل مذاكرة معايا ✨ — وMini Assistant المجاني لسه معاك.')}</span><button type="button" data-subscribe="${esc(m.sub)}">${m.sub === 'STUDENT_CAP' ? 'Details' : /^SUB_/.test(m.sub) ? 'Renew' : 'Subscribe'}</button></div>` : ''}${cardsHTML(m.cards)}</div></div>`;
             const isLast = i === MSGS.length - 1;
             const lastPro = isLast && m.tier === 'pro' && !m.error && !(m.cards || []).length && String(m.text || '').length > 260;
-            return `<div class="tc-msg${isLast ? ' last' : ''}">${bot(m.tier || 'pro', 34)}<div class="body"><div class="tc-md">${md(m.text)}</div>${cardsHTML(m.cards)}${lastPro ? `<div class="tc-next" dir="rtl"><button data-next="quiz">🧪 نحل أسئلة عليه</button><button data-next="explain">🔍 وضّحلي أكتر</button></div>` : ''}<div class="tc-meta"><button class="tc-cp" data-cp="${i}" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg></button><span>${esc(m.error ? 'من المنصة' : (m.brand || 'Mini Assistant'))}</span></div></div></div>`;
+            const isSum = /Remember for the exam|🗺️/i.test(String(m.text || ''));
+            return `<div class="tc-msg${isLast ? ' last' : ''}">${bot(m.tier || 'pro', 34)}<div class="body"><div class="tc-md">${md(m.text)}</div>${cardsHTML(m.cards)}${lastPro ? `<div class="tc-next" dir="rtl"><button data-next="quiz">🧪 نحل أسئلة عليه</button>${isSum ? '<button data-next="pdf">📄 الملخص الكامل PDF</button>' : ''}<button data-next="explain">🔍 وضّحلي أكتر</button></div>` : ''}<div class="tc-meta"><button class="tc-cp" data-cp="${i}" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg></button><span>${esc(m.error ? 'من المنصة' : (m.brand || 'Mini Assistant'))}</span></div></div></div>`;
         }
         function welcome() {
             const f = ST && ST.student ? ST.student : {};
@@ -310,6 +322,8 @@
             }
             const sol = e.target.closest('[data-sol]');
             if (sol) { solutionsPdf(SOLS[sol.dataset.sol], sol).catch(err => opt.toast('ماعرفتش أنزّل الـ PDF — جرّب تاني (' + err.message + ')', 'error')); return; }
+            const ls = e.target.closest('[data-lsum]');
+            if (ls) { summaryPdf(SOLS[ls.dataset.lsum], ls).catch(err => opt.toast('ماعرفتش أنزّل الـ PDF — جرّب تاني (' + err.message + ')', 'error')); return; }
             const go = e.target.closest('[data-go]');
             if (go) {
                 const k = go.dataset.go;
@@ -326,6 +340,7 @@
                 if (comp && comp.tier !== 'pro' && proReady()) { comp.setTier('pro'); hint(); }
                 if (k === 'quiz') return send(u ? `يلا نحل أسئلة سوا على ${lessonName(u, l)} 🧪` : 'يلا نحل سؤالين سوا على الكلام ده 🧪', null);
                 if (k === 'explain') { comp && comp.fill(u ? `اشرحلي أكتر في ${lessonName(u, l)} جزء ` : 'وضّحلي أكتر جزء '); return; }
+                if (k === 'pdf') return send(u ? `اعملي ملخص Unit ${u} Lesson ${l} كامل PDF 📄` : 'اعملي ملخص الدرس ده كامل PDF 📄', null);
             }
             const c = e.target.closest('[data-chip]'); if (c) { comp && comp.fill(c.dataset.chip.replace(/\s*[\u{1F300}-\u{1FAFF}\u2600-\u27BF]\uFE0F?$/u, '')); return; }
             if (e.target.closest('[data-pro]')) {

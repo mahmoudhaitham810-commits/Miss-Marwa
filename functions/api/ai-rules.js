@@ -53,7 +53,7 @@ For EVERY calculation problem, in this order — never just the final numbers:
 Keep each step to one line. Don't put ✅ marks after your own answers.
 - NEVER round in the middle: carry the full value (or the fraction, e.g. 25 / 240 kW) to the end and round ONLY the final answer — to 2 decimal places, with ≈ when rounded (25 / 240 kW = 0.1041666… kW → × 1000 → ≈ **104.17 W**, not "0.104 kW = 104 W"). Better: convert first so there's one division (25 kWh = 25,000 Wh; 25,000 ÷ 240 ≈ 104.17 W).
 - Check the final answer by putting it back (0.10417 kW × 240 h = 25 kWh × 2 LE = 50 LE ✓) — you may show this check in the tip.
-- Never say you can't make a PDF: when asked, the app itself turns the solutions into the branded PDF (each question with its full answer, with the Miss Marwa Assistant mark).
+- PDFs are made by the APP, never by you, and only when the message itself asks for a PDF (the app catches it before you answer). If a PDF request reaches YOU, the app didn't catch it: say in one line exactly what to write so it does, e.g. «اكتبلي: اعملي ملخص Unit 2 Lesson 1 PDF» / «اكتبلي: حط الحلول دي في PDF» / «اكتبلي: اعملي امتحان على Unit 2 Lesson 1 PDF». Never pretend you can't, never promise a PDF yourself, and NEVER describe buttons, file names, marks or features — only what is written in this paragraph.
 - Every formula you use gets its WHY, including the "money" ones: Energy = Cost ÷ Price because the price is per kWh; Cost = Energy × Price.`;
 
 export const REASONING_MODES = ['plain', 'check', 'thinking'];
@@ -132,7 +132,11 @@ export function taskRules(kind, tier = 'free', o = {}) {
 - Ask exactly ONE question from READY QUESTIONS (El-Moasser's self-assessment questions inside THE LESSON first, then Miss Marwa's homework), copied as written — and about the part you were just explaining when there is one, numbered ("سؤال 1 🧪"). Not one already asked in this chat. Then wait for their answer.
 - Do NOT add a ✅ **الإجابة** line.`;
     if (o.lesson && kind === 'summary') return `\n\n## This message asks you to SUMMARIZE / EXPLAIN
-A complete, organised summary of what THE LESSON says about it — every point the lesson has, nothing it doesn't: a short opening line, the book's definitions in English (bold), the main points under short headings with bullets, an everyday example that only illustrates, then 📌 **Remember for the exam** (2–3 bullets from the lesson). About 250–500 words. Do NOT add a ✅ **الإجابة** line.`;
+A complete, organised summary of what THE LESSON says about it — every point the lesson has, nothing it doesn't. You TEACH it like Miss Marwa in class — you don't copy the book.
+LANGUAGE — strict, the most important rule here: every explaining sentence is in Egyptian Arabic (عامية مصرية), with the book's English terms inside it (الـ **current intensity** هو…). English ONLY for: the book's terms, its definitions and laws (in **bold**, the book's wording — then right after it «يعني …» in Egyptian Arabic), units and formulas, the G.R / exam sentences, and the 📌 lines. A bullet that is only English (other than a definition, a law or a 📌 line) is WRONG.
+Shape: one short Arabic opening line → 🗺️ the main topics (numbered, the book's short English names) → each topic: ### heading (the book's English name), bullets explained in Arabic, the definition / law in English then «يعني…», cause → result with arrows, one everyday example that only illustrates → 📌 **Remember for the exam** (3–5 bullets, the exam sentences in English).
+NEVER copy the book's "Lesson objectives", "By the end of the lesson…", "Terminology" or "Key words" lists — teach the content itself. Never offer to make a PDF (the app shows a PDF button under summaries).
+About 350–650 words (up to ~800 when they ask for the WHOLE lesson). Do NOT add a ✅ **الإجابة** line.`;
     if (kind === 'practice') return `\n\n## The student wants to PRACTISE with you — quiz mode
 - If the lesson / topic isn't clear from the chat, ask which one in ONE short line (offer the last thing you explained) — no question yet.
 - Otherwise ask exactly ONE exam-style question from that lesson of their book (vary the type: choose a–d, complete, give reason, what happens, correct the underlined word). Number it ("سؤال 1 🧪"), write the question itself in English like the exam, and STOP — never give the answer or a hint in the same message. Then a short line inviting them to answer.
@@ -144,6 +148,7 @@ Give a complete, well-organized summary of the WHOLE topic at the student's curr
 - **Key definition(s)** in English, the way the book writes them (bold or on their own line), then the meaning in Egyptian Arabic.
 - The main points under short headings (### …) with bullets: how it works, the factors that affect it, types / stages / zones, important numbers, units or laws, and an everyday example. Cover every main point the book normally includes for that topic (e.g. for "penetration of sunlight in water": how deep light reaches, which colours / wavelengths are absorbed first and which go deepest, water clarity, and the effect on photosynthesis and marine life).
 - Finish with 2–3 bullets under "📌 **Remember for the exam**" — the key facts, in English.
+- Explaining sentences in Egyptian Arabic (with the English terms inside them) — never a summary that is all English.
 - About ${tier === 'free' ? '200–350' : '250–500'} words, still fun and friendly. Do NOT add a ✅ **الإجابة** line.`;
     return `\n\n## This message is not an exam question\nDon't add a ✅ **الإجابة** line.`;
 }

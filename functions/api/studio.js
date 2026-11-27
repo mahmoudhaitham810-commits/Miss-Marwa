@@ -280,6 +280,44 @@ const docOut = (r) => r && ({ id: r.id, kind: r.kind, grade: r.grade, unit: r.un
     costUsd: r.cost_usd || 0, publishedExam: r.published_exam || null, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at });
 function safe(s, d) { try { return JSON.parse(s) ?? d; } catch (e) { return d; } }
 
+/** The full lesson summary in Miss Marwa's style (checklist → summary → coverage in code → fill the gaps).
+ *  Used by the studio (her) and by the students' chat («اعملي ملخص الدرس PDF», 28 Nov 2026). Throws Error('NO_LESSON'|'NO_TEXT'|'EMPTY'). */
+export async function buildLessonSummary(env, db, { grade, toc, unit, lesson, instructions = '', meter, kind = 'studio-summary' }) {
+    const [part] = await lessonParts(db, toc, unit, [lesson]);
+    if (!part) throw new Error('NO_LESSON');
+    if (part.text.length < 800) throw new Error('NO_TEXT');
+    const ai = async (system, task, maxTokens) => {
+        const r = await chat(env, db, { tier: 'pro', system: [system, { type: 'text', text: task }], messages: [{ role: 'user', content: 'Go.' }], maxTokens, meter: { ...meter, kind } });
+        return { data: parseJson(r.text), cost: r.costUsd || 0, raw: r.text };
+    };
+    const sys = sourceBlock(grade, [part]);
+    let cost = 0;
+    // 1) checklist of every idea
+    const c1 = await ai(sys, CHECKLIST_TASK, 4000); cost += c1.cost;
+    const checklist = ((c1.data && c1.data.items) || []).map(x => ({ kind: str(x.kind, 20), key: str(x.key, 200), p: pnum(x.p) })).filter(x => x.key).slice(0, 150);
+    // 2) the summary, covering every item
+    const task = SUMMARY_TASK + `\n\n## Checklist — cover EVERY item\n${checklist.map((c, i) => `${i + 1}. [${c.kind}] ${c.key}${c.p ? ' (p.' + c.p + ')' : ''}`).join('\n')}`
+        + (instructions ? `\n\nMiss Marwa's instructions (follow them): ${instructions}` : '')
+        + `\nUse the header "Unit ${NUM_WORD[part.unit] || part.unit} — Lesson ${NUM_WORD[part.lesson] || part.lesson}: ${part.title || ''}".`;
+    const c2 = await ai(sys, task, 14000); cost += c2.cost;
+    let blocks = ((c2.data && c2.data.blocks) || []).map(cleanBlock).filter(Boolean);
+    if (!blocks.length) throw new Error('EMPTY');
+    keepPages([part], blocks);
+    // 3) coverage in code → 4) add what's missing (once)
+    let cov = coverage(checklist, blocks);
+    if (cov.missing.length) {
+        const ftask = FILL_TASK + `\n\nMissing items:\n${cov.missing.map(m => `- [${m.kind}] ${m.key}${m.p ? ' (p.' + m.p + ')' : ''}`).join('\n')}\n\nThe summary blocks (number: block):\n${blocks.map((b, i) => `${i}: ${JSON.stringify(b).slice(0, 220)}`).join('\n')}`;
+        const c3 = await ai(sys, ftask, 5000); cost += c3.cost;
+        const ins = ((c3.data && c3.data.insert) || []).map(x => ({ after: parseInt(x.after, 10), block: cleanBlock(x.block) })).filter(x => x.block && x.after >= -1);
+        ins.sort((a, b) => b.after - a.after).forEach(x => blocks.splice(Math.min(x.after + 1, blocks.length), 0, x.block));
+        cov = coverage(checklist, blocks);
+    }
+    keepPages([part], blocks);
+    const lessonDoc = { unit: part.unit, unitTitle: part.unitTitle, lesson: part.lesson, title: str(c2.data.title, 200) || part.label, from: part.from, to: part.to, blocks,
+        coverage: { total: cov.total, covered: cov.covered, missing: cov.missing.map(m => m.key).slice(0, 30) } };
+    return { part, lessonDoc, cov, cost };
+}
+
 export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url), action = url.searchParams.get('action') || '';
@@ -327,34 +365,15 @@ export async function onRequest(context) {
                 const toc = await getToc();
                 if (!toc) return bad(`The ${GRADE_LABELS[grade] || grade} book has no book map yet — build it on Curriculum books.`, 409, { code: 'NO_MAP' });
                 const lessonNo = parseInt(data.lesson, 10);
-                const [part] = await lessonParts(db, toc, unitNo, [lessonNo]);
-                if (!part) return bad('That lesson is not in the book map', 404);
-                if (part.text.length < 800) return bad('Very little text on this lesson\'s pages — run "Book check" on Curriculum books.', 409, { code: 'NO_TEXT' });
-                const sys = sourceBlock(grade, [part]);
-                let cost = 0;
-                // 1) checklist of every idea
-                const c1 = await ai(sys, CHECKLIST_TASK, 4000, 'studio-summary'); cost += c1.cost;
-                const checklist = ((c1.data && c1.data.items) || []).map(x => ({ kind: str(x.kind, 20), key: str(x.key, 200), p: pnum(x.p) })).filter(x => x.key).slice(0, 150);
-                // 2) the summary, covering every item
-                const task = SUMMARY_TASK + `\n\n## Checklist — cover EVERY item\n${checklist.map((c, i) => `${i + 1}. [${c.kind}] ${c.key}${c.p ? ' (p.' + c.p + ')' : ''}`).join('\n')}`
-                    + (instructions ? `\n\nMiss Marwa's instructions (follow them): ${instructions}` : '')
-                    + `\nUse the header "Unit ${NUM_WORD[part.unit] || part.unit} — Lesson ${NUM_WORD[part.lesson] || part.lesson}: ${part.title || ''}".`;
-                const c2 = await ai(sys, task, 14000, 'studio-summary'); cost += c2.cost;
-                let blocks = ((c2.data && c2.data.blocks) || []).map(cleanBlock).filter(Boolean);
-                if (!blocks.length) return bad('The summary came back empty — try again.', 502, { code: 'AI_ERROR' });
-                keepPages([part], blocks);
-                // 3) coverage in code → 4) add what's missing (once)
-                let cov = coverage(checklist, blocks);
-                if (cov.missing.length) {
-                    const ftask = FILL_TASK + `\n\nMissing items:\n${cov.missing.map(m => `- [${m.kind}] ${m.key}${m.p ? ' (p.' + m.p + ')' : ''}`).join('\n')}\n\nThe summary blocks (number: block):\n${blocks.map((b, i) => `${i}: ${JSON.stringify(b).slice(0, 220)}`).join('\n')}`;
-                    const c3 = await ai(sys, ftask, 5000, 'studio-summary'); cost += c3.cost;
-                    const ins = ((c3.data && c3.data.insert) || []).map(x => ({ after: parseInt(x.after, 10), block: cleanBlock(x.block) })).filter(x => x.block && x.after >= -1);
-                    ins.sort((a, b) => b.after - a.after).forEach(x => blocks.splice(Math.min(x.after + 1, blocks.length), 0, x.block));
-                    cov = coverage(checklist, blocks);
+                let built;
+                try { built = await buildLessonSummary(env, db, { grade, toc, unit: unitNo, lesson: lessonNo, instructions, meter: { staffId: auth.staff.id } }); }
+                catch (e) {
+                    if (e.message === 'NO_LESSON') return bad('That lesson is not in the book map', 404);
+                    if (e.message === 'NO_TEXT') return bad('Very little text on this lesson\'s pages — run "Book check" on Curriculum books.', 409, { code: 'NO_TEXT' });
+                    if (e.message === 'EMPTY') return bad('The summary came back empty — try again.', 502, { code: 'AI_ERROR' });
+                    throw e;
                 }
-                keepPages([part], blocks);
-                const lessonDoc = { unit: part.unit, unitTitle: part.unitTitle, lesson: part.lesson, title: str(c2.data.title, 200) || part.label, from: part.from, to: part.to, blocks,
-                    coverage: { total: cov.total, covered: cov.covered, missing: cov.missing.map(m => m.key).slice(0, 30) } };
+                const { part, lessonDoc, cov, cost } = built;
                 // save: a new doc, or append / replace this lesson in an existing one
                 let doc = data.docId ? docOut(await db.prepare('SELECT * FROM studio_docs WHERE id = ? AND kind = \'summary\'').bind(data.docId).first()) : null;
                 if (doc) {
