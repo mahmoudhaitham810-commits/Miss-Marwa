@@ -513,7 +513,7 @@
     //   • the robot in the corner (not on the assistant itself, not in "Ask Miss Marwa", never inside an exam)
     //   • the trial notice on Home
     //   • the launch welcome — once per student (saved on the server, so never again on any device)
-    const ROBOT_V = '20261127b';
+    const ROBOT_V = '20261127c';
     let robotP = null;
     const loadRobot = () => window.AiRobot ? Promise.resolve() : (robotP = robotP || new Promise((res, rej) => {
         const s = document.createElement('script'); s.src = '/assets/ai-robot.js?v=' + ROBOT_V;

@@ -10,7 +10,9 @@
     const AVATAR = '/assets/img/marwa-160.png';
     const R = window.AiRobot;
     // the robot's face in a navy disc — Pro (cyan) or Mini (teal); the photo only if ai-robot.js didn't load
-    const bot = (tier, size, cls = 'av') => R ? `<span class="${cls} tc-bot${tier === 'free' ? ' mini' : ''}" style="--s:${size}px" aria-hidden="true">${R.head(Math.round(size * .74), tier === 'free' ? 'mini' : 'pro')}</span>` : `<img class="${cls}" src="${AVATAR}" alt="">`;
+    const robot = (tier, size, cls) => R ? `<span class="${cls} tc-bot${tier === 'free' ? ' mini' : ''}" style="--s:${size}px" aria-hidden="true">${R.head(Math.round(size * .74), tier === 'free' ? 'mini' : 'pro')}</span>` : `<img class="${cls}" src="${AVATAR}" alt="">`;
+    // 27 Nov 2026 (Mahmoud): the robot only in the header next to the name — every reply shows Miss Marwa's photo, as if she answers herself
+    const bot = (tier, size, cls = 'av') => cls === 'av' ? `<img class="av" src="${AVATAR}" alt="">` : robot(tier, size, cls);
     const GL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
     const LEVEL = { excellent: 'ممتاز 🔥', good: 'جيد جداً 👌', average: 'متوسط 🙂', weak: 'محتاج شغل 💪' };
     const pc = (v) => (v === null || v === undefined ? '—' : `${Math.round(v * 10) / 10}%`);

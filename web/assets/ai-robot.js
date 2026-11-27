@@ -183,8 +183,9 @@
     .ars-tabs button[aria-selected="true"] { background: var(--surface, #fff); color: var(--text, #0F172A); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
     .ars-wallet { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 14px; color: #fff; background: linear-gradient(135deg, #B91C1C, #E11D48); box-shadow: 0 12px 24px -16px rgba(185, 28, 28, .9); }
     .ars-wallet small { display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; opacity: .85; }
-    .ars-wallet b { display: block; font-size: 24px; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
-    .ars-wallet button { border: 1px solid rgba(255, 255, 255, .5); background: rgba(255, 255, 255, .14); color: #fff; border-radius: 10px; padding: 8px 14px; font: inherit; font-weight: 800; cursor: pointer; flex: none; }
+    .ars-wallet b { display: block; font-size: 24px; letter-spacing: .06em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ars-wallet > div { min-width: 0; }
+    .ars-wallet button { white-space: nowrap; border: 1px solid rgba(255, 255, 255, .5); background: rgba(255, 255, 255, .14); color: #fff; border-radius: 10px; padding: 8px 14px; font: inherit; font-weight: 800; cursor: pointer; flex: none; }
     .ars-how { margin: 10px 0 0; font-size: 13.5px; line-height: 1.75; color: var(--text-2, #334155); }
     .ars-drop { display: grid; justify-items: center; gap: 4px; text-align: center; padding: 18px 14px; border: 1.5px dashed var(--border, #CBD5E1); border-radius: 16px; cursor: pointer; transition: border-color .2s, background .2s; position: relative; overflow: hidden; }
     .ars-drop:hover { border-color: var(--primary, #2F5BEA); background: rgba(47, 91, 234, .04); }
@@ -195,7 +196,7 @@
     .ars-in { display: grid; gap: 6px; margin-top: 10px; font-size: 13px; } .ars-in small { color: var(--muted, #64748B); }
     .ars-in input { border: 1px solid var(--border, #E2E8F0); background: var(--surface, #fff); color: var(--text, #0F172A); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 15px; letter-spacing: .04em; }
     .ars-code { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; padding: 9px 12px; border-radius: 12px; background: var(--surface-2, #F1F5F9); font-size: 12.5px; color: var(--muted, #64748B); }
-    .ars-code b { font-size: 15px; color: var(--text, #0F172A); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+    .ars-code b { font-size: 15px; color: var(--text, #0F172A); letter-spacing: .04em; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
     .ars-state { display: flex; gap: 12px; align-items: flex-start; padding: 13px 14px; border-radius: 16px; margin-bottom: 14px; }
     .ars-state b { display: block; font-size: 14.5px; margin-bottom: 2px; } .ars-state span { display: block; font-size: 13.5px; line-height: 1.7; }
     .ars-state > div { flex: 1; min-width: 0; } .ars-state:not(:has(> div)) { display: block; }
