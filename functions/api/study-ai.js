@@ -44,12 +44,14 @@ export const FRIENDLY = {
     STUDENT_CAP: 'خلص رصيد Assistant Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر الجاي.',
     TRIAL_CAP: 'خلص رصيد الفترة التجريبية بتاعك 🙏 — اشترك في Assistant Pro عشان تكمّل معايا ✨',
     TRIAL_OVER: 'الفترة التجريبية خلصت 🙏 — اشترك في Assistant Pro عشان تكمّل معايا ✨',
+    SUB_CAP: 'خلص رصيد اشتراكك 🙏 — جدّد الاشتراك وكمّل معايا ✨',
+    SUB_EXPIRED: 'اشتراكك في Assistant Pro خلص 🙏 — جدّده وكمّل معايا ✨',
     CACHE_BUSY: 'الشرح بيتجهز دلوقتي ⏳ — جرّب تاني بعد ثواني.',
     PAID_OFF: 'Assistant Pro مش متاح دلوقتي — جرّب كمان شوية 🙏',
     AI_ERROR: 'حصلت مشكلة وإحنا بنجهز الشرح 😅 — جرّب تاني.',
     NO_TEXT: 'الملخص ده صور بس 📷 — لسه مقدرش أقراه، اسأل مس مروة عنه.'
 };
-const STATUS = { PRO_CLOSED: 403, STUDENT_OFF: 403, STUDENT_CAP: 429, TRIAL_CAP: 429, TRIAL_OVER: 403, CACHE_BUSY: 503, PAID_OFF: 503, DAILY_CAP: 429, MONTHLY_CAP: 429, AI_ERROR: 502 };
+const STATUS = { PRO_CLOSED: 403, STUDENT_OFF: 403, STUDENT_CAP: 429, TRIAL_CAP: 429, TRIAL_OVER: 403, SUB_CAP: 429, SUB_EXPIRED: 403, CACHE_BUSY: 503, PAID_OFF: 503, DAILY_CAP: 429, MONTHLY_CAP: 429, AI_ERROR: 502 };
 
 export const EXPLAIN_SYSTEM = `You are the teaching assistant of مس مروة (Miss Marwa), a science teacher in Egypt, on her online platform. A student got ONE question of Miss Marwa's online exam wrong (or left it blank). Explain it.
 

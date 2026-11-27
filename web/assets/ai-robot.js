@@ -166,6 +166,49 @@
     .ard-rows b { font-variant-numeric: tabular-nums; }
     .ard-tips { margin: 0; padding-inline-start: 18px; font-size: 13.5px; line-height: 1.8; }
 
+    /* ---------- subscribe ---------- */
+    .ars-load { display: flex; gap: 6px; justify-content: center; padding: 30px 0; } .ars-load i { width: 8px; height: 8px; border-radius: 50%; background: var(--primary, #2F5BEA); animation: air-pulse 1s infinite; }
+    .ars-load i:nth-child(2) { animation-delay: .15s; } .ars-load i:nth-child(3) { animation-delay: .3s; }
+    .ars-offer { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; padding: 14px 16px; border-radius: 18px; margin-bottom: 16px;
+        border: 1px solid rgba(34, 211, 238, .45); background: linear-gradient(160deg, rgba(34, 211, 238, .09), transparent 65%); }
+    .ars-price { text-align: center; min-width: 92px; } .ars-price b { display: block; font-size: 38px; line-height: 1; letter-spacing: -.02em; }
+    .ars-price span { font-size: 13px; font-weight: 800; letter-spacing: .08em; color: var(--muted, #64748B); } .ars-price small { display: block; font-size: 12px; color: var(--muted, #64748B); margin-top: 3px; }
+    .ars-offer ul { margin: 0; padding-inline-start: 18px; font-size: 13.5px; line-height: 1.75; }
+    .ars-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+    .ars-steps > li { border: 1px solid var(--border, #E2E8F0); border-radius: 18px; padding: 14px; }
+    .ars-h { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; } .ars-h b { font-size: 15px; }
+    .ars-h .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; color: #fff; background: linear-gradient(135deg, #0F2A52, #1D4ED8); flex: none; }
+    .ars-tabs { display: inline-flex; padding: 4px; border-radius: 12px; background: var(--surface-2, #F1F5F9); gap: 4px; margin-bottom: 10px; }
+    .ars-tabs button { border: 0; background: transparent; padding: 8px 14px; border-radius: 9px; font: inherit; font-size: 13.5px; font-weight: 700; color: var(--muted, #64748B); cursor: pointer; }
+    .ars-tabs button[aria-selected="true"] { background: var(--surface, #fff); color: var(--text, #0F172A); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
+    .ars-wallet { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 14px; color: #fff; background: linear-gradient(135deg, #B91C1C, #E11D48); box-shadow: 0 12px 24px -16px rgba(185, 28, 28, .9); }
+    .ars-wallet small { display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; opacity: .85; }
+    .ars-wallet b { display: block; font-size: 24px; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+    .ars-wallet button { border: 1px solid rgba(255, 255, 255, .5); background: rgba(255, 255, 255, .14); color: #fff; border-radius: 10px; padding: 8px 14px; font: inherit; font-weight: 800; cursor: pointer; flex: none; }
+    .ars-how { margin: 10px 0 0; font-size: 13.5px; line-height: 1.75; color: var(--text-2, #334155); }
+    .ars-drop { display: grid; justify-items: center; gap: 4px; text-align: center; padding: 18px 14px; border: 1.5px dashed var(--border, #CBD5E1); border-radius: 16px; cursor: pointer; transition: border-color .2s, background .2s; position: relative; overflow: hidden; }
+    .ars-drop:hover { border-color: var(--primary, #2F5BEA); background: rgba(47, 91, 234, .04); }
+    .ars-drop .ars-plus { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; color: var(--primary, #2F5BEA); background: rgba(47, 91, 234, .1); }
+    .ars-drop b { font-size: 14px; } .ars-drop small { font-size: 12.5px; color: var(--muted, #64748B); }
+    .ars-drop.has { padding: 8px; border-style: solid; } .ars-drop.has img { max-height: 220px; max-width: 100%; border-radius: 10px; display: block; }
+    .ars-chg { position: absolute; bottom: 14px; padding: 5px 12px; border-radius: 99px; font-size: 12px; font-weight: 700; color: #fff; background: rgba(15, 23, 42, .72); }
+    .ars-in { display: grid; gap: 6px; margin-top: 10px; font-size: 13px; } .ars-in small { color: var(--muted, #64748B); }
+    .ars-in input { border: 1px solid var(--border, #E2E8F0); background: var(--surface, #fff); color: var(--text, #0F172A); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 15px; letter-spacing: .04em; }
+    .ars-code { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; padding: 9px 12px; border-radius: 12px; background: var(--surface-2, #F1F5F9); font-size: 12.5px; color: var(--muted, #64748B); }
+    .ars-code b { font-size: 15px; color: var(--text, #0F172A); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+    .ars-state { display: flex; gap: 12px; align-items: flex-start; padding: 13px 14px; border-radius: 16px; margin-bottom: 14px; }
+    .ars-state b { display: block; font-size: 14.5px; margin-bottom: 2px; } .ars-state span { display: block; font-size: 13.5px; line-height: 1.7; }
+    .ars-state > div { flex: 1; min-width: 0; } .ars-state:not(:has(> div)) { display: block; }
+    .ars-state.ok { background: rgba(16, 185, 129, .1); border: 1px solid rgba(16, 185, 129, .35); }
+    .ars-state.wait { background: rgba(34, 211, 238, .08); border: 1px solid rgba(34, 211, 238, .4); }
+    .ars-state.bad { background: rgba(239, 68, 68, .08); border: 1px solid rgba(239, 68, 68, .35); }
+    .ars-spin { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid rgba(34, 211, 238, .3); border-top-color: #0891B2; animation: ars-spin 1s linear infinite; margin-top: 2px; }
+    @keyframes ars-spin { to { transform: rotate(360deg); } }
+    .ars-mini { margin: 12px 2px 4px; font-size: 12.5px; color: var(--muted, #64748B); } .ars-mini a, .ars-link { color: var(--primary, #2F5BEA); font-weight: 700; }
+    .ars-link { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
+    .ard-btn[disabled] { opacity: .5; cursor: not-allowed; transform: none !important; }
+    @media (max-width: 620px) { .ars-offer { grid-template-columns: 1fr; text-align: center; gap: 8px; } .ars-offer ul { text-align: start; } .ars-wallet b { font-size: 21px; } }
+
     /* ---------- the launch welcome ---------- */
     .arw { position: fixed; inset: 0; z-index: 2100; display: grid; place-items: center; padding: 20px; overflow: hidden; color: #E6F6FF; font-family: Inter, "IBM Plex Sans Arabic", system-ui, sans-serif;
         background: radial-gradient(90% 70% at 50% 42%, #10285A 0%, #071230 46%, #030814 100%); opacity: 0; transition: opacity .45s ease; }
@@ -376,11 +419,12 @@
         let meter = '';
         if (c) {
             const pct = c.budget > 0 ? Math.max(0, Math.min(100, c.left / c.budget * 100)) : 0;
-            meter = `<div class="ard-meter"><div class="top"><span>${c.mode === 'trial' ? 'Free trial credits' : 'This month\'s credits'}</span><b>${n1(c.left)} <small>/ ${n1(c.budget)} left</small></b></div>
+            meter = `<div class="ard-meter"><div class="top"><span>${c.mode === 'trial' ? 'Free trial credits' : c.ends ? 'Subscription credits' : 'This month\'s credits'}</span><b>${n1(c.left)} <small>/ ${n1(c.budget)} left</small></b></div>
                 <div class="ard-bar${pct < 20 ? ' low' : ''}"><i style="width:${pct}%"></i></div>
-                <p dir="rtl">${c.mode === 'trial' ? `الفترة التجريبية لحد ${esc(dayAr(c.ends))} <bdi dir="ltr">${esc(dayEn(c.ends))}</bdi>. ` : 'الرصيد بيتجدد أول كل شهر. '}السؤال النصي بياخد جزء صغير من الـ credit، والصور والـ PDF أكتر — ومفيش حد للرسايل في اليوم.</p></div>`;
-        } else if (['TRIAL_CAP', 'TRIAL_OVER', 'STUDENT_OFF'].includes(pro.code)) {
-            meter = `<div class="ard-meter"><div class="top"><span>Assistant Pro</span><b style="font-size:16px">${pro.code === 'TRIAL_OVER' ? 'Trial ended' : pro.code === 'TRIAL_CAP' ? 'Trial credits used' : 'Not subscribed'}</b></div>
+                <p dir="rtl">${c.mode === 'trial' ? `الفترة التجريبية لحد ${esc(dayAr(c.ends))} <bdi dir="ltr">${esc(dayEn(c.ends))}</bdi>. ` : c.ends ? `اشتراكك لحد ${esc(dayAr(c.ends))} <bdi dir="ltr">${esc(dayEn(c.ends))}</bdi>. ` : 'الرصيد بيتجدد أول كل شهر. '}السؤال النصي بياخد جزء صغير من الـ credit، والصور والـ PDF أكتر — ومفيش حد للرسايل في اليوم.</p>
+                ${c.mode === 'trial' ? '<button class="ard-btn p" type="button" data-sub style="margin-top:12px">Subscribe to keep going</button>' : ''}</div>`;
+        } else if (['TRIAL_CAP', 'TRIAL_OVER', 'STUDENT_OFF', 'SUB_CAP', 'SUB_EXPIRED'].includes(pro.code)) {
+            meter = `<div class="ard-meter"><div class="top"><span>Assistant Pro</span><b style="font-size:16px">${({ TRIAL_OVER: 'Trial ended', TRIAL_CAP: 'Trial credits used', SUB_CAP: 'Credits used', SUB_EXPIRED: 'Subscription ended' })[pro.code] || 'Not subscribed'}</b></div>
                 <p dir="rtl" style="margin-top:6px">اشترك في Assistant Pro عشان تكمّل معايا ✨</p><button class="ard-btn p" type="button" data-sub style="margin-top:10px">Subscribe</button></div>`;
         }
         const rows = [];
@@ -414,14 +458,102 @@
     }
 
     // ---------- subscribe (trial over / credits used up) — the full subscription screen comes next ----------
-    function subscribe({ code = '', askHref = 'questions.html' } = {}) {
-        const title = code === 'TRIAL_OVER' ? 'Your free trial has ended' : code === 'TRIAL_CAP' ? "You've used your trial credits" : code === 'STUDENT_CAP' ? "This month's credits are used up" : 'Subscribe to Assistant Pro';
-        const ar = code === 'STUDENT_CAP' ? 'الرصيد بيتجدد أول الشهر الجاي — ولو محتاج رصيد زيادة كلّم مس مروة 🙏' : 'اشترك في Miss Marwa Assistant Pro عشان نكمّل مذاكرة سوا — شرح من كتابك، حل بالصور، أسئلة تدريب وامتحانات PDF.';
-        const d = dialog(`<div class="ard-stage" style="grid-template-columns:110px minmax(0,1fr)"><div class="ard-bot">${svg({ size: 96 })}</div>
-                <div class="ard-say"><span class="ard-kick">Assistant Pro</span><h2 style="font-size:22px">${esc(title)}</h2><p dir="rtl">${esc(ar)}</p></div></div>
-            <div class="ard-body"><div class="ard-how" dir="rtl">عشان تشترك، ابعت لمس مروة من <b>Ask Miss Marwa</b> وفريقها هيفعّلهولك ✨ — وMini Assistant المجاني لسه معاك.</div></div>
-            <div class="ard-foot"><button class="ard-btn g" type="button" data-ok>Later</button><a class="ard-btn p" href="${esc(askHref)}" style="text-decoration:none">Ask Miss Marwa</a></div>`, { small: true, label: 'Subscribe to Assistant Pro' });
-        d.box.addEventListener('click', (e) => { if (e.target.closest('[data-ok]')) d.close(); });
+    // ---------- subscribe: pay by Vodafone Cash / Fawry, then send the screenshot / receipt here (27 Nov 2026) ----------
+    //   GET /api/subscription?action=info → price, wallet, account code, the last request; POST …?action=request → the photo
+    const TITLES = { TRIAL_OVER: 'Your free trial has ended', TRIAL_CAP: "You've used your trial credits", SUB_EXPIRED: 'Your subscription has ended',
+        SUB_CAP: "You've used this subscription's credits", STUDENT_CAP: "This month's credits are used up" };
+    const fmtWallet = (w) => String(w || '').replace(/^(\d{4})(\d{3})(\d{4})$/, '$1 $2 $3');
+    const ago = (iso) => { const t = Date.parse(String(iso || '').replace(' ', 'T') + (/Z|[+-]\d\d:?\d\d$/.test(iso) ? '' : 'Z')); if (!t) return ''; const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? 'دلوقتي' : m < 60 ? `من ${m} دقيقة` : m < 1440 ? `من ${Math.round(m / 60)} ساعة` : `من ${Math.round(m / 1440)} يوم`; };
+    // a phone photo (4 MB) → JPEG ≤ 1600 px (~300 KB), still sharp enough to read a transfer number
+    function shrink(file) {
+        return new Promise((res, rej) => {
+            const url = URL.createObjectURL(file), img = new Image();
+            img.onload = () => {
+                const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+                const c = document.createElement('canvas'); c.width = w; c.height = h;
+                const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h);
+                URL.revokeObjectURL(url);
+                const out = c.toDataURL('image/jpeg', .85);
+                res({ mime: 'image/jpeg', data: out.slice(out.indexOf(',') + 1), preview: out });
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('img')); };
+            img.src = url;
+        });
+    }
+    function subscribe({ code = '' } = {}) {
+        css();
+        const d = dialog(`<div class="ard-stage"><div class="ard-bot">${svg({ size: 118 })}</div>
+                <div class="ard-say"><span class="ard-kick">Miss Marwa Assistant Pro</span><h2>${esc(TITLES[code] || 'Subscribe to Assistant Pro')}</h2>
+                <p dir="rtl">${code ? 'اشترك وكمّل مذاكرة معايا — ' : ''}شرح من كتابك، حل بالصور، أسئلة تدريب وامتحانات PDF.</p></div></div>
+            <div class="ard-body" id="arsBody"><div class="ars-load" aria-busy="true"><i></i><i></i><i></i></div></div>`, { label: 'Subscribe to Assistant Pro' });
+        const box = d.box, body = box.querySelector('#arsBody');
+        let info = null, method = 'vodafone', pick = null, busy = false, forceForm = false;
+        const api = async (action, payload) => {
+            const r = await fetch('/api/subscription?action=' + action, payload ? { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) } : { credentials: 'same-origin' });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.error || 'حصلت مشكلة — جرّب تاني');
+            return j;
+        };
+        const waLink = () => `https://wa.me/2${info.wallet}?text=${encodeURIComponent(`إيصال اشتراك Assistant Pro (${info.price} جنيه)\nكود الحساب: ${info.code}`)}`;
+        function render() {
+            const R = info.request, P = info.price;
+            let top = '';
+            if (info.sub) top = `<div class="ars-state ok"><b>You're subscribed ✓</b><span dir="rtl">اشتراكك شغال لحد <bdi dir="ltr">${esc(dayEn(info.sub.until))}</bdi> — باقيلك <bdi dir="ltr">${n1(info.sub.leftEgp)}</bdi> credits. تقدر تجدّد بعد ما يخلص.</span></div>`;
+            else if (R && R.status === 'pending' && !forceForm) {
+                box.querySelector('.ard-say h2').textContent = 'Thanks — we got your payment';
+                body.innerHTML = `<div class="ars-state wait"><span class="ars-spin" aria-hidden="true"></span><div><b>Payment received — waiting for activation</b>
+                    <span dir="rtl">وصلنا إيصالك (${esc(ago(R.createdAt))}). فريق مس مروة بيراجعه ويفعّلك Assistant Pro لمدة ${info.days} يوم — وهيوصلك إشعار أول ما يتفعّل ✨</span></div></div>
+                    <div class="ars-code"><span>Your account code</span><b>${esc(info.code)}</b></div>
+                    <p class="ars-mini" dir="rtl">الصورة مش واضحة أو بعت حاجة غلط؟ <button type="button" class="ars-link" data-again>ابعت صورة تانية</button></p>`;
+                foot(`<span></span><button class="ard-btn p" type="button" data-ok>Got it</button>`);
+                return;
+            } else if (R && R.status === 'rejected') top = `<div class="ars-state bad"><b>Your last receipt wasn't accepted</b><span dir="rtl">${esc(R.note || 'ابعت صورة أوضح للتحويل.')}</span></div>`;
+            box.querySelector('.ard-say h2').textContent = info.sub ? 'Renew Assistant Pro' : (TITLES[code] || 'Subscribe to Assistant Pro');
+            body.innerHTML = `${top}
+                <div class="ars-offer"><div class="ars-price"><b>${n1(P)}</b><span>EGP</span><small>for ${info.days} days</small></div>
+                    <ul><li><b>${n1(info.credits)} credits</b> for explanations, summaries &amp; quizzes</li><li>Photos, PDFs, quizzes &amp; practice exams</li><li>Only your Science curriculum — like Miss Marwa</li></ul></div>
+                <ol class="ars-steps">
+                    <li><div class="ars-h"><span class="n">1</span><b>Transfer <bdi>${n1(P)}</bdi> EGP</b></div>
+                        <div class="ars-tabs" role="tablist"><button type="button" role="tab" data-m="vodafone" aria-selected="${method === 'vodafone'}">Vodafone Cash</button><button type="button" role="tab" data-m="fawry" aria-selected="${method === 'fawry'}">Fawry</button></div>
+                        <div class="ars-wallet"><div><small>${method === 'fawry' ? 'Vodafone Cash wallet (deposit at Fawry)' : 'Vodafone Cash wallet'}</small><b dir="ltr">${esc(fmtWallet(info.wallet))}</b></div><button type="button" data-copy="${esc(info.wallet)}">Copy</button></div>
+                        <p class="ars-how" dir="rtl">${method === 'fawry'
+                            ? `روح أي منفذ <b>فوري</b> واطلب <b>«إيداع في محفظة فودافون كاش»</b> على الرقم ده بـ <b>${n1(P)} جنيه</b> — وخد الإيصال وصوّره.`
+                            : `حوّل <b>${n1(P)} جنيه</b> على المحفظة دي من محفظتك (فودافون كاش أو أي محفظة) أو من <b>InstaPay</b> — وخد screenshot لرسالة التحويل.`}</p></li>
+                    <li><div class="ars-h"><span class="n">2</span><b>Send ${method === 'fawry' ? 'a photo of the receipt' : 'the screenshot'}</b></div>
+                        <label class="ars-drop${pick ? ' has' : ''}"><input type="file" accept="image/*" data-file hidden>
+                            ${pick ? `<img src="${pick.preview}" alt="Your receipt"><span class="ars-chg">Change photo</span>` : `<span class="ars-plus" aria-hidden="true">＋</span><b>${method === 'fawry' ? 'Upload the receipt photo' : 'Upload the screenshot'}</b><small dir="rtl">${method === 'fawry' ? 'صوّر الإيصال كله بوضوح' : 'لازم يبان المبلغ والرقم اللي اتحوّل عليه'}</small>`}</label>
+                        ${method === 'vodafone' ? `<label class="ars-in"><span dir="rtl">الرقم اللي حوّلت منه <small>(اختياري — بيسرّع المراجعة)</small></span><input inputmode="numeric" maxlength="11" placeholder="01xxxxxxxxx" data-from dir="ltr"></label>` : ''}
+                        <div class="ars-code"><span>Your account code — sent with the photo automatically</span><b>${esc(info.code)}</b></div></li>
+                    <li><div class="ars-h"><span class="n">3</span><b>We activate it</b></div><p class="ars-how" dir="rtl">فريق مس مروة بيراجع التحويل ويفعّلك خلال ساعات — والـ ${info.days} يوم بيبدأوا من لحظة التفعيل.</p></li>
+                </ol>
+                <p class="ars-mini" dir="rtl">مشكلة في الرفع؟ <a href="${esc(waLink())}" target="_blank" rel="noopener">ابعت الصورة على واتساب</a> مع كود حسابك.</p>`;
+            foot(`<button class="ard-btn g" type="button" data-ok>Later</button><button class="ard-btn p" type="button" data-send ${pick ? '' : 'disabled'}>Send receipt</button>`);
+        }
+        function foot(html) { let f = box.querySelector('.ard-foot'); if (!f) { f = document.createElement('div'); f.className = 'ard-foot'; box.appendChild(f); } f.innerHTML = html; }
+        box.addEventListener('click', async (e) => {
+            if (e.target.closest('[data-ok]')) { d.close(); return; }
+            const t = e.target.closest('[data-m]'); if (t && t.dataset.m !== method) { method = t.dataset.m; render(); return; }
+            if (e.target.closest('[data-again]')) { forceForm = true; render(); return; }
+            const cp = e.target.closest('[data-copy]');
+            if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); cp.textContent = 'Copied ✓'; } catch (x) { cp.textContent = cp.dataset.copy; } setTimeout(() => { cp.textContent = 'Copy'; }, 1800); return; }
+            if (e.target.closest('[data-send]') && pick && !busy) {
+                busy = true; const b = e.target.closest('[data-send]'); b.disabled = true; b.textContent = 'Sending…';
+                const from = (box.querySelector('[data-from]') || {}).value || '';
+                try {
+                    const r = await api('request', { method, fromPhone: from.replace(/\D/g, ''), image: { mime: pick.mime, data: pick.data } });
+                    info.request = r.request; pick = null; forceForm = false; render();
+                } catch (x) { b.disabled = false; b.textContent = 'Send receipt'; toast(x.message); }
+                busy = false;
+            }
+        });
+        box.addEventListener('change', async (e) => {
+            const f = e.target.closest('[data-file]'); if (!f || !f.files || !f.files[0]) return;
+            const file = f.files[0];
+            if (!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|heic)$/i.test(file.name)) { toast('اختار صورة (screenshot أو صورة الإيصال)'); return; }
+            try { pick = await shrink(file); render(); } catch (x) { toast('الصورة دي مش بتفتح — جرّب screenshot تاني'); }
+        });
+        function toast(m) { if (window.Site && Site.toast) Site.toast(m, 'error'); else alert(m); }
+        api('info').then(j => { info = j; render(); }).catch(x => { body.innerHTML = `<div class="ars-state bad"><b>Couldn't load</b><span dir="rtl">${esc(x.message)}</span></div>`; foot(`<button class="ard-btn p" type="button" data-ok>Close</button>`); });
         return d;
     }
 

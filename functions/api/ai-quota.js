@@ -42,6 +42,10 @@ export async function ensureQuotaTables(db) {
     ]);
     // 27 Nov 2026 — trial calls are marked trial = 1, so they never count against a subscriber's monthly budget
     try { await db.prepare('ALTER TABLE ai_usage ADD COLUMN trial INTEGER NOT NULL DEFAULT 0').run(); } catch (e) { /* already there */ }
+    // 27 Nov 2026 — paid subscriptions: a payment approved on the AI usage page = 30 days from that moment (paid_from → paid_until,
+    // a Cairo day, included) with a fresh monthly budget. Students Miss Marwa switches ON by hand keep the calendar month (both NULL).
+    try { await db.prepare('ALTER TABLE ai_student_plan ADD COLUMN paid_from TEXT').run(); } catch (e) { /* already there */ }
+    try { await db.prepare('ALTER TABLE ai_student_plan ADD COLUMN paid_until TEXT').run(); } catch (e) { /* already there */ }
     readyDbs.add(db);
 }
 
@@ -59,19 +63,77 @@ export function trialPhase(T, now = new Date()) { const d = cairoDay(now); retur
  *  students at all (Miss Marwa's own switch on the AI usage page), whether the free Mini Assistant is open (her switch,
  *  or the Cloudflare variable TUTOR_OPEN = 1), and the launch trial { start, end, budget, phase }. */
 export async function quotaSettings(db) {
-    const { results } = await db.prepare(`SELECT "key", value FROM app_kv WHERE "key" IN ('aiq_rate', 'aiq_budget', 'aiq_open', 'aiq_free_open', 'aiq_trial_start', 'aiq_trial_end', 'aiq_trial_budget')`).all();
+    const { results } = await db.prepare(`SELECT "key", value FROM app_kv WHERE "key" IN ('aiq_rate', 'aiq_budget', 'aiq_open', 'aiq_free_open', 'aiq_trial_start', 'aiq_trial_end', 'aiq_trial_budget',
+        'aiq_price', 'aiq_wallet', 'aiq_rate_auto', 'aiq_rate_buffer', 'aiq_rate_market', 'aiq_rate_at', 'aiq_rate_src', 'aiq_rate_err')`).all();
     const m = Object.fromEntries((results || []).map(r => [r.key, r.value]));
     const trial = { start: dayIn(m.aiq_trial_start, TRIAL_DEFAULT.start), end: dayIn(m.aiq_trial_end, TRIAL_DEFAULT.end), budget: m.aiq_trial_budget === '0' ? 0 : posNum(m.aiq_trial_budget, TRIAL_DEFAULT.budget) };
     trial.phase = trial.budget > 0 ? trialPhase(trial) : 'off';
-    return { rate: posNum(m.aiq_rate, RATE_DEFAULT), budget: posNum(m.aiq_budget, BUDGET_DEFAULT), open: m.aiq_open === '1', freeOpen: m.aiq_free_open === '1', trial };
+    return {
+        rate: posNum(m.aiq_rate, RATE_DEFAULT), budget: posNum(m.aiq_budget, BUDGET_DEFAULT), open: m.aiq_open === '1', freeOpen: m.aiq_free_open === '1', trial,
+        // what a student pays for 30 days of Pro, and where (Vodafone Cash wallet — also the number for Fawry deposits)
+        price: posNum(m.aiq_price, PRICE_DEFAULT), wallet: WALLET_RE.test(String(m.aiq_wallet || '')) ? m.aiq_wallet : WALLET_DEFAULT,
+        // the dollar rate: automatic (market rate + a safety margin, refreshed every few hours) unless she turns it off
+        rateAuto: m.aiq_rate_auto !== '0', rateBuffer: m.aiq_rate_buffer === undefined || m.aiq_rate_buffer === null ? RATE_BUFFER_DEFAULT : Math.max(0, Math.min(30, Number(m.aiq_rate_buffer) || 0)),
+        rateMarket: Number(m.aiq_rate_market) || null, rateAt: m.aiq_rate_at || null, rateSource: m.aiq_rate_src || null, rateError: m.aiq_rate_err || null
+    };
 }
-export async function saveQuotaSettings(db, { rate, budget, open, freeOpen, trial, daily }) {
+export const PRICE_DEFAULT = 65;               // EGP for 30 days of Assistant Pro (27 Nov 2026, Mahmoud)
+export const WALLET_DEFAULT = '01003021917';   // Vodafone Cash wallet the students transfer to (Mahmoud's number)
+const WALLET_RE = /^01[0125]\d{8}$/;
+export const RATE_BUFFER_DEFAULT = 5;          // % added on top of the market rate — card fees / bank spread, so no loss
+
+// ---------- the dollar rate, automatically (27 Nov 2026) ----------
+// Free daily sources, no key: ExchangeRate-API's open endpoint (attribution link on the AI usage page), then a public mirror.
+// Asked at most every 6 hours (one request at a time); a value outside 10–500, or 25 % away from the last one, is NOT applied
+// on its own — the page shows it and Miss Marwa decides. A failed fetch keeps the last rate.
+export const RATE_SOURCES = [
+    { name: 'ExchangeRate-API', url: 'https://open.er-api.com/v6/latest/USD', pick: (d) => d && d.result === 'success' && d.rates ? d.rates.EGP : null },
+    { name: 'currency-api', url: 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json', pick: (d) => d && d.usd ? d.usd.egp : null }
+];
+const RATE_EVERY = 6 * 3600e3;
+export async function refreshRate(db, { force = false, fetcher = (u, o) => fetch(u, o) } = {}) {
+    try {
+        await ensureQuotaTables(db);
+        const S = await quotaSettings(db);
+        if (!S.rateAuto && !force) return { ok: true, skipped: 'manual' };
+        if (!force && S.rateAt && Date.now() - Date.parse(S.rateAt) < RATE_EVERY) return { ok: true, skipped: 'fresh', rate: S.rate };
+        // one request at a time (many students open the site at once)
+        const now = Date.now();
+        const claim = await db.prepare(`INSERT INTO app_kv ("key", value) VALUES ('aiq_rate_try', ?) ON CONFLICT("key") DO UPDATE SET value = excluded.value
+            WHERE CAST(app_kv.value AS INTEGER) < ?`).bind(String(now), now - (force ? 5e3 : 10 * 60e3)).run();
+        if (!claim.meta || !claim.meta.changes) return { ok: true, skipped: 'busy', rate: S.rate };
+        let market = null, source = null, err = null;
+        for (const src of RATE_SOURCES) {
+            try {
+                const r = await fetcher(src.url, { signal: AbortSignal.timeout(5000), headers: { accept: 'application/json' } });
+                if (!r.ok) { err = `${src.name}: HTTP ${r.status}`; continue; }
+                const v = Number(src.pick(await r.json()));
+                if (Number.isFinite(v) && v >= 10 && v <= 500) { market = Math.round(v * 100) / 100; source = src.name; break; }
+                err = `${src.name}: no EGP rate`;
+            } catch (e) { err = `${src.name}: ${String(e && e.message || e).slice(0, 80)}`; }
+        }
+        const put = (k, v) => db.prepare(`INSERT INTO app_kv ("key", value) VALUES (?, ?) ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(k, String(v));
+        if (market == null) { await put('aiq_rate_err', err || 'No source answered').run(); return { ok: false, error: err, rate: S.rate }; }
+        const jump = S.rateMarket && Math.abs(market - S.rateMarket) / S.rateMarket > 0.25;
+        const rate = Math.round(market * (1 + S.rateBuffer / 100) * 100) / 100;
+        const st = [put('aiq_rate_market', market), put('aiq_rate_at', new Date().toISOString()), put('aiq_rate_src', source)];
+        if (jump && !force) st.push(put('aiq_rate_err', `The market rate jumped to ${market} (was ${S.rateMarket}) — not applied. Check it and press "Update now".`));
+        else { st.push(put('aiq_rate_err', '')); if (S.rateAuto || force) st.push(put('aiq_rate', rate)); }
+        await db.batch(st);
+        return { ok: true, market, rate: jump && !force ? S.rate : rate, source, held: !!(jump && !force) };
+    } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+}
+export async function saveQuotaSettings(db, { rate, budget, open, freeOpen, trial, daily, price, wallet, rateAuto, rateBuffer }) {
     const st = [];
     const put = (k, v) => db.prepare(`INSERT INTO app_kv ("key", value) VALUES (?, ?) ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(k, String(v));
     if (rate !== undefined) st.push(put('aiq_rate', rate));
     if (budget !== undefined) st.push(put('aiq_budget', budget));
     if (open !== undefined) st.push(put('aiq_open', open ? '1' : '0'));
     if (freeOpen !== undefined) st.push(put('aiq_free_open', freeOpen ? '1' : '0'));
+    if (price !== undefined) st.push(put('aiq_price', price));
+    if (wallet !== undefined && WALLET_RE.test(String(wallet))) st.push(put('aiq_wallet', wallet));
+    if (rateAuto !== undefined) st.push(put('aiq_rate_auto', rateAuto ? '1' : '0'));
+    if (rateBuffer !== undefined) st.push(put('aiq_rate_buffer', rateBuffer));
     if (trial) {
         if (trial.start !== undefined && DAY_RE.test(String(trial.start))) st.push(put('aiq_trial_start', trial.start));
         if (trial.end !== undefined && DAY_RE.test(String(trial.end))) st.push(put('aiq_trial_end', trial.end));
@@ -130,6 +192,15 @@ export async function releaseDaily(db, studentId, what) {
 
 // What counts this month: rows of this period, after the last reset (a reset only counts in the month it was made)
 const since = (plan, per) => (plan && plan.reset_period === per && plan.reset_at) || '';
+/** which ai_usage rows count against the budget: a paid subscription → everything since it started (or since a reset after
+ *  that); otherwise → this calendar month (since a reset in it) */
+export function usageWindow(plan, per) {
+    if (plan && plan.paid_from) return { where: 'created_at >= ?', args: [plan.reset_at && plan.reset_at > plan.paid_from ? plan.reset_at : plan.paid_from] };
+    return { where: 'period = ? AND created_at >= ?', args: [per, since(plan, per)] };
+}
+/** switched ON, and (when it's a paid subscription) not past its last day */
+export const subExpired = (plan, now = new Date()) => !!(plan && plan.enabled && plan.paid_until && cairoDay(now) > plan.paid_until);
+export const planActive = (plan, now = new Date()) => !!(plan && plan.enabled) && !subExpired(plan, now);
 
 /** One student's quota right now. */
 export async function studentQuota(db, studentId, S = null) {
@@ -137,11 +208,13 @@ export async function studentQuota(db, studentId, S = null) {
     S = S || await quotaSettings(db);
     const per = period();
     const plan = await db.prepare('SELECT * FROM ai_student_plan WHERE student_id = ?').bind(studentId).first();
-    const u = await db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage WHERE student_id = ? AND period = ? AND created_at >= ? AND trial = 0`)
-        .bind(studentId, per, since(plan, per)).first();
+    const W = usageWindow(plan, per);
+    const u = await db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage WHERE student_id = ? AND ${W.where} AND trial = 0`)
+        .bind(studentId, ...W.args).first();
     const budgetEgp = plan && plan.budget_egp > 0 ? plan.budget_egp : S.budget;
     const usedUsd = Number(u && u.usd) || 0, budgetUsd = budgetEgp / S.rate;
-    const enabled = !!(plan && plan.enabled);
+    const enabled = planActive(plan), expired = subExpired(plan);
+    const sub = plan && plan.paid_until ? { paidFrom: plan.paid_from, paidUntil: plan.paid_until, expired } : null;
     // the launch trial: everything this student spent with trial = 1 (any month)
     const T = S.trial, t = await db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage WHERE student_id = ? AND trial = 1').bind(studentId).first();
     const tUsed = Number(t && t.usd) || 0, tBudget = T.budget / S.rate;
@@ -152,8 +225,8 @@ export async function studentQuota(db, studentId, S = null) {
     return {
         studentId, period: per, enabled, customBudget: !!(plan && plan.budget_egp > 0),
         budgetEgp, budgetUsd, usedUsd, usedEgp: usedUsd * S.rate, leftUsd: Math.max(0, budgetUsd - usedUsd), leftEgp: Math.max(0, (budgetUsd - usedUsd) * S.rate),
-        messages: Number(u && u.n) || 0, rate: S.rate, trial, mode,
-        active: mode === 'plan' ? { mode, budgetEgp, usedEgp: usedUsd * S.rate, leftEgp: Math.max(0, (budgetUsd - usedUsd) * S.rate), budgetUsd, leftUsd: Math.max(0, budgetUsd - usedUsd) }
+        messages: Number(u && u.n) || 0, rate: S.rate, trial, mode, sub, switchedOn: !!(plan && plan.enabled),
+        active: mode === 'plan' ? { mode, budgetEgp, usedEgp: usedUsd * S.rate, leftEgp: Math.max(0, (budgetUsd - usedUsd) * S.rate), budgetUsd, leftUsd: Math.max(0, budgetUsd - usedUsd), ends: sub ? sub.paidUntil : null }
             : mode === 'trial' ? { mode, budgetEgp: T.budget, usedEgp: trial.usedEgp, leftEgp: trial.leftEgp, budgetUsd: tBudget, leftUsd: trial.leftUsd, ends: T.end }
             : null
     };
@@ -171,13 +244,14 @@ export function worstCaseUsd(model, { chars = 0, images = 0, maxTokens = 1200 } 
  * Can this student use Pro right now?  → { ok, code?, message?, quota }
  * code: PRO_CLOSED (not opened to students yet) | STUDENT_OFF (not switched on for them) | STUDENT_CAP (month used up)
  *       | TRIAL_CAP (no subscription, trial credits used up) | TRIAL_OVER (no subscription, the trial days are over)
+ *       | SUB_CAP (paid subscription, its credits used up) | SUB_EXPIRED (paid subscription, its 30 days are over)
  */
 export async function studentAccess(db, studentId) {
     const S = await quotaSettings(db), q = await studentQuota(db, studentId, S);
     if (!S.open) return { ok: false, code: 'PRO_CLOSED', quota: q };
-    if (q.mode === 'plan') return q.leftUsd <= 0.0005 ? { ok: false, code: 'STUDENT_CAP', quota: q } : { ok: true, quota: q };
+    if (q.mode === 'plan') return q.leftUsd <= 0.0005 ? { ok: false, code: q.sub ? 'SUB_CAP' : 'STUDENT_CAP', quota: q } : { ok: true, quota: q };
     if (q.mode === 'trial') return q.trial.leftUsd <= 0.0005 ? { ok: false, code: 'TRIAL_CAP', quota: q } : { ok: true, quota: q };
-    return { ok: false, code: S.trial.phase === 'after' ? 'TRIAL_OVER' : 'STUDENT_OFF', quota: q };
+    return { ok: false, code: q.sub && q.sub.expired ? 'SUB_EXPIRED' : S.trial.phase === 'after' ? 'TRIAL_OVER' : 'STUDENT_OFF', quota: q };
 }
 
 /** Thrown when a student can't use Pro right now. */
@@ -191,9 +265,9 @@ export async function reserve(db, { studentId, model, kind = 'chat', usd }) {
     await ensureQuotaTables(db);
     const S = await quotaSettings(db), per = period();
     const plan = await db.prepare('SELECT * FROM ai_student_plan WHERE student_id = ?').bind(studentId).first();
-    if (!plan || !plan.enabled) {
+    if (!planActive(plan)) {
         // no subscription → the launch trial, while its days last: its own 15-credit budget (trial = 1 rows only)
-        if (S.trial.phase !== 'on') throw new QuotaError(S.trial.phase === 'after' ? 'TRIAL_OVER' : 'STUDENT_OFF', 'Assistant Pro is not switched on for this student.', await studentQuota(db, studentId, S));
+        if (S.trial.phase !== 'on') throw new QuotaError(subExpired(plan) ? 'SUB_EXPIRED' : S.trial.phase === 'after' ? 'TRIAL_OVER' : 'STUDENT_OFF', 'Assistant Pro is not switched on for this student.', await studentQuota(db, studentId, S));
         const t = await db.prepare(`INSERT INTO ai_usage (student_id, kind, model, period, cost_usd, pending, trial)
             SELECT ?, ?, ?, ?, ?, 1, 1 WHERE (SELECT COALESCE(SUM(cost_usd), 0) FROM ai_usage WHERE student_id = ? AND trial = 1) + ? <= ?`)
             .bind(studentId, kind, model, per, usd, studentId, usd, S.trial.budget / S.rate).run();
@@ -202,10 +276,11 @@ export async function reserve(db, { studentId, model, kind = 'chat', usd }) {
     }
     const budgetUsd = (plan.budget_egp > 0 ? plan.budget_egp : S.budget) / S.rate;
     // check + reserve in ONE statement → two messages at the same moment can't both slip past the budget
+    const W = usageWindow(plan, per);
     const r = await db.prepare(`INSERT INTO ai_usage (student_id, kind, model, period, cost_usd, pending)
-        SELECT ?, ?, ?, ?, ?, 1 WHERE (SELECT COALESCE(SUM(cost_usd), 0) FROM ai_usage WHERE student_id = ? AND period = ? AND created_at >= ? AND trial = 0) + ? <= ?`)
-        .bind(studentId, kind, model, per, usd, studentId, per, since(plan, per), usd, budgetUsd).run();
-    if (!r.meta || !r.meta.changes) throw new QuotaError('STUDENT_CAP', 'This month\'s Assistant Pro budget is used up.', await studentQuota(db, studentId, S));
+        SELECT ?, ?, ?, ?, ?, 1 WHERE (SELECT COALESCE(SUM(cost_usd), 0) FROM ai_usage WHERE student_id = ? AND ${W.where} AND trial = 0) + ? <= ?`)
+        .bind(studentId, kind, model, per, usd, studentId, ...W.args, usd, budgetUsd).run();
+    if (!r.meta || !r.meta.changes) throw new QuotaError(plan.paid_from ? 'SUB_CAP' : 'STUDENT_CAP', 'This month\'s Assistant Pro budget is used up.', await studentQuota(db, studentId, S));
     return Number(r.meta.last_row_id);
 }
 /** The call answered → the reservation becomes the real cost and tokens. */

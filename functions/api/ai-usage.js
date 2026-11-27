@@ -5,12 +5,14 @@
 //   POST ?action=set      { studentId, enabled?, budgetEgp? }  (budgetEgp null → back to the default)
 //   POST ?action=bulk     { studentIds: [], enabled }
 //   POST ?action=reset    { studentId }   → this month's budget starts again from now
-//   POST ?action=settings { rate?, budget?, open?, freeOpen?, trial?: {start, end, budget}, daily?: {images, pdfIn, pdfOut} }
+//   POST ?action=settings { rate?, budget?, open?, freeOpen?, trial?: {start, end, budget}, daily?: {images, pdfIn, pdfOut},
+//                           price?, wallet?, rateAuto?, rateBuffer? }
+//   POST ?action=rate-now   → fetch today's dollar rate now (applies it + the safety margin)
 //   POST ?action=daily    { studentId, daily: {images, pdfIn, pdfOut} | null }   (own daily file allowance; null → default)
 // Every change goes to the activity log.
 // =====================================================================
 import { requireStaff, ensureAppSchema, audit } from './admin-auth.js';
-import { ensureQuotaTables, quotaSettings, saveQuotaSettings, studentQuota, period, dailyDefaults, dailyLimits, dailyState, saveStudentDaily } from './ai-quota.js';
+import { ensureQuotaTables, quotaSettings, saveQuotaSettings, studentQuota, period, dailyDefaults, dailyLimits, dailyState, saveStudentDaily, refreshRate, subExpired, cairoDay } from './ai-quota.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -37,6 +39,7 @@ export async function onRequest(context) {
         const auth = await requireStaff(request, env, 'ai.manage');
         if (auth.error) return auth.error;
         await ensureQuotaTables(db);
+        if (action === 'overview') await refreshRate(db);   // the dollar rate: today's, when automatic (at most every 6 hours, fast otherwise)
         const S = await quotaSettings(db), per = period();
         const studentExists = async (id) => !!(id && await db.prepare('SELECT 1 FROM students WHERE student_id = ?').bind(id).first());
 
@@ -48,7 +51,9 @@ export async function onRequest(context) {
                     COALESCE(SUM(u.input_tokens + u.cache_read + u.cache_write), 0) AS all_in, COALESCE(SUM(u.output_tokens), 0) AS all_out,
                     SUM(CASE WHEN u.period = ? THEN 1 ELSE 0 END) AS m_n,
                     COALESCE(SUM(CASE WHEN u.period = ? THEN u.cost_usd ELSE 0 END), 0) AS m_usd,
-                    COALESCE(SUM(CASE WHEN u.period = ? AND u.trial = 0 AND u.created_at >= (CASE WHEN p.reset_period = ? THEN COALESCE(p.reset_at, '') ELSE '' END) THEN u.cost_usd ELSE 0 END), 0) AS q_usd,
+                    COALESCE(SUM(CASE WHEN u.trial = 0 AND (CASE WHEN p.paid_from IS NOT NULL
+                            THEN u.created_at >= (CASE WHEN p.reset_at > p.paid_from THEN p.reset_at ELSE p.paid_from END)
+                            ELSE u.period = ? AND u.created_at >= (CASE WHEN p.reset_period = ? THEN COALESCE(p.reset_at, '') ELSE '' END) END) THEN u.cost_usd ELSE 0 END), 0) AS q_usd,
                     COALESCE(SUM(CASE WHEN u.trial = 1 THEN u.cost_usd ELSE 0 END), 0) AS t_usd, SUM(CASE WHEN u.trial = 1 THEN 1 ELSE 0 END) AS t_n,
                     COALESCE(SUM(CASE WHEN u.period = ? THEN u.cached ELSE 0 END), 0) AS m_cached
                 FROM ai_usage u LEFT JOIN ai_student_plan p ON p.student_id = u.student_id
@@ -76,7 +81,8 @@ export async function onRequest(context) {
                 const budgetEgp = p.budget_egp > 0 ? p.budget_egp : S.budget, usedUsd = Number(u.q_usd) || 0;
                 return {
                     studentId: s.student_id, firstName: s.first_name, lastName: s.last_name, grade: String(s.grade || '').toLowerCase(),
-                    enabled: !!p.enabled, budgetEgp, customBudget: p.budget_egp > 0, resetAt: p.reset_period === per ? p.reset_at : null,
+                    enabled: !!p.enabled && !subExpired(p), budgetEgp, customBudget: p.budget_egp > 0, resetAt: p.reset_period === per ? p.reset_at : null,
+                    paid: p.paid_until ? { from: p.paid_from, until: p.paid_until, expired: subExpired(p) } : null,
                     month: { messages: Number(u.m_n) || 0, usd: money(u.m_usd), cached: Number(u.m_cached) || 0 },
                     top: topKind.get(s.student_id) ? { kind: topKind.get(s.student_id).kind, usd: money(topKind.get(s.student_id).usd), n: topKind.get(s.student_id).n } : null,
                     quota: { usedUsd: money(usedUsd), usedEgp: money(usedUsd * S.rate), leftEgp: money(Math.max(0, budgetEgp - usedUsd * S.rate)) },
@@ -120,6 +126,10 @@ export async function onRequest(context) {
             if (!await studentExists(id)) return bad('Student not found', 404);
             const fields = {};
             if (data.enabled !== undefined) fields.enabled = data.enabled ? 1 : 0;
+            if (data.enabled) {   // switching ON by hand someone whose paid 30 days are over → Miss Marwa's decision: back to the normal monthly budget
+                const cur = await db.prepare('SELECT paid_from, paid_until FROM ai_student_plan WHERE student_id = ?').bind(id).first();
+                if (cur && cur.paid_until && cairoDay() > cur.paid_until) { fields.paid_from = null; fields.paid_until = null; }
+            }
             if (data.budgetEgp !== undefined) {
                 if (data.budgetEgp === null || data.budgetEgp === '') fields.budget_egp = null;
                 else { const b = okAmount(data.budgetEgp); if (b == null) return bad('Budget must be a number above 0'); fields.budget_egp = b; }
@@ -173,6 +183,10 @@ export async function onRequest(context) {
             if (data.budget !== undefined) { const b = okAmount(data.budget); if (b == null) return bad('The default budget must be a number above 0'); next.budget = b; }
             if (data.open !== undefined) next.open = !!data.open;
             if (data.freeOpen !== undefined) next.freeOpen = !!data.freeOpen;
+            if (data.price !== undefined) { const v = okAmount(data.price); if (v == null || v > 5000) return bad('The price must be a number above 0'); next.price = v; }
+            if (data.wallet !== undefined) { const w = String(data.wallet || '').replace(/\D/g, ''); if (!/^01[0125]\d{8}$/.test(w)) return bad('The wallet must be an Egyptian mobile number (11 digits)'); next.wallet = w; }
+            if (data.rateAuto !== undefined) next.rateAuto = !!data.rateAuto;
+            if (data.rateBuffer !== undefined) { const v = Number(data.rateBuffer); if (!(v >= 0 && v <= 30)) return bad('The safety margin must be between 0 and 30 %'); next.rateBuffer = v; }
             if (data.trial) {
                 const day = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null;
                 const t = { start: day(data.trial.start) || S.trial.start, end: day(data.trial.end) || S.trial.end, budget: data.trial.budget === undefined || data.trial.budget === '' ? S.trial.budget : Number(data.trial.budget) };
@@ -189,7 +203,14 @@ export async function onRequest(context) {
             if (!Object.keys(next).length) return bad('Nothing to change');
             await saveQuotaSettings(db, next);
             await audit(db, request, auth.staff, 'ai.settings', null, { before: S, after: { ...S, ...next } });
+            if (next.rateAuto && !S.rateAuto) await refreshRate(db, { force: true });   // turned automatic on → today's rate right away
             return json({ ok: true, settings: await quotaSettings(db) });
+        }
+        if (action === 'rate-now') {
+            const r = await refreshRate(db, { force: true });
+            await audit(db, request, auth.staff, 'ai.rate-now', null, { before: S.rate, result: r });
+            if (!r.ok) return bad("Couldn't get today's rate: " + (r.error || 'no source answered') + ' — the old rate stays.', 502);
+            return json({ ok: true, result: r, settings: await quotaSettings(db) });
         }
         return bad('Unknown action', 404);
     } catch (err) {

@@ -18,6 +18,15 @@
     <link rel="stylesheet" href="/assets/site.css">
     <link rel="stylesheet" href="/admin/assets/admin.css">
     <style>
+        .pay-card.has-pending { box-shadow: 0 0 0 2px var(--warning, #F59E0B); }
+        .pay-row { grid-template-columns: 64px minmax(0, 1fr) auto !important; align-items: center; }
+        .pay-th { width: 64px; height: 64px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); padding: 0; background: var(--surface-2); cursor: zoom-in; display: block; }
+        .pay-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pay-acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+        .pay-meta { display: block; }
+        .rate-auto { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13.5px; cursor: pointer; } .rate-auto input { width: 18px; height: 18px; accent-color: var(--primary); }
+        .ok-t { color: var(--success, #059669); font-weight: 700; display: block; } .bad-t { color: var(--danger, #DC2626); font-weight: 700; display: block; }
+        @media (max-width: 560px) { .pay-row { grid-template-columns: 56px minmax(0, 1fr) !important; } .pay-th { width: 56px; height: 56px; } .pay-acts { grid-column: 1 / -1; justify-content: stretch; } .pay-acts .btn { flex: 1; } }
         .urow { grid-template-columns: 40px minmax(0, 1fr) auto auto 16px; align-items: center; }
         .urow .use { display: none; }
         @media (min-width: 760px) { .urow { grid-template-columns: 40px minmax(0, 1fr) 70px minmax(170px, 230px) auto 16px; } .urow .use { display: block; } }
@@ -71,6 +80,12 @@
                 <div><b id="openTitle">Assistant Pro for students</b><p class="small muted" id="openSub" style="margin:4px 0 0"></p></div>
                 <label class="sw big" title="Open Assistant Pro to students"><input type="checkbox" id="openSw" aria-label="Open Assistant Pro to students"><span class="track"></span><span class="lbl" id="openLbl"></span></label>
             </div>
+            <div class="card pay-card" id="payCard" style="margin-bottom:14px">
+                <div class="card-head"><h2 class="card-title"><span data-icon="clipboard" style="display:contents"></span>Payment requests · طلبات الاشتراك</h2><span class="chip" id="payChip">…</span></div>
+                <p class="small muted" style="margin:0 0 10px" id="paySub"></p>
+                <div id="payList"></div>
+                <button class="btn btn-ghost btn-sm" id="payAll" style="margin-top:8px">Show approved &amp; rejected too</button>
+            </div>
             <div class="card open-card" id="miniCard" style="margin-bottom:14px">
                 <div><b>Mini Assistant (free) for students</b><p class="small muted" id="miniSub" style="margin:4px 0 0"></p></div>
                 <label class="sw big" title="Open Mini Assistant to students"><input type="checkbox" id="miniSw" aria-label="Open Mini Assistant to students"><span class="track"></span><span class="lbl" id="miniLbl"></span></label>
@@ -85,11 +100,24 @@
                     <button class="btn btn-primary" id="saveTrial">Save trial</button>
                 </div>
             </div>
+            <div class="card" style="margin-bottom:14px">
+                <div class="card-head"><h2 class="card-title"><span data-icon="sparkles" style="display:contents"></span>Subscription · الاشتراك</h2></div>
+                <p class="small muted" style="margin:0 0 10px">What students see when they subscribe: they transfer the price to this Vodafone Cash wallet (or deposit it at Fawry) and send the screenshot here. Approving a request = Pro ON for <b>30 days</b> from that moment with a fresh budget.</p>
+                <div class="set-grid">
+                    <div><label for="price">Price (EGP for 30 days)</label><input class="fin num" id="price" inputmode="decimal" autocomplete="off"><small>Shown to students on the subscribe screen.</small></div>
+                    <div><label for="wallet">Vodafone Cash wallet</label><input class="fin num" id="wallet" inputmode="numeric" maxlength="11" autocomplete="off" dir="ltr"><small>Students transfer here — also the number for Fawry deposits.</small></div>
+                    <button class="btn btn-primary" id="saveSub">Save</button>
+                </div>
+            </div>
             <div id="kpis"></div>
             <div class="card" style="margin:14px 0">
                 <div class="card-head"><h2 class="card-title"><span data-icon="settings" style="display:contents"></span>Budget settings</h2></div>
                 <div class="set-grid">
-                    <div><label for="rate">EGP per 1 USD</label><input class="fin num" id="rate" inputmode="decimal" autocomplete="off"><small>Used to show costs in EGP.</small></div>
+                    <div class="rate-box"><label for="rate">EGP per 1 USD</label><input class="fin num" id="rate" inputmode="decimal" autocomplete="off"><small id="rateHelp">Used to show costs in EGP.</small>
+                        <label class="rate-auto"><input type="checkbox" id="rateAuto"> <b>Update automatically</b> <span class="muted">every few hours</span></label>
+                        <div id="rateAutoBox" style="margin-top:8px"><label for="rateBuf">Safety margin over the market rate (%)</label><input class="fin num" id="rateBuf" inputmode="decimal" autocomplete="off" style="max-width:120px">
+                            <small id="rateInfo"></small><button class="btn btn-soft btn-sm" id="rateNow" type="button" style="margin-top:6px">Update now</button>
+                            <small style="display:block;margin-top:6px"><a href="https://www.exchangerate-api.com" target="_blank" rel="noopener" class="muted">Rates By Exchange Rate API</a></small></div></div>
                     <div><label for="budget">Default budget per student (EGP / month)</label><input class="fin num" id="budget" inputmode="decimal" autocomplete="off"><small>Most AI cost a student can use in a month. Can be changed for one student.</small></div>
                     <div><label for="dImg">Photos per day</label><input class="fin num" id="dImg" inputmode="numeric" autocomplete="off"><small>Photos a student can send each day.</small></div>
                     <div><label for="dPin">PDFs uploaded per day</label><input class="fin num" id="dPin" inputmode="numeric" autocomplete="off"><small>Worksheets the student attaches.</small></div>
@@ -145,6 +173,13 @@
             catch (err) { $('list').innerHTML = `<div class="notice danger">${esc(err.message)}</div>`; return; }
             D.students.forEach(s => { s._q = `${name(s)} ${s.studentId}`.toLowerCase(); });
             $('rate').value = D.settings.rate; $('budget').value = D.settings.budget;
+            $('price').value = D.settings.price; $('wallet').value = D.settings.wallet;
+            const ra = !!D.settings.rateAuto;
+            $('rateAuto').checked = ra; $('rate').readOnly = ra; $('rateAutoBox').hidden = !ra; $('rateBuf').value = D.settings.rateBuffer;
+            $('rateHelp').textContent = ra ? 'Set automatically: today\'s market rate + the safety margin.' : 'Typed by you. Used for every cost in EGP and every student budget.';
+            $('rateInfo').innerHTML = D.settings.rateMarket ? `Market rate <b class="num">${D.settings.rateMarket}</b> + ${D.settings.rateBuffer}% → <b class="num">${D.settings.rate}</b> · updated ${esc(A.fmtDate(D.settings.rateAt, true))} (${esc(D.settings.rateSource || '')})` : 'Not fetched yet — press “Update now”.';
+            if (D.settings.rateError) $('rateInfo').innerHTML += `<br><span style="color:var(--danger)">${esc(D.settings.rateError)}</span>`;
+            loadPay();
             $('dImg').value = D.daily.images; $('dPin').value = D.daily.pdfIn; $('dPout').value = D.daily.pdfOut;
             const op = !!D.proOpenForStudents;
             $('openSw').checked = op; $('openLbl').textContent = op ? 'Open' : 'Closed';
@@ -190,7 +225,7 @@
                 return `<div class="srow urow fade-up" style="--i:${Math.min(i, 14)}" data-open="${esc(s.studentId)}" role="button" tabindex="0">
                     <span class="avatar">${A.initials({ firstName: s.firstName })}</span>
                     <span class="sname"><b dir="auto">${esc(name(s))}</b><small class="num muted">${esc(s.studentId)}${s.month.messages ? ` · ${s.month.messages} msg this month` : ''}</small>
-                        <span class="mini-use num muted">${egp(s.quota.usedEgp)} / ${egp(s.budgetEgp)}</span>${s.trial && s.trial.messages ? `<small class="muted">Trial: ${egp(s.trial.egp)} · ${s.trial.messages} msg</small>` : ''}${s.top ? `<small class="muted">Most spent on: ${esc(KIND[s.top.kind] || s.top.kind)} (${egp(toEgp(s.top.usd))})</small>` : ''}</span>
+                        <span class="mini-use num muted">${egp(s.quota.usedEgp)} / ${egp(s.budgetEgp)}</span>${s.paid ? `<small class="${s.paid.expired ? 'bad-t' : 'ok-t'}">${s.paid.expired ? 'Subscription ended' : 'Paid'} · until ${esc(s.paid.until)}</small>` : ''}${s.trial && s.trial.messages ? `<small class="muted">Trial: ${egp(s.trial.egp)} · ${s.trial.messages} msg</small>` : ''}${s.top ? `<small class="muted">Most spent on: ${esc(KIND[s.top.kind] || s.top.kind)} (${egp(toEgp(s.top.usd))})</small>` : ''}</span>
                     <span class="sgrade">${esc(A.GRADES[s.grade] || s.grade)}</span>
                     <span class="use"><span class="bar ${barCls(p)}" title="${Math.round(p)}% used"><i style="width:${p}%"></i></span>
                         <small class="num muted"><span>${egp(s.quota.usedEgp)} used</span><span>${egp(s.quota.leftEgp)} left${s.customBudget ? ' ✎' : ''}</span></small></span>
@@ -251,11 +286,69 @@
             catch (err) { Site.toast(err.message, 'error'); }
             finally { $('saveTrial').disabled = false; }
         });
+        // ---------- the dollar rate ----------
+        $('rateAuto').addEventListener('change', async () => {
+            const on = $('rateAuto').checked;
+            try { await api('/api/ai-usage?action=settings', { body: { rateAuto: on } }); Site.toast(on ? 'The rate now updates automatically' : 'The rate is now set by you', 'success'); await load(); }
+            catch (err) { $('rateAuto').checked = !on; Site.toast(err.message, 'error'); }
+        });
+        $('rateNow').addEventListener('click', async () => {
+            $('rateNow').disabled = true;
+            try { const r = await api('/api/ai-usage?action=rate-now', { body: {} }); Site.toast(`Rate updated: ${r.settings.rate} EGP / $`, 'success'); await load(); }
+            catch (err) { Site.toast(err.message, 'error'); }
+            finally { $('rateNow').disabled = false; }
+        });
+        // ---------- subscription settings ----------
+        $('saveSub').addEventListener('click', async () => {
+            $('saveSub').disabled = true;
+            try { await api('/api/ai-usage?action=settings', { body: { price: A.normalizeDigits($('price').value).trim(), wallet: A.normalizeDigits($('wallet').value).replace(/\D/g, '') } }); Site.toast('Saved', 'success'); await load(); }
+            catch (err) { Site.toast(err.message, 'error'); }
+            finally { $('saveSub').disabled = false; }
+        });
+        // ---------- payment requests ----------
+        let payAll = false, PAY = [];
+        const METHOD = { vodafone: 'Vodafone Cash', fawry: 'Fawry' };
+        async function loadPay() {
+            let r; try { r = await api('/api/subscription?action=list' + (payAll ? '&status=all' : '')); } catch (e) { $('payList').innerHTML = `<div class="notice danger">${esc(e.message)}</div>`; return; }
+            PAY = r.requests;
+            $('payChip').textContent = r.pending ? `${r.pending} waiting` : 'None waiting'; $('payChip').className = 'chip ' + (r.pending ? 'warning' : '');
+            $('payCard').classList.toggle('has-pending', !!r.pending);
+            $('paySub').textContent = r.pending ? 'Check the amount and the wallet number on each photo, then approve — Pro turns ON for 30 days.' : 'When a student sends a transfer screenshot or a Fawry receipt, it appears here (and you get a notification).';
+            $('payAll').textContent = payAll ? 'Show only the waiting ones' : 'Show approved & rejected too';
+            $('payList').innerHTML = PAY.length ? `<div class="srows">${PAY.map(q => `<div class="srow pay-row" data-pay="${q.id}">
+                    ${q.hasImage ? `<button class="pay-th" data-img="${q.id}" aria-label="See the receipt of ${esc(q.name)}"><img src="/api/subscription?action=image&id=${q.id}" alt="" loading="lazy"></button>` : '<span class="pay-th"></span>'}
+                    <span class="sname"><b dir="auto">${esc(q.name)}</b><small class="num muted">${esc(q.studentId)} · ${esc(A.GRADES[q.grade] || q.grade)}</small>
+                        <small class="muted pay-meta">${esc(METHOD[q.method] || q.method)} · <span class="num" style="font-weight:800;color:var(--text)">${egp(q.amount)}</span>${q.fromPhone ? ` · from <span class="num">${esc(q.fromPhone)}</span>` : ''} · ${esc(A.fmtDate(q.createdAt, true))}</small>
+                        ${q.status !== 'pending' ? `<small class="${q.status === 'approved' ? 'ok-t' : 'bad-t'}">${q.status === 'approved' ? `Approved — Pro until ${esc(q.paidUntil || '')}` : `Rejected: ${esc(q.note || '')}`}</small>` : ''}</span>
+                    ${q.status === 'pending' ? `<span class="pay-acts"><button class="btn btn-primary btn-sm" data-ok="${q.id}">Approve</button><button class="btn btn-ghost btn-sm" data-no="${q.id}">Reject</button></span>` : '<span></span>'}
+                </div>`).join('')}</div>` : '';
+        }
+        $('payAll').addEventListener('click', () => { payAll = !payAll; loadPay(); });
+        $('payList').addEventListener('click', (e) => {
+            const im = e.target.closest('[data-img]'), ok = e.target.closest('[data-ok]'), no = e.target.closest('[data-no]');
+            const q = PAY.find(x => String(x.id) === (im || ok || no || {}).dataset?.[im ? 'img' : ok ? 'ok' : 'no']);
+            if (!q) return;
+            const approve = (c) => async () => { c && c(); try { const r = await api('/api/subscription?action=decide', { body: { id: q.id, approve: true } }); Site.toast(`Pro ON for ${q.name} until ${r.paidUntil}`, 'success'); await load(); } catch (err) { Site.toast(err.message, 'error'); } };
+            if (im) {
+                const close = Site.sheet({ iconName: 'image', title: q.name, subtitle: `${q.studentId} · ${METHOD[q.method] || q.method} · ${egp(q.amount)}${q.fromPhone ? ' · from ' + q.fromPhone : ''}`,
+                    html: `<img src="/api/subscription?action=image&id=${q.id}" alt="Receipt" style="width:100%;border-radius:14px;display:block;background:#fff">`,
+                    actions: q.status === 'pending' ? [{ label: 'Approve', cls: 'btn-primary', onClick: (c) => approve(c)() }, { label: 'Reject', cls: 'btn-ghost', onClick: (c) => { c(); setTimeout(() => reject(q), 250); } }] : [{ label: 'Close', cls: 'btn-ghost' }] });
+                return;
+            }
+            if (ok) { Site.sheet({ iconName: 'checkCircle', tone: 'success', title: `Approve ${q.name}?`, subtitle: `Assistant Pro ON for 30 days from now, with a fresh ${egp(D.settings.budget)} budget.`, actions: [{ label: 'Approve', cls: 'btn-primary', onClick: (c) => approve(c)() }, { label: 'Cancel', cls: 'btn-ghost' }] }); return; }
+            if (no) reject(q);
+        });
+        function reject(q) {
+            Site.sheet({ iconName: 'alert', tone: 'danger', title: `Reject ${q.name}'s receipt?`, subtitle: 'The student sees your reason and can send a new photo.',
+                html: `<label class="small" for="rejWhy">Reason (the student sees it)</label><textarea class="fin" id="rejWhy" rows="3" style="width:100%;margin-top:6px" dir="auto" placeholder="مثلاً: المبلغ مش واضح — ابعت screenshot لرسالة التحويل كاملة"></textarea>`,
+                actions: [{ label: 'Reject', cls: 'btn-danger', onClick: async (c) => { const note = (document.getElementById('rejWhy') || {}).value || ''; if (!note.trim()) { Site.toast('Write the reason first', 'error'); return; } c(); try { await api('/api/subscription?action=decide', { body: { id: q.id, approve: false, note } }); Site.toast('Rejected — the student was told', 'success'); await loadPay(); } catch (err) { Site.toast(err.message, 'error'); } } }, { label: 'Cancel', cls: 'btn-ghost' }] });
+        }
         $('saveSet').addEventListener('click', async () => {
             const rate = A.normalizeDigits($('rate').value).trim(), budget = A.normalizeDigits($('budget').value).trim();
             $('saveSet').disabled = true;
             const n = (id) => A.normalizeDigits($(id).value).trim();
-            try { await api('/api/ai-usage?action=settings', { body: { rate, budget, daily: { images: n('dImg'), pdfIn: n('dPin'), pdfOut: n('dPout') } } }); Site.toast('Saved', 'success'); await load(); }
+            const auto = $('rateAuto').checked;
+            try { await api('/api/ai-usage?action=settings', { body: { ...(auto ? { rateBuffer: n('rateBuf') } : { rate }), budget, daily: { images: n('dImg'), pdfIn: n('dPin'), pdfOut: n('dPout') } } }); Site.toast('Saved', 'success'); await load(); }
             catch (err) { Site.toast(err.message, 'error'); }
             finally { $('saveSet').disabled = false; }
         });

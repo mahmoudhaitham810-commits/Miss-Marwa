@@ -193,7 +193,7 @@
             if (m.role === 'user') { const src = m.imgUrl || (m.imageId ? q('image') + '&id=' + m.imageId : ''); return `<div class="tc-msg me"><div class="col">${src ? `<img class="shot" src="${esc(src)}" alt="Photo">` : ''}<div class="bubble" dir="auto">${esc(m.text)}</div><button class="tc-cp" data-cp="${i}" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg></button></div></div>`; }
             if (m.role === 'picker') return `<div class="tc-msg">${bot('pro', 34)}<div class="body" style="flex:1 1 auto"><div class="tc-pick"><h5 dir="rtl">📘 تحب نلخص أنهي درس؟</h5>${m.units && m.units.length ? m.units.map(u => `<div class="u">Unit ${u.unit}${u.title ? ' · ' + esc(u.title) : ''}</div><div class="ls">${u.lessons.map(l => `<button data-sum="${u.unit}.${l.lesson}"><b>Lesson ${l.lesson}</b>${l.title ? ' · ' + esc(l.title) : ''}</button>`).join('')}</div>`).join('') : '<p class="muted" dir="rtl" style="margin:0">كتابك لسه بيتجهز 📚 — قريب جداً.</p>'}</div></div></div>`;
             if (m.role === 'typing') return `<div class="tc-msg">${bot(comp ? comp.tier : 'pro', 34)}<div class="body"><span class="tc-dots"><span></span><span></span><span></span></span></div></div>`;
-            if (m.role === 'error') return `<div class="tc-msg">${bot(m.tier || 'pro', 34)}<div class="body"><div class="tc-err" dir="auto">${esc(m.text)}${m.retry && i === MSGS.length - 1 ? '<br><button class="btn btn-soft btn-sm" data-retry>جرّب تاني</button>' : ''}</div>${m.sub ? `<div class="tc-subcard" dir="rtl"><span class="tx">${m.sub === 'STUDENT_CAP' ? '<b>رصيد الشهر خلص</b> — بيتجدد أول الشهر الجاي. وMini Assistant المجاني لسه معاك.' : '<b>عايز تكمّل مع Assistant Pro؟</b> اشترك وكمّل مذاكرة معايا ✨ — وMini Assistant المجاني لسه معاك.'}</span><button type="button" data-subscribe="${esc(m.sub)}">${m.sub === 'STUDENT_CAP' ? 'Details' : 'Subscribe'}</button></div>` : ''}${cardsHTML(m.cards)}</div></div>`;
+            if (m.role === 'error') return `<div class="tc-msg">${bot(m.tier || 'pro', 34)}<div class="body"><div class="tc-err" dir="auto">${esc(m.text)}${m.retry && i === MSGS.length - 1 ? '<br><button class="btn btn-soft btn-sm" data-retry>جرّب تاني</button>' : ''}</div>${m.sub ? `<div class="tc-subcard" dir="rtl"><span class="tx">${m.sub === 'STUDENT_CAP' ? '<b>رصيد الشهر خلص</b> — بيتجدد أول الشهر الجاي. وMini Assistant المجاني لسه معاك.' : (/^SUB_/.test(m.sub) ? '<b>عايز تكمّل مع Assistant Pro؟</b> جدّد اشتراكك وكمّل مذاكرة معايا ✨ — وMini Assistant المجاني لسه معاك.' : '<b>عايز تكمّل مع Assistant Pro؟</b> اشترك وكمّل مذاكرة معايا ✨ — وMini Assistant المجاني لسه معاك.')}</span><button type="button" data-subscribe="${esc(m.sub)}">${m.sub === 'STUDENT_CAP' ? 'Details' : /^SUB_/.test(m.sub) ? 'Renew' : 'Subscribe'}</button></div>` : ''}${cardsHTML(m.cards)}</div></div>`;
             const isLast = i === MSGS.length - 1;
             const lastPro = isLast && m.tier === 'pro' && !m.error && !(m.cards || []).length && String(m.text || '').length > 260;
             return `<div class="tc-msg${isLast ? ' last' : ''}">${bot(m.tier || 'pro', 34)}<div class="body"><div class="tc-md">${md(m.text)}</div>${cardsHTML(m.cards)}${lastPro ? `<div class="tc-next" dir="rtl"><button data-next="quiz">🧪 نحل أسئلة عليه</button><button data-next="explain">🔍 وضّحلي أكتر</button></div>` : ''}<div class="tc-meta"><button class="tc-cp" data-cp="${i}" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg></button><span>${esc(m.error ? 'من المنصة' : (m.brand || 'Mini Assistant'))}</span></div></div></div>`;
@@ -224,11 +224,11 @@
         function trialBanner() {
             const c = ST.credits, t = ST.launch && ST.launch.trial;
             if (ST.preview || !R || !t || ST.subscribed) return '';
-            if (c && c.mode === 'trial') return `<div class="tc-trial">${R.head(26)}<span><b>Free trial</b> · ${esc(R.dayEn(t.start))} → ${esc(R.dayEn(t.end))}${c.budget > 0 && c.left / c.budget <= .5 ? '' : `<small>${R.n1(c.left)} of ${R.n1(c.budget)} free credits left · <span dir="rtl">فترة تجريبية مجانية</span></small>`}</span><button type="button" data-guide>Guide</button></div>`;
+            if (c && c.mode === 'trial') return `<div class="tc-trial">${R.head(26)}<span><b>Free trial</b> · ${esc(R.dayEn(t.start))} → ${esc(R.dayEn(t.end))}${c.budget > 0 && c.left / c.budget <= .5 ? '' : `<small>${R.n1(c.left)} of ${R.n1(c.budget)} free credits left · <span dir="rtl">فترة تجريبية مجانية</span></small>`}</span><button type="button" data-subnow>Subscribe</button></div>`;
             return '';
         }
         const setCredits = (c) => { if (ST && c !== undefined) { ST.credits = c; const p = proM(); if (c && p) p.leftPct = c.budget > 0 ? Math.round(c.left / c.budget * 100) : null; sub(); } };
-        const SUBS = ['TRIAL_CAP', 'TRIAL_OVER', 'STUDENT_CAP', 'STUDENT_OFF'];
+        const SUBS = ['TRIAL_CAP', 'TRIAL_OVER', 'STUDENT_CAP', 'STUDENT_OFF', 'SUB_CAP', 'SUB_EXPIRED'];
         function lockPro(code) {   // Pro just stopped for them (credits / trial) → the composer shows it locked
             const p = proM(); if (!p || !code) return;
             Object.assign(p, { ready: false, locked: true, code });
@@ -257,7 +257,7 @@
                 if (d.threadId) threadId = d.threadId;
                 if (d.today && ST) { ST.today = d.today; sub(); }
                 const limit = ['DAILY_LIMIT', 'IMAGE_LIMIT', 'POOL_EMPTY', 'BONUS_CLOSED'].includes(d.code);
-                const noRetry = ['FILE_LIMIT', 'EXAM_LOCK', 'PRO_LOCKED', 'STUDENT_OFF', 'STUDENT_CAP', 'TRIAL_CAP', 'TRIAL_OVER', 'FREE_CLOSED'].includes(d.code);
+                const noRetry = ['FILE_LIMIT', 'EXAM_LOCK', 'PRO_LOCKED', 'STUDENT_OFF', 'STUDENT_CAP', 'TRIAL_CAP', 'TRIAL_OVER', 'SUB_CAP', 'SUB_EXPIRED', 'FREE_CLOSED'].includes(d.code);
                 if (SUBS.includes(d.code)) { lockPro(d.code); if (ST && ST.credits && d.code !== 'STUDENT_OFF') setCredits(Object.assign({}, ST.credits, { left: 0 })); }
                 if (!d.user && !limit) { /* not saved → let them resend */ }
                 if (d.code === 'IMAGE_LIMIT' || d.code === 'DAILY_LIMIT' || d.code === 'FILE_LIMIT' || (d.code === 'BONUS_CLOSED' && !d.threadId)) MSGS.pop();   // nothing was sent
@@ -336,7 +336,7 @@
             const r = e.target.closest('[data-retry]');
             if (r) { const last = [...MSGS].reverse().find(m => m.role === 'error'); MSGS = MSGS.filter(m => m !== last); const u = MSGS.pop(); if (u && u.role === 'user') send(last.last.text, last.last.image, last.last.doc); }
         });
-        $('tcBanner').addEventListener('click', (e) => { if (e.target.closest('[data-guide]')) openGuide(); });
+        $('tcBanner').addEventListener('click', (e) => { if (e.target.closest('[data-guide]')) openGuide(); else if (e.target.closest('[data-subnow]') && R) R.subscribe({}); });
         $('tcGuide').addEventListener('click', () => openGuide());
         function openGuide() {
             if (!R) { opt.toast('حمّل الصفحة تاني 🙏', 'info'); return; }
@@ -361,7 +361,7 @@
         // ---------- Assistant Pro for this student ----------
         const proM = () => (ST && ST.models || []).find(m => m.tier === 'pro') || {};
         const proReady = () => !!proM().ready;
-        const proLockedMsg = () => ({ STUDENT_OFF: 'Miss Marwa Assistant Pro جزء من الاشتراك ✨ — كلّم مس مروة عشان تفعّله.', STUDENT_CAP: 'خلص رصيد Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر.', TRIAL_CAP: 'خلص رصيد الفترة التجريبية 🙏 — اشترك عشان تكمّل مع Pro ✨', TRIAL_OVER: 'الفترة التجريبية خلصت 🙏 — اشترك عشان تكمّل مع Pro ✨' })[proM().code] || 'Miss Marwa Assistant Pro جاي قريب جداً 🚀';
+        const proLockedMsg = () => ({ STUDENT_OFF: 'Miss Marwa Assistant Pro جزء من الاشتراك ✨ — كلّم مس مروة عشان تفعّله.', STUDENT_CAP: 'خلص رصيد Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر.', TRIAL_CAP: 'خلص رصيد الفترة التجريبية 🙏 — اشترك عشان تكمّل مع Pro ✨', TRIAL_OVER: 'الفترة التجريبية خلصت 🙏 — اشترك عشان تكمّل مع Pro ✨', SUB_CAP: 'خلص رصيد اشتراكك 🙏 — جدّده عشان تكمّل ✨', SUB_EXPIRED: 'اشتراكك خلص 🙏 — جدّده عشان تكمّل ✨' })[proM().code] || 'Miss Marwa Assistant Pro جاي قريب جداً 🚀';
         const modelOpt = (m) => ({ tier: m.tier, name: m.name, ready: m.ready, locked: m.locked, note: m.tier === 'free' ? (m.ready ? 'Free · مجاني' : 'قريب 🚀') : (m.note || 'قريب جداً 🚀') });
 
         const hint = () => { const h = root.querySelector('#tcHint'); if (h && comp) h.textContent = comp.tier === 'pro' ? 'Miss Marwa Assistant Pro بيجاوب من كتابك 📖 — ولو حاجة مش واضحة اسأل مس مروة 🙂' : 'Mini Assistant ممكن يغلط — راجع المعلومة المهمة مع مس مروة 🙂'; };

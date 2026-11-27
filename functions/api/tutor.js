@@ -24,7 +24,7 @@
 // =====================================================================
 import { requireStaff, ensureAppSchema, verifyStudentRequest } from './admin-auth.js';
 import { chat, usageSummary, bonusOpen, AiLimitError, BRANDS, claudeReady } from './ai-gateway.js';
-import { studentAccess, dailyLimits, dailyState, claimDaily, releaseDaily, quotaSettings, ensureQuotaTables } from './ai-quota.js';
+import { studentAccess, dailyLimits, dailyState, claimDaily, releaseDaily, quotaSettings, ensureQuotaTables, refreshRate } from './ai-quota.js';
 import { searchBook, bookRules, gradeToc, lessonPack, lessonRules } from './curriculum.js';
 import { sourceBlock, lessonParts } from './studio.js';
 import { getOrMake, CacheBusyError } from './ai-cache.js';
@@ -86,7 +86,7 @@ async function whoIs(request, env, db, url) {
     const freeOn = await freeOpen(env, db);
     // open to them: Mini is open, or Pro works for them, or Pro is open but they need to subscribe (trial over / used up) —
     // they still get in, see their chats and the "subscribe" screen
-    const inside = freeOn || pro.ok || ['STUDENT_CAP', 'TRIAL_CAP', 'TRIAL_OVER'].includes(pro.code);
+    const inside = freeOn || pro.ok || ['STUDENT_CAP', 'TRIAL_CAP', 'TRIAL_OVER', 'SUB_CAP', 'SUB_EXPIRED'].includes(pro.code);
     if (!inside) return { error: bad('Miss Marwa AI Assistant is coming soon 🚀', 403, { code: 'NOT_OPEN' }) };
     return { preview: false, staff: null, student: st, pro, freeOn };
 }
@@ -257,11 +257,13 @@ const PRO_MSG = {
     STUDENT_CAP: 'خلص رصيد Miss Marwa Assistant Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر الجاي.',
     TRIAL_CAP: 'خلص رصيد الفترة التجريبية بتاعك 🙏 — اشترك في Miss Marwa Assistant Pro عشان تكمّل معايا ✨',
     TRIAL_OVER: 'الفترة التجريبية خلصت 🙏 — اشترك في Miss Marwa Assistant Pro عشان تكمّل معايا ✨',
+    SUB_CAP: 'خلص رصيد اشتراكك 🙏 — جدّد الاشتراك وكمّل معايا ✨',
+    SUB_EXPIRED: 'اشتراكك في Miss Marwa Assistant Pro خلص 🙏 — جدّده وكمّل معايا ✨',
     PRO_CLOSED: 'Miss Marwa Assistant Pro جاي قريب جداً 🚀',
     PAID_OFF: 'Miss Marwa Assistant Pro مش متاح دلوقتي 🙏'
 };
 const FRIENDLY = {
-    STUDENT_OFF: PRO_MSG.STUDENT_OFF, STUDENT_CAP: PRO_MSG.STUDENT_CAP, PAID_OFF: PRO_MSG.PAID_OFF, TRIAL_CAP: PRO_MSG.TRIAL_CAP, TRIAL_OVER: PRO_MSG.TRIAL_OVER,
+    STUDENT_OFF: PRO_MSG.STUDENT_OFF, STUDENT_CAP: PRO_MSG.STUDENT_CAP, PAID_OFF: PRO_MSG.PAID_OFF, TRIAL_CAP: PRO_MSG.TRIAL_CAP, TRIAL_OVER: PRO_MSG.TRIAL_OVER, SUB_CAP: PRO_MSG.SUB_CAP, SUB_EXPIRED: PRO_MSG.SUB_EXPIRED,
     DAILY_CAP: 'Miss Marwa Assistant Pro خد استراحة النهارده 🙏 — جرّب بكره.', MONTHLY_CAP: 'Miss Marwa Assistant Pro خد استراحة 🙏 — كلّم مس مروة.',
     POOL_EMPTY: 'Mini Assistant خد استراحة النهارده 😴 — بيرجع الساعة 2 بالليل. لو محتاج دلوقتي جرّب Miss Marwa Assistant Pro.',
     BONUS_CLOSED: 'خلصت رسايلك النهارده 😅 — رسايل زيادة بتفتح لما يكون فيه رصيد فاضي، جرّب كمان شوية أو بكره.',
@@ -294,12 +296,13 @@ export async function onRequest(context) {
         // Pro for this student right now? (Preview: always, paid as staff use)
         const proNow = async () => !claudeReady(env) ? { ok: false, code: 'PAID_OFF' } : who.preview ? { ok: true } : await studentAccess(db, sid);
         if (action === 'status') {
+            if (context.waitUntil) context.waitUntil(refreshRate(db));   // keep the dollar rate fresh (no wait for the student)
             const u = await usageSummary(env, db);
             const pa = await proNow();
             const freeOn = who.preview ? true : who.freeOn;
             const credits = creditsOf(pa.quota);
             const proModel = { tier: 'pro', name: BRANDS.pro.name, ready: !!pa.ok, locked: !pa.ok, code: pa.ok ? null : pa.code,
-                note: pa.ok ? (credits && credits.mode === 'trial' ? 'Free trial · تجربة مجانية' : 'من كتابك · From your book') : pa.code === 'STUDENT_CAP' ? 'خلص رصيد الشهر' : ['TRIAL_CAP', 'TRIAL_OVER'].includes(pa.code) ? 'اشترك عشان تكمّل' : pa.code === 'STUDENT_OFF' ? 'اطلب تفعيله من مس مروة' : 'Coming soon',
+                note: pa.ok ? (credits && credits.mode === 'trial' ? 'Free trial · تجربة مجانية' : 'من كتابك · From your book') : pa.code === 'STUDENT_CAP' ? 'خلص رصيد الشهر' : ['TRIAL_CAP', 'TRIAL_OVER'].includes(pa.code) ? 'اشترك عشان تكمّل' : ['SUB_CAP', 'SUB_EXPIRED'].includes(pa.code) ? 'جدّد الاشتراك' : pa.code === 'STUDENT_OFF' ? 'اطلب تفعيله من مس مروة' : 'Coming soon',
                 leftPct: credits && credits.budget > 0 ? Math.max(0, Math.min(100, Math.round(credits.left / credits.budget * 100))) : null };
             const S = await quotaSettings(db);
             const seen = {};
@@ -311,7 +314,7 @@ export async function onRequest(context) {
                 preview: who.preview, open: freeOn, title: ME,
                 // the launch: Pro open to students + the trial dates; this student's credits (EGP) and the one-time screens seen
                 launch: { live: S.open && claudeReady(env) && S.trial.phase !== 'before', trial: { phase: S.trial.phase, start: S.trial.start, end: S.trial.end, credits: S.trial.budget } },
-                credits, subscribed: !!(pa.quota && pa.quota.enabled), seen, daily: pa.ok && !who.preview ? await dailyState(db, sid) : null,
+                credits, subscribed: !!(pa.quota && pa.quota.enabled), sub: pa.quota && pa.quota.sub || null, seen, daily: pa.ok && !who.preview ? await dailyState(db, sid) : null,
                 student: { id: sid, firstName: who.student.firstName, gender: who.student.gender, grade: who.student.grade },
                 models: [
                     { tier: 'free', name: BRANDS.free.name, note: 'Free', ready: aiReady(env) && freeOn },
@@ -393,7 +396,7 @@ export async function onRequest(context) {
             const tier = data.tier === 'pro' ? 'pro' : 'free';
             if (tier === 'pro') {
                 const pa = await proNow();
-                if (!pa.ok) return bad(PRO_MSG[pa.code] || `${BRANDS.pro.name} جاي قريب جداً 🚀`, ['STUDENT_CAP', 'TRIAL_CAP'].includes(pa.code) ? 429 : 403, { code: pa.code === 'PRO_CLOSED' || pa.code === 'PAID_OFF' ? 'PRO_LOCKED' : pa.code });
+                if (!pa.ok) return bad(PRO_MSG[pa.code] || `${BRANDS.pro.name} جاي قريب جداً 🚀`, ['STUDENT_CAP', 'TRIAL_CAP', 'SUB_CAP'].includes(pa.code) ? 429 : 403, { code: pa.code === 'PRO_CLOSED' || pa.code === 'PAID_OFF' ? 'PRO_LOCKED' : pa.code });
             } else if (!who.preview && !who.freeOn) return bad('Mini Assistant جاي قريب 🚀 — استخدم Miss Marwa Assistant Pro.', 403, { code: 'FREE_CLOSED' });
             let text = String(data.text || '').replace(/\r/g, '').trim();
             const img = readImage(data.image);
@@ -545,7 +548,7 @@ export async function onRequest(context) {
                     return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), aiError: { code } });
                 }
                 await save({ role: 'error', text: FRIENDLY[code] || FRIENDLY.AI_ERROR, error: code });
-                return json({ error: FRIENDLY[code] || FRIENDLY.AI_ERROR, code, threadId: t.id, user: msgOut(userMsg), today: await today() }, ['POOL_EMPTY', 'BONUS_CLOSED', 'STUDENT_CAP', 'TRIAL_CAP', 'DAILY_CAP', 'MONTHLY_CAP'].includes(code) ? 429 : ['STUDENT_OFF', 'TRIAL_OVER'].includes(code) ? 403 : ['FREE_OFF', 'PAID_OFF'].includes(code) ? 503 : 502);
+                return json({ error: FRIENDLY[code] || FRIENDLY.AI_ERROR, code, threadId: t.id, user: msgOut(userMsg), today: await today() }, ['POOL_EMPTY', 'BONUS_CLOSED', 'STUDENT_CAP', 'TRIAL_CAP', 'SUB_CAP', 'DAILY_CAP', 'MONTHLY_CAP'].includes(code) ? 429 : ['STUDENT_OFF', 'TRIAL_OVER', 'SUB_EXPIRED'].includes(code) ? 403 : ['FREE_OFF', 'PAID_OFF'].includes(code) ? 503 : 502);
             }
         }
         return bad('Unknown action', 404);
