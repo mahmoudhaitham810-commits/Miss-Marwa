@@ -385,8 +385,8 @@
             });
             hint();
             // the introduction — the first time only (any device); "Guide" opens it again
-            let seenPreview = false; try { seenPreview = !!localStorage.getItem('tc_seen_intro_preview'); } catch (x) { }
-            if (R && ST.seen && (ST.preview ? !seenPreview : !ST.seen.intro)) setTimeout(() => openIntro(true), 450);
+            //   (staff Preview: never by itself — "Guide" → "Show the introduction again" shows it)
+            if (R && ST.seen && !ST.preview && !ST.seen.intro) setTimeout(() => openIntro(true), 450);
             try { const t = await api('thread'); threadId = t.thread ? t.thread.id : null; MSGS = t.messages || []; } catch (e) { }
             render(false);
         })();
