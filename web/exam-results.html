@@ -90,9 +90,10 @@
     </main>
 
     <script src="/assets/pwa.js"></script>
-    <script src="/assets/student.js?v=20261120a"></script>
+    <script src="/assets/student.js?v=20261127a"></script>
     <script src="/assets/ai-kit.js?v=20261122d"></script>
-    <script src="/assets/marwa-buddy.js?v=20261120a"></script>
+    <script src="/assets/marwa-buddy.js?v=20261127a"></script>
+    <script src="/assets/ai-robot.js?v=20261127a"></script>
     <script>
     (function () {
         if (!window.App) return;
@@ -184,7 +185,7 @@
                         <div class="card reveal" style="margin-top:16px">
                             <div class="card-head"><h2 class="card-title">${icon('sparkles')}Need help?</h2></div>
                             <p class="small muted" style="margin:0 0 12px">Stuck on a question? Ask Miss Marwa or the AI Assistant.</p>
-                            <button class="btn btn-soft btn-block btn-sm" data-soon="Ask Miss Marwa">${icon('help', 'sm')}Ask Miss Marwa<span class="soon-tag">Soon</span></button>
+                            <a class="btn btn-soft btn-block btn-sm" href="${url('questions.html')}">${icon('help', 'sm')}Ask Miss Marwa</a>
                             <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-soon="The AI Assistant">${icon('bot', 'sm')}AI Assistant<span class="soon-tag">Soon</span></button>
                         </div>
                     </aside>
@@ -282,14 +283,20 @@
                     .then(st => { AI = st; if (aiOn()) drawQuestions(); });
                 // the badge peeks out of the result card: go over the mistakes (and explain the first one when Pro is on)
                 const miss = wrong + blank, hero = root.querySelector('section.card');
-                if (miss) MarwaBuddy.peek(hero, { text: 'يلا نراجع غلطاتك سوا! 💡', label: 'Assistant Pro: يلا نراجع غلطاتك',
-                    onOpen: () => {
-                        document.querySelector('#filt [data-f="w"]')?.click();
-                        const first = state.findIndex(x => x === 'w');
-                        const art = document.getElementById('q' + (first + 1));
-                        if (art) art.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        if (first >= 0 && aiOn()) explain(first, art && art.querySelector('[data-explain]'));
-                    } });
+                const reviewMistakes = () => {
+                    document.querySelector('#filt [data-f="w"]')?.click();
+                    const first = state.findIndex(x => x === 'w');
+                    const art = document.getElementById('q' + (first + 1));
+                    if (art) art.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    if (first >= 0 && aiOn()) explain(first, art && art.querySelector('[data-explain]'));
+                };
+                // Miss Marwa (her photo) asks them to go over the mistakes together — right above the questions
+                const filt = document.getElementById('filt');
+                if (miss && filt && window.AiRobot) {
+                    filt.insertAdjacentHTML('beforebegin', AiRobot.teacher({ text: 'يلا نراجع الغلطات اللي عملناها في الامتحان!', sub: "Let's review the mistakes we made on the exam!", action: 'Review my mistakes', attrs: 'data-review' }));
+                    filt.previousElementSibling.querySelector('[data-review]').addEventListener('click', reviewMistakes);
+                }
+                if (miss) MarwaBuddy.peek(hero, { text: 'يلا نراجع غلطاتك سوا! 💡', label: 'Assistant Pro: يلا نراجع غلطاتك', onOpen: reviewMistakes });
                 else MarwaBuddy.peek(hero, { text: 'إيه الحلاوة دي! 🎉 كل إجاباتك صح', onOpen: () => { } });
             }
             document.getElementById('filt')?.addEventListener('click', (e) => {

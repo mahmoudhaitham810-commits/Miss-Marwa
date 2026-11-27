@@ -42,12 +42,14 @@ export const FRIENDLY = {
     PRO_CLOSED: 'الميزة دي هتفتح قريب جداً 🚀',
     STUDENT_OFF: 'الشرح ده جزء من اشتراك Assistant Pro ✨ — كلّم مس مروة عشان تفعّله.',
     STUDENT_CAP: 'خلص رصيد Assistant Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر الجاي.',
+    TRIAL_CAP: 'خلص رصيد الفترة التجريبية بتاعك 🙏 — اشترك في Assistant Pro عشان تكمّل معايا ✨',
+    TRIAL_OVER: 'الفترة التجريبية خلصت 🙏 — اشترك في Assistant Pro عشان تكمّل معايا ✨',
     CACHE_BUSY: 'الشرح بيتجهز دلوقتي ⏳ — جرّب تاني بعد ثواني.',
     PAID_OFF: 'Assistant Pro مش متاح دلوقتي — جرّب كمان شوية 🙏',
     AI_ERROR: 'حصلت مشكلة وإحنا بنجهز الشرح 😅 — جرّب تاني.',
     NO_TEXT: 'الملخص ده صور بس 📷 — لسه مقدرش أقراه، اسأل مس مروة عنه.'
 };
-const STATUS = { PRO_CLOSED: 403, STUDENT_OFF: 403, STUDENT_CAP: 429, CACHE_BUSY: 503, PAID_OFF: 503, DAILY_CAP: 429, MONTHLY_CAP: 429, AI_ERROR: 502 };
+const STATUS = { PRO_CLOSED: 403, STUDENT_OFF: 403, STUDENT_CAP: 429, TRIAL_CAP: 429, TRIAL_OVER: 403, CACHE_BUSY: 503, PAID_OFF: 503, DAILY_CAP: 429, MONTHLY_CAP: 429, AI_ERROR: 502 };
 
 export const EXPLAIN_SYSTEM = `You are the teaching assistant of مس مروة (Miss Marwa), a science teacher in Egypt, on her online platform. A student got ONE question of Miss Marwa's online exam wrong (or left it blank). Explain it.
 
@@ -141,7 +143,7 @@ export async function onRequest(context) {
         if (W.error) return W.error;
         const sid = W.student.id;
         const access = async () => W.preview ? { ok: true, quota: null } : studentAccess(db, sid);
-        const leftPct = (q) => q && q.budgetUsd > 0 ? Math.max(0, Math.min(100, Math.round(q.leftUsd / q.budgetUsd * 100))) : null;
+        const leftPct = (q) => { const v = q && (q.active || (q.enabled ? q : null)); return v && v.budgetUsd > 0 ? Math.max(0, Math.min(100, Math.round(v.leftUsd / v.budgetUsd * 100))) : null; };
 
         if (action === 'status') {
             const a = await access();

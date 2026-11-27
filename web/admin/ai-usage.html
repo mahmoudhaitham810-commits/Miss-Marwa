@@ -71,6 +71,20 @@
                 <div><b id="openTitle">Assistant Pro for students</b><p class="small muted" id="openSub" style="margin:4px 0 0"></p></div>
                 <label class="sw big" title="Open Assistant Pro to students"><input type="checkbox" id="openSw" aria-label="Open Assistant Pro to students"><span class="track"></span><span class="lbl" id="openLbl"></span></label>
             </div>
+            <div class="card open-card" id="miniCard" style="margin-bottom:14px">
+                <div><b>Mini Assistant (free) for students</b><p class="small muted" id="miniSub" style="margin:4px 0 0"></p></div>
+                <label class="sw big" title="Open Mini Assistant to students"><input type="checkbox" id="miniSw" aria-label="Open Mini Assistant to students"><span class="track"></span><span class="lbl" id="miniLbl"></span></label>
+            </div>
+            <div class="card" style="margin-bottom:14px">
+                <div class="card-head"><h2 class="card-title"><span data-icon="sparkles" style="display:contents"></span>Launch trial · الفترة التجريبية</h2><span class="chip" id="trialChip"></span></div>
+                <p class="small muted" style="margin:0 0 10px" id="trialSub"></p>
+                <div class="set-grid">
+                    <div><label for="tStart">First day</label><input class="fin num" id="tStart" type="date"><small>Cairo time, from 12:00 am.</small></div>
+                    <div><label for="tEnd">Last day</label><input class="fin num" id="tEnd" type="date"><small>Included — it ends at midnight.</small></div>
+                    <div><label for="tBudget">Trial credits per student (EGP)</label><input class="fin num" id="tBudget" inputmode="decimal" autocomplete="off"><small>1 credit = 1 EGP of AI cost. Only for students <b>without</b> Pro ON. 0 = no trial.</small></div>
+                    <button class="btn btn-primary" id="saveTrial">Save trial</button>
+                </div>
+            </div>
             <div id="kpis"></div>
             <div class="card" style="margin:14px 0">
                 <div class="card-head"><h2 class="card-title"><span data-icon="settings" style="display:contents"></span>Budget settings</h2></div>
@@ -137,6 +151,15 @@
             $('openCard').classList.toggle('is-open', op);
             $('openSub').innerHTML = op ? '✅ <b>Open.</b> Students with Pro <b>ON</b> below can use it (exam explanations, summaries, questions) within their budget. Students with Pro OFF see “ask Miss Marwa to activate”.'
                 : '🔒 <b>Closed</b> — every student sees “coming soon”. Switch on the students who paid first, then open it here. Staff use has <b>no limit</b>.';
+            const fo = !!D.settings.freeOpen;
+            $('miniSw').checked = fo; $('miniLbl').textContent = fo ? 'Open' : 'Closed'; $('miniCard').classList.toggle('is-open', fo);
+            $('miniSub').innerHTML = fo ? '✅ <b>Open.</b> Every student can use the free Mini Assistant (a few messages a day, free model — costs you nothing).' : '🔒 <b>Closed</b> — students only see Assistant Pro (if it works for them).';
+            const T = D.settings.trial, PH = { before: 'Starts soon', on: 'Running now', after: 'Finished', off: 'Off' };
+            $('tStart').value = T.start; $('tEnd').value = T.end; $('tBudget').value = T.budget;
+            $('trialChip').textContent = PH[T.phase] || T.phase; $('trialChip').className = 'chip ' + (T.phase === 'on' ? 'success' : T.phase === 'before' ? 'primary' : '');
+            $('trialSub').innerHTML = `Students <b>without</b> Pro ON can use Assistant Pro from <b class="num">${esc(T.start)}</b> to <b class="num">${esc(T.end)}</b>, up to <b class="num">${egp(T.budget)}</b> each — kept apart from the monthly budget. After that they're asked to subscribe.`
+                + (D.totals.trialStudents ? ` So far: <b class="num">${D.totals.trialStudents}</b> student${D.totals.trialStudents === 1 ? '' : 's'} tried it, cost <b class="num">${egp(toEgp(D.totals.trialUsd))}</b>.` : '')
+                + (op ? '' : ' <b>Assistant Pro must be Open above for the trial to work.</b>');
             render();
         }
         const inGrade = (s) => grade === 'all' || s.grade === grade;
@@ -167,7 +190,7 @@
                 return `<div class="srow urow fade-up" style="--i:${Math.min(i, 14)}" data-open="${esc(s.studentId)}" role="button" tabindex="0">
                     <span class="avatar">${A.initials({ firstName: s.firstName })}</span>
                     <span class="sname"><b dir="auto">${esc(name(s))}</b><small class="num muted">${esc(s.studentId)}${s.month.messages ? ` · ${s.month.messages} msg this month` : ''}</small>
-                        <span class="mini-use num muted">${egp(s.quota.usedEgp)} / ${egp(s.budgetEgp)}</span>${s.top ? `<small class="muted">Most spent on: ${esc(KIND[s.top.kind] || s.top.kind)} (${egp(toEgp(s.top.usd))})</small>` : ''}</span>
+                        <span class="mini-use num muted">${egp(s.quota.usedEgp)} / ${egp(s.budgetEgp)}</span>${s.trial && s.trial.messages ? `<small class="muted">Trial: ${egp(s.trial.egp)} · ${s.trial.messages} msg</small>` : ''}${s.top ? `<small class="muted">Most spent on: ${esc(KIND[s.top.kind] || s.top.kind)} (${egp(toEgp(s.top.usd))})</small>` : ''}</span>
                     <span class="sgrade">${esc(A.GRADES[s.grade] || s.grade)}</span>
                     <span class="use"><span class="bar ${barCls(p)}" title="${Math.round(p)}% used"><i style="width:${p}%"></i></span>
                         <small class="num muted"><span>${egp(s.quota.usedEgp)} used</span><span>${egp(s.quota.leftEgp)} left${s.customBudget ? ' ✎' : ''}</span></small></span>
@@ -212,10 +235,21 @@
         $('openSw').addEventListener('change', () => {
             const on = $('openSw').checked; $('openSw').checked = !on;
             Site.sheet({ iconName: on ? 'sparkles' : 'lock', title: on ? 'Open Assistant Pro to students?' : 'Close Assistant Pro for students?',
-                subtitle: on ? `Only the ${D.totals.enabled} student${D.totals.enabled === 1 ? '' : 's'} with Pro ON can use it, each within their own budget.` : 'Every student will see “coming soon” again. Their budgets and usage are kept.',
+                subtitle: on ? `The ${D.totals.enabled} student${D.totals.enabled === 1 ? '' : 's'} with Pro ON can use it, each within their own budget${D.settings.trial.phase === 'on' || D.settings.trial.phase === 'before' ? ` — and during the trial (${D.settings.trial.start} → ${D.settings.trial.end}) every other student too, up to ${egp(D.settings.trial.budget)} each` : ''}.` : 'Every student will see “coming soon” again. Their budgets and usage are kept.',
                 actions: [{ label: on ? 'Yes, open it' : 'Yes, close it', cls: on ? 'btn-primary' : 'btn-danger', onClick: async (c) => { c();
                     try { await api('/api/ai-usage?action=settings', { body: { open: on } }); Site.toast(on ? 'Assistant Pro is open for students' : 'Assistant Pro is closed for students', 'success'); await load(); }
                     catch (err) { Site.toast(err.message, 'error'); } } }, { label: 'Cancel', cls: 'btn-ghost' }] });
+        });
+        $('miniSw').addEventListener('change', async () => {
+            const on = $('miniSw').checked;
+            try { await api('/api/ai-usage?action=settings', { body: { freeOpen: on } }); Site.toast(on ? 'Mini Assistant is open for students' : 'Mini Assistant is closed for students', 'success'); await load(); }
+            catch (err) { $('miniSw').checked = !on; Site.toast(err.message, 'error'); }
+        });
+        $('saveTrial').addEventListener('click', async () => {
+            $('saveTrial').disabled = true;
+            try { await api('/api/ai-usage?action=settings', { body: { trial: { start: $('tStart').value, end: $('tEnd').value, budget: A.normalizeDigits($('tBudget').value).trim() } } }); Site.toast('Trial saved', 'success'); await load(); }
+            catch (err) { Site.toast(err.message, 'error'); }
+            finally { $('saveTrial').disabled = false; }
         });
         $('saveSet').addEventListener('click', async () => {
             const rate = A.normalizeDigits($('rate').value).trim(), budget = A.normalizeDigits($('budget').value).trim();

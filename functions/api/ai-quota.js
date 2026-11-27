@@ -40,23 +40,43 @@ export async function ensureQuotaTables(db) {
             pdf_in INTEGER NOT NULL DEFAULT 0, pdf_out INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (student_id, day))`),
         db.prepare(`CREATE TABLE IF NOT EXISTS app_kv ("key" TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`)
     ]);
+    // 27 Nov 2026 — trial calls are marked trial = 1, so they never count against a subscriber's monthly budget
+    try { await db.prepare('ALTER TABLE ai_usage ADD COLUMN trial INTEGER NOT NULL DEFAULT 0').run(); } catch (e) { /* already there */ }
     readyDbs.add(db);
 }
 
 const posNum = (v, d) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : d; };
-/** { rate, budget, open } — EGP per USD, the default budget per student (EGP), and whether Pro is open to
- *  students at all (Miss Marwa's own switch on the AI usage page; closed until she opens the pilot). */
+// ---------- launch trial (27 Nov 2026, Mahmoud): students WITHOUT a subscription can use Pro from Saturday 28 Nov to
+//   Thursday 3 Dec (Cairo days, both included), up to 15 EGP of AI cost each ("15 credits", 1 credit = 1 EGP) — kept apart
+//   from the 65 EGP monthly budget of subscribers. No daily message limit; when the credits or the days run out → subscribe.
+export const TRIAL_DEFAULT = { start: '2026-11-28', end: '2026-12-03', budget: 15 };
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const dayIn = (v, d) => DAY_RE.test(String(v || '')) ? String(v) : d;
+/** 'before' | 'on' | 'after' — by Cairo calendar day */
+export function trialPhase(T, now = new Date()) { const d = cairoDay(now); return d < T.start ? 'before' : d > T.end ? 'after' : 'on'; }
+
+/** { rate, budget, open, freeOpen, trial } — EGP per USD, the default budget per student (EGP), whether Pro is open to
+ *  students at all (Miss Marwa's own switch on the AI usage page), whether the free Mini Assistant is open (her switch,
+ *  or the Cloudflare variable TUTOR_OPEN = 1), and the launch trial { start, end, budget, phase }. */
 export async function quotaSettings(db) {
-    const { results } = await db.prepare(`SELECT "key", value FROM app_kv WHERE "key" IN ('aiq_rate', 'aiq_budget', 'aiq_open')`).all();
+    const { results } = await db.prepare(`SELECT "key", value FROM app_kv WHERE "key" IN ('aiq_rate', 'aiq_budget', 'aiq_open', 'aiq_free_open', 'aiq_trial_start', 'aiq_trial_end', 'aiq_trial_budget')`).all();
     const m = Object.fromEntries((results || []).map(r => [r.key, r.value]));
-    return { rate: posNum(m.aiq_rate, RATE_DEFAULT), budget: posNum(m.aiq_budget, BUDGET_DEFAULT), open: m.aiq_open === '1' };
+    const trial = { start: dayIn(m.aiq_trial_start, TRIAL_DEFAULT.start), end: dayIn(m.aiq_trial_end, TRIAL_DEFAULT.end), budget: m.aiq_trial_budget === '0' ? 0 : posNum(m.aiq_trial_budget, TRIAL_DEFAULT.budget) };
+    trial.phase = trial.budget > 0 ? trialPhase(trial) : 'off';
+    return { rate: posNum(m.aiq_rate, RATE_DEFAULT), budget: posNum(m.aiq_budget, BUDGET_DEFAULT), open: m.aiq_open === '1', freeOpen: m.aiq_free_open === '1', trial };
 }
-export async function saveQuotaSettings(db, { rate, budget, open, daily }) {
+export async function saveQuotaSettings(db, { rate, budget, open, freeOpen, trial, daily }) {
     const st = [];
     const put = (k, v) => db.prepare(`INSERT INTO app_kv ("key", value) VALUES (?, ?) ON CONFLICT("key") DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).bind(k, String(v));
     if (rate !== undefined) st.push(put('aiq_rate', rate));
     if (budget !== undefined) st.push(put('aiq_budget', budget));
     if (open !== undefined) st.push(put('aiq_open', open ? '1' : '0'));
+    if (freeOpen !== undefined) st.push(put('aiq_free_open', freeOpen ? '1' : '0'));
+    if (trial) {
+        if (trial.start !== undefined && DAY_RE.test(String(trial.start))) st.push(put('aiq_trial_start', trial.start));
+        if (trial.end !== undefined && DAY_RE.test(String(trial.end))) st.push(put('aiq_trial_end', trial.end));
+        if (trial.budget !== undefined && Number(trial.budget) >= 0 && Number(trial.budget) <= 500) st.push(put('aiq_trial_budget', Number(trial.budget)));
+    }
     if (daily) { st.push(put('aiq_d_images', daily.images)); st.push(put('aiq_d_pdfin', daily.pdfIn)); st.push(put('aiq_d_pdfout', daily.pdfOut)); }
     if (st.length) await db.batch(st);
 }
@@ -117,14 +137,25 @@ export async function studentQuota(db, studentId, S = null) {
     S = S || await quotaSettings(db);
     const per = period();
     const plan = await db.prepare('SELECT * FROM ai_student_plan WHERE student_id = ?').bind(studentId).first();
-    const u = await db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage WHERE student_id = ? AND period = ? AND created_at >= ?`)
+    const u = await db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage WHERE student_id = ? AND period = ? AND created_at >= ? AND trial = 0`)
         .bind(studentId, per, since(plan, per)).first();
     const budgetEgp = plan && plan.budget_egp > 0 ? plan.budget_egp : S.budget;
     const usedUsd = Number(u && u.usd) || 0, budgetUsd = budgetEgp / S.rate;
+    const enabled = !!(plan && plan.enabled);
+    // the launch trial: everything this student spent with trial = 1 (any month)
+    const T = S.trial, t = await db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage WHERE student_id = ? AND trial = 1').bind(studentId).first();
+    const tUsed = Number(t && t.usd) || 0, tBudget = T.budget / S.rate;
+    const trial = { phase: T.phase, start: T.start, end: T.end, budgetEgp: T.budget, budgetUsd: tBudget, usedUsd: tUsed, usedEgp: tUsed * S.rate,
+        leftUsd: Math.max(0, tBudget - tUsed), leftEgp: Math.max(0, (tBudget - tUsed) * S.rate), messages: Number(t && t.n) || 0 };
+    // what the student is using right now: their subscription, the trial, or nothing
+    const mode = enabled ? 'plan' : T.phase === 'on' ? 'trial' : 'none';
     return {
-        studentId, period: per, enabled: !!(plan && plan.enabled), customBudget: !!(plan && plan.budget_egp > 0),
+        studentId, period: per, enabled, customBudget: !!(plan && plan.budget_egp > 0),
         budgetEgp, budgetUsd, usedUsd, usedEgp: usedUsd * S.rate, leftUsd: Math.max(0, budgetUsd - usedUsd), leftEgp: Math.max(0, (budgetUsd - usedUsd) * S.rate),
-        messages: Number(u && u.n) || 0, rate: S.rate
+        messages: Number(u && u.n) || 0, rate: S.rate, trial, mode,
+        active: mode === 'plan' ? { mode, budgetEgp, usedEgp: usedUsd * S.rate, leftEgp: Math.max(0, (budgetUsd - usedUsd) * S.rate), budgetUsd, leftUsd: Math.max(0, budgetUsd - usedUsd) }
+            : mode === 'trial' ? { mode, budgetEgp: T.budget, usedEgp: trial.usedEgp, leftEgp: trial.leftEgp, budgetUsd: tBudget, leftUsd: trial.leftUsd, ends: T.end }
+            : null
     };
 }
 
@@ -139,13 +170,14 @@ export function worstCaseUsd(model, { chars = 0, images = 0, maxTokens = 1200 } 
 /**
  * Can this student use Pro right now?  → { ok, code?, message?, quota }
  * code: PRO_CLOSED (not opened to students yet) | STUDENT_OFF (not switched on for them) | STUDENT_CAP (month used up)
+ *       | TRIAL_CAP (no subscription, trial credits used up) | TRIAL_OVER (no subscription, the trial days are over)
  */
 export async function studentAccess(db, studentId) {
     const S = await quotaSettings(db), q = await studentQuota(db, studentId, S);
     if (!S.open) return { ok: false, code: 'PRO_CLOSED', quota: q };
-    if (!q.enabled) return { ok: false, code: 'STUDENT_OFF', quota: q };
-    if (q.leftUsd <= 0.0005) return { ok: false, code: 'STUDENT_CAP', quota: q };
-    return { ok: true, quota: q };
+    if (q.mode === 'plan') return q.leftUsd <= 0.0005 ? { ok: false, code: 'STUDENT_CAP', quota: q } : { ok: true, quota: q };
+    if (q.mode === 'trial') return q.trial.leftUsd <= 0.0005 ? { ok: false, code: 'TRIAL_CAP', quota: q } : { ok: true, quota: q };
+    return { ok: false, code: S.trial.phase === 'after' ? 'TRIAL_OVER' : 'STUDENT_OFF', quota: q };
 }
 
 /** Thrown when a student can't use Pro right now. */
@@ -159,11 +191,19 @@ export async function reserve(db, { studentId, model, kind = 'chat', usd }) {
     await ensureQuotaTables(db);
     const S = await quotaSettings(db), per = period();
     const plan = await db.prepare('SELECT * FROM ai_student_plan WHERE student_id = ?').bind(studentId).first();
-    if (!plan || !plan.enabled) throw new QuotaError('STUDENT_OFF', 'Assistant Pro is not switched on for this student.', await studentQuota(db, studentId, S));
+    if (!plan || !plan.enabled) {
+        // no subscription → the launch trial, while its days last: its own 15-credit budget (trial = 1 rows only)
+        if (S.trial.phase !== 'on') throw new QuotaError(S.trial.phase === 'after' ? 'TRIAL_OVER' : 'STUDENT_OFF', 'Assistant Pro is not switched on for this student.', await studentQuota(db, studentId, S));
+        const t = await db.prepare(`INSERT INTO ai_usage (student_id, kind, model, period, cost_usd, pending, trial)
+            SELECT ?, ?, ?, ?, ?, 1, 1 WHERE (SELECT COALESCE(SUM(cost_usd), 0) FROM ai_usage WHERE student_id = ? AND trial = 1) + ? <= ?`)
+            .bind(studentId, kind, model, per, usd, studentId, usd, S.trial.budget / S.rate).run();
+        if (!t.meta || !t.meta.changes) throw new QuotaError('TRIAL_CAP', 'The trial credits are used up.', await studentQuota(db, studentId, S));
+        return Number(t.meta.last_row_id);
+    }
     const budgetUsd = (plan.budget_egp > 0 ? plan.budget_egp : S.budget) / S.rate;
     // check + reserve in ONE statement → two messages at the same moment can't both slip past the budget
     const r = await db.prepare(`INSERT INTO ai_usage (student_id, kind, model, period, cost_usd, pending)
-        SELECT ?, ?, ?, ?, ?, 1 WHERE (SELECT COALESCE(SUM(cost_usd), 0) FROM ai_usage WHERE student_id = ? AND period = ? AND created_at >= ?) + ? <= ?`)
+        SELECT ?, ?, ?, ?, ?, 1 WHERE (SELECT COALESCE(SUM(cost_usd), 0) FROM ai_usage WHERE student_id = ? AND period = ? AND created_at >= ? AND trial = 0) + ? <= ?`)
         .bind(studentId, kind, model, per, usd, studentId, per, since(plan, per), usd, budgetUsd).run();
     if (!r.meta || !r.meta.changes) throw new QuotaError('STUDENT_CAP', 'This month\'s Assistant Pro budget is used up.', await studentQuota(db, studentId, S));
     return Number(r.meta.last_row_id);

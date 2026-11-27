@@ -80,9 +80,10 @@
     </main>
 
     <script src="/assets/pwa.js"></script>
-    <script src="/assets/student.js?v=20261120a"></script>
+    <script src="/assets/student.js?v=20261127a"></script>
     <script src="/assets/ai-kit.js?v=20261122d"></script>
-    <script src="/assets/marwa-buddy.js?v=20261120a"></script>
+    <script src="/assets/marwa-buddy.js?v=20261127a"></script>
+    <script src="/assets/ai-robot.js?v=20261127a"></script>
     <script>
     (function () {
         if (!window.App) return;
@@ -206,6 +207,9 @@
             }
 
             {
+                // the newest summary Assistant Pro can study with them (uploaded to the platform, not the old Drive links) → Miss Marwa says so
+                const aiFirst = window.AiRobot && aiShown() ? list.find(it => typeOf(it.category) === 'summaries' && AI_IDS.has(String(it.id))) : null;
+                if (aiFirst) html += AiRobot.teacher({ text: 'يلا نذاكر الملخص الجديد سوا!', sub: "Let's study the new summary together — Assistant Pro explains it from your book.", action: 'Study it with AI ✨', attrs: `data-teach="${esc(aiFirst.id)}"` });
                 // Newest first: one list, latest upload at the top (the unit shows on each item)
                 html += `<div class="card reveal"><div class="card-head"><h2 class="card-title">${icon(q ? 'search' : 'clock')}${q ? `${list.length} result${list.length === 1 ? '' : 's'}` : `Newest first · ${list.length}`}</h2></div>
                     <div class="unit-list" style="padding:0">${list.map(itemHtml).join('')}</div></div>`;
@@ -229,6 +233,9 @@
         let t = null;
         document.getElementById('q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { query = e.target.value; render(); }, 150); });
         document.getElementById('units').addEventListener('click', (e) => {
+            const tc = e.target.closest('[data-teach]');
+            if (tc) { const it = items.find(i => String(i.id) === tc.dataset.teach); const w = document.querySelector(`.ai-item[data-ai="${CSS.escape(tc.dataset.teach)}"]`);
+                if (w) w.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (it) openSummary(it); return; }
             const sm = e.target.closest('[data-sum]');
             if (sm) { const it = items.find(i => String(i.id) === sm.dataset.sum); if (it) openSummary(it); return; }
             const head = e.target.closest('.unit-head');

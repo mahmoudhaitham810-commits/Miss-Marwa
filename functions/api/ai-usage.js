@@ -5,7 +5,7 @@
 //   POST ?action=set      { studentId, enabled?, budgetEgp? }  (budgetEgp null → back to the default)
 //   POST ?action=bulk     { studentIds: [], enabled }
 //   POST ?action=reset    { studentId }   → this month's budget starts again from now
-//   POST ?action=settings { rate?, budget?, open?, daily?: {images, pdfIn, pdfOut} }
+//   POST ?action=settings { rate?, budget?, open?, freeOpen?, trial?: {start, end, budget}, daily?: {images, pdfIn, pdfOut} }
 //   POST ?action=daily    { studentId, daily: {images, pdfIn, pdfOut} | null }   (own daily file allowance; null → default)
 // Every change goes to the activity log.
 // =====================================================================
@@ -48,7 +48,8 @@ export async function onRequest(context) {
                     COALESCE(SUM(u.input_tokens + u.cache_read + u.cache_write), 0) AS all_in, COALESCE(SUM(u.output_tokens), 0) AS all_out,
                     SUM(CASE WHEN u.period = ? THEN 1 ELSE 0 END) AS m_n,
                     COALESCE(SUM(CASE WHEN u.period = ? THEN u.cost_usd ELSE 0 END), 0) AS m_usd,
-                    COALESCE(SUM(CASE WHEN u.period = ? AND u.created_at >= (CASE WHEN p.reset_period = ? THEN COALESCE(p.reset_at, '') ELSE '' END) THEN u.cost_usd ELSE 0 END), 0) AS q_usd,
+                    COALESCE(SUM(CASE WHEN u.period = ? AND u.trial = 0 AND u.created_at >= (CASE WHEN p.reset_period = ? THEN COALESCE(p.reset_at, '') ELSE '' END) THEN u.cost_usd ELSE 0 END), 0) AS q_usd,
+                    COALESCE(SUM(CASE WHEN u.trial = 1 THEN u.cost_usd ELSE 0 END), 0) AS t_usd, SUM(CASE WHEN u.trial = 1 THEN 1 ELSE 0 END) AS t_n,
                     COALESCE(SUM(CASE WHEN u.period = ? THEN u.cached ELSE 0 END), 0) AS m_cached
                 FROM ai_usage u LEFT JOIN ai_student_plan p ON p.student_id = u.student_id
                 WHERE u.student_id IS NOT NULL GROUP BY u.student_id`).bind(per, per, per, per, per).all();
@@ -79,6 +80,7 @@ export async function onRequest(context) {
                     month: { messages: Number(u.m_n) || 0, usd: money(u.m_usd), cached: Number(u.m_cached) || 0 },
                     top: topKind.get(s.student_id) ? { kind: topKind.get(s.student_id).kind, usd: money(topKind.get(s.student_id).usd), n: topKind.get(s.student_id).n } : null,
                     quota: { usedUsd: money(usedUsd), usedEgp: money(usedUsd * S.rate), leftEgp: money(Math.max(0, budgetEgp - usedUsd * S.rate)) },
+                    trial: { messages: Number(u.t_n) || 0, usd: money(u.t_usd), egp: money((Number(u.t_usd) || 0) * S.rate) },
                     allTime: { messages: Number(u.all_n) || 0, usd: money(u.all_usd), tokensIn: Number(u.all_in) || 0, tokensOut: Number(u.all_out) || 0 }
                 };
             });
@@ -88,7 +90,8 @@ export async function onRequest(context) {
                 totals: {
                     enabled: on.length, studentsUsd: money(students.reduce((t, s) => t + s.month.usd, 0)), staffUsd: money(staffUse && staffUse.usd), staffMessages: Number(staffUse && staffUse.n) || 0,
                     messages: students.reduce((t, s) => t + s.month.messages, 0), cached: students.reduce((t, s) => t + s.month.cached, 0),
-                    budgetEgp: money(on.reduce((t, s) => t + s.budgetEgp, 0))
+                    budgetEgp: money(on.reduce((t, s) => t + s.budgetEgp, 0)),
+                    trialStudents: students.filter(s => s.trial.messages > 0).length, trialUsd: money(students.reduce((t, s) => t + s.trial.usd, 0))
                 },
                 grand: {
                     today: { usd: money(G && G.d_usd), messages: Number(G && G.d_n) || 0, studentsUsd: money(G && G.d_st), staffUsd: money((Number(G && G.d_usd) || 0) - (Number(G && G.d_st) || 0)) },
@@ -169,6 +172,14 @@ export async function onRequest(context) {
             if (data.rate !== undefined) { const r = okAmount(data.rate); if (r == null || r > 1000) return bad('The EGP rate must be between 1 and 1000'); next.rate = r; }
             if (data.budget !== undefined) { const b = okAmount(data.budget); if (b == null) return bad('The default budget must be a number above 0'); next.budget = b; }
             if (data.open !== undefined) next.open = !!data.open;
+            if (data.freeOpen !== undefined) next.freeOpen = !!data.freeOpen;
+            if (data.trial) {
+                const day = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null;
+                const t = { start: day(data.trial.start) || S.trial.start, end: day(data.trial.end) || S.trial.end, budget: data.trial.budget === undefined || data.trial.budget === '' ? S.trial.budget : Number(data.trial.budget) };
+                if (!(t.budget >= 0 && t.budget <= 500)) return bad('Trial credits must be between 0 and 500 EGP');
+                if (t.end < t.start) return bad('The trial must end on or after its first day');
+                next.trial = t;
+            }
             if (data.daily) {
                 const g = (v) => { const n = Math.floor(Number(v)); return Number.isFinite(n) && n >= 0 && n <= 200 ? n : null; };
                 const dl = { images: g(data.daily.images), pdfIn: g(data.daily.pdfIn), pdfOut: g(data.daily.pdfOut) };

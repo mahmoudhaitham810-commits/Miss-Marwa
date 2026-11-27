@@ -20,7 +20,8 @@
         <path class="aib-star" d="M16 6.2c.9 4.9 2.9 6.9 7.8 7.8-4.9.9-6.9 2.9-7.8 7.8-.9-4.9-2.9-6.9-7.8-7.8 4.9-.9 6.9-2.9 7.8-7.8z" fill="currentColor"/>
         <path class="aib-mini" d="M24.5 20.5c.3 1.6 1 2.3 2.6 2.6-1.6.3-2.3 1-2.6 2.6-.3-1.6-1-2.3-2.6-2.6 1.6-.3 2.3-1 2.6-2.6z" fill="#A5F3FC"/>
     </svg>`;
-    const badge = (size = 56) => `<span class="aib" style="--s:${size}px" aria-hidden="true">${ICON}</span>`;
+    // 27 Nov 2026 (launch): the badge shows the Assistant Pro robot's face (ai-robot.js) when that script is on the page
+    const badge = (size = 56) => `<span class="aib${window.AiRobot ? ' robot' : ''}" style="--s:${size}px" aria-hidden="true">${window.AiRobot ? window.AiRobot.head(Math.round(size * .7)) : ICON}</span>`;
 
     const CSS = `
     .aib { position: relative; display: inline-grid; place-items: center; flex: none; width: var(--s); height: var(--s); border-radius: 50%; color: #E0FBFF;
@@ -28,6 +29,7 @@
         box-shadow: 0 0 0 2px rgba(34, 211, 238, .85), 0 0 0 calc(var(--s) * .07) rgba(34, 211, 238, .16), 0 8px 22px -6px rgba(8, 145, 178, .65); }
     .aib::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; box-shadow: 0 0 calc(var(--s) * .35) rgba(34, 211, 238, .45); opacity: .7; animation: aib-glow 2.8s ease-in-out infinite; pointer-events: none; }
     .aib-ic { width: 66%; height: 66%; overflow: visible; }
+    .aib.robot .air { width: 72%; height: 72%; }
     .aib-star { transform-origin: 16px 14px; animation: aib-twinkle 2.4s ease-in-out infinite; }
     .aib-mini { transform-origin: 24.5px 23px; animation: aib-twinkle 2.4s ease-in-out .9s infinite; }
     .aib-e { transform-origin: 16px 16px; animation: aib-orbit 5s linear infinite; }

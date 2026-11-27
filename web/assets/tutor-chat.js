@@ -3,11 +3,14 @@
    Used by /assistant.html (students, once it's opened) AND /admin/tutor-preview.html (staff Preview),
    so staff test exactly what students will get.
    TutorChat.mount(rootEl, { as: 'MM-…' (Preview only), toast(msg, kind) })
-   Needs /assets/ai-kit.js.
+   Needs /assets/ai-kit.js and /assets/ai-robot.js (the robot, the introduction, the guide, the credits meter).
    ===================================================================== */
 (function () {
     const { md, esc, composer } = window.AiKit;
     const AVATAR = '/assets/img/marwa-160.png';
+    const R = window.AiRobot;
+    // the robot's face in a navy disc — Pro (cyan) or Mini (teal); the photo only if ai-robot.js didn't load
+    const bot = (tier, size, cls = 'av') => R ? `<span class="${cls} tc-bot${tier === 'free' ? ' mini' : ''}" style="--s:${size}px" aria-hidden="true">${R.head(Math.round(size * .74), tier === 'free' ? 'mini' : 'pro')}</span>` : `<img class="${cls}" src="${AVATAR}" alt="">`;
     const GL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
     const LEVEL = { excellent: 'ممتاز 🔥', good: 'جيد جداً 👌', average: 'متوسط 🙂', weak: 'محتاج شغل 💪' };
     const pc = (v) => (v === null || v === undefined ? '—' : `${Math.round(v * 10) / 10}%`);
@@ -22,6 +25,21 @@
     const CSS = `
     .tc { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; min-height: calc(100dvh - 140px); }
     .tc-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .tc-bot { display: inline-grid; place-items: center; flex: none; width: var(--s); height: var(--s); border-radius: 50%; padding: 0 !important; border: 0 !important;
+        background: radial-gradient(circle at 32% 28%, #1E4E8C 0%, #0F2A52 50%, #0B1630 100%) !important; box-shadow: 0 0 0 1.5px rgba(34, 211, 238, .75), 0 6px 14px -8px rgba(8, 145, 178, .7); }
+    .tc-bot.mini { box-shadow: 0 0 0 1.5px rgba(139, 92, 246, .7), 0 6px 14px -8px rgba(109, 40, 217, .6); }
+    .tc-msg .tc-bot { width: 34px; height: 34px; }
+    .tc-hello .air, .tc-lock .air { margin: 0 auto; }
+    .tc-head .gb { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; font: inherit; font-size: 13px; font-weight: 700; padding: 8px 11px; cursor: pointer; flex: none; display: inline-flex; align-items: center; gap: 6px; }
+    .tc-head .gb:hover, .tc-head .nb:hover { border-color: var(--primary); }
+    .tc-trial { display: flex; align-items: center; gap: 10px; border-radius: 14px; padding: 9px 12px; margin-bottom: 8px; font-size: 13px; color: #E6F6FF; background: linear-gradient(135deg, #0F2A52, #163B70); }
+    .tc-trial b { color: #67E8F9; } .tc-trial > span { flex: 1; min-width: 0; line-height: 1.45; } .tc-trial small { display: block; font-size: 12.5px; color: #CFE3F5; text-align: start; }
+    .tc-trial .air { flex: none; }
+    @media (max-width: 520px) { .tc-head .gb span { display: none; } .tc-head .gb { padding: 8px 9px; } .tc-head strong { font-size: 15px; } }
+    .tc-trial button { border: 1px solid rgba(103, 232, 249, .45); background: transparent; color: #E6F6FF; border-radius: 99px; padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; flex: none; }
+    .tc-subcard { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 10px; padding: 12px 14px; border-radius: 16px; color: #E6F6FF; background: radial-gradient(120% 160% at 0% 0%, #1B3A6E, #0B1A36 60%); }
+    .tc-subcard .tx { flex: 1 1 200px; font-size: 13.5px; line-height: 1.6; } .tc-subcard b { color: #fff; }
+    .tc-subcard button { border: 0; border-radius: 12px; padding: 9px 14px; font: inherit; font-size: 13px; font-weight: 800; color: #071128; background: linear-gradient(135deg, #67E8F9, #A5F3FC); cursor: pointer; }
     .tc-head img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; background: #fff; border: 2px solid var(--primary-soft, #e0e7ff); flex: none; }
     .tc-head .t { flex: 1; min-width: 0; }
     .tc-head strong { display: block; font-size: 16px; line-height: 1.2; }
@@ -141,7 +159,7 @@
         }
         let ST = null, MSGS = [], threadId = null, sending = false, MINE = null, comp = null;
 
-        root.innerHTML = `<div class="tc tc-pad"><div class="tc-head"><img src="${AVATAR}" alt=""><div class="t"><strong>Miss Marwa AI Assistant</strong><small id="tcSub">…</small></div><button class="nb" id="tcNew">+ New chat</button></div>
+        root.innerHTML = `<div class="tc tc-pad"><div class="tc-head">${bot('pro', 46, 'hb')}<div class="t"><strong>Miss Marwa AI Assistant</strong><small id="tcSub">…</small></div><button class="gb" id="tcGuide" title="Guide & limits" aria-label="Guide and limits"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-5M12 7.8v.2"/></svg><span>Guide</span></button><button class="nb" id="tcNew">+ New chat</button></div>
             <div id="tcBanner"></div><div class="tc-msgs" id="tcMsgs" aria-live="polite"></div>
             <div class="tc-comp"><div id="tcComp"></div><p class="tc-hint" id="tcHint">Mini Assistant ممكن يغلط — راجع المعلومة المهمة مع مس مروة 🙂</p></div></div>`;
         const $ = (id) => root.querySelector('#' + id);
@@ -173,18 +191,18 @@
 
         function msgHTML(m, i) {
             if (m.role === 'user') { const src = m.imgUrl || (m.imageId ? q('image') + '&id=' + m.imageId : ''); return `<div class="tc-msg me"><div class="col">${src ? `<img class="shot" src="${esc(src)}" alt="Photo">` : ''}<div class="bubble" dir="auto">${esc(m.text)}</div><button class="tc-cp" data-cp="${i}" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg></button></div></div>`; }
-            if (m.role === 'picker') return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body" style="flex:1 1 auto"><div class="tc-pick"><h5 dir="rtl">📘 تحب نلخص أنهي درس؟</h5>${m.units && m.units.length ? m.units.map(u => `<div class="u">Unit ${u.unit}${u.title ? ' · ' + esc(u.title) : ''}</div><div class="ls">${u.lessons.map(l => `<button data-sum="${u.unit}.${l.lesson}"><b>Lesson ${l.lesson}</b>${l.title ? ' · ' + esc(l.title) : ''}</button>`).join('')}</div>`).join('') : '<p class="muted" dir="rtl" style="margin:0">كتابك لسه بيتجهز 📚 — قريب جداً.</p>'}</div></div></div>`;
-            if (m.role === 'typing') return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body"><span class="tc-dots"><span></span><span></span><span></span></span></div></div>`;
-            if (m.role === 'error') return `<div class="tc-msg"><img class="av" src="${AVATAR}" alt=""><div class="body"><div class="tc-err" dir="auto">${esc(m.text)}${m.retry && i === MSGS.length - 1 ? '<br><button class="btn btn-soft btn-sm" data-retry>جرّب تاني</button>' : ''}</div>${cardsHTML(m.cards)}</div></div>`;
+            if (m.role === 'picker') return `<div class="tc-msg">${bot('pro', 34)}<div class="body" style="flex:1 1 auto"><div class="tc-pick"><h5 dir="rtl">📘 تحب نلخص أنهي درس؟</h5>${m.units && m.units.length ? m.units.map(u => `<div class="u">Unit ${u.unit}${u.title ? ' · ' + esc(u.title) : ''}</div><div class="ls">${u.lessons.map(l => `<button data-sum="${u.unit}.${l.lesson}"><b>Lesson ${l.lesson}</b>${l.title ? ' · ' + esc(l.title) : ''}</button>`).join('')}</div>`).join('') : '<p class="muted" dir="rtl" style="margin:0">كتابك لسه بيتجهز 📚 — قريب جداً.</p>'}</div></div></div>`;
+            if (m.role === 'typing') return `<div class="tc-msg">${bot(comp ? comp.tier : 'pro', 34)}<div class="body"><span class="tc-dots"><span></span><span></span><span></span></span></div></div>`;
+            if (m.role === 'error') return `<div class="tc-msg">${bot(m.tier || 'pro', 34)}<div class="body"><div class="tc-err" dir="auto">${esc(m.text)}${m.retry && i === MSGS.length - 1 ? '<br><button class="btn btn-soft btn-sm" data-retry>جرّب تاني</button>' : ''}</div>${m.sub ? `<div class="tc-subcard" dir="rtl"><span class="tx">${m.sub === 'STUDENT_CAP' ? '<b>رصيد الشهر خلص</b> — بيتجدد أول الشهر الجاي. وMini Assistant المجاني لسه معاك.' : '<b>عايز تكمّل مع Assistant Pro؟</b> اشترك وكمّل مذاكرة معايا ✨ — وMini Assistant المجاني لسه معاك.'}</span><button type="button" data-subscribe="${esc(m.sub)}">${m.sub === 'STUDENT_CAP' ? 'Details' : 'Subscribe'}</button></div>` : ''}${cardsHTML(m.cards)}</div></div>`;
             const isLast = i === MSGS.length - 1;
             const lastPro = isLast && m.tier === 'pro' && !m.error && !(m.cards || []).length && String(m.text || '').length > 260;
-            return `<div class="tc-msg${isLast ? ' last' : ''}"><img class="av" src="${AVATAR}" alt=""><div class="body"><div class="tc-md">${md(m.text)}</div>${cardsHTML(m.cards)}${lastPro ? `<div class="tc-next" dir="rtl"><button data-next="quiz">🧪 نحل أسئلة عليه</button><button data-next="explain">🔍 وضّحلي أكتر</button></div>` : ''}<div class="tc-meta"><button class="tc-cp" data-cp="${i}" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg></button><span>${esc(m.error ? 'من المنصة' : (m.brand || 'Mini Assistant'))}</span></div></div></div>`;
+            return `<div class="tc-msg${isLast ? ' last' : ''}">${bot(m.tier || 'pro', 34)}<div class="body"><div class="tc-md">${md(m.text)}</div>${cardsHTML(m.cards)}${lastPro ? `<div class="tc-next" dir="rtl"><button data-next="quiz">🧪 نحل أسئلة عليه</button><button data-next="explain">🔍 وضّحلي أكتر</button></div>` : ''}<div class="tc-meta"><button class="tc-cp" data-cp="${i}" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg></button><span>${esc(m.error ? 'من المنصة' : (m.brand || 'Mini Assistant'))}</span></div></div></div>`;
         }
         function welcome() {
             const f = ST && ST.student ? ST.student : {};
             const girl = f.gender === 'female';
             const chips = [['sum', '📘 لخصلي درس'], ['quiz', '🧪 يلا نحل أسئلة سوا'], ['explain', `🤓 اشرحلي حاجة ${girl ? 'مش فاهماها' : 'مش فاهمها'}`], ['me', '📊 عامل إيه في درجاتي؟']];
-            return `<div class="tc-hello"><img src="${AVATAR}" alt=""><h2 dir="rtl">أهلاً يا ${esc(f.firstName || '')} 👋</h2>
+            return `<div class="tc-hello">${R ? R.svg({ size: 92 }) : `<img src="${AVATAR}" alt="">`}<h2 dir="rtl">أهلاً يا ${esc(f.firstName || '')} 👋</h2>
                 <p class="tc-ask" dir="rtl">هننجز إيه النهارده؟ 🎯</p>
                 <p dir="rtl">أنا مساعد مس مروة — بذاكر معاك من كتابك 📖: ألخصلك درس، نحل أسئلة سوا، أشرحلك أي جزء، أو ابعتلي صورة سؤال 📷</p>
                 <div class="tc-chips">${chips.map(([k, c]) => `<button data-go="${k}" dir="rtl">${esc(c)}</button>`).join('')}</div>
@@ -199,7 +217,22 @@
             // (no counter line under the title — the user asked for it to be removed; limits are explained only when reached)
             $('tcSub').hidden = true;
             $('tcBanner').innerHTML = (ST.preview ? `<div class="tc-banner">👀 <b>Preview</b> — you're seeing exactly what <b>${esc(ST.student.firstName)}</b> would see. Chats here stay separate from the student's own and use separate daily counters.</div>` : '')
-                + (ST.inExam ? `<div class="tc-banner">📝 إنت في امتحان دلوقتي — المساعد هيستناك لحد ما تخلّص 😉</div>` : '');
+                + (ST.inExam ? `<div class="tc-banner">📝 إنت في امتحان دلوقتي — المساعد هيستناك لحد ما تخلّص 😉</div>` : '')
+                + trialBanner() + (R && ST.credits ? R.meter(ST.credits) : '');
+        }
+        // the trial notice (students without a subscription, while the trial runs)
+        function trialBanner() {
+            const c = ST.credits, t = ST.launch && ST.launch.trial;
+            if (ST.preview || !R || !t || ST.subscribed) return '';
+            if (c && c.mode === 'trial') return `<div class="tc-trial">${R.head(26)}<span><b>Free trial</b> · ${esc(R.dayEn(t.start))} → ${esc(R.dayEn(t.end))}${c.budget > 0 && c.left / c.budget <= .5 ? '' : `<small>${R.n1(c.left)} of ${R.n1(c.budget)} free credits left · <span dir="rtl">فترة تجريبية مجانية</span></small>`}</span><button type="button" data-guide>Guide</button></div>`;
+            return '';
+        }
+        const setCredits = (c) => { if (ST && c !== undefined) { ST.credits = c; const p = proM(); if (c && p) p.leftPct = c.budget > 0 ? Math.round(c.left / c.budget * 100) : null; sub(); } };
+        const SUBS = ['TRIAL_CAP', 'TRIAL_OVER', 'STUDENT_CAP', 'STUDENT_OFF'];
+        function lockPro(code) {   // Pro just stopped for them (credits / trial) → the composer shows it locked
+            const p = proM(); if (!p || !code) return;
+            Object.assign(p, { ready: false, locked: true, code });
+            if (comp && comp.setModels) comp.setModels(ST.models.map(modelOpt));
         }
 
         async function send(text, image, doc) {
@@ -214,6 +247,8 @@
                 const u = [...MSGS].reverse().find(m => m.role === 'user'); if (u && r.user) { u.text = r.user.text; u.imageId = r.user.imageId; }
                 MSGS.push(r.reply);
                 if (r.today && ST) { ST.today = r.today; sub(); }
+                if (r.credits !== undefined) setCredits(r.credits);
+                if (r.daily && ST) ST.daily = r.daily;
                 if (r.daily) { const left = [['images', 'صور'], ['pdfIn', 'ملفات PDF'], ['pdfOut', 'PDF تعملهم']].filter(([k]) => r.daily[k].max > 0 && r.daily[k].used > 0 && r.daily[k].max - r.daily[k].used <= 1)
                     .map(([k, n]) => `${r.daily[k].max - r.daily[k].used === 0 ? 'خلصت' : 'باقيلك 1'} ${n}`); if (left.length) opt.toast(`النهارده: ${left.join(' · ')} — بيرجعوا بكره ✨`, 'info'); }
             } catch (e) {
@@ -222,10 +257,11 @@
                 if (d.threadId) threadId = d.threadId;
                 if (d.today && ST) { ST.today = d.today; sub(); }
                 const limit = ['DAILY_LIMIT', 'IMAGE_LIMIT', 'POOL_EMPTY', 'BONUS_CLOSED'].includes(d.code);
-                const noRetry = ['FILE_LIMIT', 'EXAM_LOCK', 'PRO_LOCKED', 'STUDENT_OFF', 'STUDENT_CAP', 'FREE_CLOSED'].includes(d.code);
+                const noRetry = ['FILE_LIMIT', 'EXAM_LOCK', 'PRO_LOCKED', 'STUDENT_OFF', 'STUDENT_CAP', 'TRIAL_CAP', 'TRIAL_OVER', 'FREE_CLOSED'].includes(d.code);
+                if (SUBS.includes(d.code)) { lockPro(d.code); if (ST && ST.credits && d.code !== 'STUDENT_OFF') setCredits(Object.assign({}, ST.credits, { left: 0 })); }
                 if (!d.user && !limit) { /* not saved → let them resend */ }
                 if (d.code === 'IMAGE_LIMIT' || d.code === 'DAILY_LIMIT' || d.code === 'FILE_LIMIT' || (d.code === 'BONUS_CLOSED' && !d.threadId)) MSGS.pop();   // nothing was sent
-                MSGS.push({ role: 'error', text: e.message, retry: !limit && !noRetry, last: { text, image, doc },
+                MSGS.push({ role: 'error', text: e.message, retry: !limit && !noRetry, last: { text, image, doc }, sub: SUBS.includes(d.code) && !(ST && ST.preview) ? d.code : null, tier: comp ? comp.tier : 'pro',
                     cards: limit ? [{ type: 'upgrade', text: d.code === 'IMAGE_LIMIT' ? `عايز تبعت صور أكتر وتاخد حل أدق؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}` : `عايز تسأل أكتر من كده؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}`, tier: 'pro' }] : null });
                 if (d.code === 'EXAM_LOCK' && ST) { ST.inExam = true; sub(); }
             }
@@ -250,12 +286,15 @@
                 threadId = r.threadId; MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push(r.reply);
             } catch (e) {
                 const d = e.data || {}; if (d.threadId) threadId = d.threadId;
-                MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push({ role: 'error', text: e.message });
+                MSGS = MSGS.filter(m => m.role !== 'typing'); MSGS.push({ role: 'error', text: e.message, sub: SUBS.includes(d.code) && !(ST && ST.preview) ? d.code : null });
+                if (SUBS.includes(d.code)) lockPro(d.code);
             }
             sending = false; comp && comp.setBusy(false); render();
         }
         const lessonName = (u, l) => { const x = (UNITS || []).find(v => v.unit === u); const y = x && x.lessons.find(v => v.lesson === l); return `Unit ${u} · Lesson ${l}${y && y.title ? ' (' + y.title + ')' : ''}`; };
         $('tcMsgs').addEventListener('click', (e) => {
+            const sb = e.target.closest('[data-subscribe]');
+            if (sb) { if (R) R.subscribe({ code: sb.dataset.subscribe }); return; }
             const cp = e.target.closest('[data-cp]');
             if (cp) {
                 const m = MSGS[+cp.dataset.cp]; if (!m) return;
@@ -297,6 +336,23 @@
             const r = e.target.closest('[data-retry]');
             if (r) { const last = [...MSGS].reverse().find(m => m.role === 'error'); MSGS = MSGS.filter(m => m !== last); const u = MSGS.pop(); if (u && u.role === 'user') send(last.last.text, last.last.image, last.last.doc); }
         });
+        $('tcBanner').addEventListener('click', (e) => { if (e.target.closest('[data-guide]')) openGuide(); });
+        $('tcGuide').addEventListener('click', () => openGuide());
+        function openGuide() {
+            if (!R) { opt.toast('حمّل الصفحة تاني 🙏', 'info'); return; }
+            if (!ST) return;
+            R.guide({ status: ST, daily: ST.daily || null, onIntro: () => openIntro(false) });
+        }
+        function openIntro(first) {
+            if (!R || !ST) return;
+            R.intro({ trial: ST.launch && ST.launch.trial ? Object.assign({}, ST.launch.trial, { credits: (ST.credits && ST.credits.mode === 'trial' ? ST.credits.budget : ST.launch.trial.credits) }) : null, subscribed: ST.subscribed,
+                onClose: () => { if (first) markSeen('intro'); } });
+        }
+        function markSeen(what) {
+            if (ST && ST.seen) ST.seen[what] = true;
+            if (ST && ST.preview) { try { localStorage.setItem('tc_seen_' + what + '_preview', '1'); } catch (x) { } return; }
+            api('seen', { what }).catch(() => { });
+        }
         $('tcNew').addEventListener('click', async () => {
             try { const r = await api('new', {}); threadId = r.thread.id; MSGS = []; render(false); } catch (e) { opt.toast(e.message, 'error'); }
         });
@@ -305,7 +361,8 @@
         // ---------- Assistant Pro for this student ----------
         const proM = () => (ST && ST.models || []).find(m => m.tier === 'pro') || {};
         const proReady = () => !!proM().ready;
-        const proLockedMsg = () => ({ STUDENT_OFF: 'Miss Marwa Assistant Pro جزء من الاشتراك ✨ — كلّم مس مروة عشان تفعّله.', STUDENT_CAP: 'خلص رصيد Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر.' })[proM().code] || 'Miss Marwa Assistant Pro جاي قريب جداً 🚀';
+        const proLockedMsg = () => ({ STUDENT_OFF: 'Miss Marwa Assistant Pro جزء من الاشتراك ✨ — كلّم مس مروة عشان تفعّله.', STUDENT_CAP: 'خلص رصيد Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر.', TRIAL_CAP: 'خلص رصيد الفترة التجريبية 🙏 — اشترك عشان تكمّل مع Pro ✨', TRIAL_OVER: 'الفترة التجريبية خلصت 🙏 — اشترك عشان تكمّل مع Pro ✨' })[proM().code] || 'Miss Marwa Assistant Pro جاي قريب جداً 🚀';
+        const modelOpt = (m) => ({ tier: m.tier, name: m.name, ready: m.ready, locked: m.locked, note: m.tier === 'free' ? (m.ready ? 'Free · مجاني' : 'قريب 🚀') : (m.note || 'قريب جداً 🚀') });
 
         const hint = () => { const h = root.querySelector('#tcHint'); if (h && comp) h.textContent = comp.tier === 'pro' ? 'Miss Marwa Assistant Pro بيجاوب من كتابك 📖 — ولو حاجة مش واضحة اسأل مس مروة 🙂' : 'Mini Assistant ممكن يغلط — راجع المعلومة المهمة مع مس مروة 🙂'; };
         // ---------- start ----------
@@ -314,19 +371,22 @@
             catch (e) {
                 const d = e.data || {};
                 if (d.code === 'NOT_OPEN') { try { sessionStorage.setItem('ai_nav', JSON.stringify({ open: false, at: Date.now() })); } catch (x) { } }   // the menu's "AI Assistant" goes back to "Soon" at once
-                root.innerHTML = `<div class="tc-lock"><img src="${AVATAR}" alt=""><h2 dir="rtl" style="margin:10px 0 4px">${d.code === 'NOT_OPEN' ? 'مساعد مس مروة جاي قريب 🚀' : 'مش قادرين نفتح المساعد دلوقتي'}</h2><p class="muted" dir="rtl">${esc(d.code === 'NOT_OPEN' ? 'بنجهزه ليك على أكمل وجه — هيوصلك إشعار أول ما يفتح 🔔' : e.message)}</p>${d.code === 'NOT_OPEN' ? '<p class="muted" style="font-size:13px;margin-top:4px">Miss Marwa AI Assistant · Coming soon</p>' : ''}</div>`;
+                root.innerHTML = `<div class="tc-lock">${R ? R.svg({ size: 96 }) : `<img src="${AVATAR}" alt="">`}<h2 dir="rtl" style="margin:10px 0 4px">${d.code === 'NOT_OPEN' ? 'مساعد مس مروة جاي قريب 🚀' : 'مش قادرين نفتح المساعد دلوقتي'}</h2><p class="muted" dir="rtl">${esc(d.code === 'NOT_OPEN' ? 'بنجهزه ليك على أكمل وجه — هيوصلك إشعار أول ما يفتح 🔔' : e.message)}</p>${d.code === 'NOT_OPEN' ? '<p class="muted" style="font-size:13px;margin-top:4px">Miss Marwa AI Assistant · Coming soon</p>' : ''}</div>`;
                 return;
             }
             sub();
             comp = composer($('tcComp'), {
-                models: ST.models.map(m => ({ tier: m.tier, name: m.name, ready: m.ready, locked: m.locked, note: m.tier === 'free' ? (m.ready ? 'Free · مجاني' : 'قريب 🚀') : (m.note || 'قريب جداً 🚀') })),
+                models: ST.models.map(modelOpt),
                 tier: !ST.models[0].ready && proReady() ? 'pro' : 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, pdf: true, photoMax: 1152, photoQuality: 0.8, dropZone: root, voiceKey: 'tutor_voice', toast: opt.toast,
                 onSend: ({ text, image, doc }) => send(text, image, doc),
                 onTier: () => hint(),
-                onLocked: (m) => opt.toast(m && m.tier === 'free' ? 'Mini Assistant جاي قريب 🚀' : proLockedMsg(), 'info'),
+                onLocked: (m) => { if (m && m.tier !== 'free' && SUBS.includes(proM().code) && R && !ST.preview) R.subscribe({ code: proM().code }); else opt.toast(m && m.tier === 'free' ? 'Mini Assistant جاي قريب 🚀' : proLockedMsg(), 'info'); },
                 beforeAttach: () => (comp && comp.tier === 'free' && ST.today.images >= ST.today.limits.images ? `مسموح بصورة واحدة في اليوم على Mini Assistant 📷 — ${proReady() ? 'حوّل لـ Miss Marwa Assistant Pro وابعت صور براحتك ✨' : 'Miss Marwa Assistant Pro جاي قريب 🚀'}` : true)
             });
             hint();
+            // the introduction — the first time only (any device); "Guide" opens it again
+            let seenPreview = false; try { seenPreview = !!localStorage.getItem('tc_seen_intro_preview'); } catch (x) { }
+            if (R && ST.seen && (ST.preview ? !seenPreview : !ST.seen.intro)) setTimeout(() => openIntro(true), 450);
             try { const t = await api('thread'); threadId = t.thread ? t.thread.id : null; MSGS = t.messages || []; } catch (e) { }
             render(false);
         })();

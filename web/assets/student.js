@@ -497,14 +497,91 @@
     function refreshAiNav(active) {
         if (isAdmin) return;
         let v = null; try { v = JSON.parse(sessionStorage.getItem('ai_nav') || 'null'); } catch (e) { }
-        if (v && Date.now() - v.at < 600000) return;
-        fetch('/api/tutor?action=status', { credentials: 'same-origin' }).then(r => {
-            const open = r.ok;
-            try { sessionStorage.setItem('ai_nav', JSON.stringify({ open, at: Date.now() })); } catch (e) { }
+        if (v && Date.now() - v.at < 600000) { aiExtras(v, active); return; }
+        fetch('/api/tutor?action=status', { credentials: 'same-origin' }).then(async r => {
+            const open = r.ok, d = open ? await r.json().catch(() => ({})) : {};
+            const nv = { open, at: Date.now(), launch: d.launch || null, seen: d.seen || null, subscribed: !!d.subscribed, credits: d.credits || null };
+            try { sessionStorage.setItem('ai_nav', JSON.stringify(nv)); } catch (e) { }
             const btn = document.querySelector('.side-nav [data-soon="AI Assistant"]'), link = document.querySelector('.side-nav a[href$="assistant.html"]');
             if (open && btn) btn.outerHTML = `<a href="${url('assistant.html')}" class="${active === 'assistant' ? 'active' : ''}">${icon('bot')}AI Assistant</a>`;
             else if (!open && link) link.outerHTML = `<button data-soon="AI Assistant">${icon('bot')}AI Assistant<span class="soon-tag">Soon</span></button>`;
+            aiExtras(nv, active);
         }).catch(() => { });
+    }
+
+    // ---------- the AI's presence on every page (27 Nov 2026 launch) ----------
+    //   • the robot in the corner (not on the assistant itself, not in "Ask Miss Marwa", never inside an exam)
+    //   • the trial notice on Home
+    //   • the launch welcome — once per student (saved on the server, so never again on any device)
+    const ROBOT_V = '20261127a';
+    let robotP = null;
+    const loadRobot = () => window.AiRobot ? Promise.resolve() : (robotP = robotP || new Promise((res, rej) => {
+        const s = document.createElement('script'); s.src = '/assets/ai-robot.js?v=' + ROBOT_V;
+        s.onload = () => window.AiRobot ? res() : rej(new Error('robot')); s.onerror = () => { robotP = null; s.remove(); rej(new Error('robot')); };
+        document.head.appendChild(s);
+    }));
+    window.loadAiRobot = loadRobot;
+    const ROBOT_LINES = {
+        home: ['عندك سؤال في الـ Science؟ أنا هنا 👋', 'أقدر ألخّصلك أي درس من كتابك 📘', 'صوّرلي أي سؤال وأحلّهولك خطوة بخطوة 📷'],
+        lessons: ['عايز ملخص لدرس؟ أنا ألخّصهولك من كتابك 📘', 'خلّصت المذاكرة؟ تعالى نحل أسئلة سوا 🧪'],
+        exams: ['قبل الامتحان: أعملك امتحان تدريب PDF بالإجابات 📄', 'بعد الامتحان هشرحلك كل غلطة 💡'],
+        results: ['يلا نراجع غلطاتك سوا 💡', 'كل سؤال غلط… أشرحلك ليه بالظبط 🔍']
+    };
+    let welcomed = false;
+    // "AI Assistant · Soon" buttons on the pages (Home's action card, the results page) become real links once it's open
+    function upgradeAiButtons(root) {
+        (root || document).querySelectorAll('[data-soon="The AI Assistant"]').forEach(b => {
+            const a = document.createElement('a');
+            a.className = b.className; a.href = url('assistant.html');
+            a.setAttribute('style', (b.getAttribute('style') || '') + ';text-decoration:none;color:inherit');
+            a.innerHTML = b.innerHTML.replace(/<span class="soon-tag">[^<]*<\/span>/g, '');
+            b.replaceWith(a);
+        });
+    }
+    let aiObs = null;
+    function aiExtras(v, active) {
+        if (!v || !v.open || isAdmin) return;
+        upgradeAiButtons();
+        if (!aiObs && 'MutationObserver' in window) { aiObs = new MutationObserver(() => { if (document.querySelector('[data-soon="The AI Assistant"]')) upgradeAiButtons(); }); aiObs.observe(document.body, { childList: true, subtree: true }); }
+        const L = v.launch || {};
+        loadRobot().then(() => {
+            if (!['assistant', 'questions', 'profile'].includes(active)) AiRobot.launcher({ href: url('assistant.html'), lines: ROBOT_LINES[active] || ROBOT_LINES.home });
+            if (active === 'home') homeTrial(v);
+            let localSeen = false; try { localSeen = !!localStorage.getItem('ai_welcome_' + session.id); } catch (e) { }
+            if (L.live && v.seen && v.seen.welcome === false && !localSeen && !welcomed && active !== 'assistant') {
+                welcomed = true;
+                const mark = () => {
+                    try { localStorage.setItem('ai_welcome_' + session.id, '1'); v.seen.welcome = true; sessionStorage.setItem('ai_nav', JSON.stringify(v)); } catch (e) { }
+                    fetch('/api/tutor?action=seen', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ what: 'welcome' }) }).catch(() => { });
+                };
+                setTimeout(() => AiRobot.welcome({ trial: L.trial, subscribed: v.subscribed, firstName: session.firstName || '', onClose: mark, onStart: () => { location.href = url('assistant.html'); } }), 700);
+            }
+        }).catch(() => { });
+    }
+    // Home: the trial notice (students without a subscription, while the trial runs)
+    function homeTrial(v) {
+        const t = v.launch && v.launch.trial, c = v.credits;
+        if (!t || t.phase !== 'on' || v.subscribed || !c || c.mode !== 'trial' || document.getElementById('aiTrialCard')) return;
+        const hello = document.querySelector('#main .hello'), host = document.getElementById('main') || document.querySelector('main'); if (!host) return;
+        const st = document.createElement('style'); st.textContent = `
+            .ai-trial { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 0 0 16px; border-radius: 20px; color: #E6F6FF; position: relative; overflow: hidden; text-decoration: none;
+                background: radial-gradient(120% 160% at 0% 0%, #1B3A6E 0%, #0B1A36 55%, #071128 100%); box-shadow: 0 18px 40px -28px rgba(2, 6, 23, .9); animation: aitr .7s cubic-bezier(.16, 1, .3, 1) both; }
+            .ai-trial::after { content: ''; position: absolute; right: -50px; top: -70px; width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, rgba(34, 211, 238, .22), transparent 65%); pointer-events: none; }
+            .ai-trial .bt { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: #0B1630; box-shadow: 0 0 0 2px rgba(34, 211, 238, .8); }
+            .ai-trial .tx { flex: 1; min-width: 0; position: relative; z-index: 1; }
+            .ai-trial .k { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #67E8F9; }
+            .ai-trial b { display: block; font-size: 16px; color: #fff; margin: 2px 0; }
+            .ai-trial small { display: block; font-size: 13px; color: #A9C2DC; }
+            .ai-trial .go { position: relative; z-index: 1; flex: none; border-radius: 12px; padding: 10px 14px; font-size: 13.5px; font-weight: 800; color: #071128; background: linear-gradient(135deg, #67E8F9, #A5F3FC); }
+            @keyframes aitr { from { opacity: 0; transform: translateY(8px); } }
+            @media (max-width: 560px) { .ai-trial { flex-wrap: wrap; } .ai-trial .go { width: 100%; text-align: center; } }
+            @media (prefers-reduced-motion: reduce) { .ai-trial { animation: none; } }`;
+        document.head.appendChild(st);
+        const a = document.createElement('a');
+        a.id = 'aiTrialCard'; a.className = 'ai-trial'; a.href = url('assistant.html');
+        a.innerHTML = `<span class="bt">${AiRobot.head(34)}</span><span class="tx"><span class="k">Free trial · ${esc(AiRobot.dayEn(t.start))} → ${esc(AiRobot.dayEn(t.end))}</span>
+            <b>Miss Marwa Assistant Pro is live</b><small>${AiRobot.n1(c.left)} of ${AiRobot.n1(c.budget)} free credits left · try it until ${esc(AiRobot.dayEn(t.end))}</small></span><span class="go">Start studying →</span>`;
+        if (hello) hello.insertAdjacentElement('afterend', a); else host.insertAdjacentElement('afterbegin', a);
     }
     function shell({ active = 'home', title = '', notifications = true, bottomNav = true } = {}) {
         const first = session.firstName || 'Student';
