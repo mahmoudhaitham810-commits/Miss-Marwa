@@ -203,16 +203,18 @@ export const ENGLISH_ONLY = /(بال?[اإ]نجليز[يى]|بال?[اإ]نجل�
 // «الشرح بالعربي والمصطلحات بالإنجليزي» is the normal one, not an English-only request
 export const wantsEnglishOnly = (t) => ENGLISH_ONLY.test(String(t || '')) && !/(عربي|عامي|اشرح)/.test(String(t || ''));
 const shortHash = async (t) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
-async function lessonSummaryDoc(env, db, { grade, unit, lesson, payer, english = false }) {
-    const base = await lessonSummaryBase(env, db, { grade, unit, lesson, payer });
+// beforeMake(): runs only when something NEW must be generated (a ready-made one never calls it) → that's where the daily PDF slot is taken
+async function lessonSummaryDoc(env, db, { grade, unit, lesson, payer, english = false, beforeMake = null }) {
+    const base = await lessonSummaryBase(env, db, { grade, unit, lesson, payer, beforeMake });
     if (english) return { ...base, lang: 'en' };
     const out = await getOrMake(db, `lsumx:v1:${base.key}`, { kind: 'lesson-summary-pdf-ar', ref: `${grade}:${unit}:${lesson}`, waitMs: 170000, make: async () => {
+        if (beforeMake) await beforeMake();
         const x = await explainLessonSummary(env, db, { grade, toc: base.toc, unit, lesson, blocks: base.lessonDoc.blocks || [], meter: payer });
         return { text: JSON.stringify({ ...base.lessonDoc, blocks: x.blocks }), model: 'claude-haiku-5-5', costUsd: x.cost };
     } });
     return { ...base, lessonDoc: parse(out.text), lang: 'ar', cached: base.cached && !!out.cached };
 }
-async function lessonSummaryBase(env, db, { grade, unit, lesson, payer }) {
+async function lessonSummaryBase(env, db, { grade, unit, lesson, payer, beforeMake = null }) {
     const toc = await gradeToc(env, db, grade, { build: false }).catch(() => []);
     const U = toc[0] && toc[0].units.find(u => u.unit === unit), Ls = U && U.lessons.find(l => l.lesson === lesson);
     if (!U || !Ls) { const e = new Error('NO_LESSON'); e.code = 'NO_LESSON'; throw e; }
@@ -227,6 +229,7 @@ async function lessonSummaryBase(env, db, { grade, unit, lesson, payer }) {
     // 2) made once, shared (a rebuilt book map with other pages → a new one)
     const key = `lsum:v1:${toc[0].book}:${unit}:${lesson}:${Ls.start}-${Ls.end}`;
     const out = await getOrMake(db, key, { kind: 'lesson-summary-pdf', ref: `${grade}:${unit}:${lesson}`, waitMs: 170000, make: async () => {
+        if (beforeMake) await beforeMake();
         const b = await buildLessonSummary(env, db, { grade, toc, unit, lesson, meter: payer, kind: 'student-summary-pdf' });
         return { text: JSON.stringify(b.lessonDoc), model: 'claude-haiku-5-5', costUsd: b.cost };
     } });
@@ -487,12 +490,15 @@ export async function onRequest(context) {
             if (data.threadId && !t) return bad('Chat not found', 404);
             // Pro: photos and PDFs have a daily allowance (messages don't). Miss Marwa's staff preview is never limited.
             const claimed = [];
+            let L2 = null;
             if (!free && !who.preview) {
-                const L2 = await dailyLimits(db, sid);
+                L2 = await dailyLimits(db, sid);
                 const need = [img && 'images', doc && 'pdfIn', !img && (wantsPdf(text) || (!doc && SUMMARY_PDF.test(text))) && 'pdfOut'].filter(Boolean);
                 const WHAT = { images: ['صور', 'صورة'], pdfIn: ['ملفات PDF بتبعتها', 'ملف PDF بتبعته'], pdfOut: ['ملفات PDF أعملهالك (حل، امتحان أو ملخص جديد)', 'ملف PDF أعمله'] };
                 for (const w of need) {
                     if (L2[w] > 0 && await claimDaily(db, sid, w, L2[w])) { claimed.push(w); continue; }
+                    // today's PDFs are used up → still fine for a READY-MADE one (no new AI cost); checked again only if something new must be made
+                    if (w === 'pdfOut' && L2[w] > 0) continue;
                     for (const c of claimed) await releaseDaily(db, sid, c);   // nothing was sent → nothing used
                     const msg = L2[w] > 0
                         ? `النهارده وصلت للحد اليومي: ${L2[w]} ${WHAT[w][0]} 📎 — بيرجع من أول بكره ✨ ولسه تقدر تسألني أسئلة نصية براحتك، من غير حد 💬`
@@ -500,7 +506,15 @@ export async function onRequest(context) {
                     return bad(msg, 429, { code: 'FILE_LIMIT', daily: await dailyState(db, sid, L2) });
                 }
             }
-            const giveBack = async () => { for (const c of claimed) await releaseDaily(db, sid, c); };
+            const giveBack = async () => { for (const c of claimed.splice(0)) await releaseDaily(db, sid, c); };
+            // a brand-new PDF is about to be generated → it needs one of today's PDFs (taken now if it wasn't up front)
+            const limitMsg = () => `النهارده وصلت للحد اليومي: ${L2.pdfOut} ملفات PDF جديدة أعملهالك (حل، امتحان أو ملخص جديد) 📎 — بيرجع من أول بكره ✨ الملخصات الجاهزة بتنزل عادي في أي وقت، ولسه تقدر تسألني أسئلة نصية براحتك 💬`;
+            const takeSlot = async () => {
+                if (free || who.preview || claimed.includes('pdfOut')) return;
+                if (!L2) L2 = await dailyLimits(db, sid);
+                if (L2.pdfOut > 0 && await claimDaily(db, sid, 'pdfOut', L2.pdfOut)) { claimed.push('pdfOut'); return; }
+                const e = new Error('FILE_LIMIT'); e.code = 'FILE_LIMIT'; throw e;
+            };
             const dailyOut = async () => (!free && !who.preview ? { daily: await dailyState(db, sid), credits: creditsOf((await studentAccess(db, sid)).quota) } : {});
             if (!t) {
                 const r = await db.prepare('INSERT INTO tutor_threads (student_id, staff_id, title) VALUES (?, ?, ?)').bind(sid, staffId, text.split('\n')[0].slice(0, 60)).run();
@@ -561,7 +575,7 @@ export async function onRequest(context) {
                         let ref = refFromText(text) || await threadLesson(db, t.id);
                         if (!ref) { try { const pk = await lessonPack(env, db, { grade: who.student.grade, text, ask: text, meter: payer }); ref = pk && pk.ref; } catch (e) { } }
                         if (!ref || !ref.lesson) { const e = new Error('NO_LESSON'); e.code = 'NO_LESSON_SUM'; throw e; }
-                        const S = await lessonSummaryDoc(env, db, { grade: who.student.grade, unit: Number(ref.unit), lesson: Number(ref.lesson), payer: { staffId: who.preview ? who.staff.id : null }, english: wantsEnglishOnly(text) });
+                        const S = await lessonSummaryDoc(env, db, { grade: who.student.grade, unit: Number(ref.unit), lesson: Number(ref.lesson), payer: { staffId: who.preview ? who.staff.id : null }, english: wantsEnglishOnly(text), beforeMake: takeSlot });
                         await keepThreadLesson(db, t.id, ref);
                         if (S.cached) await giveBack();   // ready-made (hers, or a classmate's) costs nothing → not one of today's PDFs
                         const girl = who.student.gender === 'female';
@@ -585,6 +599,7 @@ export async function onRequest(context) {
                         const count = Math.min(30, Math.max(5, parseInt((text.match(/(\d{1,2})\s*(سؤال|اسئله|أسئلة|questions?)/i) || [])[1], 10) || 10));
                         exam = { bookText, ask: text, count };
                     }
+                    await takeSlot();
                     const out = await makeSolutions(env, db, { messages: (all || []).reverse(), worksheet: exam ? null : await threadDoc(db, 'student', t.id), gradeLabel: GRADE_LABEL[who.student.grade] || '', meter: payer, exam });
                     const girl = who.student.gender === 'female';
                     const saved = await save({ text: out.content.exam ? `جاهز امتحانك ${girl ? 'يا بطلة' : 'يا بطل'} 📝 **${out.content.title}** — ${out.content.items.length} سؤال من كتابك، وبعدهم صفحة الإجابة النموذجية بالتفصيل. ${girl ? 'حليه لوحدك الأول وبعدين راجعي' : 'حله لوحدك الأول وبعدين راجع'} من الإجابات 💪` : `جاهز ${girl ? 'يا بطلة' : 'يا بطل'} 📄 **${out.content.title}** — كل سؤال وتحته حله بالتفصيل: المعطيات، تحويل الوحدات وليه، القانون وليه، والحل. ${girl ? 'نزّليه' : 'نزّله'} من الزرار تحت وذاكر منه 💪`.replace('وذاكر', girl ? 'وذاكري' : 'وذاكر'),
@@ -592,6 +607,10 @@ export async function onRequest(context) {
                     return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), ...(await dailyOut()) });
                 } catch (e) {
                     await giveBack();
+                    if (e.code === 'FILE_LIMIT') {
+                        await db.prepare('DELETE FROM tutor_messages WHERE id = ?').bind(userMsg.id).run().catch(() => {});   // nothing happened → not left in the chat
+                        return json({ error: limitMsg(), code: 'FILE_LIMIT', daily: await dailyState(db, sid, L2), threadId: t.id }, 429);
+                    }
                     const msg = e.code === 'NO_LESSON_SUM' || (e.message === 'NO_LESSON' && wantsSummaryPdf(text)) ? 'قولي أنهي درس عايز ملخصه PDF 📚 (مثلاً: اعملي ملخص Unit 2 Lesson 1 PDF)' : e instanceof CacheBusyError ? 'الملخص ده بيتجهز دلوقتي لزميل ليك ⏳ — جرّب كمان دقيقة' : ['NO_TEXT', 'EMPTY'].includes(e.message) ? 'صفحات الدرس ده لسه مش جاهزة 📚 — جرّب درس تاني أو اسأل مس مروة' : e.code === 'NO_LESSON' ? 'قولي على أنهي Unit / Lesson عايز الامتحان 📚 (مثلاً: اعملي امتحان على Unit 2 Lesson 1 PDF)' : e.code === 'NO_SOLUTIONS' ? 'مفيش حلول في الشات ده لسه أحطها في PDF 🤔 — ابعتلي الأسئلة وأحلهالك الأول.' : e instanceof AiLimitError ? (FRIENDLY[e.code] || FRIENDLY.AI_ERROR) : 'ماعرفتش أعمل الـ PDF المرة دي — جرّب تاني 🙏';
                     await save({ role: 'error', text: msg, error: e.code || 'PDF' });
                     return json({ error: msg, code: e.code || 'PDF_FAILED', threadId: t.id, user: msgOut(userMsg) }, e instanceof AiLimitError ? 429 : 502);
