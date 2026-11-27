@@ -178,7 +178,26 @@ const SUMMARY_WORD = /(لخص|ملخص|تلخيص|summary|summari[sz]e|الدر�
 const looksLikeSummary = (t) => /Remember for the exam|In this lesson|🗺️/i.test(String(t || ''));
 // «لخصلي الدرس في PDF» / «ملخص Unit 2 PDF» — "summarise" + PDF is a request to MAKE one (when they didn't send a file)
 const SUMMARY_PDF = /(لخص|ملخص|تلخيص|summar)[^\n]{0,70}(pdf|بي ?دي ?[اإ]ف)/i;
-export const wantsSummaryPdf = (text, lastAssistant = '') => !wantsExam(text) && ((wantsPdf(text) && (SUMMARY_WORD.test(text) || looksLikeSummary(lastAssistant))) || SUMMARY_PDF.test(String(text || '')));
+// 28 Nov (Mahmoud's test): «ظبطهولي في pdf عشان ارجعله» after an EXPLANATION must give the lesson summary — only a request
+// that names solutions / questions, or comes right after a SOLVED question, means the worked-solutions PDF.
+const SOLVE_WORD = /(?<![\u0621-\u064A])(ال)?(حل(?:ول|ها|هم|ه|هالي|هاالي|هولي|هملي|يها|يهم)?|مسائل|مساله|مسأله|مسألة|اسئله|أسئلة|اسئلة|الاسئله|إجابات|اجابات)(?![\u0621-\u064A])|solutions?|answers|questions|problems/i;
+const looksSolved = (t) => /✅ \*\*الإجابة|المعطيات|\*\*Given|Given:|Worked Solutions/i.test(String(t || ''));
+const EXPLAIN_WORD = /(شرح|الشرح|اشرح|ملخص|لخص|الدرس)/;
+const CORRECTION = /(مش|بدل|مش عايز|not|instead)/i;
+/** a "the summary, not the solutions" correction right after a solutions PDF — «انا عايز الشرح مش حل مسائل» */
+export const correctsToSummary = (text, lastAssistantCards = []) => (lastAssistantCards || []).some(c => c && c.type === 'solutions' && !(c.content && c.content.exam)) && EXPLAIN_WORD.test(String(text || '')) && CORRECTION.test(String(text || ''));
+// «حطهم / اعملهم / ظبطهملي في PDF» — "them" = the questions / solutions
+const THEM = /(?<![\u0621-\u064A])(حط|اعمل|عمل|خلي|ظبط|جمع|نزل|حول|اكتب)(هم|هملي|هوملي|ولهم|يهم)(?![\u0621-\u064A])/;
+const looksLikeQuestions = (t) => /(^|\s)(Q\s*\d|\d\s*[).-]\s)|sol:|choose|complete|give reason|اختار|علل|اكمل|أكمل/i.test(String(t || '')) || askKind(String(t || '')) === 'exam';
+export const wantsSummaryPdf = (text, lastAssistant = '', lastUser = '') => {
+    const t = String(text || '');
+    if (wantsExam(t)) return false;
+    if (SUMMARY_PDF.test(t)) return true;
+    if (!wantsPdf(t)) return false;
+    if (SUMMARY_WORD.test(t) || EXPLAIN_WORD.test(t) || looksLikeSummary(lastAssistant)) return true;
+    // "put it in a PDF" after an EXPLANATION → the lesson summary; after questions / solutions → the worked solutions
+    return !SOLVE_WORD.test(t) && !THEM.test(t) && !looksSolved(lastAssistant) && !looksLikeQuestions(lastUser);
+};
 async function lessonSummaryDoc(env, db, { grade, unit, lesson, payer }) {
     const toc = await gradeToc(env, db, grade, { build: false }).catch(() => []);
     const U = toc[0] && toc[0].units.find(u => u.unit === unit), Ls = U && U.lessons.find(l => l.lesson === lesson);
@@ -505,12 +524,19 @@ export async function onRequest(context) {
             if (doc) await keepDoc(db, 'student', t.id, doc);   // kept with the chat: every later message (and "make it a PDF") sees it
             const sheet = doc ? { name: doc.name, text: doc.text } : await threadDoc(db, 'student', t.id);
             // "حطهولي في PDF" → the chat's solutions as the same branded worked-solutions PDF Miss Marwa gets
-            if (!free && !img && (wantsPdf(text) || (!doc && !sheet && SUMMARY_PDF.test(text)))) {
+            // «انا عايز الشرح مش حل مسائل» right after a solutions PDF → the lesson summary PDF straight away
+            let fix = false;
+            if (!free && !img && !doc && !wantsPdf(text) && EXPLAIN_WORD.test(text) && CORRECTION.test(text)) {
+                const la = await db.prepare(`SELECT cards FROM tutor_messages WHERE thread_id = ? AND role = 'assistant' AND id < ? ORDER BY id DESC LIMIT 1`).bind(t.id, userMsg.id).first();
+                fix = correctsToSummary(text, la && parse(la.cards));
+            }
+            if (!free && !img && (fix || wantsPdf(text) || (!doc && !sheet && SUMMARY_PDF.test(text)))) {
                 try {
                     const { results: all } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
                     const payer = who.preview ? { staffId: who.staff.id, kind: 'chat-pdf' } : { studentId: sid, kind: 'chat-pdf' };
                     const lastA = ((all || []).find(m => m.role === 'assistant') || {}).text || '';
-                    if (!doc && !sheet && wantsSummaryPdf(text, lastA)) {
+                    const lastU = ((all || []).find(m => m.role === 'user') || {}).text || '';
+                    if (fix || (!doc && !sheet && wantsSummaryPdf(text, lastA, lastU))) {
                         // which lesson: named in the message → the chat's lesson → the lesson the message is about
                         let ref = refFromText(text) || await threadLesson(db, t.id);
                         if (!ref) { try { const pk = await lessonPack(env, db, { grade: who.student.grade, text, ask: text, meter: payer }); ref = pk && pk.ref; } catch (e) { } }
@@ -522,7 +548,7 @@ export async function onRequest(context) {
                         const name = `Unit ${ref.unit} · Lesson ${ref.lesson}${S.title ? ' — ' + S.title : ''}`;
                         const nameIso = `\u2066${name}\u2069`;   // keeps "Unit 2 · Lesson 1" in reading order inside the Arabic line
                         const L = S.lessonDoc, nTerms = (L.blocks || []).filter(b => b.t === 'term').length, nGr = (L.blocks || []).filter(b => b.t === 'reason').length;
-                        const saved = await save({ text: `جاهز ملخصك ${girl ? 'يا بطلة' : 'يا بطل'} 📄 **${nameIso}** — الدرس كله بأسلوب مس مروة${S.by === 'marwa' ? ' (الملخص اللي عاملاه بنفسها ✨)' : ''}: كل تعريف${nTerms ? ` (${nTerms})` : ''}، كل G.R${nGr ? ` (${nGr})` : ''}، القوانين والمقارنات، وفي الآخر أهم النقط للامتحان. نزّله من الزرار 👇`,
+                        const saved = await save({ text: `${fix ? `حقك عليا ${girl ? 'يا بطلة' : 'يا بطل'} 🙏 — ده ` : `جاهز ملخصك ${girl ? 'يا بطلة' : 'يا بطل'} 📄 `}**${nameIso}** — الدرس كله بأسلوب مس مروة${S.by === 'marwa' ? ' (الملخص اللي عاملاه بنفسها ✨)' : ''}: كل تعريف${nTerms ? ` (${nTerms})` : ''}، كل G.R${nGr ? ` (${nGr})` : ''}، القوانين والمقارنات، وفي الآخر أهم النقط للامتحان. نزّله من الزرار 👇`,
                             model: 'claude-haiku-5-5', cost: 0, cards: JSON.stringify([{ type: 'lessonpdf', grade: who.student.grade, by: S.by, title: name, content: { lessons: [L] } }]) });
                         return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), ...(await dailyOut()) });
                     }
