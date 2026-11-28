@@ -108,7 +108,8 @@ export async function onRequestPost(context) {
         }
         return Response.json({ error: 'Invalid action' }, { status: 400 });
     } catch (err) {
-        return Response.json({ error: 'حصل خطأ في السيرفر', detail: String(err && err.message || err) }, { status: 500 });
+        console.error('parent error', err);
+        return Response.json({ error: 'حصل خطأ في السيرفر', detail: undefined /* the real error goes to the server log only (audit 28 Nov 2026) */ }, { status: 500 });
     }
 }
 
@@ -260,7 +261,8 @@ export async function onRequestGet(context) {
         }
         return pj({ error: 'Invalid action' }, 400);
     } catch (err) {
-        return pj({ error: 'حصل خطأ في السيرفر', detail: String(err && err.message || err) }, 500);
+        console.error('parent error', err);
+        return pj({ error: 'حصل خطأ في السيرفر', detail: undefined /* the real error goes to the server log only (audit 28 Nov 2026) */ }, 500);
     }
 }
 

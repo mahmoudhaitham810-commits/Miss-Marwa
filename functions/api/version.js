@@ -1,8 +1,8 @@
-import { ensureStaffSchema } from './admin-auth.js';
+import { ensureStaffSchema, verifyAdminRequest } from './admin-auth.js';
 
 // GET /api/version — which build of the Functions is running, which settings it receives,
 // and whether the database is reachable. Setting NAMES only (never values).
-export async function onRequestGet({ env }) {
+export async function onRequestGet({ env, request }) {
     const names = Object.keys(env || {}).sort();
     const db = [env.DB, env.D1_DB].find(d => d && typeof d.prepare === "function");
     let database = 'NO D1 DATABASE BINDING — a plain text variable named DB is not a database. Add a D1 binding named DB for this environment.';
@@ -17,10 +17,12 @@ export async function onRequestGet({ env }) {
             database = String(e && e.message ? e.message : e).slice(0, 500);
         }
     }
+    let staff = null; try { staff = await verifyAdminRequest(request, env); } catch (e) { }
     return Response.json({
         functionsBuild: 'phase2-diag-5',
-        settingNames: names.filter(k => typeof env[k] === 'string'),
-        bindings: names.filter(k => typeof env[k] !== 'string'),
+        // the list of setting / binding NAMES only for a signed-in staff member (audit 28 Nov 2026: anyone could read which
+        // integrations and keys exist) — the yes/no checks below are enough for the login page's diagnostics
+        ...(staff ? { settingNames: names.filter(k => typeof env[k] === 'string'), bindings: names.filter(k => typeof env[k] !== 'string') } : {}),
         dbIsTextVariable: typeof env.DB === 'string',
         hasAdminTokenSecret: typeof env.ADMIN_TOKEN_SECRET === 'string',
         // public page: whether the secret is long enough — never its length (audit 23 Nov 2026)

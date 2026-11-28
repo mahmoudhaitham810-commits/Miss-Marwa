@@ -564,6 +564,7 @@ export async function onRequest(context) {
 
         return bad('Invalid action');
     } catch (err) {
-        return Response.json({ error: 'حصل خطأ في السيرفر', detail: String(err && err.message || err) }, { status: 500 });
+        console.error('ask error', err);
+        return Response.json({ error: 'حصل خطأ في السيرفر', detail: undefined /* the real error goes to the server log only (audit 28 Nov 2026) */ }, { status: 500 });
     }
 }

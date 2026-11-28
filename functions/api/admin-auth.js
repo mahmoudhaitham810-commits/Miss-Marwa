@@ -452,8 +452,11 @@ export async function readParentCookie(request, env) {
 }
 export const CLEAR_STUDENT_COOKIE = `${STUDENT_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
 export function studentSessionsEnabled(env) { return !!studentSecret(env); }
+// Audit 28 Nov 2026: this used to be ON whenever the signing secret was missing — a missing / misspelt secret would have let
+// anyone open any student's account by typing a student code. Now it is fail-CLOSED: only the explicit
+// STUDENT_LEGACY_SESSIONS=allow setting (and a working secret) turns the old code-only sign-in on.
 export function legacyStudentsAllowed(env) {
-    return !studentSecret(env) || String(env.STUDENT_LEGACY_SESSIONS || '').toLowerCase() === 'allow';
+    return !!studentSecret(env) && String(env.STUDENT_LEGACY_SESSIONS || '').toLowerCase() === 'allow';
 }
 // ---------- Max 2 devices per student ----------
 // Each browser keeps a random device id in its own long-lived HttpOnly cookie. Signing in registers

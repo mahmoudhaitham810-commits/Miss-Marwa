@@ -177,7 +177,7 @@ const ORDS = Object.keys(ORD).sort((a, b) => b.length - a.length).join('|');
 const numOf = (v) => /^\d+$/.test(v) ? parseInt(v, 10) : ORD[v] || null;
 export function refFromText(text) {
     const t = ' ' + norm(text).replace(/[^\p{L}\p{N}\s]/gu, ' ') + ' ';
-    const u = t.match(new RegExp(`(?:\\bunit|\\bu|الوحده|وحده|الباب|باب)\\s*(?:رقم\\s*|no\\s*)?(\\d{1,2}|${ORDS})(?=\\s)`));
+    const u = t.match(new RegExp(`(?:\\bunit|\\bchapter|\\bch|\\bu|الوحده|وحده|الباب|باب)\\s*(?:رقم\\s*|no\\s*)?(\\d{1,2}|${ORDS})(?=\\s)`));
     const l = t.match(new RegExp(`(?:\\blesson|\\bl|الدرس|درس)\\s*(?:رقم\\s*|no\\s*)?(\\d{1,2}|${ORDS})(?=\\s)`));
     const unit = u ? numOf(u[1]) : null, lesson = l ? numOf(l[1]) : null;
     return unit || lesson ? { unit, lesson } : null;

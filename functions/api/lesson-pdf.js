@@ -69,6 +69,8 @@ export async function onRequest(context) {
             return new Response(obj.body, { headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `inline; filename="${name}"` } });
         }
         if (action === 'ids') {
+            // signed-in only (audit 28 Nov 2026) — nothing private in it, but nothing on the site answers strangers
+            if (!((await verifyStudentRequest(request, env, db)) || (await verifyAdminRequest(request, env)))) return bad('Please sign in first', 401);
             const grade = String(url.searchParams.get('grade') || '').toLowerCase();
             const { results } = await db.prepare(`SELECT f.lesson_id FROM lesson_files f JOIN lessons l ON l.id = f.lesson_id WHERE l.grade = ? AND f.chars >= ?`).bind(grade, MIN_TEXT).all();
             return json({ ids: (results || []).map(r => r.lesson_id) });

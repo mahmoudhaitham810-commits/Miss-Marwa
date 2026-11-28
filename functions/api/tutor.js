@@ -28,7 +28,7 @@ import { studentAccess, dailyLimits, dailyState, claimDaily, releaseDaily, quota
 import { searchBook, bookRules, gradeToc, lessonPack, lessonRules, refFromText } from './curriculum.js';
 import { sourceBlock, lessonParts, buildLessonSummary, explainLessonSummary } from './studio.js';
 import { getOrMake, CacheBusyError } from './ai-cache.js';
-import { wantsPdf, wantsExam, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
+import { wantsPdf, wantsExam, keepDoc, threadDoc, makeSolutions, worksheetBlock, PDFW, mentionsPdf } from './solutions-doc.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
@@ -177,7 +177,7 @@ async function keepThreadLesson(db, threadId, ref) {
 const SUMMARY_WORD = /(لخص|ملخص|تلخيص|summary|summari[sz]e|الدرس كله|الدرس كامل|الدرس ده)/i;
 const looksLikeSummary = (t) => /Remember for the exam|In this lesson|🗺️/i.test(String(t || ''));
 // «لخصلي الدرس في PDF» / «ملخص Unit 2 PDF» — "summarise" + PDF is a request to MAKE one (when they didn't send a file)
-const SUMMARY_PDF = /(لخص|ملخص|تلخيص|summar)[^\n]{0,70}(pdf|بي ?دي ?[اإ]ف)/i;
+const SUMMARY_PDF = new RegExp(`(لخص|ملخص|تلخيص|summar)[^\\n]{0,70}${PDFW}`, 'i');
 // 28 Nov (Mahmoud's test): «ظبطهولي في pdf عشان ارجعله» after an EXPLANATION must give the lesson summary — only a request
 // that names solutions / questions, or comes right after a SOLVED question, means the worked-solutions PDF.
 const SOLVE_WORD = /(?<![\u0621-\u064A])(ال)?(حل(?:ول|ها|هم|ه|هالي|هاالي|هولي|هملي|يها|يهم)?|مسائل|مساله|مسأله|مسألة|اسئله|أسئلة|اسئلة|الاسئله|إجابات|اجابات)(?![\u0621-\u064A])|solutions?|answers|questions|problems/i;
@@ -198,6 +198,8 @@ export const wantsSummaryPdf = (text, lastAssistant = '', lastUser = '') => {
     // "put it in a PDF" after an EXPLANATION → the lesson summary; after questions / solutions → the worked solutions
     return !SOLVE_WORD.test(t) && !THEM.test(t) && !looksSolved(lastAssistant) && !looksLikeQuestions(lastUser);
 };
+// the model saying it can't make a PDF / asking the student to re-type → replaced by the real way (safety net)
+export const PDF_REFUSAL = /(مش|ما|مـش)\s?(ه|ح)?(قدر|اقدر|أقدر|بقدر|بعرف|اعرف|أعرف)[^\n]{0,50}(PDF|ملف|بي دي)|مقدرش[^\n]{0,40}(PDF|ملف)|اكتب(لي|ي|يلي)?\s?(بالظبط|كده بالظبط)|(can'?t|cannot|unable to)[^\n]{0,40}PDF/i;
 // the student's PDF explains in Egyptian Arabic (Miss Marwa's way) — the all-English one only when they ask for English
 export const ENGLISH_ONLY = /(بال?[اإ]نجليز[يى]|بال?[اإ]نجلش|[اإ]نجليز[يى] بس|english only|in english|english version|only english)/i;
 // «الشرح بالعربي والمصطلحات بالإنجليزي» is the normal one, not an English-only request
@@ -616,6 +618,7 @@ export async function onRequest(context) {
                     return json({ error: msg, code: e.code || 'PDF_FAILED', threadId: t.id, user: msgOut(userMsg) }, e instanceof AiLimitError ? 429 : 502);
                 }
             }
+            let pack = null;
             try {
                 let out;
                 if (free) {
@@ -631,7 +634,6 @@ export async function onRequest(context) {
                     const searchText = `${text} ${sheet ? sheet.text.slice(0, 1500) : ''} ${prevQ}`.trim();
                     // 25 Nov 2026: the WHOLE lesson of their book (+ its ready questions) instead of a few snippets — the chat
                     // remembers its lesson, so follow-ups («idea»، «C»، «وضحلي») stay on it
-                    let pack = null;
                     if (!intents.length) {
                         const threadRef = await threadLesson(db, t.id);
                         const quick = !img && !doc && threadRef && (String(text).trim().length <= 14 || (prevAskedQuestion(messages) && String(text).trim().length <= 40));
@@ -652,7 +654,15 @@ export async function onRequest(context) {
                         messages: [...EXAMPLES, ...messages], maxTokens: sheet ? 9000 : img ? 2000 : 1600, image: img && !img.error ? img : null,
                         meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
                 }
-                const body = kind === 'exam' ? out.text : dropAnswerLine(out.text);
+                let body = kind === 'exam' ? out.text : dropAnswerLine(out.text);
+                // safety net (28 Nov 2026): a PDF / file request that still reached the model → the real button, never "write exactly …"
+                if (!free && !intents.length && !doc && mentionsPdf(text)) {
+                    const ref = (pack && pack.ref) || await threadLesson(db, t.id);
+                    if (ref && ref.lesson && !cards.some(c => c.type === 'next')) cards.push({ type: 'next', unit: Number(ref.unit), lesson: Number(ref.lesson), title: (pack && pack.title) || '' });
+                    if (PDF_REFUSAL.test(body)) body = ref && ref.lesson
+                        ? `حاضر ${who.student.gender === 'female' ? 'يا بطلة' : 'يا بطل'} 👇 دوس على «📄 الملخص الكامل PDF» اللي تحت وهيتعملك على طول`
+                        : `حاضر ${who.student.gender === 'female' ? 'يا بطلة' : 'يا بطل'} 👇 قولي أنهي درس (مثلاً Unit 2 Lesson 1) وأعملهولك PDF على طول`;
+                }
                 const saved = await save({ text: (intents.length ? body : englishTerms(body)) || '…', model: out.model, ms: out.ms, neurons: out.neurons, cost: out.costUsd, cards: cards.length ? JSON.stringify(cards) : null });
                 return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), ...(await dailyOut()) });
             } catch (e) {

@@ -14,7 +14,7 @@
 // =====================================================================
 import { requireStaff, ensureAppSchema, verifyStudentRequest, audit, auditStmt } from './admin-auth.js';
 import { ensureQuotaTables, quotaSettings, studentQuota, cairoDay } from './ai-quota.js';
-import { putMedia, mediaInfo, mediaResponse } from './media-store.js';
+import { putMedia, mediaInfo, mediaResponse, deleteMedia } from './media-store.js';
 import { pushTo, students as pushStudents, staffList, background } from './push.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
@@ -135,12 +135,13 @@ export async function onRequest(context) {
             if (!real || bytes.length > MAX_BYTES) return bad('ده مش ملف صورة — ارفع screenshot أو صورة الإيصال');
             const today = await db.prepare(`SELECT COUNT(*) AS n FROM ai_pay_requests WHERE student_id = ? AND created_at >= datetime('now', '-1 day')`).bind(sid).first();
             if ((Number(today && today.n) || 0) >= PER_DAY) return bad('بعت طلبات كتير النهارده — استنى رد فريق مس مروة 🙏', 429);
-            const pending = await db.prepare(`SELECT id FROM ai_pay_requests WHERE student_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`).bind(sid).first();
+            const pending = await db.prepare(`SELECT id, media_id FROM ai_pay_requests WHERE student_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`).bind(sid).first();
             const m = await putMedia(env, db, { kind: 'pay', studentId: sid, mime: real, data: img.data });
             let id;
             if (pending) {   // they're sending a clearer photo — replace the waiting one (still ONE request)
                 id = pending.id;
                 await db.prepare(`UPDATE ai_pay_requests SET method = ?, amount = ?, from_phone = ?, media_id = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(method, S.price, fromPhone || null, m.id, id).run();
+                if (pending.media_id && pending.media_id !== m.id) await deleteMedia(env, db, [pending.media_id]).catch(() => {});   // the old photo isn't kept (storage + privacy)
             } else {
                 const r = await db.prepare('INSERT INTO ai_pay_requests (student_id, method, amount, from_phone, media_id) VALUES (?, ?, ?, ?, ?)').bind(sid, method, S.price, fromPhone || null, m.id).run();
                 id = Number(r.meta.last_row_id);
@@ -158,6 +159,6 @@ export async function onRequest(context) {
         return bad('Unknown action', 404);
     } catch (e) {
         console.error('subscription error', e);
-        return bad(e.message || 'Server error', 500);
+        return bad('حصلت مشكلة — جرّب تاني 🙏', 500);   // the real error stays in the server log, never in the answer
     }
 }

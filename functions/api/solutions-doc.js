@@ -7,8 +7,15 @@ import { PRO_ACCURACY } from './ai-rules.js';
 
 // "put it in a PDF / اعمله PDF / حطهم في ملف PDF" — a request to MAKE a PDF (not "here is a PDF, solve it")
 const VERB = '(حط|عمل|خلي|خلى|حول|طلع|جهز|نزل|ابعت|بعت|عايز|عاوز|محتاج|ممكن|اكتب|put|make|turn|export|convert|save|give me|create|generate|want|need|prepare)';
-const PDFW = '(pdf|بي ?دي ?[اإ]ف|بى ?دى ?[اإ]ف)';
-const MAKE_PDF = new RegExp(`${VERB}[^\\n]{0,60}${PDFW}|${PDFW}[^\\n]{0,25}(فيه|فيها|بالاجابات|بالإجابات|بالحل|with the answers|of the answers)`, 'i');
+// every way students write it (28 Nov 2026: «اعملي البدف تاني» was missed → the model answered instead of the app):
+// pdf · PDF · p d f · pfd · بي دي اف · بى دى إف · بيدياف · بدف · البدف · ال pdf
+export const PDFW = '(p\\s?\\.?\\s?d\\s?\\.?\\s?f|pfd|(?<![\\u0621-\\u064A])(ال)?(بدف|بي\\s?دي\\s?[اإأ]ف|بى\\s?دى\\s?[اإأ]ف|بيدي\\s?[اإأ]ف|بيدى\\s?[اإأ]ف|پي\\s?دي\\s?[اإأ]ف|ب\\s?د\\s?ف)(?![\\u0621-\\u064A]))';
+// «حطهولي في ملف» / «اعمله ملف» — a file = a PDF
+const FILEW = '(?<![\\u0621-\\u064A])[وب]?(في|ف|ك|ل|على شكل|علي شكل)?\\s?(ال)?(ملف|فايل)(?![\\u0621-\\u064A])';
+const MAKE_VERB = '(حط|عمل|حول|طلع|جهز|نزل|ظبط|جمع)';
+const MAKE_PDF = new RegExp(`${VERB}[^\\n]{0,60}${PDFW}|${PDFW}[^\\n]{0,25}(فيه|فيها|بالاجابات|بالإجابات|بالحل|with the answers|of the answers)|${MAKE_VERB}[^\\n]{0,40}${FILEW}`, 'i');
+/** any mention of a PDF / file at all (used after the model answered, as a safety net) */
+export const mentionsPdf = (text) => new RegExp(PDFW + '|' + FILEW, 'i').test(String(text || ''));
 export const wantsPdf = (text) => MAKE_PDF.test(String(text || ''));
 /** "اعملي امتحان … PDF" → a practice exam (questions, then a Model Answer page) instead of the chat's solutions */
 export const wantsExam = (text) => /امتحان|امتحني|اختبار|اختبرني|كويز|exam|quiz|\btest\b/i.test(String(text || ''));
