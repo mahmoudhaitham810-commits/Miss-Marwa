@@ -279,7 +279,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
     await kvAdd(db, `ai_spend_${month()}`, costUsd);
     if (held) { await settle(db, held, { usage, costUsd, model }); held = null; }
     else await logUsage(db, { staffId: M.staffId ?? null, kind, model, usage, costUsd });
-    return { text, tier, brand: BRANDS[tier].name, model, ms: Date.now() - t0, costUsd, usage };
+    return { text, tier, brand: BRANDS[tier].name, model, ms: Date.now() - t0, costUsd, usage, stop: res.stop_reason || null };   // stop = 'max_tokens' → the answer was cut
     } finally { if (held) await release(db, held); }
 }
 

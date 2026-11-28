@@ -466,7 +466,12 @@ export async function lessonPack(env, db, { grade, text = '', ask = '', image = 
     if (named && named.lesson && findLesson(school.units, named)) ref = named;
     else if (quick && threadRef) ref = threadRef;
     else {
-        const found = await searchBook(env, db, { grade, text, refText: '', image, meter, k: 8, maxChars: 8000 });
+        // 28 Nov 2026 (Mahmoud's «Test Mahmoud» chat): a follow-up like «اشرح الباقي» / «ده الدرس كله؟» used to lose the chat's
+        // lesson when the search found nothing → no lesson text → the model said "it's not in my database". Now the chat's
+        // lesson stays unless the search CLEARLY points at another lesson (and a failed search never drops it).
+        let found;
+        try { found = await searchBook(env, db, { grade, text, refText: '', image, meter, k: 8, maxChars: 8000 }); }
+        catch (e) { if (!threadRef) throw e; found = { science: true, ctx: { passages: [] } }; }
         science = found.science;
         if (science && found.ctx.passages.length) {
             const votes = new Map();
@@ -480,7 +485,7 @@ export async function lessonPack(env, db, { grade, text = '', ask = '', image = 
             if (best && best[1] >= 2 && !(prev && prev >= best[1] - 1)) { const [u, l] = best[0].split(':').map(Number); ref = { unit: u, lesson: l }; }
             else if (threadRef) ref = threadRef;
             else if (best) { const [u, l] = best[0].split(':').map(Number); ref = { unit: u, lesson: l }; }
-        } else if (threadRef && !science && String(ask || '').length <= 60) ref = threadRef;   // «idea»، «وضحلي» — still about the lesson
+        } else if (threadRef) ref = threadRef;   // «idea»، «وضحلي»، «كمل»، «اشرح الباقي» — still about the chat's lesson
     }
     const hit = ref ? findLesson(school.units, ref) : null;
     if (!hit) return { indexed: true, science, ref: null, block: '' };
@@ -518,6 +523,11 @@ export function lessonRules(gradeLabel, title) {
 - Key terms and definitions in the book's English wording, in **bold**.
 - Questions (quiz, «نحل أسئلة»، «اختبرني», practice): give ONLY questions from READY QUESTIONS — first El-Moasser's self-assessment questions inside THE LESSON, then Miss Marwa's homework — copied as written — one at a time, never one already asked in this chat. Check their answer with the lesson / the answer key and say why in one simple line. NEVER write your own questions. If none are left, say so and offer to explain a part instead.
 - If they ask about something that isn't in this lesson, look at whether it's in their book at all; if not, say it's not in their curriculum.
+- THE LESSON above is the complete lesson: you HAVE all of it. Never say something "isn't in your database / data / memory", that you're "not programmed" for it, or that you only gave "a quick summary" — if they want more, teach more from THE LESSON.
+- LAYOUT for a phone screen (clean, never a wall of text): a ### heading for each section · ONE idea per bullet, max 2 short lines · a blank line between sections · every definition, law, equation, genotype / cross and comparison on its OWN line · never chain several English terms in one Arabic line — e.g. not «(R) dominant و(r) recessive و(Y) yellow…» but:
+  - **Round (R)** ← dominant
+  - **Wrinkled (r)** ← recessive
+  Put the Arabic explanation on its own line after the English («يعني …»).
 - End an explanation with: 📖 من كتابك — Unit ${title.match(/Unit (\d+)/) ? title.match(/Unit (\d+)/)[1] : ''} · Lesson ${title.match(/Lesson (\d+)/) ? title.match(/Lesson (\d+)/)[1] : ''}. Never PDF page numbers.`;
 }
 

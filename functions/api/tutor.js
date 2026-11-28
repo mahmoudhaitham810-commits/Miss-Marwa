@@ -238,6 +238,17 @@ async function lessonSummaryBase(env, db, { grade, unit, lesson, payer, beforeMa
     return { lessonDoc: parse(out.text), by: 'ai', title: Ls.title || '', cached: !!out.cached, toc, key };
 }
 
+// 28 Nov 2026 — replies a paid student must never get
+export const BAD_REPLY = /(قاعد[ةه] (ال)?بيانات|داتا ?بيز|\bdata ?base\b|مش متبرمج|مش مبرمج|not programmed|مش موجود (عندي|معايا) |ملخص سريع بس|مجرد ملخص|just a (quick |short )?summary)/i;
+// a verdict that flips inside a graded answer («❌ … لكن لحظة، خليني أصحح نفسي … إجابتك كانت صح»)
+const FLIP_WORDS = /(خليني (أ|ا)صحح|(أ|ا)صحح نفسي|لكن لحظة|استنى لحظة|let me (re-?evaluate|correct)|I made a mistake|غلطت في التصحيح)/i;
+export const FLIP_REPLY = { test: (t) => { const x = String(t || ''); return FLIP_WORDS.test(x) || (/^\s*❌/.test(x) && /إجابتك (كانت |هي )?(صح|الصح)|✅\s*(برافو|صح)/.test(x)); } };
+const FIX_RULE = `## Your first draft broke the rules — write the answer again
+- THE LESSON (above, when present) is the complete lesson: explain whatever they ask from it fully. Never mention a database, data, memory or programming, and never call your explanation "a quick summary".
+- Grading a quiz answer: solve it yourself first, then give ONE final verdict as the first word and never change it inside the message (no «لحظة», no «خليني أصحح نفسي»).`;
+const GRADING_RULE = `## Their message is the ANSWER to your last quiz question
+Before writing anything, solve that question yourself step by step and compare with their answer (exactly: the letter / word / number they chose). Then write: the verdict first (✅ برافو! or ❌ قربت…) — final, never changed later in the message — the correct answer in **English** like the model answer, ONE short line why in Egyptian Arabic, then the next question.
+Layout: each part on its own line (the verdict · the answer · why · the next question), never a wall of text.`;
 /** Did the assistant's last message ask the student a practice question? (then a short message is the answer) */
 const prevAskedQuestion = (messages) => { const a = messages.filter(m => m.role === 'assistant').slice(-1)[0]; return !!a && /question\s*\d|سؤال\s*\d|اختيارك|true or false|صح ولا غلط|ابعتلي إجابتك|إجابتك/i.test(a.content); };
 
@@ -308,11 +319,12 @@ const EXAMPLES = [
 ];
 
 // The short lesson summary students get in the chat (made once per lesson, shared) — not the long teacher summary.
-export const STUDENT_SUMMARY_TASK = `## Task: a SHORT, high-value summary of this lesson for students (they read it in the chat on their phone)
-Not the long teacher summary: about 450–800 words, but NOTHING important skipped — every definition, law / rule, unit, device, key reason (G.R), key comparison and key example the exams ask about, each as ONE tight line.
+export const STUDENT_SUMMARY_TASK = `## Task: the COMPLETE lesson, explained for students in the chat (they read it on their phone)
+COMPLETE (28 Nov 2026 — it used to skip parts): every section of the lesson in the book's order, NOTHING skipped — every definition, law / rule, unit, device, process, reason (G.R), comparison and example the lesson has. As long as the lesson needs (usually 700–1500 words) — never "a quick summary", never several ideas squeezed into one line.
 Organise it like Miss Marwa (a roadmap first, then each main topic in turn, so it reads like one story):
 - First: 🗺️ **In this lesson:** then the 3–6 main topics as a numbered list (short, simple names).
 - Then each topic: ### 1. <topic> — bullets: **Term:** definition (the book's wording) · explanation in short lines · cause → result with arrows · formulas with their units on their own line · **G.R:** fact → Because … · a quick example.
+- LAYOUT for a phone: ONE idea per bullet (max 2 short lines), a blank line between topics, every definition / law / equation / genotype / comparison on its own line — never chain several English terms in one Arabic line; the Arabic «يعني …» on its own line after the English.
 - A small markdown table only for a real comparison (2–4 rows).
 - End with: 📌 **Remember for the exam** — 3–5 bullets.
 LANGUAGE — strict (Miss Marwa teaches in Egyptian Arabic; the exams are in English): every explaining line is in Egyptian Arabic (عامية مصرية) with the book's English terms inside it (الـ **resistance** بتقل لما…). English ONLY for the book's terms, definitions and laws (in **bold**, the book's wording, then «يعني …» in Arabic), units and formulas, the **G.R:** sentence + "Because …" (as written in the exam, then one Arabic line why), and the 📌 lines. A bullet that is only English (other than those) is wrong. Never Arabic science terms (no شدة التيار / المقاومة / فرق الجهد — the English term).
@@ -438,13 +450,13 @@ export async function onRequest(context) {
             const ask = `لخصلي Unit ${unit} · Lesson ${lesson}${Ls.title ? ': ' + Ls.title : ''} 📘`;
             const ur = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text) VALUES (?, 'user', ?)`).bind(t.id, ask).run();
             const userMsg = { id: Number(ur.meta.last_row_id), role: 'user', text: ask, created_at: new Date().toISOString() };
-            const key = `ssum:v2:${toc[0].book}:${unit}:${lesson}:${Ls.start}-${Ls.end}`;   // v2 (28 Nov): Arabic explanations — the old English-only ones are never served again   // a rebuilt map with other pages → a new summary
+            const key = `ssum:v3:${toc[0].book}:${unit}:${lesson}:${Ls.start}-${Ls.end}`;   // v2 (28 Nov): Arabic explanations — the old English-only ones are never served again   // a rebuilt map with other pages → a new summary
             try {
                 const out = await getOrMake(db, key, { kind: 'student-summary', ref: `${grade}:${unit}:${lesson}`, waitMs: 80000, make: async () => {
                     const parts = await lessonParts(db, toc, unit, [lesson]);
                     if (!parts.length || !parts[0].text.trim()) throw new Error('NO_PAGES');
                     const r = await chat(env, db, { tier: 'pro', system: [sourceBlock(grade, parts), { type: 'text', text: STUDENT_SUMMARY_TASK }], messages: [{ role: 'user', content: 'Go.' }],
-                        maxTokens: 2600, meter: { staffId: who.preview ? who.staff.id : null, kind: 'student-summary' } });
+                        maxTokens: 7000, meter: { staffId: who.preview ? who.staff.id : null, kind: 'student-summary' } });
                     return { text: r.text, model: r.model, costUsd: r.costUsd };
                 } });
                 const head = `📘 **Unit ${unit} · Lesson ${lesson}${Ls.title ? ' — ' + Ls.title : ''}**
@@ -543,7 +555,9 @@ export async function onRequest(context) {
             else if (free && science) cards.push({ type: 'upgrade', text: NOTE_TEXT, tier: 'pro' });
             const { results: hist } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
             const messages = (hist || []).reverse().map(m => ({ role: m.role, content: m.text }));
-            messages.forEach((m, i) => { if (i < messages.length - 4 && m.content.length > 700) m.content = m.content.slice(0, 650) + ' …'; });   // older turns: the gist is enough (saves tokens on long chats)
+            // older turns: the gist is enough (saves tokens on long chats) — but «كمل / اشرح الباقي» needs the explanations it continues
+            const cont = !img && kind === 'continue';
+            messages.forEach((m, i) => { if (i < messages.length - 4 && m.content.length > 700 && !(cont && m.role === 'assistant')) m.content = m.content.slice(0, 650) + ' …'; });
             // the chat's worksheet (attached now or earlier) → a cached block in the instructions for every message of the chat
             const save = async (f) => {
                 const r = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text, tier, model, ms, neurons, cost_usd, error, cards) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -622,7 +636,7 @@ export async function onRequest(context) {
             try {
                 let out;
                 if (free) {
-                    out = await chat(env, db, { tier: 'free', pool: 'student', system: tutorPrompt(d, 'free') + (img ? IMAGE_RULES : '') + (intents.length ? '' : taskRules(kind, 'free')), messages: [...EXAMPLES, ...messages], maxTokens: img ? 900 : 850, temperature: 0.5, image: img && !img.error ? img : null, bonus });
+                    out = await chat(env, db, { tier: 'free', pool: 'student', system: tutorPrompt(d, 'free') + (img ? IMAGE_RULES : '') + (intents.length ? '' : taskRules(kind, 'free')) + (!img && prevAskedQuestion(messages) ? '\n\n' + GRADING_RULE : ''), messages: [...EXAMPLES, ...messages], maxTokens: img ? 900 : 850, temperature: 0.5, image: img && !img.error ? img : null, bonus });
                     await kvAdd(db, counterKey(who, 'msgs'), 1);
                     if (img) await kvAdd(db, counterKey(who, 'imgs'), 1);
                 } else {
@@ -636,7 +650,7 @@ export async function onRequest(context) {
                     // remembers its lesson, so follow-ups («idea»، «C»، «وضحلي») stay on it
                     if (!intents.length) {
                         const threadRef = await threadLesson(db, t.id);
-                        const quick = !img && !doc && threadRef && (String(text).trim().length <= 14 || (prevAskedQuestion(messages) && String(text).trim().length <= 40));
+                        const quick = !img && !doc && threadRef && (String(text).trim().length <= 14 || kind === 'continue' || (prevAskedQuestion(messages) && String(text).trim().length <= 40));
                         try { pack = await lessonPack(env, db, { grade: who.student.grade, text: searchText, ask: text, image: img && !img.error ? img : null, meter: payer, threadRef, quick }); } catch (e) { pack = null; }
                         if (pack && pack.block) await keepThreadLesson(db, t.id, pack.ref);
                     }
@@ -650,11 +664,27 @@ export async function onRequest(context) {
                         sys = tutorSystem(d, 'pro', { books: !!(found && found.ctx.text) }, (img ? IMAGE_RULES : '') + books + (intents.length ? '' : taskRules(kind, 'pro')));
                     }
                     if (sheet) sys.splice(1, 0, worksheetBlock(sheet, 'the student'));   // [fixed][worksheet][lesson] = the same cached prefix every turn
-                    out = await chat(env, db, { tier: 'pro', system: sys, thinking: sheet ? 4000 : 0,   // a worksheet: think + recompute first
-                        messages: [...EXAMPLES, ...messages], maxTokens: sheet ? 9000 : img ? 2000 : 1600, image: img && !img.error ? img : null,
-                        meter: who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' } });
+                    // 28 Nov 2026 («Test Mahmoud»): grading a quiz answer → think FIRST (hidden), so the verdict never flips mid-message;
+                    // a lesson explanation / «كمل» → room for the WHOLE lesson (it was cut at 1,600 tokens → rushed, parts skipped)
+                    const grading = !img && !sheet && prevAskedQuestion(messages);
+                    const teaching = !!(pack && pack.block) && (kind === 'summary' || kind === 'continue');
+                    const think = sheet ? 4000 : grading ? 2500 : 0;
+                    if (grading) sys.push({ type: 'text', text: GRADING_RULE });
+                    const callPro = (system, meter) => chat(env, db, { tier: 'pro', system, thinking: think,
+                        messages: [...EXAMPLES, ...messages], maxTokens: sheet ? 9000 : img ? 2000 : teaching ? 6000 : grading ? 1800 : 2200, image: img && !img.error ? img : null, meter });
+                    out = await callPro(sys, who.preview ? { staffId: who.staff.id, kind: 'chat' } : { studentId: sid, kind: 'chat' });
+                    // a reply that breaks the rules ("not in my database", "just a quick summary", "wait, let me correct myself")
+                    // → written again ONCE, on the platform's account (the student never pays for our mistake)
+                    if (BAD_REPLY.test(out.text) || (grading && FLIP_REPLY.test(out.text))) {
+                        try {
+                            const again = await callPro([...sys, { type: 'text', text: FIX_RULE }], { staffId: who.preview ? who.staff.id : null, kind: 'chat-fix' });
+                            if (again && again.text && !BAD_REPLY.test(again.text) && !(grading && FLIP_REPLY.test(again.text))) out = { ...again, costUsd: (out.costUsd || 0) + (again.costUsd || 0) };
+                        } catch (e) { /* keep the first answer */ }
+                    }
                 }
                 let body = kind === 'exam' ? out.text : dropAnswerLine(out.text);
+                // cut by the length limit → tell them how to get the rest (never a silent half answer)
+                if (!free && out.stop === 'max_tokens') body = body.replace(/\s+$/, '') + '\n\n✋ لسه فاضل جزء — اكتب «كمل» وأكمل من هنا 👇';
                 // safety net (28 Nov 2026): a PDF / file request that still reached the model → the real button, never "write exactly …"
                 if (!free && !intents.length && !doc && mentionsPdf(text)) {
                     const ref = (pack && pack.ref) || await threadLesson(db, t.id);
