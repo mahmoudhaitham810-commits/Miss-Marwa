@@ -26,7 +26,7 @@ import { requireStaff, ensureAppSchema, verifyStudentRequest } from './admin-aut
 import { chat, AiLimitError, claudeReady } from './ai-gateway.js';
 import { studentAccess, logUsage, ensureQuotaTables } from './ai-quota.js';
 import { getOrMake, sha256, CacheBusyError } from './ai-cache.js';
-import { LANGUAGE_SCHOOLS } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, GRADE_SCOPE } from './ai-rules.js';
 import { lessonText, MIN_TEXT } from './lesson-pdf.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
@@ -34,8 +34,8 @@ const json = (d, s = 200) => Response.json(d, { status: s });
 const bad = (m, s = 400, extra = {}) => json({ error: m, ...extra }, s);
 export const GRADE_LABEL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
-const EXPLAIN_VERSION = 'v1';     // bump when EXPLAIN_SYSTEM changes → fresh explanations
-const SUMMARY_VERSION = 'v2';     // bump when the summary task changes → fresh summaries
+const EXPLAIN_VERSION = 'v2';     // bump when EXPLAIN_SYSTEM changes → fresh explanations
+const SUMMARY_VERSION = 'v3';     // bump when the summary task changes → fresh summaries
 const MAX_Q = 600, MAX_HISTORY = 6;
 
 export const FRIENDLY = {
@@ -66,6 +66,7 @@ export const EXPLAIN_SYSTEM = `You are the teaching assistant of مس مروة (
 - EVERY science term, unit, symbol and formula stays in English and **bold**: الـ **Density**، **kg**، **D = m / V**. Never translate science terms into Arabic.
 - This same explanation is shown to MANY students → no name, no "يا بطل/يا بطلة", no masculine or feminine verbs. Use neutral wording: "يلا نشوف"، "خلّينا نفتكر"، "الاختيار ده".
 ${LANGUAGE_SCHOOLS}
+${GRADE_SCOPE}
 
 ## Format — short, for a phone (max ~120 words), exactly these parts, no greeting, no sign-off:
 ✅ **الإجابة الصح:** <letter> — <the choice text>
@@ -86,6 +87,7 @@ export function pdfBlock(lesson, file) {
 - Egyptian colloquial Arabic (عامية مصرية) — never فصحى.
 - EVERY science term, unit, symbol and formula stays in English and **bold**, exactly as written in the summary. Never translate science terms.
 ${LANGUAGE_SCHOOLS}
+${GRADE_SCOPE}
 
 ## The summary — "${String(lesson.title || '').slice(0, 150)}"
 ${file.text}` };

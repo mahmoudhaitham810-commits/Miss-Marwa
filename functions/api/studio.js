@@ -26,7 +26,7 @@ import { requireStaff, ensureAppSchema, audit } from './admin-auth.js';
 import { chat, AiLimitError, claudeReady } from './ai-gateway.js';
 import { createExam } from './exams.js';
 import { cleanSolutions } from './solutions-doc.js';
-import { englishTerms } from './ai-rules.js';
+import { englishTerms, GRADE_SCOPE } from './ai-rules.js';
 import { gradeToc, pageTexts, chunksOf, pageKind, norm, GRADE_LABELS, bookName } from './curriculum.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
@@ -334,7 +334,7 @@ export async function explainLessonSummary(env, db, { grade, toc, unit, lesson, 
     const [part] = await lessonParts(db, toc, unit, [lesson]);
     if (!part) throw new Error('NO_LESSON');
     const list = blocks.map((b, i) => `${i}: ${JSON.stringify(b).slice(0, 420)}`).join('\n');
-    const r = await chat(env, db, { tier: 'pro', system: [sourceBlock(grade, [part]), { type: 'text', text: EXPLAIN_TASK }], messages: [{ role: 'user', content: 'The summary blocks (number: block):\n' + list }], maxTokens: 12000, meter: { ...meter, kind } });
+    const r = await chat(env, db, { tier: 'pro', system: [sourceBlock(grade, [part]), { type: 'text', text: EXPLAIN_TASK + GRADE_SCOPE }], messages: [{ role: 'user', content: 'The summary blocks (number: block):\n' + list }], maxTokens: 12000, meter: { ...meter, kind } });
     const notes = ((parseJson(r.text) || {}).notes || []);
     const out = blocks.map(b => ({ ...b }));
     let n = 0;

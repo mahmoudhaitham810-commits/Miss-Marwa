@@ -33,7 +33,7 @@ import { wantsPdf, wantsExam, keepDoc, threadDoc, makeSolutions, worksheetBlock,
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
 import { readImage, saveImage, serveImage, purgeOldImages } from './ai-image.js';
-import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, COMPANION, englishTerms, askKind, taskRules, dropAnswerLine, isScienceQuestion, isCapabilityQuestion, capabilitiesForStudent } from './ai-rules.js';
+import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, COMPANION, GRADE_SCOPE, englishTerms, askKind, taskRules, dropAnswerLine, isScienceQuestion, isCapabilityQuestion, capabilitiesForStudent } from './ai-rules.js';
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -211,7 +211,7 @@ const shortHash = async (t) => [...new Uint8Array(await crypto.subtle.digest('SH
 async function lessonSummaryDoc(env, db, { grade, unit, lesson, payer, english = false, beforeMake = null }) {
     const base = await lessonSummaryBase(env, db, { grade, unit, lesson, payer, beforeMake });
     if (english) return { ...base, lang: 'en' };
-    const out = await getOrMake(db, `lsumx:v1:${base.key}`, { kind: 'lesson-summary-pdf-ar', ref: `${grade}:${unit}:${lesson}`, waitMs: 170000, make: async () => {
+    const out = await getOrMake(db, `lsumx:v2:${base.key}`, { kind: 'lesson-summary-pdf-ar', ref: `${grade}:${unit}:${lesson}`, waitMs: 170000, make: async () => {
         if (beforeMake) await beforeMake();
         const x = await explainLessonSummary(env, db, { grade, toc: base.toc, unit, lesson, blocks: base.lessonDoc.blocks || [], meter: payer });
         return { text: JSON.stringify({ ...base.lessonDoc, blocks: x.blocks }), model: 'claude-haiku-5-5', costUsd: x.cost };
@@ -335,7 +335,7 @@ Organise it like Miss Marwa (a roadmap first, then each main topic in turn, so i
 - End with: 📌 **Remember for the exam** — 3–5 bullets.
 LANGUAGE — strict (Miss Marwa teaches in Egyptian Arabic; the exams are in English): every explaining line is in Egyptian Arabic (عامية مصرية) with the book's English terms inside it (الـ **resistance** بتقل لما…). English ONLY for the book's terms, definitions and laws (in **bold**, the book's wording, then «يعني …» in Arabic), units and formulas, the **G.R:** sentence + "Because …" (as written in the exam, then one Arabic line why), and the 📌 lines. A bullet that is only English (other than those) is wrong. Never Arabic science terms (no شدة التيار / المقاومة / فرق الجهد — the English term).
 NEVER copy the book's "Lesson objectives", "By the end of the lesson…", "Terminology" or "Key words" lists — teach the content.
-Markdown only. Never address one student (it is shared by the whole class): no name, no يا بطل. No greeting, no question at the end, no page numbers, no offer to make a PDF — the app adds the buttons.`;
+Markdown only. Never address one student (it is shared by the whole class): no name, no يا بطل. No greeting, no question at the end, no page numbers, no offer to make a PDF — the app adds the buttons.${GRADE_SCOPE}`;
 
 // ---------- messages ----------
 const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } };
@@ -475,7 +475,7 @@ export async function onRequest(context) {
             const ask = `لخصلي Unit ${unit} · Lesson ${lesson}${Ls.title ? ': ' + Ls.title : ''} 📘`;
             const ur = await db.prepare(`INSERT INTO tutor_messages (thread_id, role, text) VALUES (?, 'user', ?)`).bind(t.id, ask).run();
             const userMsg = { id: Number(ur.meta.last_row_id), role: 'user', text: ask, created_at: new Date().toISOString() };
-            const key = `ssum:v3:${toc[0].book}:${unit}:${lesson}:${Ls.start}-${Ls.end}`;   // v2 (28 Nov): Arabic explanations — the old English-only ones are never served again   // a rebuilt map with other pages → a new summary
+            const key = `ssum:v4:${toc[0].book}:${unit}:${lesson}:${Ls.start}-${Ls.end}`;   // v2 (28 Nov): Arabic explanations — the old English-only ones are never served again   // a rebuilt map with other pages → a new summary
             try {
                 const out = await getOrMake(db, key, { kind: 'student-summary', ref: `${grade}:${unit}:${lesson}`, waitMs: 80000, make: async () => {
                     const parts = await lessonParts(db, toc, unit, [lesson]);
