@@ -76,9 +76,16 @@ export async function onRequest(context) {
             const kvAll = await db.prepare(`SELECT COALESCE(SUM(CAST(value AS REAL)), 0) AS usd FROM app_kv WHERE "key" LIKE 'ai_spend_%' AND length("key") = 16`).first();
             const allUsd = Math.max(Number(G && G.a_usd) || 0, Number(kvAll && kvAll.usd) || 0);
             const P = new Map((plans || []).map(p => [p.student_id, p])), U = new Map((use || []).map(u => [u.student_id, u]));
+            const trialOn = !!(S.trial && S.trial.budget > 0 && S.trial.phase === 'on');
             const students = (studs || []).map(s => {
                 const p = P.get(s.student_id) || {}, u = U.get(s.student_id) || {};
                 const budgetEgp = p.budget_egp > 0 ? p.budget_egp : S.budget, usedUsd = Number(u.q_usd) || 0;
+                const on = !!p.enabled && !subExpired(p), trialEgp = (Number(u.t_usd) || 0) * S.rate;
+                // what the student has to spend RIGHT NOW (28 Nov 2026 — Mahmoud: "how much each student spent and has left"):
+                // Pro → their monthly / paid budget; no Pro but the trial is running → the trial credits; otherwise nothing
+                const credits = on ? { mode: 'pro', totalEgp: budgetEgp, usedEgp: money(usedUsd * S.rate), leftEgp: money(Math.max(0, budgetEgp - usedUsd * S.rate)) }
+                    : trialOn ? { mode: 'trial', totalEgp: S.trial.budget, usedEgp: money(trialEgp), leftEgp: money(Math.max(0, S.trial.budget - trialEgp)) }
+                    : { mode: 'off', totalEgp: 0, usedEgp: 0, leftEgp: 0 };
                 return {
                     studentId: s.student_id, firstName: s.first_name, lastName: s.last_name, grade: String(s.grade || '').toLowerCase(),
                     enabled: !!p.enabled && !subExpired(p), budgetEgp, customBudget: p.budget_egp > 0, resetAt: p.reset_period === per ? p.reset_at : null,
@@ -87,6 +94,7 @@ export async function onRequest(context) {
                     top: topKind.get(s.student_id) ? { kind: topKind.get(s.student_id).kind, usd: money(topKind.get(s.student_id).usd), n: topKind.get(s.student_id).n } : null,
                     quota: { usedUsd: money(usedUsd), usedEgp: money(usedUsd * S.rate), leftEgp: money(Math.max(0, budgetEgp - usedUsd * S.rate)) },
                     trial: { messages: Number(u.t_n) || 0, usd: money(u.t_usd), egp: money((Number(u.t_usd) || 0) * S.rate) },
+                    credits, avgEgp: Number(u.all_n) ? money((Number(u.all_usd) || 0) * S.rate / Number(u.all_n)) : null,
                     allTime: { messages: Number(u.all_n) || 0, usd: money(u.all_usd), tokensIn: Number(u.all_in) || 0, tokensOut: Number(u.all_out) || 0 }
                 };
             });

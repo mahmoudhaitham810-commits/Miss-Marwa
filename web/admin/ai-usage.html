@@ -67,6 +67,12 @@
         .open-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 18px; }
         .open-card.is-open { border-color: var(--success-line, #86efac); background: var(--success-soft, #f0fdf4); }
         .sw.big .lbl { display: inline !important; min-width: 48px; }
+        .seg-mini { display: flex; gap: 6px; flex-wrap: wrap; } .seg-mini .chip { cursor: pointer; border: 0; font: inherit; font-size: 12px; font-weight: 700; }
+        .utable td, .utable th { white-space: nowrap; } .utable td:first-child { white-space: normal; min-width: 150px; }
+        .utable tbody tr { cursor: pointer; } .utable tbody tr:hover td { background: var(--surface-2); }
+        .utable .mode { font-size: 11.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+        .utable .mode.pro { background: #DCFCE7; color: #166534; } .utable .mode.trial { background: #E0E7FF; color: #3730A3; } .utable .mode.off { background: var(--surface-2); color: var(--muted); }
+        .utable .left { display: flex; align-items: center; gap: 8px; } .utable .left .bar { width: 70px; flex: none; }
     </style>
 </head>
 <body class="site staff">
@@ -76,6 +82,14 @@
                 <div><h1>AI usage · استهلاك الذكاء الاصطناعي</h1><p id="countLine">Assistant Pro: who it's switched on for, what it cost, and what's left of each student's budget.</p></div>
             </div>
             <section class="grand" id="grand" aria-label="Total AI spend"></section>
+            <!-- 28 Nov 2026: each student's spending and what's left, at a glance (Pro AND trial students) -->
+            <div class="card" id="useCard" style="margin-bottom:14px">
+                <div class="card-head"><h2 class="card-title"><span data-icon="users" style="display:contents"></span>Each student's usage · استهلاك كل طالب</h2>
+                    <div class="seg-mini" role="tablist"><button type="button" class="chip primary" data-uf="used" aria-pressed="true">Used the AI</button><button type="button" class="chip" data-uf="all" aria-pressed="false">Everyone with credits</button></div></div>
+                <p class="small muted" id="useSub" style="margin:2px 0 10px"></p>
+                <div class="rec-wrap"><table class="rec utable"><thead><tr><th>Student</th><th>Plan</th><th>Spent</th><th>Messages</th><th>Credits left</th><th title="Left ÷ this student's average cost per message">≈ Messages left</th></tr></thead><tbody id="useBody"></tbody></table></div>
+                <div id="useMore"></div>
+            </div>
             <div class="card open-card" id="openCard" style="margin-bottom:14px">
                 <div><b id="openTitle">Assistant Pro for students</b><p class="small muted" id="openSub" style="margin:4px 0 0"></p></div>
                 <label class="sw big" title="Open Assistant Pro to students"><input type="checkbox" id="openSw" aria-label="Open Assistant Pro to students"><span class="track"></span><span class="lbl" id="openLbl"></span></label>
@@ -203,8 +217,41 @@
             return D.students.filter(s => inGrade(s) && (view === 'all' || (view === 'on') === s.enabled) && (!q || s._q.includes(q)))
                 .sort((a, b) => (b.enabled - a.enabled) || (b.quota.usedEgp - a.quota.usedEgp) || a.grade.localeCompare(b.grade) || name(a).localeCompare(name(b)));
         };
+        // ---- each student's usage (spent / messages / credits left / ≈ messages left) ----
+        let useFilter = 'used', useLimit = 40;
+        function renderUse() {
+            const all = D.students.filter(inGrade);
+            const avgAll = D.totals.messages ? toEgp(D.totals.studentsUsd) / D.totals.messages : 0.1;
+            const rows = all.filter(s => useFilter === 'all' ? (s.credits && s.credits.mode !== 'off') || s.allTime.messages : s.allTime.messages > 0)
+                .sort((a, b) => (toEgp(b.month.usd) + b.trial.egp) - (toEgp(a.month.usd) + a.trial.egp) || b.allTime.messages - a.allTime.messages || name(a).localeCompare(name(b)));
+            const M = { pro: 'Pro', trial: 'Trial', off: 'No credits' };
+            $('useSub').innerHTML = `<b class="num">${rows.length}</b> student${rows.length === 1 ? '' : 's'} · spent this month <b class="num">${egp(toEgp(D.totals.studentsUsd))}</b>`
+                + ` · tap a student for the details (what they used it for, day by day). ≈ messages left = credits left ÷ the student's own average (about <b class="num">${egp(avgAll)}</b> a message overall).`;
+            $('useBody').innerHTML = rows.length ? rows.slice(0, useLimit).map(s => {
+                const c = s.credits || { mode: 'off', totalEgp: 0, usedEgp: 0, leftEgp: 0 };
+                const p = c.totalEgp > 0 ? Math.min(100, c.usedEgp / c.totalEgp * 100) : 0;
+                const avg = s.avgEgp > 0 ? s.avgEgp : avgAll;
+                const msgsLeft = c.mode === 'off' ? '—' : avg > 0 ? `≈ ${Math.floor(c.leftEgp / avg).toLocaleString()}` : '—';
+                return `<tr data-open="${esc(s.studentId)}" tabindex="0">
+                    <td><b dir="auto">${esc(name(s))}</b><br><small class="muted num">${esc(A.GRADES[s.grade] || s.grade)} · ${esc(s.studentId)}</small></td>
+                    <td><span class="mode ${c.mode}">${M[c.mode]}</span>${s.paid && !s.paid.expired ? `<br><small class="muted num">until ${esc(s.paid.until)}</small>` : ''}</td>
+                    <td class="num"><b>${egp(toEgp(s.month.usd))}</b>${s.trial.messages ? `<br><small class="muted">trial ${egp(s.trial.egp)}</small>` : ''}<br><small class="muted">all-time ${egp(toEgp(s.allTime.usd))}</small></td>
+                    <td class="num">${s.month.messages.toLocaleString()}<br><small class="muted">all-time ${s.allTime.messages.toLocaleString()}</small></td>
+                    <td class="num">${c.mode === 'off' ? '<span class="muted">—</span>' : `<span class="left"><span class="bar ${barCls(p)}"><i style="width:${p}%"></i></span><b>${egp(c.leftEgp)}</b></span><small class="muted">of ${egp(c.totalEgp)}</small>`}</td>
+                    <td class="num"><b>${msgsLeft}</b></td></tr>`;
+            }).join('') : `<tr><td colspan="6" class="muted" style="padding:14px">${useFilter === 'used' ? 'No student has used the AI yet' : 'No student has credits right now'}${grade !== 'all' ? ' in this grade' : ''}.</td></tr>`;
+            $('useMore').innerHTML = rows.length > useLimit ? `<button class="btn btn-ghost btn-block" id="useMoreBtn" style="margin-top:8px">Show ${Math.min(40, rows.length - useLimit)} more (${rows.length - useLimit} left)</button>` : '';
+            $('useMoreBtn')?.addEventListener('click', () => { useLimit += 40; renderUse(); });
+        }
+        $('useCard').addEventListener('click', (e) => {
+            const f = e.target.closest('[data-uf]');
+            if (f) { useFilter = f.dataset.uf; useLimit = 40; $('useCard').querySelectorAll('[data-uf]').forEach(b => { const on = b === f; b.classList.toggle('primary', on); b.setAttribute('aria-pressed', on); }); renderUse(); return; }
+            const r = e.target.closest('[data-open]'); if (r) openStudent(r.dataset.open);
+        });
+        $('useCard').addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-open]')) { e.preventDefault(); openStudent(e.target.dataset.open); } });
         function render() {
             if (!D) return;
+            renderUse();
             const T = D.totals, list = shown(), G = D.grand;
             if (G) {
                 const gc = (k, g, extra) => `<div class="gcard fade-up"><div class="gk">${k}</div><div class="gv num">${egp(toEgp(g.usd))}</div><div class="gu num">${usd(g.usd)}</div>

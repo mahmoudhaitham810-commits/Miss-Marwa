@@ -161,7 +161,9 @@ Give a complete, well-organized summary of the WHOLE topic at the student's curr
 - The main points under short headings (### …) with bullets: how it works, the factors that affect it, types / stages / zones, important numbers, units or laws, and an everyday example. Cover every main point the book normally includes for that topic (e.g. for "penetration of sunlight in water": how deep light reaches, which colours / wavelengths are absorbed first and which go deepest, water clarity, and the effect on photosynthesis and marine life).
 - Finish with 2–3 bullets under "📌 **Remember for the exam**" — the key facts, in English.
 - Explaining sentences in Egyptian Arabic (with the English terms inside them) — never a summary that is all English.
-- About ${tier === 'free' ? '200–350' : '250–500'} words, still fun and friendly. Do NOT add a ✅ **الإجابة** line.`;
+- A file / PDF / photo they sent → TEACH it like a teacher in class, part by part in its order: the English wording, then
+  «يعني …» in Egyptian Arabic on its own line, an everyday example — never just repeat its text (they already have it).
+- About ${tier === 'free' ? '200–350' : '400–1200 (a whole file: as long as it needs)'} words, still fun and friendly. Do NOT add a ✅ **الإجابة** line.`;
     return `\n\n## This message is not an exam question\nDon't add a ✅ **الإجابة** line.`;
 }
 /** Remove "✅ الإجابة:" lines from a reply that wasn't an exam question (the model sometimes adds them anyway). */

@@ -35,7 +35,7 @@ const bad = (m, s = 400, extra = {}) => json({ error: m, ...extra }, s);
 export const GRADE_LABEL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const EXPLAIN_VERSION = 'v1';     // bump when EXPLAIN_SYSTEM changes → fresh explanations
-const SUMMARY_VERSION = 'v1';     // bump when the summary task changes → fresh summaries
+const SUMMARY_VERSION = 'v2';     // bump when the summary task changes → fresh summaries
 const MAX_Q = 600, MAX_HISTORY = 6;
 
 export const FRIENDLY = {
@@ -90,16 +90,29 @@ ${LANGUAGE_SCHOOLS}
 ## The summary — "${String(lesson.title || '').slice(0, 150)}"
 ${file.text}` };
 }
-export const SUMMARY_TASK = `## Your task: summarize it
-This summary is shown to MANY students → no name, no "يا بطل/يا بطلة", no masculine or feminine verbs ("يلا نلخص"، "خلّينا نفتكر").
-Make a short, organized revision sheet for a phone (max ~350 words):
-- a one-line intro that starts with: «يلا نلخص الملخص ده سوا 📚»
-- short headings (###) for the main parts, in the summary's order
-- under each: the key points as bullets — definitions, laws, formulas (with units), and examples in the summary
-- end with «🎯 **أهم حاجات للامتحان:**» — 3–5 bullets with what is most likely to be asked
-No greeting at the end, no sign-off.`;
+// 28 Nov 2026 (Mahmoud): "a short revision sheet, max ~350 words" just repeated her English summary — the student already has
+// that text. Now it TEACHES it: every part, the English wording + an Egyptian-Arabic explanation, examples, quick checks.
+export const SUMMARY_TASK = `## Your task: TEACH this summary — like Miss Marwa explaining it to her class
+The student already HAS this summary — repeating it is useless. Your job is to EXPLAIN it so they understand it, the way a
+great teacher does in class. This answer is shown to MANY students → no name, no "يا بطل/يا بطلة", no masculine or feminine verbs.
+- Start with «يلا نذاكر الملخص ده سوا 📚» and ONE line in Egyptian Arabic: what we're going to understand today (the parts).
+- Go through EVERY part of the summary in its order — skip nothing. For each part:
+  ### the part's heading (English, as in the summary)
+  - the definition / law / rule in **English**, exactly as in the summary — that's the exam wording
+  - right under it, on its own line: «يعني …» — the explanation in Egyptian Arabic, simple and warm, as if talking to the class:
+    what it means, why it happens, and how it connects to the idea before it
+  - an example from the students' daily life in Egypt when it helps (🍳 الطبخ، ☀️ الشمس، 📱 الموبايل…)
+  - a formula → the formula on its own line, what each symbol means with its unit, and one quick worked example if the summary has numbers
+  - **G.R** → the reason in English (exam wording) + «يعني …» in Arabic
+- Never tell them to "read the summary / the book" — YOU explain it. Never answer in English only.
+- After every 2–3 parts: «✋ سؤال سريع:» ONE short check question (its answer goes at the very end).
+- End with «🎯 **أهم حاجات للامتحان:**» (3–5 bullets) and then «✅ إجابات الأسئلة السريعة».
+- LAYOUT for a phone: one idea per bullet, a blank line between parts, every definition / equation on its own line, the Arabic
+  «يعني …» on its own line after the English — never a wall of text.
+- As long as the summary needs (usually 600–1400 words) — complete, never rushed. No greeting at the end, no sign-off.`;
 export const ASK_TASK = `## Your task: answer the student's question about this summary
-- Answer ONLY from the summary above, short and clear (max ~150 words), steps with units for problems.
+- Answer ONLY from the summary above. EXPLAIN like a teacher, never just quote it: the English term / wording in **bold**, then
+  «يعني …» in Egyptian Arabic, an everyday example if it helps, steps with units for problems (usually 80–300 words).
 - If the summary doesn't cover it, say so in one line and suggest asking مس مروة — don't answer from outside knowledge.
 - Off-topic → one friendly line, then back to the summary.`;
 
@@ -218,15 +231,15 @@ export async function onRequest(context) {
             try {
                 if (action === 'summary') {
                     out = await getOrMake(db, `sum:${SUMMARY_VERSION}:${lessonId}:${file.hash}`, {
-                        kind: 'summary', ref: lessonId, waitMs: 60000,
+                        kind: 'summary', ref: lessonId, waitMs: 170000,
                         make: async () => {
-                            const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'لخّصلي الملخص ده من فضلك 🙏' }], maxTokens: 1100, meter: meter('summary') });
+                            const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'لخّصلي الملخص ده من فضلك 🙏' }], maxTokens: 6000, meter: meter('summary') });
                             return { text: r.text, model: r.model, costUsd: r.costUsd };
                         }
                     });
                     if (out.cached) await logHit('summary');
                 } else {
-                    const r = await chat(env, db, { tier: 'pro', system, messages: [...history, { role: 'user', content: question }], maxTokens: 700, meter: meter('ask') });
+                    const r = await chat(env, db, { tier: 'pro', system, messages: [...history, { role: 'user', content: question }], maxTokens: 1500, meter: meter('ask') });
                     out = { text: r.text, cached: false };
                 }
             } catch (e) {
