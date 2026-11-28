@@ -22,6 +22,8 @@
         .ai-tag.ok { background: var(--success-soft); color: var(--success); }
         .ai-tag.scan { background: var(--warning-soft); color: var(--notice-warning-text, #92400e); }
         .ai-tag.none { background: var(--surface-2); color: var(--muted); }
+        button.ai-tag { border: 0; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-align: start; }
+        button.ai-tag:hover { filter: brightness(1.05); text-decoration: underline; }
         .pdf-pick { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1.5px dashed var(--border); border-radius: 14px; cursor: pointer; }
         .pdf-pick input { position: absolute; opacity: 0; width: 1px; height: 1px; }
         .pdf-pick:focus-within { border-color: var(--primary); }
@@ -105,14 +107,14 @@
             const f = PDF[l.id];
             if (!f) return `<span class="ai-tag none" title="Attach the PDF (file button) so Assistant Pro can summarize it">No PDF — AI can't read it</span>`;
             return f.readable ? `<span class="ai-tag ok" title="Assistant Pro can summarize this with the students">✨ AI ready · ${f.pages} page${f.pages === 1 ? '' : 's'}</span>`
+                : A.can('lessons.create') ? `<button type="button" class="ai-tag scan" data-ocr="${esc(l.id)}" title="This PDF is photos only — press to let the AI read its pages">📷 Scanned — ✨ press to read it with AI</button>`
                 : `<span class="ai-tag scan" title="This PDF is photos only — Assistant Pro can't read it">📷 Scanned — no text</span>`;
         }
         // ---------- PDF → text in this browser (pdf.js, free) + upload ----------
         let pdfLib = null;
         const loadPdf = () => pdfLib || (pdfLib = (window.__pdfjsLib ? Promise.resolve(window.__pdfjsLib) : import('/assets/vendor/pdfjs/pdf.min.js').then(m => { m.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js'; return m; })));
-        async function pdfPages(file, onStep) {
-            const lib = await loadPdf();
-            const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+        async function openPdf(bytes) { const lib = await loadPdf(); return lib.getDocument({ data: bytes, isEvalSupported: false }).promise; }
+        async function pdfPages(doc, onStep) {
             const pages = [];
             for (let n = 1; n <= Math.min(doc.numPages, 400); n++) {
                 const tc = await (await doc.getPage(n)).getTextContent();
@@ -121,18 +123,73 @@
             }
             return pages;
         }
+        // 28 Nov 2026: a scanned / photo page has no text → AI vision reads it (page → JPEG ~1500 px → /api/lesson-pdf?action=ocr).
+        // 3 pages at a time, each with up to 3 tries and a time limit; one stuck page can't freeze the upload.
+        const SCANNED = (t) => String(t || '').replace(/\s+/g, '').length < 40;
+        async function ocrPages(lessonId, doc, pages, onStep) {
+            const todo = pages.map((t, i) => SCANNED(t) ? i + 1 : 0).filter(Boolean).slice(0, 80);
+            if (!todo.length) return { read: 0, skipped: [], spent: 0 };
+            let done = 0, spent = 0, stop = null; const skipped = [];
+            const one = async (n) => {
+                const page = await doc.getPage(n);
+                const v1 = page.getViewport({ scale: 1 }), k = 1500 / Math.max(v1.width, v1.height), vp = page.getViewport({ scale: k });
+                const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+                const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+                await page.render({ canvasContext: g, viewport: vp }).promise;
+                const b64 = c.toDataURL('image/jpeg', 0.85).split(',')[1];
+                for (let t = 1; t <= 3; t++) {
+                    if (stop) return;
+                    try { const r = await api('/api/lesson-pdf?action=ocr', { body: { lessonId, n, image: { mime: 'image/jpeg', b64 } }, timeout: 120000 }); pages[n - 1] = r.text || ''; spent += r.costUsd || 0; return; }
+                    catch (err) {
+                        if (err.status === 403 || err.status === 503 || (err.data && err.data.code)) { stop = err; return; }   // not allowed / AI off / AI limit → stop
+                        if (t === 3) { skipped.push(n); return; }
+                        await new Promise(res => setTimeout(res, 2500 * t));
+                    }
+                }
+            };
+            const queue = todo.slice();
+            const worker = async () => { while (queue.length && !stop) { const n = queue.shift(); await one(n); done++; if (onStep) onStep(`AI is reading the scanned pages… ${done} of ${todo.length}`); } };
+            if (onStep) onStep(`AI is reading the scanned pages… 0 of ${todo.length}`);
+            await Promise.all([worker(), worker(), worker()]);
+            return { read: todo.length - skipped.length - (stop ? queue.length : 0), skipped, spent, stop, total: todo.length };
+        }
         async function uploadPdf(lessonId, file, onStep) {
             if (!file || !/pdf$/i.test(file.type || file.name)) throw new Error('Choose a PDF file');
             if (file.size > 30 * 1024 * 1024) throw new Error('The PDF must be smaller than 30 MB');
-            let pages = [];
-            try { pages = await pdfPages(file, (n, t) => onStep && onStep(`Reading page ${n} of ${t}…`)); } catch (e) { pages = []; }
+            let pages = [], ocr = null;
+            try {
+                const doc = await openPdf(new Uint8Array(await file.arrayBuffer()));
+                pages = await pdfPages(doc, (n, t) => onStep && onStep(`Reading page ${n} of ${t}…`));
+                ocr = await ocrPages(lessonId, doc, pages, onStep);
+            } catch (e) { /* the file is still uploaded; its text can be read later */ }
             if (onStep) onStep('Uploading…');
             const fd = new FormData(); fd.append('lessonId', lessonId); fd.append('file', file, file.name); fd.append('text', JSON.stringify(pages));
             const res = await fetch('/api/lesson-pdf?action=upload', { method: 'POST', body: fd, credentials: 'same-origin' });
             const d = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(d.error || 'Upload failed');
-            return d;
+            return { ...d, ocr };
         }
+        // a scanned PDF that's already on the platform → read it with AI now (no re-upload)
+        async function readScanned(l, tag) {
+            const f = PDF[l.id]; if (!f || tag.dataset.busy) return;
+            tag.dataset.busy = '1';
+            const say = (t) => { tag.textContent = t; };
+            try {
+                say('Opening the PDF…');
+                const res = await fetch('/api/lesson-pdf?action=file&id=' + encodeURIComponent(l.id), { credentials: 'same-origin' });
+                if (!res.ok) throw new Error('Could not open the PDF');
+                const doc = await openPdf(new Uint8Array(await res.arrayBuffer()));
+                const pages = await pdfPages(doc, (n, t) => say(`Reading page ${n} of ${t}…`));
+                const ocr = await ocrPages(l.id, doc, pages, say);
+                if (ocr.stop) throw ocr.stop;
+                say('Saving…');
+                const d = await api('/api/lesson-pdf?action=text', { body: { lessonId: l.id, pages } });
+                PDF[l.id] = { ...f, readable: d.readable, chars: d.chars };
+                Site.toast(d.readable ? `✨ AI read ${ocr.read} page${ocr.read === 1 ? '' : 's'} — Assistant Pro can use this summary now` + (ocr.skipped.length ? ` (${ocr.skipped.length} skipped — press again for them)` : '') : 'The AI found no text on these pages', d.readable ? 'success' : 'info');
+            } catch (e) { Site.toast((e.message || 'Stopped') + ' — press the tag to try again', 'error'); }
+            delete tag.dataset.busy; render();
+        }
+        const ocrNote = (d) => !d.ocr || !d.ocr.total ? '' : d.ocr.stop ? ` — the AI couldn't read the scanned pages (${d.ocr.stop.message || 'AI off'})` : ` — AI read ${d.ocr.read} scanned page${d.ocr.read === 1 ? '' : 's'}`;
         function attachPdf(l) {
             const has = !!PDF[l.id];
             Site.sheet({
@@ -145,7 +202,7 @@
                     const f = document.getElementById('apf').files[0], msg = (t, bad) => { const m = document.getElementById('apfMsg'); m.textContent = t; m.style.color = bad ? 'var(--danger)' : ''; };
                     if (!f) return msg('Choose a PDF first.', true);
                     if (btn.disabled) return; btn.disabled = true;
-                    try { const d = await uploadPdf(l.id, f, (t) => msg(t)); close(); Site.toast(d.readable ? `PDF attached ✅ (${d.pages} pages)` : 'PDF attached — but it has no text (scanned), so Assistant Pro can\'t read it', d.readable ? 'success' : 'info'); load(); }
+                    try { const d = await uploadPdf(l.id, f, (t) => msg(t)); close(); Site.toast(d.readable ? `PDF attached ✅ (${d.pages} pages)${ocrNote(d)}` : `PDF attached — but no text could be read${ocrNote(d)}`, d.readable ? 'success' : 'info'); load(); }
                     catch (e) { msg(e.message, true); btn.disabled = false; }
                 } }, { label: 'Cancel', cls: 'btn-ghost' }]
             });
@@ -153,6 +210,7 @@
         }
         const safeUrl = (u) => /^https?:\/\//i.test(String(u || '').trim()) ? String(u).trim() : '#';
         $('list').addEventListener('click', (e) => {
+            const o = e.target.closest('[data-ocr]'); if (o) { const l = L.find(x => x.id === o.dataset.ocr); if (l) readScanned(l, o); return; }
             const p = e.target.closest('[data-pdf]'); if (p) { const l = L.find(x => x.id === p.dataset.pdf); if (l) attachPdf(l); return; }
             const b = e.target.closest('[data-del]'); if (!b) return;
             const l = L.find(x => x.id === b.dataset.del); if (!l) return;
@@ -188,9 +246,10 @@
                     if (!pdf && !/^https?:\/\/\S+$/i.test(body.url)) return err('The link must start with https:// — or upload the PDF.');
                     busy = true;
                     try {
-                        if (pdf) { const d = await uploadPdf(body.id, pdf, (t) => err(t, true)); if (!body.url) body.url = d.url; }   // the file first: no broken link if it fails
+                        let up = null;
+                        if (pdf) { up = await uploadPdf(body.id, pdf, (t) => err(t, true)); if (!body.url) body.url = up.url; }   // the file first: no broken link if it fails
                         await api('/api/lessons', { body });
-                        close(); Site.toast('Published ✅', 'success'); load();
+                        close(); Site.toast('Published ✅' + (up ? ocrNote(up) : ''), 'success'); load();
                     } catch (e) { err(e.message); }
                     finally { busy = false; }
                 } }, { label: 'Cancel', cls: 'btn-ghost' }]

@@ -10,9 +10,21 @@
 //   GET  ?action=ids&grade=prep2                    → lesson ids that Assistant Pro can summarize (text found)
 //   GET  ?action=list (staff)                        → every attached PDF with pages / text size
 //   POST ?action=remove { lessonId } (staff, lessons.delete)
+//   POST ?action=ocr  { lessonId, n, image:{mime,b64} } (staff, lessons.create) → the text of ONE scanned page, read by AI
+//        vision (28 Nov 2026: a photo-only PDF like «November Revision» was "Scanned — no text" → the assistant couldn't use it)
+//   POST ?action=text { lessonId, pages:[…] } (staff, lessons.create) → save the AI-read text of a PDF already uploaded
 // =====================================================================
 import { requireStaff, audit, ensureAppSchema, verifyStudentRequest, verifyAdminRequest } from './admin-auth.js';
 import { sha256 } from './ai-cache.js';
+import { chat, AiLimitError, claudeReady } from './ai-gateway.js';
+
+const OCR_SYSTEM = `You copy the text from a photo of ONE page of a science study summary written by an Egyptian school teacher (Miss Marwa) for her students.
+Output ONLY the text of the page, in reading order, exactly as written — Arabic and English as they are (never translate, never fix the science, never add anything).
+Keep headings, numbering, bullet points, definitions, laws, equations with their units, tables (as "a | b" rows) and arrows (→).
+Handwriting or a phone photo: read it carefully; a word you truly can't read → […].
+A figure / drawing → ONE short line: [Figure: what it shows + its labels].
+A page with no text at all → output exactly: [no text]`;
+export const MAX_OCR_PAGES = 80;
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -115,6 +127,43 @@ export async function onRequest(context) {
             if (before && before.r2_key !== key) { try { await bucket.delete(before.r2_key); } catch (e) { /* an orphan file costs nothing much */ } }
             await audit(db, request, auth.staff, before ? 'lessons.pdf.replace' : 'lessons.pdf.upload', lessonId, { name, size: bytes.length, pages: pages.length, chars: text.length });
             return json({ ok: true, lessonId, url: `${url.origin}/api/lesson-pdf?action=file&id=${encodeURIComponent(lessonId)}`, pages: pages.length, chars: text.length, readable: text.length >= MIN_TEXT, replaced: !!before });
+        }
+        if (action === 'ocr') {
+            const auth = await requireStaff(request, env, 'lessons.create');
+            if (auth.error) return auth.error;
+            if (!claudeReady(env)) return bad('Assistant Pro is not connected — the AI can\'t read scanned pages yet.', 503, { code: 'PAID_OFF' });
+            const data = await request.json().catch(() => ({}));
+            const n = parseInt(data.n, 10), img = data.image || {};
+            if (!ID_RE.test(String(data.lessonId || ''))) return bad('Bad lesson id');
+            if (!(n >= 1 && n <= 400)) return bad('Bad page');
+            if (!/^image\/(jpeg|png|webp)$/.test(img.mime || '') || typeof img.b64 !== 'string' || !img.b64 || img.b64.length > 4_000_000) return bad('Send the page as a JPEG');
+            let out;
+            try {
+                out = await chat(env, db, { tier: 'pro', maxTokens: 3000, image: { mime: img.mime, b64: img.b64 }, system: OCR_SYSTEM,
+                    messages: [{ role: 'user', content: `Copy all the text of page ${n}.` }], meter: { staffId: auth.staff.id, kind: 'ocr-lesson' } });
+            } catch (e) {
+                if (e instanceof AiLimitError) return bad(e.message, 502, { code: e.code });
+                throw e;
+            }
+            const text = String(out.text || '').replace(/^```[a-z]*\n?|```$/g, '').trim();
+            return json({ ok: true, n, text: /^\[no text\]$/i.test(text) ? '' : text.slice(0, 20000), costUsd: out.costUsd || 0 });
+        }
+        if (action === 'text') {
+            const auth = await requireStaff(request, env, 'lessons.create');
+            if (auth.error) return auth.error;
+            const data = await request.json().catch(() => ({}));
+            const id = String(data.lessonId || '');
+            const row = ID_RE.test(id) ? await db.prepare('SELECT file_hash, pages FROM lesson_files WHERE lesson_id = ?').bind(id).first() : null;
+            if (!row) return bad('Upload the PDF first', 404);
+            const pages = Array.isArray(data.pages) ? data.pages.slice(0, 400) : [];
+            const text = joinPages(pages);
+            const textPages = pages.filter(t => String(t || '').trim().length >= 40).length;
+            // a new fingerprint → AI summaries made from the old (empty) text are never served again
+            const hash = (await sha256(row.file_hash + ':ocr:' + text)).slice(0, 24);
+            await db.prepare('UPDATE lesson_files SET text = ?, chars = ?, text_pages = ?, file_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE lesson_id = ?')
+                .bind(text, text.length, textPages, hash, id).run();
+            await audit(db, request, auth.staff, 'lessons.pdf.ocr', id, { pages: pages.length, chars: text.length });
+            return json({ ok: true, lessonId: id, pages: row.pages || pages.length, chars: text.length, readable: text.length >= MIN_TEXT });
         }
         if (action === 'remove') {
             const auth = await requireStaff(request, env, 'lessons.delete');
