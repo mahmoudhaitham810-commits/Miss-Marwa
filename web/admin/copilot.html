@@ -217,7 +217,7 @@
     <script src="/assets/pwa.js"></script>
     <script src="/assets/site.js"></script>
     <script src="/admin/assets/admin.js"></script>
-    <script src="/assets/ai-kit.js?v=20261122d"></script>
+    <script src="/assets/ai-kit.js?v=20261128c"></script>
     <script>
     (async function () {
         const A = Admin, $ = (id) => document.getElementById(id);
@@ -527,7 +527,13 @@
         function updateSend() { if (comp) comp.setBusy(sending); }
         comp = AiKit.composer($('comp'), {
             models: modelList(), tier, placeholder: 'اكتبي سؤالك… · Ask anything', maxLength: 4000, voiceKey: 'copilot_voice',
-            pdf: true, pdfPages: 20, pdfChars: 24000, dropZone: document.querySelector('.main') || document.body,
+            pdf: true, pdfPages: 50, pdfChars: 60000,
+            // a scanned page of her PDF → AI vision (every page is read — not 2 pages as one photo)
+            ocr: async (n, image) => {
+                if (tier !== 'pro') { const e = new Error('Pro only'); e.stop = true; throw e; }
+                try { return (await api('/api/copilot?action=ocr', { body: { n, image }, timeout: 120000 })).text || ''; }
+                catch (e) { if ([403, 503].includes(e.status) || (e.data && e.data.code)) e.stop = true; throw e; }
+            }, dropZone: document.querySelector('.main') || document.body,
             toast: (m, k) => Site.toast(m, k || 'info'),
             onSend: ({ text, image, doc }) => send(text, false, null, false, image, doc),
             onTier: (t) => { tier = t; A.store.set('copilot_tier', t); },

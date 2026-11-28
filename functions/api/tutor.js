@@ -28,6 +28,7 @@ import { studentAccess, dailyLimits, dailyState, claimDaily, releaseDaily, quota
 import { searchBook, bookRules, gradeToc, lessonPack, lessonRules, refFromText } from './curriculum.js';
 import { sourceBlock, lessonParts, buildLessonSummary, explainLessonSummary } from './studio.js';
 import { getOrMake, CacheBusyError } from './ai-cache.js';
+import { ocrImage } from './lesson-pdf.js';
 import { wantsPdf, wantsExam, keepDoc, threadDoc, makeSolutions, worksheetBlock, PDFW, mentionsPdf } from './solutions-doc.js';
 import { aiReady } from './ai-engine.js';
 import { studentProfile } from './analytics.js';
@@ -37,6 +38,7 @@ import { LANGUAGE_SCHOOLS, EXAM_ANSWER_LINE, PRO_ACCURACY, COMPANION, englishTer
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
 const bad = (m, s = 400, extra = {}) => json({ error: m, ...extra }, s);
+const OCR_DAY = 60;
 const MAX_TEXT = 2000, HISTORY = 12;
 const GRADE_LABEL = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
 const day = () => new Date().toISOString().slice(0, 10);
@@ -430,6 +432,25 @@ export async function onRequest(context) {
             if (!who.preview) await db.prepare(`INSERT INTO app_kv ("key", value) VALUES (?, '1') ON CONFLICT("key") DO NOTHING`).bind(`seen_${what}_${sid}`).run();
             return json({ ok: true });
         }
+        // a scanned page of a PDF they attached → its text (AI vision, Pro) — the whole PDF is read, not 2 pages as one photo.
+        // On their own Pro credits (it is their file), at most OCR_DAY pages a day.
+        if (action === 'ocr') {
+            const pa = await proNow();
+            if (!pa.ok) return bad(PRO_MSG[pa.code] || `${BRANDS.pro.name} جاي قريب جداً 🚀`, 403, { code: 'PRO_LOCKED' });
+            if (await inExam()) return bad('إنت في امتحان دلوقتي 📝', 423, { code: 'EXAM_LOCK' });
+            const k = counterKey(who, 'ocr');
+            const used = Number(((await db.prepare('SELECT value FROM app_kv WHERE "key" = ?').bind(k).first()) || {}).value) || 0;
+            if (!who.preview && used >= OCR_DAY) return bad(`قريت ${OCR_DAY} صفحة مصوّرة النهارده 📄 — الباقي من بكره، أو ابعت صفحات أقل`, 429, { code: 'OCR_LIMIT' });
+            try {
+                const o = await ocrImage(env, db, data.image, { n: parseInt(data.n, 10) || 1, meter: who.preview ? { staffId: who.staff.id, kind: 'pdf-ocr' } : { studentId: sid, kind: 'pdf-ocr' } });
+                await kvAdd(db, k, 1);
+                return json({ ok: true, text: o.text });
+            } catch (e) {
+                if (e.code === 'BAD_IMAGE') return bad(e.message);
+                if (e instanceof AiLimitError) return bad(PRO_MSG[e.code] || e.message, 429, { code: e.code });
+                throw e;
+            }
+        }
         if (action === 'new') {
             const r = await db.prepare('INSERT INTO tutor_threads (student_id, staff_id, title) VALUES (?, ?, ?)').bind(sid, staffId, 'New chat').run();
             return json({ thread: { id: Number(r.meta.last_row_id), title: 'New chat' }, messages: [] });
@@ -485,7 +506,7 @@ export async function onRequest(context) {
             if (img && img.error) return bad(img.error, 400);
             // a PDF: its text (read on the phone) goes to the AI for THIS message only; the chat keeps just its name
             const doc = data.doc && typeof data.doc === 'object' && String(data.doc.text || '').trim()
-                ? { name: String(data.doc.name || 'file.pdf').replace(/[\r\n]/g, ' ').slice(0, 80), pages: Math.max(1, Math.min(50, parseInt(data.doc.pages, 10) || 1)), text: String(data.doc.text).replace(/\r/g, '').slice(0, tier === 'pro' ? 9000 : 3500) } : null;
+                ? { name: String(data.doc.name || 'file.pdf').replace(/[\r\n]/g, ' ').slice(0, 80), pages: Math.max(1, Math.min(60, parseInt(data.doc.pages, 10) || 1)), text: String(data.doc.text).replace(/\r/g, '').slice(0, tier === 'pro' ? 60000 : 3500) } : null;
             if (!text && img) text = 'حل السؤال اللي في الصورة 📷';
             if (!text && doc) text = 'اشرحلي اللي في الملف ده 📄';
             if (!text) return bad('اكتب سؤالك الأول 🙂', 400);
@@ -565,6 +586,13 @@ export async function onRequest(context) {
                 await db.prepare('UPDATE tutor_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(t.id).run();
                 return db.prepare('SELECT * FROM tutor_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
+            // a PHOTO of questions + "make it a PDF with the solutions" → its text (AI vision) becomes the chat's worksheet,
+            // so the worked-solutions PDF has every question (28 Nov 2026 — it went to the chat model instead)
+            let photoSheet = false;
+            if (!free && img && !img.error && !doc && wantsPdf(text) && !wantsExam(text) && claudeReady(env)) {
+                try { const o = await ocrImage(env, db, img, { meter: who.preview ? { staffId: who.staff.id, kind: 'pdf-ocr' } : { studentId: sid, kind: 'pdf-ocr' } }); if (o.text.replace(/\s+/g, '').length >= 40) { await keepDoc(db, 'student', t.id, { name: '📷 photo', text: o.text }); photoSheet = true; } }
+                catch (e) { /* the chat model still answers from the photo */ }
+            }
             if (doc) await keepDoc(db, 'student', t.id, doc);   // kept with the chat: every later message (and "make it a PDF") sees it
             const sheet = doc ? { name: doc.name, text: doc.text } : await threadDoc(db, 'student', t.id);
             // "حطهولي في PDF" → the chat's solutions as the same branded worked-solutions PDF Miss Marwa gets
@@ -580,7 +608,7 @@ export async function onRequest(context) {
                 const la = await db.prepare(`SELECT cards FROM tutor_messages WHERE thread_id = ? AND role = 'assistant' AND id < ? ORDER BY id DESC LIMIT 1`).bind(t.id, userMsg.id).first();
                 toEn = (parse(la && la.cards) || []).some(c => c && c.type === 'lessonpdf' && c.lang !== 'en');
             }
-            if (!free && !img && (fix || toEn || wantsPdf(text) || (!doc && !sheet && SUMMARY_PDF.test(text)))) {
+            if (!free && (!img || photoSheet) && (fix || toEn || wantsPdf(text) || (!doc && !sheet && SUMMARY_PDF.test(text)))) {
                 try {
                     const { results: all } = await db.prepare(`SELECT role, text FROM tutor_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
                     const payer = who.preview ? { staffId: who.staff.id, kind: 'chat-pdf' } : { studentId: sid, kind: 'chat-pdf' };
@@ -689,7 +717,9 @@ export async function onRequest(context) {
                 if (!free && !intents.length && !doc && mentionsPdf(text)) {
                     const ref = (pack && pack.ref) || await threadLesson(db, t.id);
                     if (ref && ref.lesson && !cards.some(c => c.type === 'next')) cards.push({ type: 'next', unit: Number(ref.unit), lesson: Number(ref.lesson), title: (pack && pack.title) || '' });
-                    if (PDF_REFUSAL.test(body)) body = ref && ref.lesson
+                    // it pointed at a button that isn't there (no lesson known) → never leave the student looking for it
+                    if (!(ref && ref.lesson) && /الملخص الكامل PDF|زرار|button/i.test(body)) body = `حاضر ${who.student.gender === 'female' ? 'يا بطلة' : 'يا بطل'} 👇 قولي أنهي درس (مثلاً Unit 2 Lesson 1) وأعملهولك PDF على طول`;
+                    else if (PDF_REFUSAL.test(body)) body = ref && ref.lesson
                         ? `حاضر ${who.student.gender === 'female' ? 'يا بطلة' : 'يا بطل'} 👇 دوس على «📄 الملخص الكامل PDF» اللي تحت وهيتعملك على طول`
                         : `حاضر ${who.student.gender === 'female' ? 'يا بطلة' : 'يا بطل'} 👇 قولي أنهي درس (مثلاً Unit 2 Lesson 1) وأعملهولك PDF على طول`;
                 }

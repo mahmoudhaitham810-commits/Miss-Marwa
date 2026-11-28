@@ -85,7 +85,10 @@
     // compressed JPEG of its first 2 pages stacked.
     let pdfP = null;
     const pdfjs = () => pdfP || (pdfP = import('/assets/vendor/pdfjs/pdf.min.js').then(m => { m.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js'; return m; }));
-    async function readPdf(file, PDF_PAGES = 8, PDF_CHARS = 9000) {
+    // ocr(n, {mime, b64}) → the page's text (AI vision, Pro only) or null; onStep(text) → progress.
+    // 28 Nov 2026: a scanned PDF used to send only its first 2 pages as ONE photo, and a text PDF stopped at 8 pages —
+    // now every page is read (text, or AI vision for a scanned page) up to PDF_PAGES.
+    async function readPdf(file, PDF_PAGES = 8, PDF_CHARS = 9000, ocr = null, onStep = null) {
         if (file.size > 25 * 1024 * 1024) throw new Error('الملف كبير قوي (أكتر من 25MB) — ابعت الصفحات المهمة بس');
         const lib = await pdfjs();
         const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
@@ -111,8 +114,35 @@
         const rep = n >= 2 ? new Set(Object.keys(seen).filter(k => seen[k] >= Math.max(2, Math.ceil(n * 0.6)))) : new Set();
         let text = '';
         pages.forEach((t, i) => { const body = t.split('\n').filter(l => !rep.has(key(l))).join('\n').trim(); if (body && text.length < PDF_CHARS) text += `[page ${i + 1}]\n${body}\n\n`; });
+        // pages with (almost) no text = scanned → AI vision, 3 at a time, each with 2 tries
+        const scanned = pages.map((t, i) => t.replace(/\s+/g, '').length < 40 ? i + 1 : 0).filter(Boolean);
+        let ocrRead = 0, ocrFailed = 0;
+        if (ocr && scanned.length) {
+            const queue = scanned.slice(); let done = 0, stop = false;
+            const work = async () => {
+                while (queue.length && !stop) {
+                    const p = queue.shift();
+                    const pg = await doc.getPage(p), v1 = pg.getViewport({ scale: 1 }), k = 1500 / Math.max(v1.width, v1.height), vp = pg.getViewport({ scale: k });
+                    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+                    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+                    await pg.render({ canvasContext: g, viewport: vp }).promise;
+                    const b64 = c.toDataURL('image/jpeg', 0.85).split(',')[1];
+                    let got = null;
+                    for (let t = 1; t <= 2 && got === null && !stop; t++) {
+                        try { got = await ocr(p, { mime: 'image/jpeg', b64 }); }
+                        catch (e) { if (e && e.stop) { stop = true; break; } if (t === 2) got = undefined; else await new Promise(r => setTimeout(r, 2000)); }
+                    }
+                    if (typeof got === 'string') { pages[p - 1] = got; ocrRead++; } else ocrFailed++;
+                    done++; if (onStep) onStep(`🤖 بقرا الصفحات المصوّرة… ${done} / ${scanned.length}`);
+                }
+            };
+            if (onStep) onStep(`🤖 بقرا الصفحات المصوّرة… 0 / ${scanned.length}`);
+            await Promise.all([work(), work(), work()]);
+            text = '';
+            pages.forEach((t, i) => { const body = t.split('\n').filter(l => !rep.has(key(l))).join('\n').trim(); if (body && text.length < PDF_CHARS) text += `[page ${i + 1}]\n${body}\n\n`; });
+        }
         if (text.replace(/\[page \d+\]/g, '').trim().length >= 120)
-            return { kind: 'text', doc: { name, pages: n, total: doc.numPages, text: text.slice(0, PDF_CHARS).trim() } };
+            return { kind: 'text', doc: { name, pages: n, total: doc.numPages, text: text.slice(0, PDF_CHARS).trim(), ocr: ocrRead, ocrFailed } };
         // scanned (no text) → first 2 pages, stacked, one JPEG
         const shots = [];
         for (let i = 1; i <= Math.min(2, doc.numPages); i++) {
@@ -295,7 +325,7 @@
                 setDoc(null); setImage(null);
                 datt.hidden = false; datt.querySelector('small').textContent = 'بقرا الملف… · Reading the PDF…';
                 try {
-                    const r = await readPdf(f, o.pdfPages || 8, o.pdfChars || 9000);
+                    const r = await readPdf(f, o.pdfPages || 8, o.pdfChars || 9000, o.ocr || null, (t) => { datt.querySelector('small').textContent = t; });
                     if (r.kind === 'text') setDoc(r.doc);
                     else { datt.hidden = true; setImage(r.image); att.querySelector('small').textContent = `📄 ${r.image.pdfName} — scanned: first ${r.image.pages} page${r.image.pages > 1 ? 's' : ''} sent as a photo`; }
                 } catch (e) { datt.hidden = true; o.toast(e.message && /[\u0600-\u06FF]/.test(e.message) ? e.message : "الملف ده مش بيفتح — جرّب ملف تاني", 'error'); }
@@ -304,7 +334,7 @@
             try { setImage(await shrink(f, o.photoMax || 1280, o.photoQuality || 0.82)); att.querySelector('small').textContent = 'Photo ready — add a note or just send'; } catch (e) { o.toast(e.message, 'error'); }
         }
         function setImage(img) { image = img; att.hidden = !img; if (img) { att.querySelector('img').src = img.url; setDoc(null); } update(); if (img) ta.focus(); }
-        function setDoc(d) { pdoc = d; datt.hidden = !d; if (d) datt.querySelector('small').textContent = `📄 ${d.name} · ${d.pages}${d.total > d.pages ? ' of ' + d.total : ''} page${d.pages > 1 ? 's' : ''} — اكتب سؤالك عنه أو ابعت`; update(); if (d) ta.focus(); }
+        function setDoc(d) { pdoc = d; datt.hidden = !d; if (d) datt.querySelector('small').textContent = `📄 ${d.name} · ${d.pages}${d.total > d.pages ? ' of ' + d.total : ''} page${d.pages > 1 ? 's' : ''}${d.ocr ? ` · 🤖 ${d.ocr} مصوّرة اتقرت` : ''}${d.ocrFailed ? ` · ⚠️ ${d.ocrFailed} ماتقريتش` : ''} — اكتب سؤالك عنه أو ابعت`; update(); if (d) ta.focus(); }
         $('.ak-rm').addEventListener('click', () => setImage(null));
         $('.ak-rmd').addEventListener('click', () => setDoc(null));
 

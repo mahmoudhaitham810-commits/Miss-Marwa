@@ -249,7 +249,7 @@ export async function chat(env, db, { tier = 'free', pool = 'staff', system = ''
     try {
     let res = null, body = null, lastErr = '';
     for (let k = 0; k < 2 && !res; k++) {
-        const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 90000);
+        const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), Math.min(300000, Math.max(90000, (maxTokens + (thinking > 0 ? thinking : 0)) * 9)));   // long answers (a whole exam's solutions) get the time they need
         try {
             const r = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST', signal: ctl.signal,

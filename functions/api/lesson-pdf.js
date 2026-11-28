@@ -25,6 +25,15 @@ Handwriting or a phone photo: read it carefully; a word you truly can't read →
 A figure / drawing → ONE short line: [Figure: what it shows + its labels].
 A page with no text at all → output exactly: [no text]`;
 export const MAX_OCR_PAGES = 80;
+const OCR_ANY = OCR_SYSTEM.replace('a science study summary written by an Egyptian school teacher (Miss Marwa) for her students', 'a science worksheet, exam, revision or summary (Egyptian school — questions, choices, blanks, tables, answers)');
+/** ONE page image → its text (AI vision). Shared by the staff AI, the students' chat and lesson files. → { text, costUsd } */
+export async function ocrImage(env, db, img, { meter, n = 1, kind = 'any' } = {}) {
+    if (!img || !/^image\/(jpeg|png|webp)$/.test(img.mime || '') || typeof img.b64 !== 'string' || !img.b64 || img.b64.length > 4_000_000) { const e = new Error('Send the page as a JPEG'); e.code = 'BAD_IMAGE'; throw e; }
+    const out = await chat(env, db, { tier: 'pro', maxTokens: 3000, image: { mime: img.mime, b64: img.b64 }, system: kind === 'summary' ? OCR_SYSTEM : OCR_ANY,
+        messages: [{ role: 'user', content: `Copy all the text of page ${n}.` }], meter });
+    const text = String(out.text || '').replace(/^```[a-z]*\n?|```$/g, '').trim();
+    return { text: /^\[no text\]$/i.test(text) ? '' : text.slice(0, 20000), costUsd: out.costUsd || 0 };
+}
 
 const getDb = (env) => [env.DB, env.D1_DB].find(d => d && typeof d.prepare === 'function');
 const json = (d, s = 200) => Response.json(d, { status: s });
@@ -136,17 +145,14 @@ export async function onRequest(context) {
             const n = parseInt(data.n, 10), img = data.image || {};
             if (!ID_RE.test(String(data.lessonId || ''))) return bad('Bad lesson id');
             if (!(n >= 1 && n <= 400)) return bad('Bad page');
-            if (!/^image\/(jpeg|png|webp)$/.test(img.mime || '') || typeof img.b64 !== 'string' || !img.b64 || img.b64.length > 4_000_000) return bad('Send the page as a JPEG');
             let out;
-            try {
-                out = await chat(env, db, { tier: 'pro', maxTokens: 3000, image: { mime: img.mime, b64: img.b64 }, system: OCR_SYSTEM,
-                    messages: [{ role: 'user', content: `Copy all the text of page ${n}.` }], meter: { staffId: auth.staff.id, kind: 'ocr-lesson' } });
-            } catch (e) {
+            try { out = await ocrImage(env, db, img, { n, kind: 'summary', meter: { staffId: auth.staff.id, kind: 'ocr-lesson' } }); }
+            catch (e) {
+                if (e.code === 'BAD_IMAGE') return bad(e.message);
                 if (e instanceof AiLimitError) return bad(e.message, 502, { code: e.code });
                 throw e;
             }
-            const text = String(out.text || '').replace(/^```[a-z]*\n?|```$/g, '').trim();
-            return json({ ok: true, n, text: /^\[no text\]$/i.test(text) ? '' : text.slice(0, 20000), costUsd: out.costUsd || 0 });
+            return json({ ok: true, n, text: out.text, costUsd: out.costUsd });
         }
         if (action === 'text') {
             const auth = await requireStaff(request, env, 'lessons.create');

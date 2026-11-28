@@ -10,6 +10,7 @@ import { chat, usageSummary, AiLimitError, BRANDS, claudeReady } from './ai-gate
 import { aiReady } from './ai-engine.js';
 import { route, planFromContext, runTool, GRADE_LABEL } from './copilot-tools.js';
 import { readImage, saveImage, loadImage, serveImage, purgeOldImages } from './ai-image.js';
+import { ocrImage } from './lesson-pdf.js';
 import { wantsPdf, wantsMark, keepDoc, threadDoc, makeSolutions, worksheetBlock } from './solutions-doc.js';
 import { saveSolutionsDoc } from './studio.js';
 import { searchBook, staffBookRules, gradeFromText, GRADE_LABELS } from './curriculum.js';
@@ -194,6 +195,13 @@ export async function onRequest(context) {
         const data = isPost ? await request.json().catch(() => ({})) : {};
         const own = async (id) => id ? await db.prepare('SELECT * FROM copilot_threads WHERE id = ? AND staff_id = ?').bind(id, staff.id).first() : null;
 
+        // a scanned page of a PDF she attached → its text (AI vision), so the whole PDF is read, not 2 pages as a photo
+        if (action === 'ocr') {
+            if (!isPost) return bad('POST only', 405);
+            if (!claudeReady(env)) return bad('Assistant Pro is not connected', 503, { code: 'PAID_OFF' });
+            try { const o = await ocrImage(env, db, data.image, { n: parseInt(data.n, 10) || 1, meter: { staffId: staff.id, kind: 'pdf-ocr' } }); return json({ ok: true, text: o.text, costUsd: o.costUsd }); }
+            catch (e) { if (e.code === 'BAD_IMAGE') return bad(e.message); if (e instanceof AiLimitError) return bad(e.message, 502, { code: e.code }); throw e; }
+        }
         if (action === 'status') {
             const u = await usageSummary(env, db);
             return json({ ...u, tiers: TIERS.map(t => ({ tier: t, ...BRANDS[t], ready: t === 'free' ? aiReady(env) : claudeReady(env) })) });
@@ -225,7 +233,7 @@ export async function onRequest(context) {
             if (img && img.error) return bad(img.error, 400);
             // a PDF (read in her browser): its text goes to the AI for THIS message only; the chat keeps just its name
             const doc = data.doc && typeof data.doc === 'object' && String(data.doc.text || '').trim()
-                ? { name: String(data.doc.name || 'file.pdf').replace(/[\r\n]/g, ' ').slice(0, 80), pages: Math.max(1, Math.min(200, parseInt(data.doc.pages, 10) || 1)), text: String(data.doc.text).replace(/\r/g, '').slice(0, tier === 'pro' ? 24000 : 6000) } : null;
+                ? { name: String(data.doc.name || 'file.pdf').replace(/[\r\n]/g, ' ').slice(0, 80), pages: Math.max(1, Math.min(200, parseInt(data.doc.pages, 10) || 1)), text: String(data.doc.text).replace(/\r/g, '').slice(0, tier === 'pro' ? 60000 : 6000) } : null;
             if (!text && img) text = 'حلّي السؤال اللي في الصورة 📷';
             if (!text && doc) text = 'اقري الملف ده وساعديني فيه 📄';
             if (!text && !ctxPlan) return bad('Type a message', 400);
@@ -268,6 +276,13 @@ export async function onRequest(context) {
                 if (img && context.waitUntil) context.waitUntil(purgeOldImages(env, db));
             }
             if (data.resend) await db.prepare(`DELETE FROM copilot_messages WHERE thread_id = ? AND role = 'error' AND id > ?`).bind(t.id, userMsg.id).run();
+            // a PHOTO of questions + "make it a PDF with the solutions" → its text (AI vision) becomes the chat's worksheet,
+            // so the worked-solutions PDF has every question (28 Nov 2026 — it went to the chat model instead)
+            let photoSheet = false;
+            if (img && !result && tier === 'pro' && !doc && wantsPdf(text) && claudeReady(env)) {
+                try { const o = await ocrImage(env, db, img, { meter: { staffId: staff.id, kind: 'pdf-ocr' } }); if (o.text.replace(/\s+/g, '').length >= 40) { await keepDoc(db, 'staff', t.id, { name: '📷 photo', text: o.text }); photoSheet = true; } }
+                catch (e) { /* the chat model still answers from the photo */ }
+            }
             if (doc) await keepDoc(db, 'staff', t.id, doc);   // kept with the chat: every later message (and "make it a PDF") sees it
             const sheet = doc ? { name: doc.name, text: doc.text } : await threadDoc(db, 'staff', t.id);
             const { results: hist } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id <= ? ORDER BY id DESC LIMIT ?`).bind(t.id, userMsg.id, HISTORY).all();
@@ -282,7 +297,7 @@ export async function onRequest(context) {
                 return db.prepare('SELECT * FROM copilot_messages WHERE id = ?').bind(Number(r.meta.last_row_id)).first();
             };
             // "put it in a PDF" → the chat's solutions as a branded worked-solutions PDF (each question, then its full answer)
-            if (!img && !result && tier === 'pro' && wantsPdf(text)) {
+            if ((!img || photoSheet) && !result && tier === 'pro' && wantsPdf(text)) {
                 try {
                     const { results: all } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
                     const worksheet = await threadDoc(db, 'staff', t.id);

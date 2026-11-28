@@ -397,7 +397,13 @@
             sub();
             comp = composer($('tcComp'), {
                 models: ST.models.map(modelOpt),
-                tier: !ST.models[0].ready && proReady() ? 'pro' : 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, pdf: true, photoMax: 1152, photoQuality: 0.8, dropZone: root, voiceKey: 'tutor_voice', toast: opt.toast,
+                tier: !ST.models[0].ready && proReady() ? 'pro' : 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, pdf: true, pdfPages: 40, pdfChars: 60000,
+                // a scanned page → AI vision (Pro only; Mini keeps the old "first pages as a photo")
+                ocr: async (n, image) => {
+                    if (!comp || comp.tier === 'free' || !proReady()) { const e = new Error('Pro only'); e.stop = true; throw e; }
+                    try { return (await api('ocr', { n, image })).text || ''; }
+                    catch (e) { if ([403, 423, 429].includes(e.status)) { e.stop = true; if (e.status === 429) opt.toast(e.message, 'info'); } throw e; }
+                }, photoMax: 1152, photoQuality: 0.8, dropZone: root, voiceKey: 'tutor_voice', toast: opt.toast,
                 onSend: ({ text, image, doc }) => send(text, image, doc),
                 onTier: () => hint(),
                 onLocked: (m) => { if (m && m.tier !== 'free' && SUBS.includes(proM().code) && R && !ST.preview) R.subscribe({ code: proM().code }); else opt.toast(m && m.tier === 'free' ? 'Mini Assistant جاي قريب 🚀' : proLockedMsg(), 'info'); },

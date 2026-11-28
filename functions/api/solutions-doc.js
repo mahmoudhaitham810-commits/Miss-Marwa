@@ -31,14 +31,14 @@ export async function keepDoc(db, scope, threadId, doc) {
     if (!doc || !threadId) return;
     await ensure(db);
     await db.prepare(`INSERT OR REPLACE INTO ai_thread_docs (scope, thread_id, name, text, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`)
-        .bind(scope, threadId, doc.name, String(doc.text).slice(0, 30000)).run();
+        .bind(scope, threadId, doc.name, String(doc.text).slice(0, 60000)).run();
 }
 /** The worksheet of a chat, for EVERY later message of that chat (live 22 Nov: "حل الـ 30 مرة واحدة" → "I can't see the
  *  file" because the text went with one message only). A cached block: re-read at 10% of the price on each turn. */
 export function worksheetBlock(w, who = 'the student') {
     return { type: 'text', cache_control: { type: 'ephemeral' }, text: `## The worksheet ${who} attached in this chat ("${w.name}") — its full text:
 """
-${String(w.text).slice(0, 30000)}
+${String(w.text).slice(0, 60000)}
 """
 - It stays available for the WHOLE chat: never say you can't see it, and never ask for it again (or for photos of it).
 - Asked to solve it (حل / حلي / solve / the questions / الشيت / الملف): solve EVERY question of it in THIS one answer, in order — each with its number and a full worked solution as in the rules — never stop after one question to ask whether to continue. Only go one question at a time if they explicitly ask for that ("واحدة واحدة", "one at a time"), or if they ask about specific questions.
@@ -114,9 +114,9 @@ export async function makeSolutions(env, db, { messages, worksheet, gradeLabel, 
     if (!sols && !worksheet) { const e = new Error('NO_SOLUTIONS'); e.code = 'NO_SOLUTIONS'; throw e; }
     const system = [
         { type: 'text', text: `You prepare study material for Miss Marwa's ${gradeLabel || 'science'} students (Egyptian curriculum, language schools).${PRO_ACCURACY}\n\n${TASK}` },
-        { type: 'text', text: (worksheet ? `## The worksheet ("${worksheet.name}") — the questions exactly:\n"""\n${String(worksheet.text).slice(0, 30000)}\n"""\n\n` : '') + (sols ? `## The solutions from the chat:\n"""\n${sols}\n"""` : `## No solutions in the chat yet — SOLVE every question of the worksheet yourself, fully and carefully, straight into the document.`) }
+        { type: 'text', text: (worksheet ? `## The worksheet ("${worksheet.name}") — the questions exactly:\n"""\n${String(worksheet.text).slice(0, 60000)}\n"""\n\n` : '') + (sols ? `## The solutions from the chat:\n"""\n${sols}\n"""` : `## No solutions in the chat yet — SOLVE every question of the worksheet yourself, fully and carefully, straight into the document.`) }
     ];
-    const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'Go.' }], maxTokens: 16000, thinking: 5000, meter });
+    const r = await chat(env, db, { tier: 'pro', system, messages: [{ role: 'user', content: 'Go.' }], maxTokens: 28000, thinking: 5000, meter });   // a whole multi-page exam: every question with its full solution
     const content = cleanSolutions(parse(r.text));
     if (!content) { const e = new Error('BAD_JSON'); e.code = 'BAD_JSON'; throw e; }
     return { content, costUsd: r.costUsd || 0, model: r.model };
