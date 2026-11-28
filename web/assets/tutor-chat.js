@@ -256,6 +256,8 @@
         async function send(text, image, doc) {
             if (sending) return;
             sending = true; comp && comp.setBusy(true);
+            const sentTier = comp ? comp.tier : 'free';
+            let fallback = false;
             MSGS.push({ role: 'user', text: (text || (doc ? '' : '📷')) + (doc ? `${text ? '\n' : ''}📄 ${doc.name}` : ''), imgUrl: image && image.url });
             MSGS.push({ role: 'typing' }); render();
             try {
@@ -277,13 +279,27 @@
                 const limit = ['DAILY_LIMIT', 'IMAGE_LIMIT', 'POOL_EMPTY', 'BONUS_CLOSED'].includes(d.code);
                 const noRetry = ['FILE_LIMIT', 'EXAM_LOCK', 'PRO_LOCKED', 'STUDENT_OFF', 'STUDENT_CAP', 'TRIAL_CAP', 'TRIAL_OVER', 'SUB_CAP', 'SUB_EXPIRED', 'FREE_CLOSED'].includes(d.code);
                 if (SUBS.includes(d.code)) { lockPro(d.code); if (ST && ST.credits && d.code !== 'STUDENT_OFF') setCredits(Object.assign({}, ST.credits, { left: 0 })); }
+                // Pro just ran out (credits / trial / subscription) → never stuck on an error: switch to Mini and answer there
+                // (nothing was saved — the server checks Pro before saving the message)
+                if (sentTier === 'pro' && (SUBS.includes(d.code) || d.code === 'PRO_LOCKED') && !(ST && ST.preview) && ST && ST.models[0] && ST.models[0].ready && comp) {
+                    lockPro(d.code || 'PRO_LOCKED');
+                    comp.setTier('free'); hint();
+                    const u = MSGS.length && MSGS[MSGS.length - 1].role === 'user' ? MSGS.pop() : null; void u;
+                    MSGS.push({ role: 'error', text: `${{ TRIAL_CAP: 'خلص رصيد الفترة التجريبية بتاع Pro', TRIAL_OVER: 'الفترة التجريبية بتاعة Pro خلصت', SUB_CAP: 'خلص رصيد Pro بتاعك', STUDENT_CAP: 'خلص رصيد Pro بتاعك الشهر ده', SUB_EXPIRED: 'اشتراك Pro بتاعك خلص', STUDENT_OFF: 'Pro مش مفعّل على حسابك' }[d.code] || 'Pro مش متاح دلوقتي'} 🙏 — حوّلتك لـ Mini Assistant وهو بيجاوبك دلوقتي 👇`,
+                        retry: false, sub: SUBS.includes(d.code) ? d.code : null, tier: 'free', notice: true });
+                    fallback = true;
+                }
+                if (fallback) { /* the notice is already there — Mini answers next */ }
+                else {
                 if (!d.user && !limit) { /* not saved → let them resend */ }
                 if (d.code === 'IMAGE_LIMIT' || d.code === 'DAILY_LIMIT' || d.code === 'FILE_LIMIT' || (d.code === 'BONUS_CLOSED' && !d.threadId)) MSGS.pop();   // nothing was sent
                 MSGS.push({ role: 'error', text: e.message, retry: !limit && !noRetry, last: { text, image, doc }, sub: SUBS.includes(d.code) && !(ST && ST.preview) ? d.code : null, tier: comp ? comp.tier : 'pro',
                     cards: limit ? [{ type: 'upgrade', text: d.code === 'IMAGE_LIMIT' ? `عايز تبعت صور أكتر وتاخد حل أدق؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}` : `عايز تسأل أكتر من كده؟ **Miss Marwa Assistant Pro** ${proReady() ? 'معاك 👇' : 'جاي قريب 🚀'}`, tier: 'pro' }] : null });
                 if (d.code === 'EXAM_LOCK' && ST) { ST.inExam = true; sub(); }
+                }
             }
             sending = false; comp && comp.setBusy(false); render();
+            if (fallback) return send(text, image, doc);     // the same question, now on Mini
         }
 
         // ---------- study companion actions (no AI until the student picks something) ----------
@@ -377,13 +393,16 @@
             api('seen', { what }).catch(() => { });
         }
         $('tcNew').addEventListener('click', async () => {
-            try { const r = await api('new', {}); threadId = r.thread.id; MSGS = []; render(false); } catch (e) { opt.toast(e.message, 'error'); }
+            try { const r = await api('new', {}); threadId = r.thread.id; MSGS = []; if (comp) { comp.setTier(defaultTier()); hint(); } render(false); } catch (e) { opt.toast(e.message, 'error'); }
         });
         async function loadMine() { try { MINE = (await api('mine')).cards; const w = root.querySelector('#tcMine'); if (w) w.innerHTML = cardsHTML(MINE); } catch (e) { } }
 
         // ---------- Assistant Pro for this student ----------
         const proM = () => (ST && ST.models || []).find(m => m.tier === 'pro') || {};
         const proReady = () => !!proM().ready;
+        // 28 Nov 2026 (Mahmoud): students don't touch the model menu → Pro by default when they can use it (subscribed or the
+        // trial, with credits left), otherwise Mini
+        const defaultTier = () => proReady() ? 'pro' : (ST && ST.models && ST.models[0] && ST.models[0].ready ? 'free' : 'pro');
         const proLockedMsg = () => ({ STUDENT_OFF: 'Miss Marwa Assistant Pro جزء من الاشتراك ✨ — كلّم مس مروة عشان تفعّله.', STUDENT_CAP: 'خلص رصيد Pro بتاعك الشهر ده 🙏 — بيتجدد أول الشهر.', TRIAL_CAP: 'خلص رصيد الفترة التجريبية 🙏 — اشترك عشان تكمّل مع Pro ✨', TRIAL_OVER: 'الفترة التجريبية خلصت 🙏 — اشترك عشان تكمّل مع Pro ✨', SUB_CAP: 'خلص رصيد اشتراكك 🙏 — جدّده عشان تكمّل ✨', SUB_EXPIRED: 'اشتراكك خلص 🙏 — جدّده عشان تكمّل ✨' })[proM().code] || 'Miss Marwa Assistant Pro جاي قريب جداً 🚀';
         const modelOpt = (m) => ({ tier: m.tier, name: m.name, ready: m.ready, locked: m.locked, note: m.tier === 'free' ? (m.ready ? 'Free · مجاني' : 'قريب 🚀') : (m.note || 'قريب جداً 🚀') });
 
@@ -400,7 +419,7 @@
             sub();
             comp = composer($('tcComp'), {
                 models: ST.models.map(modelOpt),
-                tier: !ST.models[0].ready && proReady() ? 'pro' : 'free', placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, pdf: true, pdfPages: 40, pdfChars: 60000,
+                tier: defaultTier(), placeholder: 'اكتب سؤالك… · Ask anything', maxLength: 2000, pdf: true, pdfPages: 40, pdfChars: 60000,
                 // a scanned page → AI vision (Pro only; Mini keeps the old "first pages as a photo")
                 ocr: async (n, image) => {
                     if (!comp || comp.tier === 'free' || !proReady()) { const e = new Error('Pro only'); e.stop = true; throw e; }
