@@ -172,13 +172,17 @@ const ORD = { 'الاول': 1, 'الاولي': 1, 'اول': 1, 'اولي': 1, 'o
     'الثالث': 3, 'الثالثه': 3, 'التالت': 3, 'التالته': 3, 'تالت': 3, 'تالته': 3, 'ثالث': 3, 'ثالثه': 3, 'three': 3, 'third': 3,
     'الرابع': 4, 'الرابعه': 4, 'رابع': 4, 'رابعه': 4, 'four': 4, 'fourth': 4,
     'الخامس': 5, 'الخامسه': 5, 'خامس': 5, 'خامسه': 5, 'five': 5, 'fifth': 5,
-    'السادس': 6, 'السادسه': 6, 'سادس': 6, 'سادسه': 6, 'six': 6, 'sixth': 6 };
+    'السادس': 6, 'السادسه': 6, 'سادس': 6, 'سادسه': 6, 'six': 6, 'sixth': 6,
+    // 28 Nov 2026 — «يونيت وان ليسون تو»: English numbers written in Arabic letters, and Arabic cardinals
+    'وان': 1, 'واحد': 1, 'تو': 2, 'تيو': 2, 'اتنين': 2, 'اثنين': 2, 'ثري': 3, 'تري': 3, 'ثريي': 3, 'تلاته': 3, 'ثلاثه': 3, 'تلاتة': 3,
+    'فور': 4, 'فوور': 4, 'اربعه': 4, 'أربعه': 4, 'فايف': 5, 'فايڤ': 5, 'خمسه': 5, 'سكس': 6, 'سيكس': 6, 'سته': 6, 'سيفن': 7, 'سفن': 7, 'سبعه': 7 };
 const ORDS = Object.keys(ORD).sort((a, b) => b.length - a.length).join('|');
 const numOf = (v) => /^\d+$/.test(v) ? parseInt(v, 10) : ORD[v] || null;
 export function refFromText(text) {
     const t = ' ' + norm(text).replace(/[^\p{L}\p{N}\s]/gu, ' ') + ' ';
-    const u = t.match(new RegExp(`(?:\\bunit|\\bchapter|\\bch|\\bu|الوحده|وحده|الباب|باب)\\s*(?:رقم\\s*|no\\s*)?(\\d{1,2}|${ORDS})(?=\\s)`));
-    const l = t.match(new RegExp(`(?:\\blesson|\\bl|الدرس|درس)\\s*(?:رقم\\s*|no\\s*)?(\\d{1,2}|${ORDS})(?=\\s)`));
+    // «unit / الوحدة / يونيت» and «lesson / الدرس / ليسون» — the English words written in Arabic letters too
+    const u = t.match(new RegExp(`(?:\\bunit|\\bchapter|\\bch|\\bu|الوحده|وحده|الباب|باب|(?<=\\s)(?:ال)?(?:يونيت|يونت|يونيط|يونط|يونت|يوونت))\\s*(?:رقم\\s*|no\\s*)?(\\d{1,2}|${ORDS})(?=\\s)`));
+    const l = t.match(new RegExp(`(?:\\blesson|\\bl|الدرس|درس|(?<=\\s)(?:ال)?(?:ليسون|ليسن|لسون|ليسوون|لسن))\\s*(?:رقم\\s*|no\\s*)?(\\d{1,2}|${ORDS})(?=\\s)`));
     const unit = u ? numOf(u[1]) : null, lesson = l ? numOf(l[1]) : null;
     return unit || lesson ? { unit, lesson } : null;
 }
@@ -267,6 +271,8 @@ export async function buildToc(env, db, book, { meter = null } = {}) {
         ON CONFLICT(book) DO UPDATE SET grade = excluded.grade, status = excluded.status, units = excluded.units, total_pages = excluded.total_pages,
         cost_usd = curriculum_toc.cost_usd + excluded.cost_usd, error = excluded.error, built_at = CURRENT_TIMESTAMP`)
         .bind(book, grade, ok ? 'ready' : 'failed', JSON.stringify(units), total, r.costUsd || 0, ok ? null : 'No units found in the contents').run();
+    // a new map → the "students asked for a lesson that isn't in the map" notes of this grade are checked again from scratch
+    if (ok && grade) await db.prepare(`DELETE FROM app_kv WHERE "key" LIKE ?`).bind(`toc_miss_${grade}_%`).run().catch(() => {});
     return { units, costUsd: r.costUsd || 0 };
 }
 /**
@@ -463,6 +469,13 @@ export async function lessonPack(env, db, { grade, text = '', ask = '', image = 
     if (!school || !school.units.length) return null;
     let ref = null, science = true;
     const named = refFromText(ask || text);
+    // a lesson they NAMED that the book map doesn't have (28 Nov 2026: «يونيت وان ليسون تو» → the model said "there's no
+    // Lesson 2") → never a guess: the app shows the unit's real lessons to pick from
+    if (named && named.unit && named.lesson && !findLesson(school.units, named)) {
+        const unit = school.units.find(x => Number(x.unit) === Number(named.unit));
+        return { indexed: true, science: true, ref: null, block: '', missing: { unit: named.unit, lesson: named.lesson,
+            units: (unit ? [unit] : school.units).map(x => ({ unit: x.unit, title: x.title || '', lessons: (x.lessons || []).map(l => ({ lesson: l.lesson, title: l.title || '' })) })) } };
+    }
     if (named && named.lesson && findLesson(school.units, named)) ref = named;
     else if (quick && threadRef) ref = threadRef;
     else {
@@ -623,6 +636,10 @@ export async function onRequest(context) {
             const TC = new Map((tocs || []).map(t => { let units = []; try { units = JSON.parse(t.units || '[]') || []; } catch (e) { } return [t.book, { status: t.status, units, error: t.error, builtAt: t.built_at }]; }));
             const SC = new Map(); for (const r of scans || []) { if (!SC.has(r.book)) SC.set(r.book, []); SC.get(r.book).push(Number(r.page)); }
             const BK = new Map((books || []).map(b => [b.key, b])), ST = new Map((stats || []).map(s => [s.book, s]));
+            // lessons students NAMED that this grade's map doesn't have (28 Nov 2026) → maybe the map missed a lesson
+            const { results: miss } = await db.prepare(`SELECT "key", value FROM app_kv WHERE "key" LIKE 'toc_miss_%' ORDER BY value DESC LIMIT 200`).all();
+            const MISS = new Map();
+            for (const m of miss || []) { const x = String(m.key).match(/^toc_miss_([a-z0-9]+)_(\d+)_(\d+)$/); if (!x) continue; if (!MISS.has(x[1])) MISS.set(x[1], []); MISS.get(x[1]).push({ unit: +x[2], lesson: +x[3], at: m.value }); }
             const keys = new Set([...objects.map(o => o.key), ...BK.keys()]);
             return json({
                 connected: !!B, aiReady: claudeReady(env),
@@ -630,7 +647,7 @@ export async function onRequest(context) {
                     const o = objects.find(x => x.key === key), b = BK.get(key) || {}, s = ST.get(key) || {};
                     return { key, grade: gradeOfKey(key), name: bookName(key), inBucket: !!o, size: o ? o.size : b.size || 0, totalPages: b.total_pages || 0,
                         pagesDone: Number(s.pages) || 0, textPages: Number(s.text_pages) || 0, ocrPages: Number(s.ocr_pages) || 0, chars: Number(s.chars) || 0, updatedAt: b.updated_at || null,
-                        scanned: SC.get(key) || [], toc: TC.get(key) || null };
+                        scanned: SC.get(key) || [], toc: TC.get(key) || null, asked: bookKind(key) === 'school' ? (MISS.get(gradeOfKey(key)) || []) : [] };
                 })
             });
         }

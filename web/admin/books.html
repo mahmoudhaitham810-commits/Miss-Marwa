@@ -95,6 +95,7 @@
                     <div class="bar ${pct >= 100 ? 'ok' : ''}"><i style="width:${B ? B.pct : pct}%"></i></div>
                     <div class="book-stats">${state}${done ? `<span class="pill muted">${b.textPages} pages with text</span>` : ''}${b.ocrPages ? `<span class="pill muted">${b.ocrPages} read by AI</span>` : ''}${scan ? `<span class="pill warning">📷 ${scan} scanned page${scan === 1 ? '' : 's'}</span>` : ''}</div>
                     ${done ? mapHtml(b) : ''}
+                    ${(b.asked || []).length ? `<div class="notice warning small" style="margin:10px 0 0"><span>⚠️ Students asked for <b>${b.asked.slice(0, 6).map(x => `Unit ${x.unit} · Lesson ${x.lesson}`).join('، ')}</b>, which this book map doesn't have. If the book has ${b.asked.length === 1 ? 'that lesson' : 'those lessons'}, press <b>Rebuild book map</b>; students were shown the real lessons of the unit instead of a guess.</span></div>` : ''}
                     <div class="msg" data-msg>${B ? esc(B.msg) : ''}</div>
                     <div class="book-acts">
                         ${b.inBucket && b.grade ? `<button class="btn btn-primary btn-sm" data-index ${B ? 'disabled' : ''}>${done && done < t ? 'Continue indexing' : done ? 'Index again' : 'Index this book'}</button>` : ''}

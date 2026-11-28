@@ -240,6 +240,8 @@ async function lessonSummaryBase(env, db, { grade, unit, lesson, payer, beforeMa
     return { lessonDoc: parse(out.text), by: 'ai', title: Ls.title || '', cached: !!out.cached, toc, key };
 }
 
+// «اشرح / لخص الدرس / الوحدة / lesson / unit» — a whole lesson from their book (Mini can't: it has no book)
+const LESSON_WORD = /(الدرس|درس|الوحده|الوحدة|وحده|lesson|unit|يونيت|ليسون|الفصل|chapter)/i;
 // 28 Nov 2026 — replies a paid student must never get
 export const BAD_REPLY = /(قاعد[ةه] (ال)?بيانات|داتا ?بيز|\bdata ?base\b|مش متبرمج|مش مبرمج|not programmed|مش موجود (عندي|معايا) |ملخص سريع بس|مجرد ملخص|just a (quick |short )?summary)/i;
 // a verdict that flips inside a graded answer («❌ … لكن لحظة، خليني أصحح نفسي … إجابتك كانت صح»)
@@ -280,8 +282,10 @@ ${EXAM_ANSWER_LINE}
 ${COMPANION}
 ## Your job as ${BRANDS[tier].name}
 ${tier === 'pro'
-        ? `- You're the paid model — the student pays for real, high-value teaching. Explain clearly and completely at their grade's level: the idea, why it's true, a quick everyday example, and the exact exam answer. Problems: every step with units.${PRO_ACCURACY}`
-        : `- Help with SCIENCE and with their own progress on the platform. You're the free model: quick questions get clear, SHORT answers (up to ~6 lines); when they ask you to summarize or explain a topic (لخصلي / اشرحلي), give a complete, organized summary of all its main points (see "This message" below). The app automatically adds a note under science answers suggesting ${BRANDS.pro.name} for deeper explanations — never write such a note yourself.`}
+        ? `- You're the paid model — the student pays for real, high-value teaching. Explain clearly and completely at their grade's level: the idea, why it's true, a quick everyday example, and the exact exam answer. Problems: every step with units.${PRO_ACCURACY}
+- NEVER tell a student that a unit / lesson "doesn't exist" or "isn't in your book" — the app checks their book map itself. If THE LESSON isn't above, ask which lesson they mean (its name or topic) in one line.`
+        : `- Help with SCIENCE and with their own progress on the platform. You're the free model: quick questions get clear, SHORT answers (up to ~6 lines); when they ask you to summarize or explain a topic (لخصلي / اشرحلي), give a complete, organized summary of all its main points (see "This message" below). The app automatically adds a note under science answers suggesting ${BRANDS.pro.name} for deeper explanations — never write such a note yourself.
+- You do NOT have the student's book. NEVER say what a unit / lesson of their book contains, never name or guess which lesson is which ("Unit 1 Lesson 2 is about …"), and never invent a lesson's content — for a whole lesson of their book, say in one line that ${BRANDS.pro.name} explains it from their own book. Explain only the science idea they ask about, at their grade level.`}
 - Use ONLY the "MY DATA" block below for anything about their grades, rank, exams, absences or lessons. Never invent a number, exam, lesson or date. If something isn't there, say you don't see it.
 - Cards with their exact numbers appear under your reply when they ask about their grades, open exams or new lessons — so keep that part short and fun, don't repeat every number.
 - You can ONLY see this student's own data. If they ask about another student's grades or anything private about someone else, say kindly that you can't see that 🙂.
@@ -663,6 +667,19 @@ export async function onRequest(context) {
             let pack = null;
             try {
                 let out;
+                // 28 Nov 2026: Mini has NO book — asked to explain «Unit 1 Lesson 2» it invented a Prep 1 lesson for a Prep 3
+                // student. A named unit / lesson, or "explain / summarize the lesson" → the app answers: that's Pro's job
+                // (from their own book), never a guess. Costs nothing, and the Mini message isn't counted.
+                if (free && !img && !doc && !intents.length && (refFromText(text) || (kind === 'summary' && LESSON_WORD.test(text)) || (kind === 'continue' && !messages.some(m => m.role === 'assistant')))) {
+                    const R = refFromText(text), pa = await proNow();
+                    const what = R && R.lesson ? `**${R.unit ? `Unit ${R.unit} · ` : ''}Lesson ${R.lesson}**` : 'الدرس';
+                    const msg = pa.ok
+                        ? `شرح ${what} كامل من كتابك ده شغل **Miss Marwa Assistant Pro** ✨ — هو اللي معاه كتابك ويشرحهولك جزء جزء. دوس «اسأل Pro» 👇
+ومع Mini تقدر تسألني سؤال قصير عن أي حاجة 😊`
+                        : `شرح ${what} كامل من كتابك متاح مع **Miss Marwa Assistant Pro** ✨ (معاه كتابك نفسه). ومع Mini تقدر تسألني سؤال قصير عن معلومة معينة 😊 — ولو مش فاهم الدرس اسأل مس مروة 🙏`;
+                    const saved = await save({ text: msg, model: 'app', ms: 0, cost: 0, cards: pa.ok ? JSON.stringify([{ type: 'upgrade', text: 'الشرح الكامل للدرس من كتابك مع **Miss Marwa Assistant Pro**' }]) : null });
+                    return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today() });
+                }
                 if (free) {
                     out = await chat(env, db, { tier: 'free', pool: 'student', system: tutorPrompt(d, 'free') + (img ? IMAGE_RULES : '') + (intents.length ? '' : taskRules(kind, 'free')) + (!img && prevAskedQuestion(messages) ? '\n\n' + GRADING_RULE : ''), messages: [...EXAMPLES, ...messages], maxTokens: img ? 900 : 850, temperature: 0.5, image: img && !img.error ? img : null, bonus });
                     await kvAdd(db, counterKey(who, 'msgs'), 1);
@@ -681,6 +698,17 @@ export async function onRequest(context) {
                         const quick = !img && !doc && threadRef && (String(text).trim().length <= 14 || kind === 'continue' || (prevAskedQuestion(messages) && String(text).trim().length <= 40));
                         try { pack = await lessonPack(env, db, { grade: who.student.grade, text: searchText, ask: text, image: img && !img.error ? img : null, meter: payer, threadRef, quick }); } catch (e) { pack = null; }
                         if (pack && pack.block) await keepThreadLesson(db, t.id, pack.ref);
+                    }
+                    // a lesson they named that isn't in their book map → the real lessons to pick from (no AI, no guessing)
+                    if (pack && pack.missing) {
+                        const M = pack.missing, U = M.units.length === 1 ? M.units[0] : null;
+                        const list = U ? U.lessons.map(l => `Lesson ${l.lesson}${l.title ? ' — ' + l.title : ''}`).join('، ') : '';
+                        const msg = U ? `Unit ${M.unit} في كتابك فيه: ${list} 📘 — تقصد أنهي درس؟ دوس عليه 👇`
+                            : `مالقيتش Unit ${M.unit} في كتابك 🤔 — دي الوحدات والدروس اللي فيه، اختار الدرس 👇`;
+                        await db.prepare('INSERT OR IGNORE INTO app_kv ("key", value) VALUES (?, ?)').bind(`toc_miss_${who.student.grade}_${M.unit}_${M.lesson}`, new Date().toISOString()).run().catch(() => {});   // for the Curriculum books page
+                        await giveBack();
+                        const saved = await save({ text: msg, model: 'app', ms: 0, cost: 0, cards: JSON.stringify([{ type: 'pickles', units: M.units }]) });
+                        return json({ threadId: t.id, user: msgOut(userMsg), reply: msgOut(saved), today: await today(), ...(await dailyOut()) });
                     }
                     let sys;
                     if (pack && pack.block) {

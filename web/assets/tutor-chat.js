@@ -199,6 +199,8 @@
             // 28 Nov: the full lesson summary in Miss Marwa's style → the studio's PDF (her own when she made one)
             lessonpdf: (c) => { const k = 'l' + (++solSeq); SOLS[k] = c; const L = (c.content.lessons || [])[0] || { blocks: [] }, B = L.blocks || [], n = (t) => B.filter(b => b.t === t).length;
                 return `<div class="tc-solcard tc-sumcard" dir="rtl"><div><b dir="auto">📄 ${esc(c.title)}</b><small>${c.by === 'marwa' ? 'ملخص مس مروة نفسها ✨ · ' : 'بأسلوب مس مروة · '}${c.lang === 'en' ? 'إنجليزي بس 📘' : 'شرح بالعامية تحت كل جزء 💬'} · ${n('term')} تعريف · ${n('reason')} G.R</small></div><div class="tc-sumbtns"><button class="btn btn-primary btn-sm" data-lsum="${k}">⬇️ نزّل الـ PDF</button>${c.lang === 'en' || !L.unit ? '' : `<button class="btn btn-ghost btn-sm" data-next="pdfen" data-u="${L.unit}" data-l="${L.lesson}">📘 نسخة إنجليزي بس</button>`}</div></div>`; },
+            // the real lessons of a unit (a lesson they named isn't in their book map) — tap → explained from the book
+            pickles: (c) => `<div class="tc-next" dir="rtl">${(c.units || []).map(u => (u.lessons || []).map(l => `<button data-plesson="1" data-u="${Number(u.unit)}" data-l="${Number(l.lesson)}">📘 Unit ${Number(u.unit)} · Lesson ${Number(l.lesson)}${l.title ? ' — ' + esc(l.title) : ''}</button>`).join('')).join('')}</div>`,
             next: (c) => `<div class="tc-next" dir="rtl"><button data-next="quiz" data-u="${c.unit}" data-l="${c.lesson}">🧪 يلا نحل أسئلة عليه</button><button data-next="pdf" data-u="${c.unit}" data-l="${c.lesson}">📄 الملخص الكامل PDF</button><button data-next="explain" data-u="${c.unit}" data-l="${c.lesson}">🔍 اشرحلي جزء منه</button><button data-next="pick">📘 درس تاني</button></div>`,
             upgrade: (c) => `<div class="tc-card tc-up"><span class="tx" dir="rtl">${md(c.text).replace(/^<p[^>]*>|<\/p>$/g, '')}</span><button class="pro" data-pro>${proReady() ? '✨ اسأل Pro' : '✨ Pro · قريب'}</button></div>`
         };
@@ -335,6 +337,7 @@
                 if (k === 'me') return send('عامل إيه في درجاتي؟', null);
             }
             const sm = e.target.closest('[data-sum]'); if (sm) { const [u, l] = sm.dataset.sum.split('.').map(Number); return summarize(u, l); }
+            const pl = e.target.closest('[data-plesson]'); if (pl) { if (comp && comp.tier !== 'pro' && proReady()) { comp.setTier('pro'); hint(); } return send(`اشرحلي Unit ${+pl.dataset.u} Lesson ${+pl.dataset.l} 📘`, null); }
             const nx = e.target.closest('[data-next]');
             if (nx) {
                 const k = nx.dataset.next, u = +nx.dataset.u, l = +nx.dataset.l;
