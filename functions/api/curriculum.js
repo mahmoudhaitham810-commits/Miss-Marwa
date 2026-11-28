@@ -541,6 +541,9 @@ export function gradeFromText(text) {
         ['sec1', /\b(sec|secondary|grade)\s*\.?\s*(1|one|10)\b|\bs1\b|(اولي|الاولي|اول|الاول|1)\s*(ثانوي|الثانوي|ثانوى|ث(?=\s|$))|الصف\s*الاول\s*الثانوي/]
     ];
     for (const [g, r] of rx) if (r.test(t)) return g;
+    // "Second Preparatory" / "2nd prep" / "First Secondary" (printed on El-Moasser pages) — 28 Nov 2026
+    const en = t.match(/\b(first|1st|second|2nd|third|3rd)\s+(prep|preparatory|secondary|sec)\b/);
+    if (en) { const k = { first: 1, '1st': 1, second: 2, '2nd': 2, third: 3, '3rd': 3 }[en[1]]; return /^sec/.test(en[2]) ? (k === 1 ? 'sec1' : null) : 'prep' + k; }
     return null;
 }
 

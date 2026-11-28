@@ -11,9 +11,19 @@
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     // **bold** inside text (her key words), everything else escaped
     const rich = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    // chemical formulas with real subscripts in the finished page (H2SO4 → H₂SO₄, Al2(SO4)3 → Al₂(SO₄)₃) — only tokens made of
+    // real element symbols, so "Q1", "M1", "Unit 2" stay as they are. Never while editing (the saved text stays plain).
+    const EL = new Set('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Ag Cd Sn Sb I Xe Cs Ba Pt Au Hg Pb Bi Ra U'.split(' '));
+    const chem = (h) => h.replace(/(?<![A-Za-z0-9])(\d*)((?:[A-Z][a-z]?\d*|\((?:[A-Z][a-z]?\d*)+\)\d*)+)(?![a-z])/g, (m, coef, tok) => {
+        if (!/\d/.test(tok)) return m;
+        const syms = tok.match(/[A-Z][a-z]?/g) || [];
+        if (!syms.every(x => EL.has(x))) return m;
+        if (syms.length === 1 && !/^(H|O|N|Cl|F|Br|I)\d$/.test(tok)) return m;   // a lone "C1" / "V2" is a label, not a formula (H2, O2, Cl2 are)
+        return coef + tok.replace(/([A-Za-z)])(\d+)/g, '$1<sub>$2</sub>');   // the coefficient (3H2SO4) stays full size
+    });
     const ed = (o, path, text, tag = 'span', cls = '') => o.edit
         ? `<${tag} class="${cls}" data-e="${path}" contenteditable="true" spellcheck="false">${rich(text)}</${tag}>`
-        : `<${tag} class="${cls}">${rich(text)}</${tag}>`;
+        : `<${tag} class="${cls}">${chem(rich(text))}</${tag}>`;
     const LETTER = ['a', 'b', 'c', 'd', 'e', 'f'];
     const ORD = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth'];
     const GRADE = { prep1: 'Prep 1', prep2: 'Prep 2', prep3: 'Prep 3', sec1: 'Sec 1' };
@@ -95,7 +105,11 @@
     .sx-lines { margin: 8px 0 2px; } .sx-lines span { display: block; border-bottom: 1px dotted #94A3B8; height: 22px; }
     .sx-sol { margin: 0 0 14px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
     .sx-solq { display: flex; gap: 10px; align-items: flex-start; background: var(--sky); padding: 10px 14px; font-weight: 700; color: #0F172A; }
-    .sx-solq .qt { flex: 1; line-height: 1.5; } .sx-solq .sx-n { margin-top: 1px; }
+    .sx-solq .qt { flex: 1; line-height: 1.5; } .sx-solq .sx-n { margin-top: 1px; width: auto; min-width: 27px; padding: 0 9px; border-radius: 14px; white-space: nowrap; font-size: 12.5px; }
+    .sx-model { break-after: avoid; margin: 18px 0 10px; padding: 8px 14px; border-radius: 12px; background: var(--navy); color: #fff; font-size: 16px; font-weight: 800; letter-spacing: .01em; }
+    .sx-model:first-of-type { margin-top: 4px; }
+    sub { font-size: .72em; line-height: 0; }
+    .sx-pq { display: flex; gap: 8px; align-items: baseline; margin: 2px 0 6px; font-weight: 700; color: #0F172A; } .sx-pq .sx-plabel { flex: none; } .sx-pq .pq { flex: 1; line-height: 1.5; }
     .sx-solb { padding: 10px 14px 12px 51px; }
     .sx-solrow { margin: 0 0 7px; line-height: 1.55; }
     .sx-chip { display: inline-block; padding: 1px 9px; border-radius: 999px; background: #EEF2FF; border: 1px solid #C7D2FE; font-weight: 600; margin: 0 3px 3px 0; }
@@ -118,23 +132,24 @@
     function solutionsHtml(doc, o = {}) {
         const c = doc.content || {}, items = c.items || [];
         const opts = (it, P) => (it.options || []).length ? `<div class="sx-opts">${it.options.map((x, k) => `<span class="sx-opt">${ed(o, `${P}.options.${k}`, x)}</span>`).join('')}</div>` : '';
-        const paper = !c.exam ? '' : `<div class="sx-page">${brand(doc, `${GRADE[doc.grade] || ''} · Science<br>Practice exam`)}
+        const paper = !c.exam ? '' : `<div class="sx-page">${brand(doc, `${GRADE[doc.grade] ? GRADE[doc.grade] + ' · ' : ''}Science<br>Practice exam`)}
             <div class="sx-ex-h">${ed(o, 'title', c.title || 'Practice exam', 'div', 't')}${c.subtitle ? ed(o, 'subtitle', c.subtitle, 'div', 's') : ''}</div>
             <div class="sx-fields"><span>Name: ........................................</span><span>Class: ..........</span><span>Date: ...../...../.......</span><span>Mark: ...... / ${items.length}</span></div>
             <div class="sx-inst">Answer all questions.</div>
-            ${items.map((it, i) => `<div class="sx-blk sx-q"><span class="n">${esc(it.n || i + 1)}.</span>${ed(o, `items.${i}.q`, it.q)}${opts(it, `items.${i}`)}${(it.options || []).length ? '' : `<div class="sx-lines">${'<span></span>'.repeat((it.given || []).length || (it.parts || []).some(pt => pt.law) ? 5 : 2)}</div>`}</div>`).join('')}
+            ${items.map((it, i) => `${it.section && (i === 0 || items[i - 1].section !== it.section) ? `<div class="sx-blk sx-model">📘 ${esc(it.section)}</div>` : ''}<div class="sx-blk sx-q"><span class="n">${esc(it.n || i + 1)}.</span>${ed(o, `items.${i}.q`, it.q)}${opts(it, `items.${i}`)}${(it.options || []).length ? '' : `<div class="sx-lines">${'<span></span>'.repeat((it.given || []).length || (it.parts || []).some(pt => pt.law) ? 5 : 2)}</div>`}</div>`).join('')}
             <div class="sx-luck">Good Luck ✨</div></div>`;
-        return `<div class="sx">${paper}<div class="sx-page${c.exam ? ' sx-keypage' : ''}">${brand(doc, `${GRADE[doc.grade] || ''} · Science<br>${c.exam ? 'Model answer' : 'Worked solutions'}`)}
+        return `<div class="sx">${paper}<div class="sx-page${c.exam ? ' sx-keypage' : ''}">${brand(doc, `${GRADE[doc.grade] ? GRADE[doc.grade] + ' · ' : ''}Science<br>${c.exam ? 'Model answer' : 'Worked solutions'}`)}
             ${c.exam ? `<div class="sx-h1">Model Answer — ${esc(c.title || '')}</div>` : `<div class="sx-ex-h">${ed(o, 'title', c.title || 'Worked solutions', 'div', 't')}${c.subtitle || o.edit ? ed(o, 'subtitle', c.subtitle || '', 'div', 's') : ''}</div>`}
             ${items.map((it, i) => {
                 const P = `items.${i}`;
+                const sec = it.section && (i === 0 || items[i - 1].section !== it.section) ? `<div class="sx-blk sx-model">📘 ${esc(it.section)}</div>` : '';
                 const given = (it.given || []).length ? `<div class="sx-solrow"><span class="sx-lbl">Given:</span> ${it.given.map((g, k) => `<span class="sx-chip">${ed(o, `${P}.given.${k}`, g)}</span>`).join(' ')}${it.find ? ` <span class="sx-lbl" style="margin-left:6px">Find:</span> <span class="sx-chip f">${ed(o, `${P}.find`, it.find)}</span>` : ''}</div>` : '';
                 const conv = (it.convert || []).map((x, k) => `<div class="sx-solrow sx-conv"><span class="ic">🔁</span><div>${ed(o, `${P}.convert.${k}.text`, x.text, 'b')}${x.why ? `<div class="why">💡 ${ed(o, `${P}.convert.${k}.why`, x.why)}</div>` : ''}</div></div>`).join('');
-                const parts = (it.parts || []).map((pt, k) => `<div class="sx-solrow sx-part">${pt.label ? `<div class="sx-plabel">${ed(o, `${P}.parts.${k}.label`, pt.label)}</div>` : ''}
+                const parts = (it.parts || []).map((pt, k) => `<div class="sx-solrow sx-part">${pt.label || pt.q ? `<div class="sx-pq">${pt.label ? `<span class="sx-plabel">${ed(o, `${P}.parts.${k}.label`, pt.label)}</span>` : ''}${pt.q ? ed(o, `${P}.parts.${k}.q`, pt.q, 'span', 'pq') : ''}</div>` : ''}
                     ${pt.law ? `<div class="sx-law">${ed(o, `${P}.parts.${k}.law`, pt.law)}</div>` : ''}${pt.why ? `<div class="why">💡 ${ed(o, `${P}.parts.${k}.why`, pt.why)}</div>` : ''}
                     ${(pt.steps || []).map((st, q) => `<div class="sx-step">${ed(o, `${P}.parts.${k}.steps.${q}`, st)}</div>`).join('')}
                     ${pt.answer ? `<div class="sx-final">✔ ${ed(o, `${P}.parts.${k}.answer`, pt.answer)}</div>` : ''}</div>`).join('');
-                return `<div class="sx-blk sx-sol">${tools(o, P)}<div class="sx-solq"><span class="sx-n">${esc(it.n || i + 1)}</span><div class="qt">${c.exam ? esc(it.q) : ed(o, `${P}.q`, it.q)}${c.exam ? '' : opts(it, P)}</div></div>
+                return `${sec}<div class="sx-blk sx-sol">${tools(o, P)}<div class="sx-solq"><span class="sx-n">${esc(it.n || i + 1)}</span><div class="qt">${c.exam ? esc(it.q) : ed(o, `${P}.q`, it.q)}${c.exam ? '' : opts(it, P)}</div></div>
                     <div class="sx-solb">${given}${conv}${parts}${it.tip ? `<div class="sx-solrow sx-tip"><span class="tag">Tip</span>${ed(o, `${P}.tip`, it.tip)}</div>` : ''}</div></div>`;
             }).join('')}
         </div></div>`;

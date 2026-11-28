@@ -51,11 +51,20 @@ export async function threadDoc(db, scope, threadId) {
 
 const TASK = `## Task: turn the solutions in this chat into a WORKED-SOLUTIONS document (it becomes a branded PDF for students)
 Output ONLY JSON:
-{"title":"…","subtitle":"…","items":[{"n":"1","q":"the full question text","given":["Q = 30 C","t = 5 s"],"find":"I = ?",
+{"title":"…","subtitle":"…","items":[{"section":"Model 1 (only when the worksheet has models / sections)","n":"1 (A)","q":"the question's instruction / full text","given":["Q = 30 C","t = 5 s"],"find":"I = ?",
  "convert":[{"text":"2 min = 2 × 60 = 120 s","why":"Q = I × t needs the time in seconds"}],
  "parts":[{"label":"(a)","law":"I = Q / t","why":"we know Q and t and want I — this law links them","steps":["I = 30 C / 5 s"],"answer":"I = 6 A"}],
  "tip":"…"}]}
 Rules:
+- KEEP THE WORKSHEET'S OWN STRUCTURE (28 Nov 2026 — a 5-model revision came out with unreadable numbers, models run together,
+  sub-questions re-lettered and two different questions merged):
+  · Several models / sections (Model 1, Model 2… / Section A…) → put that name in "section" of each of its items ("section":"Model 2").
+  · "n" = the question's own short number as printed: "1 (A)", "1 (B)", "2 (A)", "3 (B)" — never "M1-1A".
+  · "q" = that question's instruction as printed ("Give a reason for:", "Balance the following equations…"). Each numbered
+    sub-question under it becomes ONE part with "label" = its printed number ("1", "2", "3" — never re-lettered (a)/(b)) and
+    "q" = its own text, then its answer. A question with no sub-questions → one part, "label":"" and no part "q".
+  · Never merge two different printed questions into one item, and never split one.
+  · A choose question: its choices go in "options" (["a) …","b) …","c) …","d) …"]), never inside "q".
 - EVERY question, in order, each with its full answer. "q" = the question exactly as in the worksheet (when the worksheet is given), else as in the chat.
 - Keep every number and answer that is in the chat's solutions unless it is clearly wrong — then correct it.
 - Make it TEACH, not just list results: every unit conversion has its "why"; every law has its "why" (which quantities it links / why this method); two-step problems: a first part explains why we need the middle quantity, then the next part. 1–3 short "steps" lines with the substitution and units. "answer" = the final result with its unit.
@@ -65,7 +74,8 @@ Rules:
 - Every statement must match the Egyptian curriculum book (e.g. identical cells in parallel: the emf stays the same and the battery works for a longer time — not "supplies more current").
 - "tip" (optional, short): a common mistake, a quick check, or the book's faster method (e.g. identical resistors in parallel: R = r / n).
 - Simple English, the book's own symbols and terms (emf, not ε). No markdown or emoji inside the JSON values.
-- "title": e.g. "Unit 2 – Electricity: Worked Solutions"; "subtitle": grade + what it is.`;
+- Chemical formulas in plain text with normal digits (H2SO4, Al2(SO4)3, 2H2O(l)) — the PDF shows the subscripts.
+- "title": e.g. "Unit 2 – Electricity: Worked Solutions"; "subtitle": the grade AS PRINTED on the worksheet + what it is (e.g. "Second Preparatory · Science · November Revision") — never invent a subject or course name.`;
 
 function parse(text) {
     const s = String(text || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
@@ -77,13 +87,13 @@ const str = (v, n = 600) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim
 export function cleanSolutions(j) {
     if (!j || !Array.isArray(j.items)) return null;
     const items = j.items.slice(0, 80).map((it, i) => ({
-        n: str(it.n || i + 1, 8), q: str(it.q, 1500),
+        section: str(it.section, 60), n: str(it.n || i + 1, 14), q: str(it.q, 1500),
         options: (Array.isArray(it.options) ? it.options : []).map(x => str(x, 200)).filter(Boolean).slice(0, 6),
         given: (Array.isArray(it.given) ? it.given : []).map(g => str(g, 120)).filter(Boolean).slice(0, 12),
         find: str(it.find, 120),
         convert: (Array.isArray(it.convert) ? it.convert : []).map(x => ({ text: str(x && x.text, 200), why: str(x && x.why, 300) })).filter(x => x.text).slice(0, 8),
-        parts: (Array.isArray(it.parts) ? it.parts : []).map(p => ({ label: str(p && p.label, 20), law: str(p && p.law, 160), why: str(p && p.why, 400),
-            steps: (Array.isArray(p && p.steps) ? p.steps : []).map(x => str(x, 300)).filter(Boolean).slice(0, 8), answer: str(p && p.answer, 600) })).filter(p => p.answer || p.steps.length || p.law).slice(0, 10),
+        parts: (Array.isArray(it.parts) ? it.parts : []).map(p => ({ label: str(p && p.label, 20), q: str(p && p.q, 800), law: str(p && p.law, 160), why: str(p && p.why, 400),
+            steps: (Array.isArray(p && p.steps) ? p.steps : []).map(x => str(x, 300)).filter(Boolean).slice(0, 8), answer: str(p && p.answer, 600) })).filter(p => p.answer || p.steps.length || p.law).slice(0, 12),
         tip: str(it.tip, 400)
     })).filter(it => it.q && it.parts.length);
     return items.length ? { title: str(j.title || 'Worked solutions', 160), subtitle: str(j.subtitle, 200), items, ...(j.mark ? { mark: true } : {}), ...(j.exam ? { exam: true } : {}) } : null;

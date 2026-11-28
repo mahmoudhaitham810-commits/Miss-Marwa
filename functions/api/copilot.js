@@ -302,7 +302,7 @@ export async function onRequest(context) {
                     const { results: all } = await db.prepare(`SELECT role, text FROM copilot_messages WHERE thread_id = ? AND role IN ('user', 'assistant') AND id < ? ORDER BY id DESC LIMIT 30`).bind(t.id, userMsg.id).all();
                     const worksheet = await threadDoc(db, 'staff', t.id);
                     const chatMsgs = (all || []).reverse();
-                    const grade = gradeFromText(text) || (worksheet && gradeFromText(worksheet.name + ' ' + worksheet.text.slice(0, 600))) || chatMsgs.filter(m => m.role === 'user').map(m => gradeFromText(m.text)).find(Boolean) || null;
+                    const grade = gradeFromText(text) || (worksheet && gradeFromText(worksheet.name + ' ' + worksheet.text.slice(0, 20000))) || chatMsgs.filter(m => m.role === 'user').map(m => gradeFromText(m.text)).find(Boolean) || null;
                     const out = await makeSolutions(env, db, { messages: chatMsgs, worksheet, gradeLabel: grade ? GRADE_LABELS[grade] : '', meter: { staffId: staff.id, kind: 'copilot-pdf' } });
                     if (wantsMark(text)) out.content.mark = true;   // her «سيب بصمتك» → the AI mark on every page
                     const docId = await saveSolutionsDoc(db, { grade, content: out.content, costUsd: out.costUsd, staffId: staff.id });
